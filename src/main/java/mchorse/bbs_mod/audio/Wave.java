@@ -97,75 +97,295 @@ public class Wave
 
     public Wave convertTo16()
     {
-        final int bytes = 16 / 8;
-
-        int c = this.data.length / this.numChannels / this.getBytesPerSample();
-        int byteRate = this.sampleRate * this.numChannels * bytes;
-        byte[] data = new byte[c * this.numChannels * bytes];
-        boolean isFloat = this.getBytesPerSample() == 4;
-
-        Wave wave = new Wave(this.audioFormat, this.numChannels, this.sampleRate, byteRate, bytes * this.numChannels, 16, data);
-
-        ByteBuffer sample = MemoryUtil.memAlloc(4);
-        ByteBuffer dataBuffer = MemoryUtil.memAlloc(data.length);
-
-        for (int i = 0; i < c * this.numChannels; i++)
+        if (this.bitsPerSample == 16 && this.audioFormat == 1)
         {
-            sample.clear();
+            return this;
+        }
 
-            for (int j = 0; j < this.getBytesPerSample(); j++)
-            {
-                sample.put(this.data[i * this.getBytesPerSample() + j]);
-            }
+        int bytesPerSample = this.getBytesPerSample();
+        if (bytesPerSample <= 0 || this.numChannels <= 0)
+        {
+            return this;
+        }
+
+        int totalSamples = this.data.length / bytesPerSample;
+        byte[] convertedData = new byte[totalSamples * 2];
+        boolean isFloat = (this.audioFormat == 3) || (this.bitsPerSample == 32 && this.audioFormat != 1);
+
+        for (int i = 0; i < totalSamples; i++)
+        {
+            int idx = i * bytesPerSample;
+            float f = 0.0f;
 
             if (isFloat)
             {
-                sample.flip();
-                float floatValue = sample.getFloat();
-
-                /* Bit depth conversion for float */
-                floatValue = Math.max(-1.0f, Math.min(1.0f, floatValue));
-                dataBuffer.putShort((short) (floatValue * Short.MAX_VALUE));
+                if (this.bitsPerSample == 32 && idx + 4 <= this.data.length)
+                {
+                    int b0 = this.data[idx] & 0xFF;
+                    int b1 = this.data[idx + 1] & 0xFF;
+                    int b2 = this.data[idx + 2] & 0xFF;
+                    int b3 = this.data[idx + 3] & 0xFF;
+                    int bits = (b3 << 24) | (b2 << 16) | (b1 << 8) | b0;
+                    f = Float.intBitsToFloat(bits);
+                }
+                else if (this.bitsPerSample == 64 && idx + 8 <= this.data.length)
+                {
+                    long bits = 0;
+                    for (int k = 0; k < 8; k++)
+                    {
+                        bits |= ((long) (this.data[idx + k] & 0xFF)) << (k * 8);
+                    }
+                    f = (float) Double.longBitsToDouble(bits);
+                }
             }
-            else
+            else // Integer PCM (Little Endian)
             {
-                sample.put((byte) 0);
-                sample.flip();
-                int intValue = sample.getInt();
-                
-                /* Bit depth conversion for integer */
-                if (this.bitsPerSample == 24)
+                if (this.bitsPerSample == 8 && idx < this.data.length)
                 {
-                    double scaledValue = intValue / 8388608.0 * Short.MAX_VALUE;
-
-                    dataBuffer.putShort((short) Math.max(Short.MIN_VALUE, Math.min(Short.MAX_VALUE, (long) scaledValue)));
+                    int b0 = this.data[idx] & 0xFF;
+                    f = (b0 - 128) / 128.0f;
                 }
-                else if (this.bitsPerSample == 32)
+                else if (this.bitsPerSample == 16 && idx + 2 <= this.data.length)
                 {
-                    double scaledValue = intValue / 2147483648.0 * Short.MAX_VALUE;
-
-                    dataBuffer.putShort((short) Math.max(Short.MIN_VALUE, Math.min(Short.MAX_VALUE, (long) scaledValue)));
+                    int b0 = this.data[idx] & 0xFF;
+                    int b1 = this.data[idx + 1];
+                    int val16 = (b1 << 8) | b0;
+                    f = val16 / 32768.0f;
                 }
-                else
+                else if (this.bitsPerSample == 24 && idx + 3 <= this.data.length)
                 {
-                    double maxOriginalValue = Math.pow(2, this.bitsPerSample - 1) - 1;
-                    double scaledValue = intValue / maxOriginalValue * Short.MAX_VALUE;
-
-                    dataBuffer.putShort((short) Math.max(Short.MIN_VALUE, Math.min(Short.MAX_VALUE, (long) scaledValue)));
+                    int b0 = this.data[idx] & 0xFF;
+                    int b1 = this.data[idx + 1] & 0xFF;
+                    int b2 = this.data[idx + 2]; // signed byte
+                    int val24 = (b2 << 16) | (b1 << 8) | b0;
+                    f = val24 / 8388608.0f;
+                }
+                else if (this.bitsPerSample == 32 && idx + 4 <= this.data.length)
+                {
+                    int b0 = this.data[idx] & 0xFF;
+                    int b1 = this.data[idx + 1] & 0xFF;
+                    int b2 = this.data[idx + 2] & 0xFF;
+                    int b3 = this.data[idx + 3]; // signed byte
+                    int val32 = (b3 << 24) | (b2 << 16) | (b1 << 8) | b0;
+                    f = val32 / 2147483648.0f;
                 }
             }
+
+            if (Float.isNaN(f))
+            {
+                f = 0.0f;
+            }
+            else if (f > 1.0f)
+            {
+                f = 1.0f;
+            }
+            else if (f < -1.0f)
+            {
+                f = -1.0f;
+            }
+
+            short sample16 = (short) Math.round(f * 32767.0f);
+            convertedData[i * 2] = (byte) (sample16 & 0xFF);
+            convertedData[i * 2 + 1] = (byte) ((sample16 >> 8) & 0xFF);
         }
 
-        dataBuffer.flip();
-        dataBuffer.get(data);
-
-        MemoryUtil.memFree(sample);
-        MemoryUtil.memFree(dataBuffer);
-
+        int byteRate = this.sampleRate * this.numChannels * 2;
+        int blockAlign = this.numChannels * 2;
+        Wave wave = new Wave(1, this.numChannels, this.sampleRate, byteRate, blockAlign, 16, convertedData);
         wave.lists = this.lists;
         wave.cues = this.cues;
 
         return wave;
+    }
+
+    public Wave downmixToStereo()
+    {
+        if (this.numChannels <= 2)
+        {
+            return this;
+        }
+
+        Wave current = this;
+        if (current.bitsPerSample != 16 || current.audioFormat != 1)
+        {
+            current = current.convertTo16();
+        }
+
+        int inChannels = current.numChannels;
+        int inFrames = current.data.length / (inChannels * 2);
+        byte[] outData = new byte[inFrames * 4];
+
+        for (int f = 0; f < inFrames; f++)
+        {
+            float left = 0.0f;
+            float right = 0.0f;
+
+            if (inChannels >= 6)
+            {
+                short chL = current.getSample16(f, 0);
+                short chR = current.getSample16(f, 1);
+                short chC = current.getSample16(f, 2);
+                short chLfe = current.getSample16(f, 3);
+                short chLs = current.getSample16(f, 4);
+                short chRs = current.getSample16(f, 5);
+
+                left = chL + 0.707f * chC + 0.5f * chLfe + 0.707f * chLs;
+                right = chR + 0.707f * chC + 0.5f * chLfe + 0.707f * chRs;
+                left *= 0.5f;
+                right *= 0.5f;
+            }
+            else
+            {
+                for (int c = 0; c < inChannels; c++)
+                {
+                    short val = current.getSample16(f, c);
+                    if (c % 2 == 0)
+                    {
+                        left += val;
+                    }
+                    else
+                    {
+                        right += val;
+                    }
+                }
+                float norm = (float) Math.sqrt((inChannels + 1) / 2.0);
+                left /= norm;
+                right /= norm;
+            }
+
+            int clL = Math.max(-32768, Math.min(32767, Math.round(left)));
+            int clR = Math.max(-32768, Math.min(32767, Math.round(right)));
+
+            int outIdx = f * 4;
+            outData[outIdx] = (byte) (clL & 0xFF);
+            outData[outIdx + 1] = (byte) ((clL >> 8) & 0xFF);
+            outData[outIdx + 2] = (byte) (clR & 0xFF);
+            outData[outIdx + 3] = (byte) ((clR >> 8) & 0xFF);
+        }
+
+        int byteRate = current.sampleRate * 2 * 2;
+        Wave wave = new Wave(1, 2, current.sampleRate, byteRate, 4, 16, outData);
+        wave.lists = current.lists;
+        wave.cues = current.cues;
+        return wave;
+    }
+
+    public Wave resample(int targetSampleRate)
+    {
+        if (this.sampleRate == targetSampleRate || targetSampleRate <= 0 || this.sampleRate <= 0)
+        {
+            return this;
+        }
+
+        Wave current = this;
+        if (current.bitsPerSample != 16 || current.audioFormat != 1)
+        {
+            current = current.convertTo16();
+        }
+
+        int channels = current.numChannels;
+        int inFrames = current.data.length / (channels * 2);
+        if (inFrames <= 0)
+        {
+            return current;
+        }
+
+        int outFrames = (int) Math.round(inFrames * ((double) targetSampleRate / (double) current.sampleRate));
+        byte[] outData = new byte[outFrames * channels * 2];
+
+        double ratio = (double) current.sampleRate / (double) targetSampleRate;
+
+        for (int outF = 0; outF < outFrames; outF++)
+        {
+            double inPos = outF * ratio;
+            int i1 = (int) Math.floor(inPos);
+            double t = inPos - i1;
+
+            int i0 = Math.max(0, i1 - 1);
+            int i2 = Math.min(inFrames - 1, i1 + 1);
+            int i3 = Math.min(inFrames - 1, i1 + 2);
+            i1 = Math.min(inFrames - 1, Math.max(0, i1));
+
+            for (int c = 0; c < channels; c++)
+            {
+                double p0 = current.getSample16(i0, c);
+                double p1 = current.getSample16(i1, c);
+                double p2 = current.getSample16(i2, c);
+                double p3 = current.getSample16(i3, c);
+
+                /* Catmull-Rom cubic spline interpolation */
+                double a = -0.5 * p0 + 1.5 * p1 - 1.5 * p2 + 0.5 * p3;
+                double b = p0 - 2.5 * p1 + 2.0 * p2 - 0.5 * p3;
+                double cCoeff = -0.5 * p0 + 0.5 * p2;
+                double d = p1;
+
+                double val = ((a * t + b) * t + cCoeff) * t + d;
+                int clamped = Math.max(-32768, Math.min(32767, (int) Math.round(val)));
+
+                int outIdx = (outF * channels + c) * 2;
+                outData[outIdx] = (byte) (clamped & 0xFF);
+                outData[outIdx + 1] = (byte) ((clamped >> 8) & 0xFF);
+            }
+        }
+
+        int byteRate = targetSampleRate * channels * 2;
+        int blockAlign = channels * 2;
+        Wave wave = new Wave(1, channels, targetSampleRate, byteRate, blockAlign, 16, outData);
+        wave.lists = current.lists;
+
+        if (current.cues != null)
+        {
+            List<WaveCue> newCues = new ArrayList<>();
+            for (WaveCue cue : current.cues)
+            {
+                WaveCue nc = new WaveCue();
+                nc.id = cue.id;
+                nc.position = (int) Math.round(cue.position * ((double) targetSampleRate / (double) current.sampleRate));
+                nc.dataChunkID = cue.dataChunkID;
+                nc.chunkStart = cue.chunkStart;
+                nc.blockStart = cue.blockStart;
+                nc.sampleStart = (int) Math.round(cue.sampleStart * ((double) targetSampleRate / (double) current.sampleRate));
+                newCues.add(nc);
+            }
+            wave.cues = newCues;
+        }
+
+        return wave;
+    }
+
+    public Wave normalize()
+    {
+        Wave current = this;
+
+        if (current.bitsPerSample != 16 || current.audioFormat != 1)
+        {
+            current = current.convertTo16();
+        }
+
+        if (current.numChannels > 2)
+        {
+            current = current.downmixToStereo();
+        }
+
+        if (current.sampleRate > 48000)
+        {
+            int targetRate = (current.sampleRate % 44100 == 0) ? 44100 : 48000;
+            current = current.resample(targetRate);
+        }
+
+        return current;
+    }
+
+    public short getSample16(int frame, int channel)
+    {
+        int idx = (frame * this.numChannels + channel) * 2;
+        if (idx < 0 || idx + 1 >= this.data.length)
+        {
+            return 0;
+        }
+        int b0 = this.data[idx] & 0xFF;
+        int b1 = this.data[idx + 1];
+        return (short) ((b1 << 8) | b0);
     }
 
     public float[] getCues()

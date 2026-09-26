@@ -53,12 +53,17 @@ public class ArmorRenderer
 
     public void renderArmorSlot(MatrixStack matrices, VertexConsumerProvider vertexConsumers, IEntity entity, EquipmentSlot armorSlot, ArmorType type, int light)
     {
+        this.renderArmorSlot(matrices, vertexConsumers, entity, armorSlot, type, light, null);
+    }
+
+    public void renderArmorSlot(MatrixStack matrices, VertexConsumerProvider vertexConsumers, IEntity entity, EquipmentSlot armorSlot, ArmorType type, int light, Identifier capeTexture)
+    {
         ItemStack itemStack = entity.getEquipmentStack(armorSlot);
         Item item = itemStack.getItem();
 
         if (type == ArmorType.CHEST && itemStack.isOf(Items.ELYTRA))
         {
-            this.renderElytra(matrices, vertexConsumers, entity, itemStack, light);
+            this.renderElytra(matrices, vertexConsumers, entity, itemStack, light, capeTexture);
 
             return;
         }
@@ -115,7 +120,7 @@ public class ArmorRenderer
     /* Vanilla elytra, verified against 1.20.4 bytecode: ElytraFeatureRenderer.render
      * (translate 0,0,0.125; armor cutout layer; glint) + ElytraEntityModel.setAngles
      * (non-player branch: standing / sneaking / fall flying wing angles) */
-    private void renderElytra(MatrixStack matrices, VertexConsumerProvider vertexConsumers, IEntity entity, ItemStack itemStack, int light)
+    private void renderElytra(MatrixStack matrices, VertexConsumerProvider vertexConsumers, IEntity entity, ItemStack itemStack, int light, Identifier capeTexture)
     {
         float pitch = 0.2617994F;
         float roll = -0.2617994F;
@@ -155,7 +160,8 @@ public class ArmorRenderer
         matrices.push();
         matrices.translate(0F, 0F, 0.125F);
 
-        VertexConsumer vertexConsumer = vertexConsumers.getBuffer(RenderLayer.getArmorCutoutNoCull(ELYTRA_TEXTURE));
+        Identifier texture = capeTexture != null ? capeTexture : ELYTRA_TEXTURE;
+        VertexConsumer vertexConsumer = vertexConsumers.getBuffer(RenderLayer.getArmorCutoutNoCull(texture));
 
         this.elytra.render(matrices, vertexConsumer, light, OverlayTexture.DEFAULT_UV, 1F, 1F, 1F, 1F);
 

@@ -142,6 +142,18 @@ public class UIClips extends UITimelineCanvas
             UIContext context = this.getContext();
             int mouseX = context.mouseX;
             int mouseY = context.mouseY;
+
+            /* Right-click on a clip: auto-pick and select it so the clip context menu is shown! */
+            Clip clipUnderMouse = this.getClipUnder(context, mouseX, mouseY);
+            if (clipUnderMouse != null)
+            {
+                if (!this.selection.contains(this.clips.getIndex(clipUnderMouse)))
+                {
+                    this.setSelected(clipUnderMouse);
+                    this.delegate.pickClip(clipUnderMouse);
+                }
+            }
+
             boolean hasSelected = this.delegate.getClip() != null;
 
             this.copyPasteController.install(menu, context, mouseX, mouseY);
@@ -695,10 +707,21 @@ public class UIClips extends UITimelineCanvas
      */
     private void addConverters(ContextMenuManager menu, UIContext context)
     {
-        ClipFactoryData data = this.factory.getData(this.delegate.getClip());
+        Clip clip = this.delegate.getClip();
+        if (clip == null)
+        {
+            return;
+        }
+
+        ClipFactoryData data = this.factory.getData(clip);
+        if (data == null || data.converters == null)
+        {
+            return;
+        }
+
         Collection<Link> converters = data.converters.keySet();
 
-        if (converters.isEmpty())
+        if (converters == null || converters.isEmpty())
         {
             return;
         }
@@ -1590,22 +1613,78 @@ public class UIClips extends UITimelineCanvas
         return super.subMouseClicked(context);
     }
 
+    private Clip getClipUnder(UIContext context, int mouseX, int mouseY)
+    {
+        if (this.clips == null)
+        {
+            return null;
+        }
+
+        int h = this.getLayerHeight();
+        Area tempArea = new Area();
+        List<Clip> clipList = this.clips.get();
+
+        /* 1. First check if any clip's edge handle is under the mouse (highest priority for resize/trim) */
+        for (int i = clipList.size() - 1; i >= 0; i--)
+        {
+            Clip c = clipList.get(i);
+            int handle = this.getClipHandle(c, context, h);
+            if (handle == 1 || handle == 2)
+            {
+                return c;
+            }
+        }
+
+        /* 2. Check if mouse is inside any clip's visual box */
+        for (int i = clipList.size() - 1; i >= 0; i--)
+        {
+            Clip c = clipList.get(i);
+            this.getClipArea(c, tempArea, h);
+            if (tempArea.isInside(context))
+            {
+                return c;
+            }
+        }
+
+        /* 3. Fallback to tick and layer coordinate */
+        int tick = (int) Math.floor(this.xAxis.from(mouseX));
+        int layerIndex = this.fromLayerY(mouseY);
+        return this.clips.getClipAt(tick, layerIndex);
+    }
+
     private boolean handleLeftClick(UIContext context, int mouseX, int mouseY, boolean ctrl, boolean shift, boolean alt)
     {
         /* Clicks on the ruler are "solid": they scrub the cursor and never grab a
          * clip whose logical row is hidden behind the ruler band (see isInRuler). */
         if (!this.hasEmbeddedView() && !this.isInRuler(mouseY))
         {
-            int tick = (int) Math.floor(this.xAxis.from(mouseX));
-            int layerIndex = this.fromLayerY(mouseY);
             Clip original = this.delegate.getClip();
-            Clip clip = this.clips.getClipAt(tick, layerIndex);
+            Clip clip = this.getClipUnder(context, mouseX, mouseY);
 
             if (clip != null)
             {
-                if (clip != original)
+                int handle = this.getClipHandle(clip, context, this.getLayerHeight());
+                this.grabMode = handle;
+                this.canGrab = false;
+                this.grabbing = true;
+
+                if (this.grabMode != 0)
                 {
-                    if (shift || this.selection.contains(this.clips.getIndex(clip)))
+                    /* Edge resize / trim: MUST ONLY trim the clicked/hovered clip!
+                     * Never trim ProCamera or other previously selected clips. */
+                    this.setSelected(clip);
+                    this.delegate.pickClip(clip);
+
+                    this.grabbedClips = Collections.singletonList(clip);
+                    this.otherClips = new ArrayList<>(this.clips.get());
+                    this.otherClips.remove(clip);
+
+                    this.grabbedData.clear();
+                    this.grabbedData.add(new Vector3i(clip.tick.get(), clip.layer.get(), clip.duration.get()));
+                }
+                else
+                {
+                    if (shift)
                     {
                         this.addSelected(clip);
 
@@ -1618,17 +1697,21 @@ public class UIClips extends UITimelineCanvas
                     }
                     else
                     {
-                        this.delegate.pickClip(clip);
                         this.setSelected(clip);
+                        this.delegate.pickClip(clip);
+                    }
+
+                    this.grabbedClips = this.getClipsFromSelection();
+                    this.otherClips = new ArrayList<>(this.clips.get());
+                    this.otherClips.removeIf(this.grabbedClips::contains);
+
+                    this.grabbedData.clear();
+                    for (Clip selectedClip : this.getClipsFromSelection())
+                    {
+                        this.grabbedData.add(new Vector3i(selectedClip.tick.get(), selectedClip.layer.get(), selectedClip.duration.get()));
                     }
                 }
 
-                this.grabMode = this.getClipHandle(clip, context, this.getLayerHeight());
-                this.canGrab = false;
-                this.grabbing = true;
-                this.grabbedClips = this.getClipsFromSelection();
-                this.otherClips = new ArrayList<>(this.clips.get());
-                this.otherClips.removeIf(this.grabbedClips::contains);
                 this.snappingPoints.clear();
                 this.snappingPoints.add(this.delegate.getCursor());
 
@@ -1673,11 +1756,6 @@ public class UIClips extends UITimelineCanvas
                 }
 
                 this.setMouse(mouseX, mouseY);
-
-                for (Clip selectedClip : this.getClipsFromSelection())
-                {
-                    this.grabbedData.add(new Vector3i(selectedClip.tick.get(), selectedClip.layer.get(), selectedClip.duration.get()));
-                }
 
                 return true;
             }

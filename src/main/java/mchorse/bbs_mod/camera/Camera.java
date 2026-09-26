@@ -15,6 +15,7 @@ public class Camera
     public float fov;
     public float near = 0.01F;
     public float far = 300F;
+    public float focusDistance = 5.0F;
 
     public Vector3d position = new Vector3d();
     public Vector3f rotation = new Vector3f();

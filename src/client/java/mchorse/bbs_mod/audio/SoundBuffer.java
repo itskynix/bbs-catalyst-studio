@@ -17,6 +17,11 @@ public class SoundBuffer
     {
         this.id = id;
 
+        if (wave != null && (wave.bitsPerSample != 16 || wave.numChannels > 2 || wave.sampleRate > 48000 || wave.audioFormat != 1))
+        {
+            wave = wave.normalize();
+        }
+
         this.buffer = AL10.alGenBuffers();
         ByteBuffer buffer = MemoryUtil.memAlloc(wave.data.length);
 

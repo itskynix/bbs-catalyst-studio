@@ -752,6 +752,9 @@ public class UIKeys
     public static final IKey FORMS_EDITOR_MODEL_CEM_CRAWLING = L10n.lang("bbs.ui.forms.editor.model.cem.crawling");
     public static final IKey FORMS_EDITOR_MODEL_CEM_HEALTH = L10n.lang("bbs.ui.forms.editor.model.cem.health");
     public static final IKey FORMS_EDITOR_MODEL_CEM_HEALTH_TOOLTIP = L10n.lang("bbs.ui.forms.editor.model.cem.health-tooltip");
+    public static final IKey FORMS_EDITOR_MODEL_CAPE = L10n.lang("bbs.ui.forms.editor.model.cape");
+    public static final IKey FORMS_EDITOR_MODEL_CAPE_ENABLE = L10n.lang("bbs.ui.forms.editor.model.cape_enable");
+    public static final IKey FORMS_EDITOR_MODEL_CAPE_PICK_TEXTURE = L10n.lang("bbs.ui.forms.editor.model.cape_pick_texture");
     public static final IKey FORMS_EDITOR_PICK_FORM = L10n.lang("bbs.ui.forms.editor.pick_form");
     public static final IKey FORMS_EDITOR_SLIM = L10n.lang("bbs.ui.forms.editor.slim");
     public static final IKey FORMS_EDITOR_SLIM_TOOLTIP = L10n.lang("bbs.ui.forms.editor.slim-tooltip");

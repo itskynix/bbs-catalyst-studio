@@ -53,15 +53,16 @@ public class SoundManager implements IWatchDogListener
         try
         {
             Wave wave = AudioReader.read(this.provider, link);
+
+            if (wave != null && (wave.bitsPerSample != 16 || wave.numChannels > 2 || wave.sampleRate > 48000 || wave.audioFormat != 1))
+            {
+                wave = wave.normalize();
+            }
+
             Waveform waveform = null;
 
-            if (includeWaveform)
+            if (includeWaveform && wave != null)
             {
-                if (wave.getBytesPerSample() > 2)
-                {
-                    wave = wave.convertTo16();
-                }
-
                 waveform = new Waveform();
                 waveform.generate(wave, this.readColorCodes(link), BBSSettings.audioWaveformDensity.get(), 40);
             }
@@ -349,7 +350,7 @@ public class SoundManager implements IWatchDogListener
         Link link = BBSMod.getProvider().getLink(path.toFile());
         String pathLower = link.path.toLowerCase();
 
-        if (!(pathLower.endsWith(".ogg") || pathLower.endsWith(".wav")))
+        if (!(pathLower.endsWith(".ogg") || pathLower.endsWith(".wav") || pathLower.endsWith(".mp3")))
         {
             return;
         }

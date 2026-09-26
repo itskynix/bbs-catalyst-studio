@@ -1063,8 +1063,18 @@ public class BBSModClient implements ClientModInitializer
             return;
         }
 
+        if (getFilms().getRecorder() != null || MultiTrackReplaySession.isActive())
+        {
+            return;
+        }
+
         UIFilmPanel panel = getDashboard().getPanel(UIFilmPanel.class);
-        if (panel.getData() != null)
+        if (panel != null && panel.isRecording())
+        {
+            return;
+        }
+
+        if (panel != null && panel.getData() != null)
         {
             Films.playFilm(panel.getData().getId(), false);
         }
@@ -1130,6 +1140,12 @@ public class BBSModClient implements ClientModInitializer
             if (recorder != null)
             {
                 recorder = BBSModClient.getFilms().stopRecording();
+
+                panel.stopPlayback();
+                if (panel.getData() != null)
+                {
+                    Films.stopFilm(panel.getData().getId());
+                }
 
                 if (recorder == null || recorder.hasNotStarted() || panel.getData() == null)
                 {

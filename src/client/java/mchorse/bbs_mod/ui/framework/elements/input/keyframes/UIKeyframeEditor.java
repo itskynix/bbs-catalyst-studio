@@ -4,6 +4,7 @@ import mchorse.bbs_mod.ui.framework.elements.input.drag.TransformSpace;
 import mchorse.bbs_mod.camera.clips.overwrite.KeyframeClip;
 import mchorse.bbs_mod.film.replays.tracks.TrackId;
 import mchorse.bbs_mod.film.replays.tracks.TrackKind;
+import mchorse.bbs_mod.film.replays.tracks.TrackStyle;
 import mchorse.bbs_mod.data.DataStorageUtils;
 import mchorse.bbs_mod.data.types.BaseType;
 import mchorse.bbs_mod.data.types.ListType;
@@ -29,7 +30,48 @@ import java.util.function.Function;
 
 public class UIKeyframeEditor extends UITimelinePanel
 {
-    public static final int[] COLORS = {Colors.RED, Colors.GREEN, Colors.BLUE, Colors.CYAN, Colors.MAGENTA, Colors.YELLOW, Colors.LIGHTEST_GRAY & 0xffffff, Colors.DEEP_PINK};
+    public static final int[] COLORS = {
+        Colors.RED,
+        Colors.GREEN,
+        Colors.BLUE,
+        Colors.CYAN,
+        Colors.MAGENTA,
+        Colors.YELLOW,
+        Colors.LIGHTEST_GRAY & 0xffffff,
+        Colors.DEEP_PINK,
+        0x54a0ff, // focus_distance / soft blue
+        Colors.ORANGE,
+        0x1dd1a1, // emerald
+        0x9b59b6, // purple
+        0xfeca57, // warm yellow
+        0x48dbfb, // cyan
+        0xff6b6b, // coral
+        0x10ac84  // teal
+    };
+
+    public static int getColor(int index)
+    {
+        if (COLORS == null || COLORS.length == 0)
+        {
+            return Colors.BLUE;
+        }
+
+        return COLORS[Math.floorMod(index, COLORS.length)];
+    }
+
+    public static int getChannelColor(KeyframeChannel channel, int index)
+    {
+        if (channel != null && channel.getId() != null)
+        {
+            int trackColor = TrackStyle.color(channel.getId());
+            if (trackColor != Colors.BLUE || "z".equals(channel.getId()) || "vZ".equals(channel.getId()) || "user4".equals(channel.getId()) || "offset_z".equals(channel.getId()))
+            {
+                return trackColor;
+            }
+        }
+
+        return getColor(index);
+    }
 
     public UIKeyframes view;
     public UIKeyframeFactory editor;
@@ -138,11 +180,21 @@ public class UIKeyframeEditor extends UITimelinePanel
     {
         this.view.removeAllSheets();
 
-        for (int i = 0; i < clip.channels.length; i++)
+        if (clip != null && clip.channels != null)
         {
-            KeyframeChannel channel = clip.channels[i];
+            for (int i = 0; i < clip.channels.length; i++)
+            {
+                KeyframeChannel channel = clip.channels[i];
 
-            this.view.addSheet(new UIKeyframeSheet(COLORS[i], channel, null));
+                if (channel == null)
+                {
+                    continue;
+                }
+
+                int color = getChannelColor(channel, i);
+
+                this.view.addSheet(new UIKeyframeSheet(color, channel, null));
+            }
         }
 
         this.pickKeyframe(null);

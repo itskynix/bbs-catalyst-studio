@@ -32,6 +32,7 @@ repositories {
 		name = "Gegy"
 		url = "https://maven.gegy.dev/"
 	}
+	mavenCentral()
 }
 
 loom {
@@ -79,6 +80,9 @@ dependencies {
 
 	modImplementation "org.anarres:jcpp:1.4.14"
 	modImplementation "io.github.douira:glsl-transformer:2.0.0-pre13"
+
+	implementation "javazoom:jlayer:1.0.1"
+	include "javazoom:jlayer:1.0.1"
 }
 
 processResources {

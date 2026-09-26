@@ -97,6 +97,9 @@ public class TrackStyle
         COLORS.put("culling", 0x8899bb);
         putColors(0xd9b23f, "smoothness", "metallic", "sss", "pixel_emission", "relief");
         COLORS.put("shape_keys", Colors.PINK);
+        COLORS.put("focus_distance", 0x54a0ff);
+        COLORS.put("has_cape", 0xe84118);
+        COLORS.put("cape_texture", 0xc23616);
         COLORS.put("model", MODEL_TRACK);
     }
 
@@ -262,6 +265,8 @@ public class TrackStyle
 
         /* Not an item but the pointer at one */
         ICONS.put("selected_slot", Icons.POINTER);
+        ICONS.put("has_cape", Icons.POSE);
+        ICONS.put("cape_texture", Icons.IMAGE);
     }
 
     public static Icon icon(String key)

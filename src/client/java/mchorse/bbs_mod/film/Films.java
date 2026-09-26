@@ -82,12 +82,13 @@ public class Films
         }
         else
         {
-            if (BBSModClient.getFilms().has(filmId))
+            if (BBSModClient.getFilms().isPlaying(filmId))
             {
                 stopFilm(filmId);
             }
             else
             {
+                BBSModClient.getFilms().unfreeze(filmId);
                 ContentType.FILMS.getRepository().load(filmId, (data) ->
                 {
                     MinecraftClient.getInstance().execute(() -> playFilm((Film) data, withCamera));
@@ -98,6 +99,14 @@ public class Films
 
     public static void playFilm(Film film, boolean withCamera)
     {
+        if (BBSModClient.getFilms().isPlaying(film.getId()))
+        {
+            stopFilm(film.getId());
+            return;
+        }
+
+        BBSModClient.getFilms().unfreeze(film.getId());
+
         FirstPersonFilmController filmController = new FirstPersonFilmController(film);
 
         if (withCamera && !film.hasFirstPerson())
@@ -155,8 +164,29 @@ public class Films
 
     /* Instance API */
 
+    public boolean isPlaying(String filmId)
+    {
+        for (BaseFilmController controller : this.controllers)
+        {
+            if (!(controller instanceof FrozenFilmController) && controller.film.getId().equals(filmId))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public BaseFilmController getController(String filmId)
     {
+        for (BaseFilmController controller : this.controllers)
+        {
+            if (!(controller instanceof FrozenFilmController) && controller.film.getId().equals(filmId))
+            {
+                return controller;
+            }
+        }
+
         for (BaseFilmController controller : this.controllers)
         {
             if (controller.film.getId().equals(filmId))

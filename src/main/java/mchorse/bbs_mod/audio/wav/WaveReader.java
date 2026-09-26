@@ -63,16 +63,46 @@ public class WaveReader extends BinaryReader
                         blockAlign = this.readShort(stream);
                         bitsPerSample = this.readShort(stream);
 
-                        /* Discarding extra data */
-                        if (chunk.size > 16)
+                        int remaining = chunk.size - 16;
+
+                        /* Support WAVE_FORMAT_EXTENSIBLE (0xFFFE / 65534) */
+                        if ((audioFormat == 0xFFFE || audioFormat == 65534) && remaining >= 24)
                         {
-                            stream.skip(chunk.size - 16);
+                            int cbSize = this.readShort(stream);
+                            int validBits = this.readShort(stream);
+                            int channelMask = this.readInt(stream);
+                            int subFormat = this.readShort(stream);
+
+                            this.skip(stream, 14);
+                            remaining -= 24;
+
+                            if (subFormat == 1 || subFormat == 3)
+                            {
+                                audioFormat = subFormat;
+                            }
+                        }
+
+                        if (remaining > 0)
+                        {
+                            this.skip(stream, remaining);
                         }
                     }
                     else if (chunk.id.equals("data"))
                     {
                         data = new byte[chunk.size];
-                        stream.read(data);
+                        int read = 0;
+
+                        while (read < chunk.size)
+                        {
+                            int r = stream.read(data, read, chunk.size - read);
+
+                            if (r < 0)
+                            {
+                                break;
+                            }
+
+                            read += r;
+                        }
                     }
                     /* https://www.recordingblogs.com/wiki/list-chunk-of-a-wave-file */
                     else if (chunk.id.equals("LIST"))

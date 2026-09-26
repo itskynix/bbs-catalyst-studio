@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.audio;
 
+import mchorse.bbs_mod.audio.mp3.Mp3Reader;
 import mchorse.bbs_mod.audio.ogg.VorbisReader;
 import mchorse.bbs_mod.audio.wav.WaveReader;
 import mchorse.bbs_mod.resources.AssetProvider;
@@ -23,29 +24,55 @@ public class AudioReader
 
         if (isVideo(pathLower))
         {
-            return readVideoAudio(provider, link);
+            Wave videoWave = readVideoAudio(provider, link);
+
+            return videoWave != null ? videoWave.normalize() : null;
         }
 
-        if (!pathLower.endsWith(".wav") && !pathLower.endsWith(".ogg"))
+        if (!pathLower.endsWith(".wav") && !pathLower.endsWith(".ogg") && !pathLower.endsWith(".mp3"))
         {
             return null;
         }
 
         /* System.out.println("Reading: " + link); */
 
+        Wave wave = null;
+
         try (InputStream asset = provider.getAsset(link))
         {
             if (pathLower.endsWith(".wav"))
             {
-                return new WaveReader().read(asset);
+                wave = new WaveReader().read(asset);
             }
             else if (pathLower.endsWith(".ogg"))
             {
-                return VorbisReader.read(link, asset);
+                wave = VorbisReader.read(link, asset);
+            }
+            else if (pathLower.endsWith(".mp3"))
+            {
+                try
+                {
+                    wave = Mp3Reader.read(link, asset);
+                }
+                catch (Exception e)
+                {
+                    /* Fallback to ffmpeg for mp3 if available */
+                    wave = readVideoAudio(provider, link);
+
+                    if (wave == null)
+                    {
+                        throw e;
+                    }
+                }
             }
         }
 
-        throw new IllegalStateException("Given link " + link + " isn't a Wave or a Vorbis file!");
+        if (wave != null)
+        {
+            return wave.normalize();
+        }
+
+        throw new IllegalStateException("Given link " + link + " isn't a supported audio file (WAV, OGG, MP3)!");
     }
 
     /**

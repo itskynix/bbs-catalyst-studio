@@ -73,9 +73,9 @@ public class MinecraftSoundMixer
             return false;
         }
 
-        if (filmAudio != null && filmAudio.bitsPerSample != 16)
+        if (filmAudio != null)
         {
-            filmAudio = filmAudio.convertTo16();
+            filmAudio = filmAudio.normalize();
         }
 
         if (filmAudio != null && (filmAudio.numChannels < 1 || filmAudio.data.length == 0))

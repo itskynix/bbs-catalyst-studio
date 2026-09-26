@@ -158,9 +158,9 @@ public class UIAudioEditor extends UIElement
         {
             Wave wave = AudioReader.read(BBSMod.getProvider(), audio);
 
-            if (wave.getBytesPerSample() > 2)
+            if (wave != null)
             {
-                wave = wave.convertTo16();
+                wave = wave.normalize();
             }
 
             List<ColorCode> colorCodes = BBSModClient.getSounds().readColorCodes(audio);

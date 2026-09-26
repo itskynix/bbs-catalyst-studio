@@ -9,8 +9,10 @@ import mchorse.bbs_mod.film.Film;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.settings.values.base.BaseValue;
 import mchorse.bbs_mod.settings.values.numeric.ValueInt;
+import mchorse.bbs_mod.camera.clips.overwrite.ProCameraClip;
 import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.film.clips.UIClip;
+import mchorse.bbs_mod.ui.film.clips.UIProCameraClip;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.utils.UITimelinePanel;
@@ -167,6 +169,13 @@ public class UIClipsPanel extends UITimelinePanel implements IUIClipsDelegate
         {
             if (this.panel.clip == clip)
             {
+                if (!this.panel.hasParent())
+                {
+                    this.attachPropertiesPanel(this.panel, 160);
+                }
+                this.resize();
+                this.resizeTarget();
+                this.panel.setVisible(this.propertiesVisible);
                 this.panel.fillData();
 
                 return;
@@ -192,15 +201,26 @@ public class UIClipsPanel extends UITimelinePanel implements IUIClipsDelegate
         {
             this.clips.embedView(null);
 
-            this.panel = UIClip.createPanel(clip, this);
-            this.panel.setUndoId("clip_panel");
+            if (clip instanceof ProCameraClip proCameraClip)
+            {
+                this.panel = new UIProCameraClip(proCameraClip, this);
+            }
+            else
+            {
+                this.panel = UIClip.createPanel(clip, this);
+            }
 
-            this.attachPropertiesPanel(this.panel, 160);
-            this.resize();
-            this.resizeTarget();
-            this.panel.fillData();
-            this.panel.setVisible(this.propertiesVisible);
-            this.panel.restoreScroll();
+            if (this.panel != null)
+            {
+                this.panel.setUndoId("clip_panel");
+
+                this.attachPropertiesPanel(this.panel, 160);
+                this.resize();
+                this.resizeTarget();
+                this.panel.fillData();
+                this.panel.setVisible(this.propertiesVisible);
+                this.panel.restoreScroll();
+            }
 
             if (this.filmPanel.isFlying())
             {

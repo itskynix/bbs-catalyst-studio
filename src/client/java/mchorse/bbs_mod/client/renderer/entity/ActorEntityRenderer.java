@@ -17,6 +17,7 @@ import net.minecraft.client.render.entity.model.ArmorEntityModel;
 import net.minecraft.client.render.entity.model.EntityModelLayers;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.EntityPose;
+import mchorse.bbs_mod.cubic.render.vanilla.CapeRenderer;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.RotationAxis;
@@ -24,6 +25,7 @@ import net.minecraft.util.math.RotationAxis;
 public class ActorEntityRenderer extends EntityRenderer<ActorEntity>
 {
     public static ArmorRenderer armorRenderer;
+    public static CapeRenderer capeRenderer;
 
     public ActorEntityRenderer(EntityRendererFactory.Context ctx)
     {
@@ -35,6 +37,8 @@ public class ActorEntityRenderer extends EntityRenderer<ActorEntity>
             ctx.getPart(EntityModelLayers.ELYTRA),
             ctx.getModelManager()
         );
+
+        capeRenderer = new CapeRenderer();
 
         /* The film draws an actor's shadow itself, sized and offset by the replay. A vanilla shadow
          * underneath would be a second one, at a fixed size nobody asked for. */

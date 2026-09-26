@@ -10,6 +10,7 @@ import mchorse.bbs_mod.audio.SoundLikeManager.LikedSound;
 import mchorse.bbs_mod.audio.SoundManager;
 import mchorse.bbs_mod.audio.SoundPlayer;
 import mchorse.bbs_mod.audio.Wave;
+import mchorse.bbs_mod.audio.mp3.Mp3Reader;
 import mchorse.bbs_mod.audio.ogg.VorbisReader;
 import mchorse.bbs_mod.audio.wav.WaveReader;
 import mchorse.bbs_mod.resources.Link;
@@ -208,7 +209,7 @@ public class UISoundOverlayPanel extends UIStringOverlayPanel
         for (Link link : BBSMod.getProvider().getLinksFromPath(Link.assets("audio")))
         {
             String pathLower = link.path.toLowerCase();
-            boolean supported = pathLower.endsWith(".wav") || pathLower.endsWith(".ogg");
+            boolean supported = pathLower.endsWith(".wav") || pathLower.endsWith(".ogg") || pathLower.endsWith(".mp3");
 
             if (supported)
             {
@@ -407,6 +408,10 @@ public class UISoundOverlayPanel extends UIStringOverlayPanel
 
                             wave = VorbisReader.read(tempLink, fis);
                         }
+                        else if (pathLower.endsWith(".mp3"))
+                        {
+                            wave = Mp3Reader.read(fis);
+                        }
                     }
                 }
             }
@@ -426,10 +431,7 @@ public class UISoundOverlayPanel extends UIStringOverlayPanel
             {
                 List<ColorCode> colorCodes = link != null ? sounds.readColorCodes(link) : new ArrayList<>();
 
-                if (wave.getBytesPerSample() > 2)
-                {
-                    wave = wave.convertTo16();
-                }
+                wave = wave.normalize();
 
                 this.player.loadAudio(wave, colorCodes);
 

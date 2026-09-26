@@ -2044,6 +2044,21 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         }
     }
 
+    public void stopPlayback()
+    {
+        if (this.runner != null && this.runner.isRunning())
+        {
+            this.runner.setPlaying(false);
+            this.lastRunning = false;
+        }
+    }
+
+    public boolean isRecording()
+    {
+        return (this.recorder != null && this.recorder.isRecording())
+            || (this.controller != null && this.controller.isRecording());
+    }
+
     public boolean canUseKeybinds()
     {
         return !this.isFlying();

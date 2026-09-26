@@ -28,6 +28,7 @@ import mchorse.bbs_mod.cubic.physics.ModelPhysicsRuntime;
 import mchorse.bbs_mod.cubic.model.ArmorSlot;
 import mchorse.bbs_mod.cubic.model.ArmorType;
 import mchorse.bbs_mod.cubic.model.bobj.BOBJModel;
+import mchorse.bbs_mod.cubic.render.vanilla.CapeRenderer;
 import mchorse.bbs_mod.forms.CustomVertexConsumerProvider;
 import mchorse.bbs_mod.forms.FormTranslucentQueue;
 import mchorse.bbs_mod.forms.FormUtilsClient;
@@ -72,6 +73,7 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.util.Hand;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.math.RotationAxis;
 import org.joml.Vector3f;
 import org.joml.Matrix4f;
@@ -529,18 +531,19 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
             RenderSystem.enableCull();
         }
 
-        /* Render items. The capture allocates ~4 matrices per bone, and its only readers here
-         * are the item/armor block right below (skipped in the picking pass entirely) and
+        /* Render items and cape. The capture allocates ~4 matrices per bone, and its only readers here
+         * are the item/armor/cape block right below (skipped in the picking pass entirely) and
          * renderBodyParts afterwards - so a model with neither pays for neither. */
+        boolean hasCape = this.form != null && this.form.hasCape.get();
         boolean hasEquipment = !model.getItemsMain().isEmpty() || !model.getItemsOff().isEmpty() || !model.getArmorSlots().isEmpty();
         boolean hasBodyParts = this.form != null && !this.form.parts.getAllTyped().isEmpty();
 
-        if (hasBodyParts || (stencilMap == null && hasEquipment))
+        if (hasBodyParts || hasCape || (stencilMap == null && hasEquipment))
         {
             this.captureMatrices(model);
         }
 
-        if (stencilMap == null && hasEquipment)
+        if (stencilMap == null && !this.renderingArm && hasEquipment)
         {
             this.renderItems(target, model, stack, EquipmentSlot.MAINHAND, ModelTransformationMode.THIRD_PERSON_RIGHT_HAND, model.getItemsMain(), finalColor, overlay, light);
             this.renderItems(target, model, stack, EquipmentSlot.OFFHAND, ModelTransformationMode.THIRD_PERSON_LEFT_HAND, model.getItemsOff(), finalColor, overlay, light);
@@ -548,6 +551,17 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
             for (Map.Entry<ArmorType, ArmorSlot> entry : model.getArmorSlots().entrySet())
             {
                 this.renderArmor(target, stack, entry.getKey(), entry.getValue(), finalColor, overlay, light);
+            }
+        }
+
+        if (stencilMap == null && !this.renderingArm && hasCape)
+        {
+            ItemStack chest = target != null ? target.getEquipmentStack(EquipmentSlot.CHEST) : null;
+            boolean hasElytra = chest != null && chest.isOf(Items.ELYTRA);
+
+            if (!hasElytra)
+            {
+                this.renderCape(target, model, stack, transition, finalColor, overlay, light);
             }
         }
     }
@@ -683,7 +697,79 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
 
             FormTranslucentQueue.setSortOrigin(new Matrix4f(RenderSystem.getModelViewMatrix()).transformPosition(armorOrigin));
 
-            ActorEntityRenderer.armorRenderer.renderArmorSlot(stack, consumers, target, type.slot, type, light);
+            Identifier capeTexture = null;
+            if (this.form != null && this.form.hasCape.get())
+            {
+                capeTexture = CapeRenderer.resolveCapeTexture(this.form.capeTexture.get());
+            }
+
+            ActorEntityRenderer.armorRenderer.renderArmorSlot(stack, consumers, target, type.slot, type, light, capeTexture);
+            consumers.draw();
+            FormTranslucentQueue.setSortOrigin(null);
+
+            CustomVertexConsumerProvider.clearRunnables();
+
+            stack.pop();
+
+            RenderSystem.enableBlend();
+            RenderSystem.enableDepthTest();
+        }
+    }
+
+    private void renderCape(IEntity target, ModelInstance model, MatrixStack stack, float transition, Color color, int overlay, int light)
+    {
+        if (this.renderingArm)
+        {
+            return;
+        }
+
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc.options.getPerspective().isFirstPerson())
+        {
+            if (target instanceof MCEntity mcEntity && mcEntity.getMcEntity() == mc.player)
+            {
+                return;
+            }
+        }
+
+        if (ActorEntityRenderer.capeRenderer == null)
+        {
+            ActorEntityRenderer.capeRenderer = new CapeRenderer();
+        }
+
+        ArmorSlot chestSlot = model.getArmorSlots().get(ArmorType.CHEST);
+        String group = chestSlot != null ? chestSlot.group : null;
+
+        if (group == null)
+        {
+            if (this.bones.has("body")) group = "body";
+            else if (this.bones.has("torso")) group = "torso";
+            else if (this.bones.has("root")) group = "root";
+        }
+
+        Matrix4f matrix = group != null ? this.bones.get(group).matrix() : null;
+
+        if (matrix != null)
+        {
+            CustomVertexConsumerProvider consumers = FormUtilsClient.getProvider();
+
+            stack.push();
+            MatrixStackUtils.multiply(stack, matrix);
+            if (chestSlot != null)
+            {
+                MatrixStackUtils.applyTransform(stack, chestSlot.transform);
+            }
+            stack.multiply(RotationAxis.POSITIVE_X.rotationDegrees(180F));
+
+            CustomVertexConsumerProvider.hijackVertexFormat((l) -> RenderSystem.enableBlend());
+
+            Vector3f capeOrigin = stack.peek().getPositionMatrix().getTranslation(new Vector3f());
+            FormTranslucentQueue.setSortOrigin(new Matrix4f(RenderSystem.getModelViewMatrix()).transformPosition(capeOrigin));
+
+            Identifier capeTexture = CapeRenderer.resolveCapeTexture(this.form.capeTexture.get());
+
+            ActorEntityRenderer.capeRenderer.renderCape(stack, consumers, target, transition, capeTexture, light);
+
             consumers.draw();
             FormTranslucentQueue.setSortOrigin(null);
 
@@ -1305,6 +1391,14 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
         if (this.animator != null)
         {
             this.animator.update(entity);
+        }
+
+        if (this.form != null && this.form.hasCape.get())
+        {
+            if (ActorEntityRenderer.capeRenderer != null)
+            {
+                ActorEntityRenderer.capeRenderer.tick(entity);
+            }
         }
     }
 }

@@ -32,9 +32,11 @@ public class UIModelFormPanel extends UIFormPanel<ModelForm>
 
     /** Only for a model that carries a CEM program — see {@link mchorse.bbs_mod.cubic.jem.CemStatus}. */
     public UISection cemSection;
+    public UISection capeSection;
 
     public UIButton pickModel;
     public UIButton pick;
+    public UIButton pickCape;
 
     public UIModelFormPanel(UIForm editor)
     {
@@ -89,9 +91,10 @@ public class UIModelFormPanel extends UIFormPanel<ModelForm>
             }
         });
 
-        this.options.add(this.pickModel, this.pick, this.poseEditor);
-
         this.buildCemSection();
+        this.buildCapeSection();
+
+        this.options.add(this.pickModel, this.pick, this.poseEditor, this.capeSection);
     }
 
     /**
@@ -118,6 +121,20 @@ public class UIModelFormPanel extends UIFormPanel<ModelForm>
             UI.labelRow(UIKeys.FORMS_EDITOR_MODEL_CEM_HEALTH, health)
         );
         this.cemSection.title.tooltip(UIKeys.FORMS_EDITOR_MODEL_CEM_TOOLTIP);
+    }
+
+    private void buildCapeSection()
+    {
+        this.pickCape = new UIButton(UIKeys.FORMS_EDITOR_MODEL_CAPE_PICK_TEXTURE, (b) ->
+        {
+            UITexturePicker.open(this.getContext(), this.form.capeTexture.get(), (l) -> this.form.capeTexture.set(l));
+        });
+
+        this.capeSection = this.section(UIKeys.FORMS_EDITOR_MODEL_CAPE, "model.cape", false);
+        this.capeSection.fields.add(
+            UIValues.toggle(UIKeys.FORMS_EDITOR_MODEL_CAPE_ENABLE, () -> this.form.hasCape),
+            this.pickCape
+        );
     }
 
     /**

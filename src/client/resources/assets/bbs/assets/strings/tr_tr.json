@@ -188,6 +188,8 @@
     "bbs.ui.camera.clips.bbs:drop_item": "Eşya düşürme",
     "bbs.ui.camera.clips.bbs:idle": "Sabit",
     "bbs.ui.camera.clips.bbs:interact_block": "Blok ile etkileşime geçme",
+    "bbs.ui.camera.clips.bbs:keyframe": "Keyframe",
+    "bbs.ui.camera.clips.bbs:pro_camera": "Pro Kamera",
     "bbs.ui.camera.clips.bbs:look": "Bakma",
     "bbs.ui.camera.clips.bbs:math": "Matematiksel",
     "bbs.ui.camera.clips.bbs:orbit": "Yörünge",
@@ -1052,5 +1054,10 @@
     "studio.ui.utility.reload_terrain": "Arazi",
     "studio.ui.utility.reload_textures": "Dokular",
     "studio.ui.utility.resize": "Pencereyi yeniden boyutlandır",
-    "studio.ui.utility.title": "Yardımcı öğeler paneli"
+    "studio.ui.utility.title": "Yardımcı öğeler paneli",
+    "bbs.ui.forms.editor.model.cape": "Pelerin",
+    "bbs.ui.forms.editor.model.cape_enable": "Pelerini Etkinleştir",
+    "bbs.ui.forms.editor.model.cape_pick_texture": "Pelerin Dokusu Seç...",
+    "bbs.ui.replays.tracks.properties.has_cape": "Pelerin",
+    "bbs.ui.replays.tracks.properties.cape_texture": "Pelerin Dokusu"
 }

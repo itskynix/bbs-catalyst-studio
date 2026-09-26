@@ -13,6 +13,7 @@ public class Position implements IMapSerializable
 
     public final Point point = new Point(0, 0, 0);
     public final Angle angle = new Angle(0, 0);
+    public float focusDistance = 5.0F;
 
     public Position()
     {}
@@ -44,18 +45,21 @@ public class Position implements IMapSerializable
     {
         this.point.set(position.point);
         this.angle.set(position.angle);
+        this.focusDistance = position.focusDistance;
     }
 
     public void set(Camera camera)
     {
         this.point.set(camera);
         this.angle.set(camera);
+        this.focusDistance = camera.focusDistance;
     }
 
     public void copy(Position position)
     {
         this.point.set(position.point.x, position.point.y, position.point.z);
         this.angle.set(position.angle.yaw, position.angle.pitch, position.angle.roll, position.angle.fov);
+        this.focusDistance = position.focusDistance;
     }
 
     public void apply(Camera camera)
@@ -63,6 +67,7 @@ public class Position implements IMapSerializable
         camera.position.set(this.point.x, this.point.y, this.point.z);
         camera.rotation.set(MathUtils.toRad(this.angle.pitch), MathUtils.toRad(this.angle.yaw), MathUtils.toRad(this.angle.roll));
         camera.fov = MathUtils.toRad(this.angle.fov);
+        camera.focusDistance = this.focusDistance;
     }
 
     public void interpolate(Position position, float factor)
@@ -74,11 +79,14 @@ public class Position implements IMapSerializable
         this.angle.pitch = Lerps.lerp(this.angle.pitch, position.angle.pitch, factor);
         this.angle.roll = Lerps.lerp(this.angle.roll, position.angle.roll, factor);
         this.angle.fov = Lerps.lerp(this.angle.fov, position.angle.fov, factor);
+        this.focusDistance = Lerps.lerp(this.focusDistance, position.focusDistance, factor);
     }
 
     public Position copy()
     {
-        return new Position(this.point.copy(), this.angle.copy());
+        Position copy = new Position(this.point.copy(), this.angle.copy());
+        copy.focusDistance = this.focusDistance;
+        return copy;
     }
 
     @Override

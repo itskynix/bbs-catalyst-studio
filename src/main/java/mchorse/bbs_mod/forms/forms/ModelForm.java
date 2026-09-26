@@ -66,6 +66,9 @@ public class ModelForm extends Form implements IPosedForm
     public final ValueBoolean cemCrawling = new ValueBoolean("cem_crawling", false);
     public final ValueFloat cemHealth = new ValueFloat("cem_health", 1F);
 
+    public final ValueBoolean hasCape = new ValueBoolean("has_cape", false);
+    public final ValueLink capeTexture = new ValueLink("cape_texture", Link.bbs("textures/default_cape.png"));
+
     /**
      * Runtime per-material texture overrides driven by the per-material animation tracks
      * (keyed by material name). Set each frame by {@code FormProperties} during playback and
@@ -133,6 +136,9 @@ public class ModelForm extends Form implements IPosedForm
         this.add(this.cemClimbing);
         this.add(this.cemCrawling);
         this.add(this.cemHealth);
+
+        this.add(this.hasCape);
+        this.add(this.capeTexture);
     }
 
     @Override
