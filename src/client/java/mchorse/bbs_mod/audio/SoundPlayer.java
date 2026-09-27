@@ -128,6 +128,7 @@ public class SoundPlayer
     public void setRelative(boolean relative)
     {
         AL10.alSourcei(this.source, AL10.AL_SOURCE_RELATIVE, relative ? AL10.AL_TRUE : AL10.AL_FALSE);
+        AL10.alSourcef(this.source, AL10.AL_ROLLOFF_FACTOR, relative ? 0.0F : 1.0F);
     }
 
     public void setLooping(boolean looping)

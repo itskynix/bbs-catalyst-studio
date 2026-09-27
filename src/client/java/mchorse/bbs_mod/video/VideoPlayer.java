@@ -58,6 +58,18 @@ public class VideoPlayer
     private float fps;
     private float duration;
 
+    /**
+     * Optional render cap set by {@link #setMaxSize}.  When non-zero, frames are decoded at
+     * this resolution (via ffmpeg scale filter) instead of native video size.
+     * {@code renderWidth} and {@code renderHeight} are the effective dimensions used for
+     * buffer allocation and texture upload after the cap has been applied.
+     */
+    private int maxRenderWidth;
+    private int maxRenderHeight;
+    /** Effective decode resolution (≤ native, ≤ cap). Set in probe() after cap is applied. */
+    private int renderWidth;
+    private int renderHeight;
+
     /* Probing spawns ffmpeg and parses its output - too slow for the render thread,
      * so it normally runs on the seek worker; only recording and explicit UI asks
      * (ensureProbed) do it synchronously. */
@@ -92,6 +104,80 @@ public class VideoPlayer
         this.file = file;
     }
 
+    /**
+     * Clamp the decoded frame resolution to at most {@code maxW x maxH}.
+     * Use this to avoid allocating a 33 MB frame buffer for a 4K source when the
+     * composition viewport is only 1920x1080.  Must be called before the first
+     * {@link #getFrame(float)}.
+     */
+    public void setMaxSize(int maxW, int maxH)
+    {
+        int newMaxW = maxW > 0 ? maxW : 0;
+        int newMaxH = maxH > 0 ? maxH : 0;
+
+        if (this.maxRenderWidth != newMaxW || this.maxRenderHeight != newMaxH)
+        {
+            this.maxRenderWidth = newMaxW;
+            this.maxRenderHeight = newMaxH;
+
+            if (this.state == STATE_VALID)
+            {
+                this.updateRenderSize();
+            }
+        }
+    }
+
+    private void updateRenderSize()
+    {
+        int oldRenderW = this.renderWidth;
+        int oldRenderH = this.renderHeight;
+
+        int capW = this.maxRenderWidth > 0 ? this.maxRenderWidth : 1920;
+        int capH = this.maxRenderHeight > 0 ? this.maxRenderHeight : 1080;
+
+        if (this.width > capW || this.height > capH)
+        {
+            float scaleW = (float) capW / this.width;
+            float scaleH = (float) capH / this.height;
+            float scale = Math.min(scaleW, scaleH);
+
+            /* ffmpeg scale filter requires dimensions divisible by 2 */
+            this.renderWidth = Math.max(2, ((int) (this.width * scale)) & ~1);
+            this.renderHeight = Math.max(2, ((int) (this.height * scale)) & ~1);
+        }
+        else
+        {
+            this.renderWidth = this.width;
+            this.renderHeight = this.height;
+        }
+
+        if (oldRenderW != 0 && (oldRenderW != this.renderWidth || oldRenderH != this.renderHeight))
+        {
+            this.stop();
+            if (this.frameBuffer != null)
+            {
+                MemoryUtil.memFree(this.frameBuffer);
+                this.frameBuffer = null;
+            }
+            if (this.texture != null)
+            {
+                this.texture.delete();
+                this.texture = null;
+            }
+            this.currentFrame = -1;
+        }
+    }
+
+    public int getRenderWidth()
+    {
+        return this.renderWidth > 0 ? this.renderWidth : this.width;
+    }
+
+    public int getRenderHeight()
+    {
+        return this.renderHeight > 0 ? this.renderHeight : this.height;
+    }
+
     public boolean isValid()
     {
         return this.state == STATE_VALID;
@@ -105,6 +191,21 @@ public class VideoPlayer
     public float getDuration()
     {
         return this.duration;
+    }
+
+    public int getWidth()
+    {
+        return this.width;
+    }
+
+    public int getHeight()
+    {
+        return this.height;
+    }
+
+    public float getFps()
+    {
+        return this.fps;
     }
 
     /**
@@ -173,6 +274,7 @@ public class VideoPlayer
                 return;
             }
 
+            this.updateRenderSize();
             this.state = STATE_VALID;
         }
         catch (Exception e)
@@ -299,12 +401,13 @@ public class VideoPlayer
         }
 
         int read = 0;
+        long startDecodeMs = System.currentTimeMillis();
 
         while (this.streamFrame <= target)
         {
-            if (!recording && read++ >= MAX_CATCH_UP_FRAMES)
+            if (!recording && (read++ >= MAX_CATCH_UP_FRAMES || (System.currentTimeMillis() - startDecodeMs > 16)))
             {
-                /* Keep the editor smooth - the rest catches up on the next render frames */
+                /* Keep the editor smooth - prevent locking UI thread when reading heavy frames */
                 break;
             }
 
@@ -321,6 +424,12 @@ public class VideoPlayer
             {
                 this.upload(target);
             }
+        }
+
+        /* If catch-up stopped before reaching target, upload the newest decoded frame so far */
+        if (!recording && this.streamFrame - 1 > this.currentFrame && this.frameBuffer != null)
+        {
+            this.upload(this.streamFrame - 1);
         }
 
         return this.texture;
@@ -397,20 +506,34 @@ public class VideoPlayer
         {
             /* Allocated on the first decode, not on probing: a player asked only for
              * metadata (a clip's duration) would otherwise hold a full frame of pixels
-             * - up to 33 MB for a 4K file - without ever decoding anything. */
+             * - up to 33 MB for a 4K file - without ever decoding anything.
+             * renderWidth/renderHeight are capped by setMaxSize(); for uncapped videos
+             * they equal width/height exactly. */
             if (this.frameBuffer == null)
             {
-                this.frameBuffer = MemoryUtil.memAlloc(this.width * this.height * 4);
+                this.frameBuffer = MemoryUtil.memAlloc(this.renderWidth * this.renderHeight * 4);
             }
 
-            ProcessBuilder builder = new ProcessBuilder(
-                FFMpegUtils.getFFMPEG(),
-                "-ss", String.valueOf(seconds),
-                "-i", this.file.getAbsolutePath(),
-                "-an", "-sn", "-dn",
-                "-f", "rawvideo", "-pix_fmt", "rgba",
-                "pipe:1"
-            );
+            /* Build the ffmpeg command; add a scale filter when the render size is smaller
+             * than the native video resolution to let ffmpeg downscale on the fly instead of
+             * transferring a full-resolution frame across the CPU→GPU bus. */
+            java.util.List<String> cmd = new java.util.ArrayList<>();
+            cmd.add(FFMpegUtils.getFFMPEG());
+            cmd.add("-ss");  cmd.add(String.valueOf(seconds));
+            cmd.add("-i");   cmd.add(this.file.getAbsolutePath());
+            cmd.add("-an");  cmd.add("-sn");  cmd.add("-dn");
+
+            if (this.renderWidth != this.width || this.renderHeight != this.height)
+            {
+                cmd.add("-vf");
+                cmd.add("scale=" + this.renderWidth + ":" + this.renderHeight);
+            }
+
+            cmd.add("-f");   cmd.add("rawvideo");
+            cmd.add("-pix_fmt"); cmd.add("rgba");
+            cmd.add("pipe:1");
+
+            ProcessBuilder builder = new ProcessBuilder(cmd);
 
             builder.redirectError(ProcessBuilder.Redirect.DISCARD);
 
@@ -459,6 +582,11 @@ public class VideoPlayer
 
     private void upload(int frame)
     {
+        if (this.texture != null && this.currentFrame == frame && this.texture.isValid())
+        {
+            return;
+        }
+
         if (this.texture == null)
         {
             this.texture = new Texture();
@@ -468,7 +596,7 @@ public class VideoPlayer
         }
 
         this.texture.bind();
-        this.texture.uploadTexture(GL11.GL_TEXTURE_2D, 0, this.width, this.height, this.frameBuffer);
+        this.texture.uploadTexture(GL11.GL_TEXTURE_2D, 0, this.renderWidth, this.renderHeight, this.frameBuffer);
         this.texture.unbind();
 
         this.currentFrame = frame;

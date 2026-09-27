@@ -2,7 +2,7 @@
 
 **Proje:** Blockbuster Studio (BBS) - Fabric 1.20.4 Port (`bbs-cs`)  
 **Tarih:** 25 Eylül 2026  
-**Son Tamamlanan Aşama:** 17. Aşama — Pro Camera Clip Mimarisi (35mm Odak Uzaklığı & Lens Presetleri, Bağımsız Roll / Dutch Angle, Dahili Dolly Zoom / Vertigo ve Odak Mesafesi Altyapısı)
+**Son Tamamlanan Aşama:** 47. Aşama — Alt Ses Katmanı Oynatma Önceliği, 2K/4K Video Frame Optimizasyonu ve Stereo OpenAL Desteği: getActiveAudioLayer iki aşamalı öncelik taraması (AUDIO katmanları her zaman öncelikli, VIDEO katmanları volume > 0 şartıyla), VideoPlayer dinamik setMaxSize ve renderWidth/renderHeight ölçekleme (FFmpeg -vf scale ile 4K'da 33MB'tan ~8MB'a düşüş), 16ms render bütçeli frame skipping/lag koruması ve OpenAL 2D stereo (AL_SOURCE_RELATIVE + AL_ROLLOFF_FACTOR=0 + setPosition(0,0,0)).
 
 ---
 
@@ -195,18 +195,384 @@ BBS moduna, DaVinci Resolve ve modern prodüksiyon araçlarından esinlenen iki 
      - `mchorse.bbs_mod.audio.mp3.Mp3Reader` sınıfı yazılarak MP3 akışlarının doğrudan 16-bit Signed PCM `Wave` nesnesine çözülmesi sağlandı.
      - `AudioReader.java`, `SoundManager.java`, `SoundBuffer.java`, `UISoundOverlayPanel.java` ve `UIAudioEditor.java` sınıflarında `.mp3` dosya uzantı filtreleri eklendi; tüm çözülen seslerin OpenAL buffer'ına yüklenmeden önce otomatik `normalize()` edilmesi garanti altına alındı.
 
+### Catalyst Editor UI Panel İskeleti - BBS Catalyst Studio (31. Aşama)
+* **Kök Neden & Mimari Uygulama:**
+  1. **Dashboard Görev Çubuğu Entegrasyonu (`UIDashboard.java`):**
+     - Dashboard alt araç çubuğunda (`registerPanels()`) "Filmler" (`film`) panelinin hemen sağına yeni `catalyst` panel adımı kaydedildi:
+       `this.buildStep("catalyst", () -> this.panels.registerPanel(new UICatalystPanel(this), UIKeys.CATALYST_TITLE, Icons.FIVE_STAR));`
+     - İkon olarak şık beş köşeli yıldız (`Icons.FIVE_STAR` - render/star/magic) seçildi.
+     - Tooltip başlığı için `UIKeys.CATALYST_TITLE` oluşturuldu; `en_us.json` ve `tr_tr.json` dil dosyalarına `"Catalyst Editor"` tanımları eklendi.
+  2. **Catalyst Editor Panel İskeleti (`UICatalystPanel.java`):**
+     - `mchorse.bbs_mod.ui.dashboard.panels.UICatalystPanel` sınıfı `UIDashboardPanel` türetilerek oluşturuldu.
+     - **Üst Araç Çubuğu (`topBar`):** Başlık etiketi, Play/Pause toggle (`Icons.PLAY`/`Icons.PAUSE`), Katman Ekle (`Icons.ADD`), İmleçte Böl (`Icons.CUT`), Proje Ayarları (`Icons.GEAR`) ve Tam Ekran (`Icons.FULLSCREEN`) eylem butonları eklendi.
+     - **Önizleme Alanı (`previewArea`):** Üst alanda (%53 yükseklik) ortalanmış 16:9 oranlı kompozisyon tuvali (canvas guide), üçte bir kuralı/güvenli alan çizgileri, ortalanmış rozet ("CATALYST VIEWPORT • 1920 × 1080 • 60 FPS") ve alt zaman kodu göstergesi yerleştirildi.
+     - **Alt Kompozisyon Çerçevesi (`bottomArea`):** Kalan alt alan (%47 yükseklik) iki modüler bölüme ayrıldı:
+       * Sol Katmanlar Paneli (`layersContainer`): Başlık çubuğu, dikey kaydırılabilir katman listesi (`layersList`), örnek kompozisyon kanalları (Video Plate, 3D Replay Actor, Audio Ambience, FX/Color).
+       * Sağ Zaman Çizelgesi (`timelineContainer`): Üst cetvel/frame tick işaretleri (`timelineHeader`), çok kanallı klip şeritleri grid'i ve kırmızı oynatma kafası (`playhead`) imleci.
+
+### Catalyst Editor Proje Yönetim Ekranı ve Üst Sekme Sistemi (32. Aşama)
+* **Kök Neden & Mimari Uygulama:**
+  1. **Catalyst Proje Veri Modeli ve Yöneticisi (`CatalystProject.java` & `CatalystProjectManager.java`):**
+     - Projelerin adı, FPS (varsayılan 60), süresi (varsayılan 300 frame), çözünürlüğü (1920×1080) ve zaman damgalarını barındıran `CatalystProject` sınıfı oluşturuldu.
+     - `CatalystProjectManager` ile `.minecraft/bbs/assets/catalyst_projects` dizininde otomatik oluşturma, JSON bazlı yükleme, kaydetme ve silme operasyonları sağlandı.
+  2. **Üst Sekme (Tab) Sistemi (`UICatalystTab.java` & `UICatalystPanel.java`):**
+     - Sol üst araç çubuğuna BBS arayüz standartlarına uygun özel sekme butonları entegre edildi:
+       * **Projeler** (`Icons.FOLDER` - "Projects")
+       * **Editör** (`Icons.FILM` - "Composition Editor")
+     - Aktif sekme vurgusu (birincil tema rengi ve alt çizgi) ile dinamik durum yönetimi (`CatalystTab.PROJECTS` vs `CatalystTab.EDITOR`) kuruldu.
+     - Aktif proje başlık rozeti (`activeProjectLabel`) sekme çubuğunun yanına yerleştirildi; seçili projenin adı, FPS ve süresi gerçek zamanlı yansıtıldı.
+  3. **Proje Karşılama ve Seçim Ekranı (Project Manager View):**
+     - Aktif seçili proje olmadığında (veya oyun açılışında panele ilk girildiğinde) panel doğrudan "Projeler" karşılama ekranını açar.
+     - **Sol Bölme:** Kayıtlı projeleri listeleyen `UICatalystProjectList`, üstünde başlık ve sayaç, "+ Yeni Proje" (`Icons.ADD`), "Klasörü Aç" (`Icons.FOLDER`) ve "Yenile" (`Icons.REFRESH`) araçları.
+       * Projeye tek tıklandığında sağdaki yapılandırma formu dolgulanır.
+       * Çift tıklandığında (veya Enter tuşunda) proje hemen aktif edilip otomatik olarak "Editör" sekmesine geçilir.
+     - **Sağ Bölme:** Proje oluşturma ve düzenleme kartı (`nameInput`, `fpsInput` [1-240], `durationInput` [1-100000], `widthInput`, `heightInput`), "Projeyi Aç / Editöre Geç" birincil butonu, "Formu Temizle" ve "Projeyi Sil" aksiyonları.
+     - İstenildiği zaman üstteki "Projeler" sekmesine tıklanarak başka bir projeye geçilebilir veya yeni proje oluşturulabilir.
+
+### Catalyst Editor — Saniye Süresi Girişi, AE Kompozisyon Sekme Şeridi ve Katman Modeli (33. Aşama)
+* **Uygulanan Değişiklikler:**
+  1. **Saniye Bazlı Süre Girişi (`UICatalystPanel.java`):**
+     - Proje oluşturma formundaki süre alanı frame → saniye giriş formatına güncellendi (`durationSecondsInput`, aralık 0.1s–3600s, varsayılan 5.0s).
+     - Girilen saniyeye karşılık otomatik hesaplanan kare sayısı (`saniye × fps`) bilgi etiketi (`durationCalcLabel`) olarak formun altında gösterildi (örn. `"5.0s (300f @ 60 FPS)"`).
+     - `CatalystProject` oluşturulurken ve kaydedilirken hem `durationSeconds` hem de karşılık gelen `durationFrames` (`seconds × fps`) alanları tutarlı biçimde saklandı.
+     - `UICatalystProjectList` satır alt başlığı `"X.Xs (Yf @ Z FPS) • W×H"` formatına dönüştürüldü.
+  2. **Katman ve Kompozisyon Veri Modeli (`CatalystLayer.java`, `CatalystComposition.java`):**
+     - `CatalystLayer`: katman adı, türü, rengi, görünürlük ve kilit durumu ile `startFrame`/`duration` kanallarını barındıran yeni veri sınıfı. `MapType` serileştirmesi `putBool`/`getBool` kullanılarak düzeltildi.
+     - `CatalystComposition`: kendi bağımsız katman listesine, FPS, süre ve oynatma kafası (`playhead`) alanlarına sahip kompozisyon nesnesi. `setupDefaultLayers()` ile 4 varsayılan katman (Video, 3D Replay, Audio, FX/Color) oluşturuluyor.
+     - `CatalystProject` güncellendi: `durationSeconds`, `List<CatalystComposition> compositions`, `activeCompositionIndex` eklendi; `ensureCompositions()`, `addComposition()`, `removeComposition()` yardımcı metotları yazıldı.
+  3. **AE Tarzı Kompozisyon Sekme Şeridi (`UICatalystCompTab.java`, `UICatalystPanel.java`):**
+     - `UICatalystCompTab extends UIClickable<UICatalystCompTab>`: After Effects benzeri tek composition sekmesi. Film şeridi ikonu, kompozisyon adı, aktif sekme üst çizgisi (birincil renk) ve ×(kapat) butonu (hover'da kırmızı). Yakın butonu `mouseClicked` override yerine `overClose` boolean alanı (her karede `renderSkin` içinde güncellenir) + callback lambda ile handle edildi; `UIElement.mouseClicked()` `final` kısıtlaması aşıldı.
+     - `UICatalystPanel`'e 22px yüksekliğinde yatay `compTabStrip` (önizleme alt sınırı ile `bottomArea` arası), sağında `+Comp` (`Icons.ADD`) butonu eklendi. `rebuildCompTabs()` aktif projenin kompozisyonlarına göre sekmeleri yeniden oluşturuyor; `setActiveComposition(index)` ile sekme geçişi yönetiliyor.
+  4. **UIKeys & Dil Dosyaları:**
+     - `UIKeys.CATALYST_COMP_NEW`, `UIKeys.CATALYST_DURATION` (güncellendi) eklendi.
+     - `en_us.json` ve `tr_tr.json` güncellendi: `"catalyst.duration"` → `"Duration (Seconds)"`, `"catalyst.comp.new"` → `"New Comp"`.
+
+---
+
+### Catalyst Editor — UI Çakışma Düzeltmesi, LayerType Enum, Katman Ekleme Menüsü ve Timeline Scrubbing (34. Aşama)
+* **Uygulanan Değişiklikler:**
+  1. **UI Üst Üste Binme Düzeltmesi (`UICatalystPanel.java`):**
+     - `projectsView` elemanı artık tüm editör bileşenlerinin (preview, compTabStrip, bottomArea) **üstüne** ekleniyor. Bu sayede Projects sekmesindeyken arkadaki editör metinleri ve tuval tamamen gizleniyor.
+     - `projectsView`'a en üst child olarak `deepSurface()` rengiyle tam alan kaplayan opak `UIRenderable` zemin eklendi.
+     - `UIElement` eklenme sırası: `topBar → previewArea → compTabStrip → bottomArea → projectsView` (projectsView en üstte render ediliyor).
+  2. **`CatalystLayer` Güncellendi — `id` Alanı ve `LayerType` Enum:**
+     - `id` alanı: `UUID.randomUUID().toString().substring(0, 8)` ile otomatik kısa ID üretimi.
+     - `LayerType` iç enum: `SOLID`, `SCENE`, `AUDIO`, `NULL`.
+     - `LayerType.fromString()` geriye dönük uyumlu: eski `"VIDEO"`, `"ACTOR"`, `"EFFECT"` string değerlerini doğru enum türüne eşliyor.
+     - `LayerType.defaultColor()` her tür için uygun renk döndürüyor.
+     - `CatalystLayer.solid(name)` ve `CatalystLayer.scene(name)` hızlı factory metotları eklendi.
+     - `CatalystComposition.setupDefaultLayers()` enum kullanacak şekilde güncellendi.
+  3. **Katman Ekleme Menüsü (`UICatalystPanel.openAddLayerMenu()`):**
+     - Üstteki `+` (Katman Ekle) butonuna tıklandığında panelin üstüne geçici bir inline popup overlay açılıyor.
+     - İki seçenek: **"+ Solid Layer"** (düz renk) ve **"+ Scene/Film Layer"** (BBS sahne/film).
+     - Seçildiğinde katman aktif kompozisyona ekleniyor, proje kaydediliyor, overlay kapanıyor.
+  4. **Timeline Playback & Scrubbing (`UICatalystPanel`):**
+     - **Play/Pause:** `playPauseButton`'a tıklandığında `isPlaying` toggle olur. `tickPlayback(comp)` preview render'ının her frame'inde çağrılır; `System.currentTimeMillis()` delta ile `fps`'e göre `currentFrame` ilerletilir. Son frame'e ulaşınca loop sıfırlanır.
+     - **Timeline scrubbing (tıklama + sürükleme):** `timelineTracks` anonymous sınıfında:
+       * `subMouseClicked` → sol tık: `isScrubbing = true`, `currentFrame` mouse X'e göre hesaplanır, play durdurulur.
+       * `subMouseReleased` → `isScrubbing = false`.
+       * `render` başında: `isScrubbing` aktifse mouse X → frame dönüşümü her karede yenilenir (drag scrub).
+     - **Kırmızı playhead çizgisi** timeline tracks ve header'da `currentFrame * 4` piksel ofsette çiziliyor.
+     - **Timecode** preview canvas altında `00:00:SS:FF [Frame X / Y]` formatında gösteriliyor.
+     - `mouseXToFrame(mouseX, area, comp)` yardımcı metodu: 4 px/frame ölçeği, `[0, duration-1]` aralığında sınırlandırılmış.
+  5. **Teknik Düzeltmeler:**
+     - `Scroll.scroll` private alanı yerine `Scroll.getScroll()` public metodu kullanıldı.
+     - `BBSSettings.mainSurface()` → `BBSSettings.deepSurface()` (mevcut olmayan metod düzeltmesi).
+     - `@Override mouseClicked()` (`UIElement`'de `final`) → kaldırıldı; tüm mouse mantığı `subMouseClicked` / `subMouseReleased` (her ikisi de `protected`, override edilebilir) üzerine taşındı.
+
+---
+
+### Catalyst Editor — UITimelineCanvas Altyapısına Geçiş ve Kompozisyon '+' Düzeltmesi (35. Aşama)
+* **Uygulanan Değişiklikler:**
+  1. **Film Editörü Timeline Altyapısına Geçiş — `UICatalystTimeline extends UITimelineCanvas`:**
+     - Yeni `UICatalystTimeline.java` sınıfı oluşturuldu (`ui.dashboard.panels.catalyst` paketi).
+     - BBS'in olgun zaman ekseni motoru `UITimelineCanvas`'tan miras alıyor: `Scale xAxis` ile piksel↔kare dönüşümü, `animateZoom()` ile mouse-wheel zoom, `dragTimeBy()` ile orta-tık sürükleme (pan), `Marquee` bantı.
+     - **Cetvel (Ruler):** `TimelineRulerRenderer.render()` kullanılıyor — `1-2-5` adımlı otomatik tick etiketleme, sunken arka plan, küçük/büyük çizgiler.
+     - **Sadece-cetvel scrubbing:** Sol tıklama **yalnızca** üst 21 px ruler bölgesinde playhead'i ilerletiyor. Klip şeritlerine tıklamak playhead'i **hareket ettirmiyor** (istemsiz scrub engellendi).
+     - **Orta tık panning:** Orta fare butonu ile hem yatay (zaman ekseni) hem dikey (katman scroll) kaydırma.
+     - **Ctrl + Scroll → Zoom in/out:** `Scale.animateZoom()` ile anchor-tabanlı animasyonlu yakınlaştırma/uzaklaştırma.
+     - **Düz Scroll → Dikey katman scroll:** `Scroll vertical` ile katman satırları yukarı/aşağı kaydırılıyor.
+     - **Playhead çizimi:** Birincil tema rengiyle (`BBSSettings.primaryColor`) tam boy dikey çizgi, ruler altında üçgen kapak, ve `UITimelineCanvas.renderCursor()` ile kare/saniye etiket kartı.
+     - **Klip blokları:** Her katmanın `startFrame` ve `duration` değerleri `Scale.toGraphX()` ile dönüştürülerek çiziliyor — zoom seviyesiyle uyumlu şekilde genişliyor/daralıyor.
+  2. **`UICatalystPanel.java` Temizliği:**
+     - Eski `timelineContainer`, `timelineHeader`, `timelineTracks` alanları ve `mouseXToFrame()` yardımcı metodu kaldırıldı.
+     - `isScrubbing` boolean alanı kaldırıldı (artık `UICatalystTimeline` kendi içinde yönetiyor).
+     - `setupBottomArea()` yeniden yazıldı: Sol layers paneli aynen korundu; sağ tarafa `UICatalystTimeline` eklendi.
+     - Timeline data akışı: `compSupplier` → aktif kompozisyon, `playheadSupplier` → `currentFrame`, `playheadSetter` → frame güncelleme + otomatik pause.
+  3. **Kompozisyon '+' Butonu Düzeltmesi:**
+     - `addCompButton` callback'ine `this.currentFrame = 0;` eklendi. `CatalystProject.addComposition()` zaten `activeCompositionIndex`'i yeni comp'a set ediyor; `currentFrame` sıfırlanmadığında eski frame timeline'da geçersiz pozisyonda kalıyordu.
+     - `rebuildCompTabs()` ve `updateTitleLabel()` çağrıları zaten mevcut — düzeltme yalnızca frame resetiydi.
+
+---
+
+### Catalyst Editor — Film Editörü Timeline Bileşeninin Birebir Uyarlanması (36. Aşama)
+* **Uygulanan Değişiklikler:**
+  1. **UIClips Mimarisinin UICatalystTimeline'a Birebir Aktarılması (`UICatalystTimeline.java`):**
+     - BBS Film Editörünün (`UIClips`) denenmiş ve stabil tıklama, scrubbing ve klip manipülasyon mantığı `UICatalystTimeline` üzerine birebir uyarlandı.
+     - **Katı Cetvel (Strict Ruler) Scrubbing:** `isInRuler(mouseY)` denetimi ile sadece en üstteki zaman cetveline (21px ruler) tıklandığında playhead taşınır ve oynatma durdurulur (`onScrub`).
+     - **Katman/Klip Seçimi ve Deselect:**
+       - Klip üzerine tıklandığında katman seçilir (`setSelected`), `Shift` ile çoklu seçim (`addSelected`/`toggleSelected`) yapılır.
+       - Klip olmayan boş track alanına tıklandığında mevcut seçim kaldırılır (Deselect / `clearSelection`), sürükleme yapılırsa Marquee seçim kutusu açılır.
+     - **Klip Taşıma ve Çift Yönlü Trim:**
+       - Sol ve sağ kenarlara yaklaşıldığında handle tespiti (`getLayerHandle` = 1 sol, 2 sağ, 0 taşıma).
+       - Sol kenardan çekilirse `startFrame` ve `duration` dinamik olarak trim edilir (`grabMode == 1`).
+       - Sağ kenardan çekilirse `duration` uzatılıp kısaltılır (`grabMode == 2`).
+       - Gövdeden tutulursa klip zaman çizelgesinde serbestçe taşınır (`grabMode == 0`).
+       - Seçili veya hover olan kliplerde `Icons.CLIP_HANLDE_LEFT` ve `Icons.CLIP_HANLDE_RIGHT` tutamaçları ile beyaz çerçeve göstergesi çizilir.
+     - **Klavye Kısayolları ve Cut / Split Desteği:**
+       - `C` tuşuna basıldığında veya üst paneldeki `splitButton`'a tıklandığında `cutSelected()` metodu çalışarak seçili klibi playhead hizasından ikiye böler (`split`).
+       - `Delete` tuşuna basıldığında seçili klipler silinir (`deleteSelected()`).
+     - **Gezinme (Navigation) & Zoom:**
+       - Orta fare tuşuyla tutularak yatay ve dikey yönde serbest pan hareketi.
+       - Fare tekerleğiyle anchor-tabanlı zaman zoom'u (`zoomTimeAt`) ve `Shift + Wheel` ile dikey track kaydırması.
+  2. **UICatalystPanel Entegrasyonu & Senkronizasyon (`UICatalystPanel.java`):**
+     - Üst araç çubuğundaki `splitButton` (`Icons.CUT`) doğrudan `cutSelectedClip()` metoduna bağlandı ve proje anında kaydedildi.
+     - Sol taraftaki `layersList` panelinde bir katmana tıklandığında timeline'daki katman otomatik olarak seçilir (`catalystTimeline.setSelected(layer)`).
+     - Seçili olan katman hem sol katman panelinde (arkaplan & beyaz outline) hem de sağ zaman çizelgesinde (beyaz outline & handle'lar) eşzamanlı olarak vurgulanır.
+     - Oynatma kafası scrubbing başladığında oynatma durumu (`isPlaying = false`) sıfırlanır.
+
+---
+
+### Catalyst Editor — Split Sıralaması, Proje Otomatik Kayıt, Katman Inspector & Viewport Render (37. Aşama)
+* **Uygulanan Değişiklikler:**
+  1. **After Effects Tarzı Split Sıralaması (Cut) (`UICatalystTimeline.java`):**
+     - `cutSelected()` metodu güncellendi:
+       * Bölünen yeni katman listenin en sonuna değil, bölünen katmanın hemen index öncesine (`comp.layers.add(originalIndex, second)`) yani bir üst satıra eklenir.
+       * Yeni oluşan üst parça otomatik olarak seçili (`setSelected`) hale gelir.
+       * Split sonrası proje otomatik olarak diske kaydedilir (`onModified.run()`).
+  2. **Tam Kalıcı Kayıt (Auto-Save & Persistence):**
+     - `UICatalystTimeline`'a `onModified` callback'i eklendi:
+       * Katman sürükleme ve trim işlemi bittiğinde (`subMouseReleased`),
+       * Katman bölündüğünde (`cutSelected`),
+       * Katman silindiğinde (`deleteSelected`),
+       * Inspector panelinden katman özellikleri (ad, opaklık, renk, görünürlük, kilit, blend modu) değiştirildiğinde,
+       * Proje anında `CatalystProjectManager.saveProject(activeProject)` ile otomatik olarak kaydedilir.
+     - `CatalystLayer` veri modeline `opacity` (0-100) ve `blendMode` ("NORMAL", "MULTIPLY", "SCREEN", "ADD", "OVERLAY") alanları eklendi; JSON serileştirmesi (`toData` / `fromData`) sağlandı.
+  3. **Katman Detayları (Inspector Panel) (`UICatalystPanel.java`):**
+     - Alt panel 3 sütunlu profesyonel NLE düzenine dönüştürüldü:
+       * Sol: Katman Listesi (`layersContainer`, 200px)
+       * Orta: Zaman Çizelgesi (`catalystTimeline`, kalan alan)
+       * Sağ: Katman Denetçisi (`inspectorContainer`, 220px)
+     - Seçili katman yoksa "No layer selected" uyarısı gösterilir.
+     - Katman seçildiğinde:
+       * Katman Adı (`UITextbox`),
+       * Katman Tipi (`UILabel`),
+       * Opaklık (`UITrackpad`, 0-100%),
+       * 8'li Hızlı Renk Paleti (Swatches) ile anında renk değiştirme,
+       * Blend Modu döngü butonu (`NORMAL`, `MULTIPLY`, `SCREEN`, `ADD`, `OVERLAY`),
+       * Görünürlük (Visible: ON/OFF) ve Kilit (Lock: ON/OFF) toggle butonları.
+  4. **Viewport Canlandırma (Canvas Rendering) (`UICatalystPanel.java`):**
+     - Üst viewport/tuval alanında `currentFrame`'de aktif olan tüm görünür katmanlar (`visible && startFrame <= currentFrame < startFrame + duration`) arkadan öne doğru (listenin sonundan başına) gerçek zamanlı çizilir.
+     - `SOLID` katmanlar belirlenen renk ve opaklıkta (`Colors.setA`) tuval alanına çizilir.
+     - `SCENE` katmanları için sahne etiketi ve renk alanı gösterilir.
+     - Katman olmayan boş karelerde kompozisyonun siyah/koyu arka planı korunur.
+
+---
+
+### Catalyst Editor — UI Çakışmaları Temizliği, Timeline Context Menüsü, Fullscreen & Genişletilmiş Katman Tipleri (38. Aşama)
+* **Uygulanan Değişiklikler:**
+  1. **Inspector & Proje Formu Metin Çakışması Düzeltmesi (`UICatalystPanel.java`):**
+     - Inspector formunda (`inspectorForm`) her elemanın dikey yüksekliği (`.h(16)` / `.h(20)`) ve dikey aralık (`4px`) net olarak belirlendi, etiketlerin ve inputların üst üste binmesi engellendi.
+     - Projeler açılış formundaki `durationCalcLabel` ve `Resolution (W x H)` alanlarının dikey yükseklikleri sabitlenerek metin çakışması tamamen giderildi.
+  2. **Viewport OSD Düzenlemesi (`UICatalystPanel.java`):**
+     - Tuvalin tam ortasına çizilen kompozisyon bilgi metin kartı (`MAIN COMP | 1920x1080 | 60 FPS | Rec.709`) ortadan kaldırıldı.
+     - Bu bilgi tuvalin sol altında yer alan timecode (`00:00:00:00`) satırının hemen bir üst satırına (`area.ey() - 34`) kompakt ve şık bir OSD olarak yerleştirildi.
+     - Tuval yüzeyi artık yalnızca katmanların kendi görsellerini engelsiz şekilde gösterir.
+  3. **Split İsimlendirme Düzeltmesi (`UICatalystTimeline.java`):**
+     - `cutSelected()` metodu içindeki `" (Split)"` eki kaldırıldı. Bölünen yeni üst parça orijinal katmanın adını birebir korur (`second.name = layer.name`).
+  4. **Üst Bardaki Add Layer'ın Kaldırılması, Fullscreen & Timeline Context Menüsü:**
+     - Üst araç çubuğundaki ilkel `+` Add Layer butonu ve popup katmanı tamamen kaldırıldı.
+     - Sağ üstteki `Icons.FULLSCREEN` butonuna tıklandığında önizleme alanını/tuvali tam ekran moduna alıp alt panelleri gizleyen (`toggleFullscreen()`) mekanizma bağlandı.
+     - `UICatalystTimeline` üzerine sağ tıklandığında açılan zengin `UIContextMenu` entegre edildi:
+       * **Add Layer Alt Menüsü:** Solid Layer, Audio Layer, Adjustment Layer, Null Layer, Text Layer, Film / Scene Layer, Video Layer, Image Layer.
+       * **Klip Üzerinde Sağ Tık Seçenekleri:** Cut / Split (C), Duplicate, Delete (Del).
+       * Kopyalama (`duplicateSelected()`) seçili katmanın tam bir kopyasını oluşturup hemen üstüne yerleştirir.
+  5. **Genişletilmiş Katman Veri Modeli (`CatalystLayer.java`):**
+     - `LayerType` enum'ına yeni tipler eklendi:
+       `SOLID, AUDIO, ADJUSTMENT, NULL, TEXT, SCENE, VIDEO, IMAGE`
+     - Her katman tipi için renk paleti (`defaultColor()`) ve katman listesi için kısaltma etiketleri (`getBadge()`: `[SOL], [A], [ADJ], [N], [T], [S], [V], [IMG]`) tanımlandı.
+
+---
+
+### Catalyst Editor — Timeline Snapping (Manyetik Yapışma), BBS Native Hiyerarşik Ekleme Menüsü ve Medya Altyapısı (39. Aşama)
+* **Uygulanan Değişiklikler:**
+  1. **Timeline Manyetik Yapışma (Snapping) (`UICatalystTimeline.java`):**
+     - Katmanlar taşınırken veya sol/sağ kenarlarından trim edilirken snap eşiği eklendi (`snapTick` metodu, 6 piksel tolerans).
+     - Diğer katmanların başlangıç ve bitiş karelerine (`startFrame`, `startFrame + duration`), oynatma kafasına (`playhead`) ve kompozisyon sınırlarına (`0`, `duration`) manyetik olarak kilitlenme sağlandı.
+     - `Alt` tuşuna basılı tutulduğunda snapping geçici olarak devre dışı bırakılır.
+  2. **BBS Film Editörü Tarzı Hiyerarşik Context Menüsü (`UICatalystTimeline.java`):**
+     - Üst bar olarak `MenuVerb` aksiyonları (`ADD`, `REMOVE`, `COPY`, `CUT`) yerleştirildi.
+     - "Add..." alt menüsü altında "Add layer at cursor..." ve "Add layer at current tick..." seçenekleri eklendi.
+     - Seçenek tıklandığında BBS standart arama çubuğu ve ikon desteğine sahip `UIChoiceMenu` açılarak tüm 8 katman tipi (`SOLID`, `AUDIO`, `ADJUSTMENT`, `NULL`, `TEXT`, `SCENE`, `VIDEO`, `IMAGE`) hiyerarşik olarak sunuldu.
+  3. **Medya & Kaynak Yolu (Resource Path) Entegrasyonu (`CatalystLayer.java` & `UICatalystPanel.java`):**
+     - `CatalystLayer` modeline `public String resourcePath = ""` alanı eklendi ve JSON/NBT serialization (`toData` / `fromData`) sağlandı.
+     - Inspector paneline `Resource / File:` alanı (`layerResourceInput`) entegre edildi. Katman `SCENE`, `VIDEO`, `IMAGE`, `AUDIO` veya `TEXT` olduğunda görünür hale gelir ve dinamik olarak güncellenir.
+  4. **Viewport Canlandırma & Doku Desteği (`UICatalystPanel.java`):**
+     - `IMAGE` katmanları için BBS `BBSModClient.getTextures().getTexture(Link.create(...))` üzerinden gerçek doku/resim render'ı bağlandı (`texturedBox`).
+     - Kaynak yolu girilmediğinde veya resim yüklenemediğinde renk kutusu ve `IMAGE: [yol]` rozeti çizilir.
+     - `VIDEO`, `SCENE` ve `TEXT` katmanları için tuval üzerinde dinamik içerik ve metin kartları çizdirildi.
+
+---
+
+### Catalyst Editor — Gerçek BBS Medya Oynatıcıları, Transform/Pivot Kontrolleri, Dahili Dosya Seçici ve UI/UX İyileştirmeleri (40. Aşama)
+* **Uygulanan Değişiklikler:**
+  1. **Context Menü Buton Çakışması & Temizlik (`UICatalystTimeline.java`):**
+     - Hiçbir katman seçili olmadığında sağ tık üst barında yalnızca `[+]` (`MenuVerb.ADD`) ikonu gösterilir; mükerrer liste satırları kaldırıldı.
+     - Katman seçildiğinde üst barda `[-]` (`MenuVerb.REMOVE`) ve `[Duplicate]` (`MenuVerb.COPY`), alt listede ise `Cut / Split (C)`, `Duplicate` ve `Delete (Del)` seçenekleri sunulur.
+  2. **Gelişmiş Text Layer Motoru & Inspector (`CatalystLayer.java` & `UICatalystPanel.java`):**
+     - `CatalystLayer` modeline `textColor` (katman renginden bağımsız metin rengi), `fontSize`, `lineWrapping` ve `shadow` alanları eklendi ve tam JSON/NBT serialization (`toData` / `fromData`) bağlandı.
+     - Inspector paneline çok satırlı metin girişi (`UITextarea`), yazı boyutu trackpad'i (`layerFontSizeInput`), metin renk seçicisi (`layerTextColorPicker` / `UIColor`), satır kaydırma (`Wrap: ON/OFF`) ve gölge (`Shadow: ON/OFF`) butonları entegre edildi.
+     - Tuval üzerinde metin, katmanın timeline rengine bağlı kalmaksızın kendi `textColor` değeriyle ve seçilen gölge ayarıyla render edilir.
+  3. **Timeline Dikey Taşıma / Katman Sıralaması (Layer Reordering):**
+     - `UICatalystTimeline` içindeki tekil katman sürüklemesine (`dragLayers`) dikey hareket algılama eklendi. Fare dikeyde başka bir satıra kaydırıldığında hedef satır indeksi (`fromLayerY(mouseY)`) hesaplanıp katman `comp.layers` listesinde yeni sırasına taşınır.
+  4. **Spacebar Play/Stop Desteği (`UICatalystPanel.java`):**
+     - `subKeyPressed` metodu override edilerek odak herhangi bir metin alanında değilken (`!context.isFocused()`) `GLFW_KEY_SPACE` tuşu ile zaman çizelgesi oynatımı (`togglePlayback()`) tetiklendi.
+  5. **Üst Bar Sadeleştirme & Kompozisyon Ayarları Modalı:**
+     - Üst bardaki gereksiz split butonu kaldırıldı, genişlik 70px olarak optimize edildi.
+     - Ayarlar butonuna (`settingsButton`) tıklandığında açılan `UIOverlayPanel` modal penceresi (`openCompositionSettingsModal()`) eklendi: Kompozisyon Adı, FPS, Süre (saniye) ve Çözünürlük (Genişlik x Yükseklik) dinamik olarak güncellenip projeye kaydedilir.
+  6. **Geri Al / İleri Al (Undo / Redo — CTRL+Z / CTRL+Y) Desteği:**
+     - Proje snapshot tabanlı `pushUndo()`, `undo()` ve `redo()` motoru kuruldu.
+     - Katman taşıma, kırpma (trim), bölme (split), çoğaltma (duplicate), silme (delete), ekleme ve ayar değişikliklerinde otomatik undo snapshot'ı alınır.
+     - Odak metin kutusunda değilken `Ctrl + Z` ile geri, `Ctrl + Y` veya `Ctrl + Shift + Z` ile ileri alma kısayolları bağlandı.
+  7. **Viewport Debug Metinlerinin Temizliği:**
+     - Tuval üzerinde katmanların üzerinde görünen "VIDEO: ...", "SCENE: ...", "IMAGE: ...", "Layer Name" gibi hata ayıklama etiketleri tamamen kaldırıldı; saf görsel/medya çıktısı sağlandı.
+  8. **BBS Yerel Dosya Seçicileri (Browse Butonları):**
+     - Ham metin kutusunun yanına dahili seçici (`layerPickResourceBtn`) ve klasör açma butonu (`layerOpenFolderBtn`) entegre edildi:
+       * `IMAGE` katmanları için `UITexturePicker.open`
+       * `VIDEO` katmanları için `UIStringOverlayPanel.links` (`UIVideoClip.getVideoLinks()`)
+       * `AUDIO` katmanları için `UISoundOverlayPanel`
+       * Klasör butonu ilgili medya dizinini (`BBSMod.getAssetsFolder()`, `BBSMod.getAudioFolder()`) sistem dosya yöneticisinde açar.
+  9. **Viewport Transform & Bounding Box:**
+     - `CatalystLayer` modeline `posX`, `posY`, `scaleX`, `scaleY`, `rotation`, `anchorX`, `anchorY` alanları ve serileştirme eklendi.
+     - Inspector paneline Position (X, Y), Scale (X, Y), Rotation ve Anchor Point (X, Y) trackpad kontrolleri yerleştirildi.
+     - Tuval üzerinde seçili katmanın etrafına beyaz çerçeve (bounding box), 4 köşesinde boyutlandırma tutamaçları ve merkezinde pivot crosshair çizildi. Katman gövdesinden tutularak taşınabilir ve köşe tutamaçlarından çekilerek ölçeklendirilebilir.
+  10. **Gerçek BBS Medya Oynatımı:**
+      - `IMAGE`: `BBSModClient.getTextures().getTexture(...)` ile doku render'ı.
+      - `VIDEO`: `BBSModClient.getVideos().getPlayer(layer, link).getFrame(relSec)` ile kare kare video gösterimi.
+      - `AUDIO`: `BBSModClient.getSounds().playUnique(this, link)` ile oynatma kafasıyla senkron ses çalma, duraklatma ve panel kapandığında (`onDisappear`) bellek/ses temizliği sağlandı.
+
+---
+
+### Catalyst Studio — Inspector Scroll, Medya Senkronizasyonu, Bounding Box Shift-Scale, Waveform ve Film Seçici (41. Aşama)
+* **Uygulanan Değişiklikler:**
+  1. **Inspector Scroll Paneli & Transform Reset (`UICatalystPanel.java`):**
+     - Inspector paneli BBS `UI.scrollView` mimarisine geçirilerek Transform, Text özellikleri ve Medya kontrollerinin dikeyde taşması tamamen çözüldü, fare tekerleğiyle akıcı kaydırma sağlandı.
+     - Transform başlığının yanına tek tıkla varsayılan değerlere (`Pos: 0, 0`, `Scale: 1, 1`, `Rot: 0°`, `Anchor: 0.5, 0.5`) dönüştüren "Reset" butonu (`layerResetTransformBtn`) eklendi.
+  2. **Video Katmanı Düzeltmeleri & Ses/Süre Senkronu (`UICatalystPanel.java` & `CatalystLayer.java`):**
+     - Tuvalde `VIDEO` ve `IMAGE` katmanları çizilirken katman rengi tint overlay'i kaldırıldı; videolar ve resimler orijinal renkleriyle (`0xFFFFFFFF` tabanlı alfa) render ediliyor.
+     - `CatalystLayer` modeline `volume` (0.0 - 1.0), `audioOffset` (kare bazlı) ve `mediaDuration` alanları eklenip serileştirildi.
+     - Inspector'a Volume slider'ı, Audio Offset trackpad'i ve klibi medyanın gerçek süresine kilitleyen "Extend to Media Length" butonu eklendi.
+     - Video sesi OpenAL ses motoru ile oynatma kafasına tam senkronize edildi.
+  3. **Kompozisyon Ayarları Modalı Geliştirmesi (`UICatalystPanel.java`):**
+     - `openCompositionSettingsModal()` içeriği canlı hesaplanan süre göstergesi (`saniye • frame @ FPS`) ve "Save & Apply" butonu ile zenginleştirildi.
+  4. **Viewport Bounding Box Shift-Scale:**
+     - Köşe tutamaçları sürüklendiğinde varsayılan olarak en-boy oranı (aspect ratio) korunarak ölçekleme yapılır; `Shift` tuşuna basılı tutulduğunda serbest (non-proportional) X/Y boyutlandırma aktif olur.
+  5. **Text Katmanı Motoru:**
+     - `fontSize` değeri `MatrixStack` ölçeklemesine bağlandı.
+     - `lineWrapping = true` iken `FontRenderer.wrap` ile otomatik satır sarma sağlandı.
+     - Katman adı asla metin içeriği olarak çizilmez; metin boşken inspector üzerinden düzenleme ipucu gösterilir.
+  6. **Ses Katmanı Senkronu, Waveform & Ses Temizliği:**
+     - Scrubbing anında, duraklatmada, sekme değişiminde ve panel kapanışında tüm OpenAL kaynakları (`stopAllAudio()`) durdurulur/temizlenir.
+     - Timeline üzerinde ses klipleri için `Waveform` render'ı ve genlik çubuğu yedeği entegre edildi.
+  7. **Film Katmanı ([FILM]) & Yerel Film Seçici:**
+     - `SCENE` katmanı kullanıcı arayüzünde "Film Layer" (`[FILM]` badge) olarak yeniden adlandırıldı.
+     - Inspector üzerinden `UIStringOverlayPanel` ile BBS kayıtlı filmleri (`BBSMod.getFilms().getKeys()`) listelenip seçildiğinde klip süresi otomatik olarak filmin kamera süresine (`film.camera.calculateDuration()`) ayarlanır.
+
+---
+
+### Catalyst Studio — EOFException Onarımı, Waveform Cache, OpenAL Kaynak Yönetimi ve Performans Optimizasyonları (42. Aşama)
+* **Uygulanan Değişiklikler:**
+  1. **Waveform Önbellekleme (Caching & Lazy Load) (`CatalystLayer.java` & `UICatalystTimeline.java`):**
+     - `UICatalystTimeline.renderTracks` içindeki render döngüsünden senkron `SoundManager.load` ve `WaveReader.read` çağrıları tamamen kaldırıldı. Her karede diske gidip WAV okuma kaynaklı `EOFException` çökme döngüsü kökten çözüldü.
+     - `CatalystLayer` modeline `cachedWaveform`, `isWaveformLoading`, `cachedWaveformPath` transient alanları eklendi.
+     - `UICatalystTimeline.ensureWaveformLoaded` asenkron iş parçacığı (`CatalystWaveformLoader`) kurularak waveform verisi yalnızca kaynak yolu (`resourcePath`) değiştiğinde arka planda tek bir kez hesaplanıp katmana önbelleğe alındı (`layer.cachedWaveform`).
+     - Okuma hataları (`EOFException`, eksik/bozuk dosyalar) `try-catch (Throwable)` ile sessizce yönetilip sonsuz yeniden denemeler engellendi.
+  2. **OpenAL Ses Kaynak Havuzu ve Tekil Oynatıcı (`UICatalystPanel.java`):**
+     - Ses çalma mantığı 60 FPS tuval render döngüsünden (`renderPreviewCanvas`) tamamen soyutlandı.
+     - Ses tetikleme yalnızca playhead tick'i değiştiğinde çalışan `updatePlaybackAudio()` metoduna taşındı.
+     - Her karede ve her katmanda yeni OpenAL ses kanalı üretilmesi engellenerek `Allocate new source: Invalid operation` hatası ortadan kaldırıldı; tekil ve kontrollü `activeAudioPlayer` tahsis edildi.
+     - Klipler arası geçişte, duraklatmada (`Space`), oynatma kafası scrubbing'inde veya panel kapanışında `stopAllAudio()` doğrudan `activeAudioPlayer.delete()` çağırarak OpenAL kaynağını anında işletim sistemine/sürücüye iade eder.
+  3. **Hafif Performans Optimizasyonları (Culling):**
+     - **Timeline Culling:** `UICatalystTimeline` içinde görünür zaman aralığı (`clipArea.ex() < area.x || clipArea.x > area.ex()`) ve dikey scroll alanının dışında kalan katmanlar ile dalga formları çizim döngüsünden elenerek (cull) GPU/CPU yükü azaltıldı.
+     - **Viewport Culling:** `renderPreviewCanvas` içinde tuvalin sınırları dışında kalan (`lx + layerW < cx || lx > cx + canvasW || ly + layerH < cy || ly > cy + canvasH`), görünmez (`!visible`) veya opaklığı sıfır olan katmanların çizim işlemleri pas geçildi.
+  4. **Katman Render Süresi ve AE Profiler (`UICatalystPanel.java`):**
+     - Her katmanın çizim süresi nanosaniye hassasiyetiyle ölçülüp `layer.lastRenderMs` alanına yazıldı ve sol paneldeki katman satırının yanına (`0.2 ms`, `1.5 ms`) basıldı.
+     - Kompozisyonun toplam render süresi ölçülerek tuvalin sol altındaki OSD şeridine (`Comp: X.X ms`) entegre edildi.
+
+---
+
+### Catalyst Studio — Media Picker NullPointerException Onarımı (43. Aşama)
+* **Kök Neden:**
+  - `crash-2026-09-27_04.57.42-client.txt` logundaki analize göre `UICatalystPanel.java` içinde `openMediaPickerForSelectedLayer()` çağrıldığında, açılan overlay/picker (örneğin Video, Audio veya Doku seçici) kullanıcı tarafından seçim yapılmadan kapatıldığında veya null döndüğünde `link.toString()` çağrısı `NullPointerException` fırlatıp oyunu çökertiyordu.
+* **Uygulanan Değişiklikler:**
+  1. **Image/Texture Picker Callback Null-Safety:**
+     - `UITexturePicker.open` callback'inde `link != null` kontrolü eklendi.
+  2. **Video Picker Callback Null-Safety:**
+     - `UIStringOverlayPanel.links` lambda callback'inde `link != null` kontrolü eklenerek `link.toString()` ve `VideoPlayer` probe/süre hesaplama işlemleri güvenli bloğa alındı.
+  3. **Audio Picker Callback Null-Safety:**
+     - `UISoundOverlayPanel` callback'inde `link != null` kontrolü eklenerek `link.toString()` ve `SoundBuffer` probe/süre hesaplama işlemleri korundu.
+  4. **Film/Scene Picker Callback Null & Empty Safety:**
+     - Film seçici callback'inde `filmId != null && !filmId.trim().isEmpty()` kontrolü eklenerek boş veya null film id seçimlerinde NBT/JSON yükleme çökmeleri önlendi.
+
+---
+
+---
+
+### Catalyst Studio — Video Aspect Ratio, Rotation Matrix, Film Viewport Render, Split Offset, Settings Modal ve Video Akıcılığı Onarımı (44. Aşama)
+* **Uygulanan Değişiklikler:**
+  1. **Video Katmanında Dinamik Aspect Ratio Desteği (`VideoPlayer.java` & `UICatalystPanel.java`):**
+     - Sabit 16:9 oranı kaldırıldı; `VideoPlayer` sınıfına `getWidth()`, `getHeight()` ve `getFps()` metotları eklendi.
+     - `UICatalystPanel.getLayerDimensions()` metodu yazılarak video ve resimlerin orijinal piksel en-boy oranına (örneğin 4:3, 1:1, 9:16) göre fit/letterbox/pillarbox hesaplandı.
+     - Hem tuvaldeki katman çizimi hem de etrafındaki Bounding Box ve köşe tutamaçları bu dinamik boyuta bağlandı.
+  2. **Katman Bölme (Cut / Split) In-Point / Offset Desteği (`CatalystLayer.java`, `UICatalystTimeline.java` & `UICatalystPanel.java`):**
+     - `CatalystLayer` modeline `mediaOffset` alanı eklendi (`toData` / `fromData` ile serileştirildi).
+     - `UICatalystTimeline.cutSelected()` içinde bölünen ikinci parçanın `mediaOffset` değeri `ilk_parca.mediaOffset + firstDuration` olarak atandı.
+     - Video, Audio ve Film oynatma kurgusunda bağıl kare hesabı:
+       `int relativeFrame = (currentPlayhead - layer.startFrame) + layer.mediaOffset;`
+       olarak güncellendi; kesilen parçaların videonun tam kesim karesinden oynaması sağlandı.
+  3. **Katman Döndürme (Rotation) Matrisi Onarımı (`UICatalystPanel.java`):**
+     - Katman çiziminde ve Bounding Box sınırlarında MatrixStack Z ekseni rotasyonu uygulandı:
+       * Pivot noktasına translate (`lx + layerW * anchorX`, `ly + layerH * anchorY`),
+       * `matrices.multiply(RotationAxis.POSITIVE_Z.rotationDegrees(layer.rotation))`,
+       * Pivotu geri öteleme ve çizim.
+     - Tuval fare tıklamalarında ve köşe tutamaçlarında dönmüş koordinatlar trigonometrik olarak hesaplanarak döndürülmüş katmanların doğru seçilip ölçeklenmesi sağlandı.
+  4. **Film Katmanının Tuvalde Render Edilmesi (`UICatalystPanel.java`):**
+     - Film katmanı için `BBSRendering.getTexture()` FBO off-screen dokusu `texturedBox` ile katman sınırlarına bağlandı; boş mavi renk yerine canlı film render'ı ve seçim durumuna göre şık kart gösterimi sağlandı.
+  5. **Composition Settings Modalını Görünür Yapma (`UICatalystPanel.java`):**
+     - Modal içindeki elementler `container.column(6).vertical().stretch()` ile kapsayıcıya bağlanıp `modal.content`'e eklendi.
+     - Comp Name, FPS, Süre (sn), Genişlik/Yükseklik ve "Apply & Close" butonu ekranda net ve ortalanmış biçimde görünür hale getirildi.
+  6. **Video Oynatma Akıcılığı & Micro-Stutter Giderimi (`VideoPlayer.java` & `UICatalystPanel.java`):**
+     - `VideoPlayer.upload()` içerisine mevcut kare numarası ile geçerli doku kimliğinin eşleşmesi durumunda GPU'ya gereksiz bellek aktarımını kesen önbellek koruması eklendi.
+     - `CatalystLayer` üzerinde kare numarası değişmedikçe bir önceki doku ID'sinin tekrar kullanımı sağlanarak oynatma akıcılığı artırıldı.
+
+  7. **Tam Ekran / Viewport Çözünürlük Bağımsız Koordinat Sistemi (`UICatalystPanel.java`):**
+     - Katmanların pencere piksel koordinatları yerine sabit sanal kompozisyon çözünürlüğüne (`comp.width` x `comp.height`, varsayılan 1920x1080) kilitlenmesi sağlandı:
+       * `float scale = Math.min((float) (area.w - 32) / compW, (float) (area.h - 32) / compH);`
+       * `float offsetX = area.x + (area.w - compW * scale) / 2.0F;`
+       * `float offsetY = area.y + (area.h - compH * scale) / 2.0F;`
+     - Tuval render döngüsünde (`renderPreviewCanvas`) MatrixStack'e `translate(offsetX, offsetY, 0)` ve `scale(scale, scale, 1.0F)` uygulanarak tüm katmanlar, metinler, görseller ve Bounding Box 1920x1080 sanal piksel uzayında çizildi.
+     - Tuval fare tıklamaları ve sürükleme işlemlerinde fare koordinatları `(mouseX - offsetX) / scale` ile sanal uzaya dönüştürülerek tam ekran geçişlerinde veya pencere yeniden boyutlandırmalarında katmanların kayması, bozulması ve oran kaybı tamamen engellendi.
+
 ---
 
 ## 4. Derleme & Doğrulama Durumu
 
 * `./gradlew.bat --no-daemon compileJava compileClientJava` komutu çalıştırıldı.
-* **Sonuç:** `BUILD SUCCESSFUL in 13s` — 0 Hata, 0 Kritik Uyarı.
+* **Sonuç (44. Aşama):** `BUILD SUCCESSFUL in 10s` — 0 Hata, 0 Kritik Uyarı.
 
 ---
 
 ## 5. Sırada Yapılacak Adım (Next Step)
 
-* Yüksek kalite WAV (24-bit, 32-bit float, 96 kHz) ve MP3 ses motoru entegrasyonu tamamlandı. Oyun içinde canlı doğrulamaya hazır.
+* Catalyst Studio 44. Aşama (Dinamik Video Aspect Ratio, Z Rotasyon Matrisi, Canlı Film Viewport Render'ı, Split In-Point Media Offset'i, Görünür Settings Modalı, Akıcı GPU Video Dokusu ve Çözünürlük Bağımsız Sanal Koordinat Sistemi) başarıyla tamamlandı. Sıradaki aşamalarda katman efekt zincirleri (Effects / Filters), maskeleme (Masks) ve keyframe tabanlı canlandırma (Transform Keyframing) geliştirilebilir.
+
+
+
+
+
+
+
+
 
 
 
