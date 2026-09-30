@@ -1,11 +1,11 @@
 ### Key Highlights
 
-#### 🎬 Catalyst NLE Timeline & Composition Studio
-* **Multi-Track Timeline:** Dedicated non-linear timeline supporting Video, Audio, Image, Text, Scene/Film, Solid, Null, and Adjustment tracks.
-* **Modern Editing Workflow:** Magnetic snapping, multi-track razor cutting, ripple gap deletion, and box/marquee multi-selection.
-* **Frame-Accurate Trimming:** Bi-directional trimming with dynamic offset synchronization to prevent unwanted frame resets.
-* **Virtual Canvas & Bounding Box:** Resolution-independent 1080p preview canvas with freeform scaling, anchor-point pivot rotation, and fullscreen monitor mode.
-* **Integrated Media Pool:** Drag-and-drop asset management straight from your desktop with automatic asynchronous waveform pre-caching.
+#### 🎬 Catalyst NLE Timeline & Composition Studio *(Experimental)*
+* **Multi-Track Timeline:** Dedicated non-linear timeline supporting Video, Audio, Image, Text, Scene/Film, Solid, Null, and Adjustment tracks. *(Experimental)*
+* **Modern Editing Workflow:** Magnetic snapping, multi-track razor cutting, ripple gap deletion, and box/marquee multi-selection. *(Experimental)*
+* **Frame-Accurate Trimming:** Bi-directional trimming with dynamic offset synchronization to prevent unwanted frame resets. *(Experimental)*
+* **Virtual Canvas & Bounding Box:** Resolution-independent 1080p preview canvas with freeform scaling, anchor-point pivot rotation, and fullscreen monitor mode. *(Experimental)*
+* **Integrated Media Pool:** Drag-and-drop asset management straight from your desktop with automatic asynchronous waveform pre-caching. *(Experimental)*
 
 #### 🎧 Studio-Grade Audio Engine
 * **Lossless Resampling:** 28-bit Soxr sinc filtering ensuring transparent 44.1 kHz / 48 kHz direct audio playback without high-frequency loss.
@@ -31,4 +31,4 @@
 #### 🔒 System & Security
 * **Locale Invariance:** Complete immunity to MoLang and file extension parsing crashes on Turkish and non-English Windows locales.
 * **Network & Stability:** Large-packet memory threshold protections against DoS attacks, along with automatic corrupt project backups.
-* **BBS Hub:** In-game marketplace framework for browsing and hot-reloading community models, presets, and rigs.
+* **BBS Hub Foundation:** In-game marketplace framework for browsing and hot-reloading community models, presets, and rigs. *(Experimental)*
