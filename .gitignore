@@ -46,3 +46,6 @@ ik_test/*
 .claude/settings.local.json
 OrthoCamera-1.20.1
 temp_change_log.md
+# Internal notes
+*.txt
+build_log.txt
