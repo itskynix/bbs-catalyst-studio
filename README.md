@@ -1,25 +1,34 @@
-# BBS CS (Catalyst Studio)
-
-**BBS CS (Catalyst Studio)** is an advanced Minecraft machinima, animation, and video production studio mod for Fabric 1.20.4, built as an upgraded fork of BBS FS.
-
-It brings a dedicated non-linear editing (NLE) timeline directly into Minecraft, featuring a studio-grade lossless audio pipeline, intelligent camera-frustum Replay LOD optimizations, and critical rendering fixes.
-
----
-
 ### Key Highlights
 
-* **Catalyst NLE Timeline:** Native composition timeline supporting Video, Audio, Image, Text, and Scene/Film layers with keyframing, trimming, and multi-track editing.
-* **Lossless Audio Pipeline:** 28-bit Soxr sinc resampling, transparent 2D stereo pass-through, and zero pitch-drift timeline scrubbing.
-* **Replay LOD Engine:** Distance and frustum-based actor culling to preserve performance in massive scenes (automatically disabled during offline video exports).
-* **Batch Replay Tools:** Instant replay reset without reloading dashboards, along with batch selection tools (Select All, Select Same Model).
-* **Render & Asset Fixes:** Full OpenGL state isolation preventing missing texture glitches with Iris/Sodium, and a comprehensive fix for armor right-side limb visibility.
-* **BBS Hub:** Integrated in-game community asset browser foundation for models, rigs, and presets.
+#### 🎬 Catalyst NLE Timeline & Composition Studio
+* **Multi-Track Timeline:** Dedicated non-linear timeline supporting Video, Audio, Image, Text, Scene/Film, Solid, Null, and Adjustment tracks[cite: 1].
+* **Modern Editing Workflow:** Magnetic snapping, multi-track razor cutting, ripple gap deletion, and box/marquee multi-selection[cite: 1].
+* **Frame-Accurate Trimming:** Bi-directional trimming with dynamic offset synchronization to prevent unwanted frame resets[cite: 1].
+* **Virtual Canvas & Bounding Box:** Resolution-independent 1080p preview canvas with freeform scaling, anchor-point pivot rotation, and fullscreen monitor mode[cite: 1].
+* **Integrated Media Pool:** Drag-and-drop asset management straight from your desktop with automatic asynchronous waveform pre-caching[cite: 1].
 
----
+#### 🎧 Studio-Grade Audio Engine
+* **Lossless Resampling:** 28-bit Soxr sinc filtering ensuring transparent 44.1 kHz / 48 kHz direct audio playback without high-frequency loss[cite: 1].
+* **Pristine 2D Stereo:** Bypassed OpenAL 3D spatialization filters on stereo sources with built-in analog soft-clipping protection[cite: 1].
+* **Smooth Scrubbing:** Native sample-rate tracking eliminating pitch and playback speed drift during timeline scrubbing[cite: 1].
+* **Extended Format Support:** Native decoding for 24-bit/32-bit float WAV and direct MP3 stream playback[cite: 1].
 
-### Building from Source
+#### ⚡ Replay Performance & Scene Management (bbs-lezy Integration)
+* **Live Multi-Track Replay Recording:** Real-time multi-actor recording session management with seamless arrow-key navigation between replays while actively recording[cite: 1].
+* **Replay LOD Engine:** Dynamic actor culling based on camera distance and view-frustum angle to maintain frame rates in heavy scenes[cite: 1].
+* **Export Quality Safeguard:** Dynamic culling automatically disengages during video exports to guarantee full rendering quality[cite: 1].
+* **Batch Replay Management:** Instant single-click replay desync reset, plus recursive batch selection and crowd multiplication tools[cite: 1].
 
-Ensure you have Java 17+ installed, then build with Gradle:
+#### 🛡️ Critical Rendering & Glitch Fixes
+* **3D Model Texture Protection:** Complete OpenGL state isolation resolving missing/glitched textures when using Sodium, Iris, ETF, and ETM[cite: 1].
+* **Armor Right-Side Limb Glitch:** Fixed missing armor rendering on the right arm, right leg, and right boot for player and actor models[cite: 1].
+* **Video Export Fixes:** Eliminated black letterboxing and windowed canvas clipping artifacts during video renders[cite: 1].
 
-```bash
-./gradlew build
+#### 🎥 Cinematic Camera & Visual Tools
+* **Pro Camera:** 35mm lens simulation, focal length controls, independent camera roll (Dutch angle), and dynamic Dolly Zoom (Vertigo) mode[cite: 1].
+* **Enhanced Cape Physics:** Fluid spring-damped cloth motion, first-person hand isolation, and Wavey Capes multi-point simulation bridge[cite: 1].
+
+#### 🔒 System & Security
+* **Locale Invariance:** Complete immunity to MoLang and file extension parsing crashes on Turkish and non-English Windows locales[cite: 1].
+* **Network & Stability:** Large-packet memory threshold protections against DoS attacks, along with automatic corrupt project backups[cite: 1].
+* **BBS Hub:** In-game marketplace framework for browsing and hot-reloading community models, presets, and rigs[cite: 1].
