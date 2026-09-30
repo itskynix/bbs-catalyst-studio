@@ -13,7 +13,7 @@
 * **Smooth Scrubbing:** Native sample-rate tracking eliminating pitch and playback speed drift during timeline scrubbing.
 * **Extended Format Support:** Native decoding for 24-bit/32-bit float WAV and direct MP3 stream playback.
 
-#### ⚡ Replay Performance & Scene Management (bbs-lezy Integration)
+#### ⚡ Replay Performance & Scene Management
 * **Live Multi-Track Replay Recording:** Real-time multi-actor recording session management with seamless arrow-key navigation between replays while actively recording.
 * **Replay LOD Engine:** Dynamic actor culling based on camera distance and view-frustum angle to maintain frame rates in heavy scenes.
 * **Export Quality Safeguard:** Dynamic culling automatically disengages during video exports to guarantee full rendering quality.
