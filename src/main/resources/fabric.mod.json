@@ -2,11 +2,12 @@
     "schemaVersion": 1,
     "id": "bbs",
     "version": "${version}",
-    "name": "BBS FS mod",
-    "description": "A new generation of video production mod",
+    "name": "BBS CS (Catalyst Studio)",
+    "description": "Built for machinima creators, animators, and filmmakers. BBS CS upgrades the core studio with the Catalyst NLE timeline, lossless studio-grade audio engine, smart replay LOD culling, and major render stability fixes.",
     "authors": [
         "McHorse",
-        "Wemppy"
+        "Wemppy (BBS FS)",
+        "Kynix"
     ],
     "contributors": [
         "Chryfi (tracker clip)",

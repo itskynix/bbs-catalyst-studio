@@ -37,8 +37,11 @@ public class VideoExportProfile
     private String pixelFormat = "yuv420p";
 
     private AudioCodec audioCodec = AudioCodec.AAC;
-    /** Audio bitrate in kbps (e.g. 192). */
-    private int audioBitrate = 192;
+    /** Audio bitrate in kbps (e.g. 320). */
+    private int audioBitrate = 320;
+
+    private boolean exportVideo = true;
+    private boolean exportAudio = true;
 
     /** GIF specific framerate (typically 15-30 fps). */
     private int gifFps = 24;
@@ -109,6 +112,8 @@ public class VideoExportProfile
         copy.pixelFormat = this.pixelFormat;
         copy.audioCodec = this.audioCodec;
         copy.audioBitrate = this.audioBitrate;
+        copy.exportVideo = this.exportVideo;
+        copy.exportAudio = this.exportAudio;
         copy.gifFps = this.gifFps;
         copy.gifDither = this.gifDither;
         copy.gifMaxColors = this.gifMaxColors;
@@ -336,6 +341,26 @@ public class VideoExportProfile
         this.customArguments = customArguments == null ? "" : customArguments;
     }
 
+    public boolean isExportVideo()
+    {
+        return this.exportVideo;
+    }
+
+    public void setExportVideo(boolean exportVideo)
+    {
+        this.exportVideo = exportVideo;
+    }
+
+    public boolean isExportAudio()
+    {
+        return this.exportAudio;
+    }
+
+    public void setExportAudio(boolean exportAudio)
+    {
+        this.exportAudio = exportAudio;
+    }
+
     /* Serialization */
 
     public MapType toData()
@@ -358,6 +383,8 @@ public class VideoExportProfile
         data.putString("pixelFormat", this.pixelFormat);
         data.putString("audioCodec", this.audioCodec.getFfmpegCodec());
         data.putInt("audioBitrate", this.audioBitrate);
+        data.putBool("exportVideo", this.exportVideo);
+        data.putBool("exportAudio", this.exportAudio);
         data.putInt("gifFps", this.gifFps);
         data.putString("gifDither", this.gifDither);
         data.putInt("gifMaxColors", this.gifMaxColors);
@@ -392,6 +419,8 @@ public class VideoExportProfile
         if (data.has("pixelFormat")) this.pixelFormat = data.getString("pixelFormat");
         if (data.has("audioCodec")) this.audioCodec = AudioCodec.fromId(data.getString("audioCodec"));
         if (data.has("audioBitrate")) this.audioBitrate = data.getInt("audioBitrate");
+        if (data.has("exportVideo")) this.exportVideo = data.getBool("exportVideo");
+        if (data.has("exportAudio")) this.exportAudio = data.getBool("exportAudio");
         if (data.has("gifFps")) this.gifFps = data.getInt("gifFps");
         if (data.has("gifDither")) this.gifDither = data.getString("gifDither");
         if (data.has("gifMaxColors")) this.gifMaxColors = data.getInt("gifMaxColors");

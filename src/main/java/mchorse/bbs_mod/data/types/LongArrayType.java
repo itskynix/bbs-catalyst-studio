@@ -36,6 +36,9 @@ public class LongArrayType extends BaseType
     public void read(DataStorageContext context) throws IOException
     {
         int c = context.in.readInt();
+
+        DataStorageContext.checkArrayLength(c);
+
         this.value = new long[c];
 
         byte[] bytes = new byte[c * 8];

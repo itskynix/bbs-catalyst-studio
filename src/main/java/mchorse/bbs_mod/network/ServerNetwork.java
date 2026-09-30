@@ -50,6 +50,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ServerNetwork
 {
@@ -95,11 +96,57 @@ public class ServerNetwork
     public static final Identifier SERVER_SAVE_STRUCTURE = new Identifier(BBSMod.MOD_ID, "s15");
     public static final Identifier SERVER_CUT_STRUCTURE = new Identifier(BBSMod.MOD_ID, "s16");
 
-    private static ServerPacketCrusher crusher = new ServerPacketCrusher();
+    /* Outgoing (server -> client) chunk numbering only ever needs to be unique per logical
+     * message, never per player, so one shared instance is fine here - the risk this class used
+     * to have was entirely on the RECEIVING side (see below). */
+    private static final ServerPacketCrusher outgoingCrusher = new ServerPacketCrusher();
+
+    /* Incoming (client -> server) chunk assembly, one crusher per connected player. Each client
+     * numbers its own outgoing chunk sequences starting from zero, so a single shared crusher here
+     * let two different players' chunk ids collide and corrupt each other's reassembly, and any
+     * transfer abandoned mid-way (disconnect, crash) was never cleared from memory. Keyed by UUID
+     * and cleaned up in forgetPlayer() on disconnect. */
+    private static final Map<UUID, ServerPacketCrusher> incomingCrushers = new ConcurrentHashMap<>();
+
+    private static ServerPacketCrusher getIncomingCrusher(ServerPlayerEntity player)
+    {
+        return incomingCrushers.computeIfAbsent(player.getUuid(), (uuid) -> new ServerPacketCrusher());
+    }
+
+    /** Drops a disconnected player's in-progress chunk assembly state so it cannot leak. */
+    public static void forgetPlayer(UUID uuid)
+    {
+        incomingCrushers.remove(uuid);
+    }
+
+    public static final long MAX_STRUCTURE_VOLUME = 2_000_000L;
+    public static final int MAX_STRUCTURE_AXIS = 512;
+
+    private static boolean isValidStructureRegion(BlockPos from, BlockPos to)
+    {
+        if (from == null || to == null)
+        {
+            return false;
+        }
+
+        long dx = Math.abs((long) to.getX() - from.getX()) + 1L;
+        long dy = Math.abs((long) to.getY() - from.getY()) + 1L;
+        long dz = Math.abs((long) to.getZ() - from.getZ()) + 1L;
+
+        if (dx > MAX_STRUCTURE_AXIS || dy > MAX_STRUCTURE_AXIS || dz > MAX_STRUCTURE_AXIS)
+        {
+            return false;
+        }
+
+        long volume = dx * dy * dz;
+
+        return volume > 0L && volume <= MAX_STRUCTURE_VOLUME;
+    }
 
     public static void reset()
     {
-        crusher.reset();
+        outgoingCrusher.reset();
+        incomingCrushers.clear();
     }
 
     public static void setup()
@@ -125,11 +172,6 @@ public class ServerNetwork
     /* Handlers */
 
     /**
-     * Save a region the structure wand picked. The corners arrive already chosen — the selection
-     * itself never leaves the client — and the reply tells it to drop its structure cache so the
-     * new file is visible to the pickers and to any form already pointing at that name.
-     */
-    /**
      * Save a region and then empty it, for the film cut that turns a build into a form. Saving
      * first is what makes this survivable: the file is the only way back, so the world is not
      * touched until it is on disk. A failed save clears nothing.
@@ -142,6 +184,18 @@ public class ServerNetwork
 
         if (!PermissionUtils.arePanelsAllowed(server, player))
         {
+            return;
+        }
+
+        if (!isValidStructureRegion(from, to))
+        {
+            PacketByteBuf reply = PacketByteBufs.create();
+
+            reply.writeBoolean(false);
+            reply.writeString(name);
+
+            ServerPlayNetworking.send(player, CLIENT_STRUCTURE_CUT, reply);
+
             return;
         }
 
@@ -164,6 +218,11 @@ public class ServerNetwork
         });
     }
 
+    /**
+     * Save a region the structure wand picked. The corners arrive already chosen — the selection
+     * itself never leaves the client — and the reply tells it to drop its structure cache so the
+     * new file is visible to the pickers and to any form already pointing at that name.
+     */
     private static void handleSaveStructure(MinecraftServer server, ServerPlayerEntity player, PacketByteBuf buf)
     {
         String name = buf.readString();
@@ -172,6 +231,18 @@ public class ServerNetwork
 
         if (!PermissionUtils.arePanelsAllowed(server, player))
         {
+            return;
+        }
+
+        if (!isValidStructureRegion(from, to))
+        {
+            PacketByteBuf reply = PacketByteBufs.create();
+
+            reply.writeBoolean(false);
+            reply.writeString(name);
+
+            ServerPlayNetworking.send(player, CLIENT_STRUCTURE_SAVED, reply);
+
             return;
         }
 
@@ -194,7 +265,7 @@ public class ServerNetwork
             return;
         }
 
-        crusher.receive(buf, (bytes, packetByteBuf) ->
+        getIncomingCrusher(player).receive(buf, (bytes, packetByteBuf) ->
         {
             BlockPos pos = buf.readBlockPos();
 
@@ -214,7 +285,9 @@ public class ServerNetwork
                 });
             }
             catch (Exception e)
-            {}
+            {
+                BBSMod.LOGGER.error("Failed to parse model block form packet!", e);
+            }
         });
     }
 
@@ -225,7 +298,7 @@ public class ServerNetwork
             return;
         }
 
-        crusher.receive(buf, (bytes, packetByteBuf) ->
+        getIncomingCrusher(player).receive(buf, (bytes, packetByteBuf) ->
         {
             try
             {
@@ -242,7 +315,9 @@ public class ServerNetwork
                 });
             }
             catch (Exception e)
-            {}
+            {
+                BBSMod.LOGGER.error("Failed to parse model block transforms packet!", e);
+            }
         });
     }
 
@@ -253,7 +328,7 @@ public class ServerNetwork
             return;
         }
 
-        crusher.receive(buf, (bytes, packetByteBuf) ->
+        getIncomingCrusher(player).receive(buf, (bytes, packetByteBuf) ->
         {
             Form form = null;
 
@@ -265,7 +340,9 @@ public class ServerNetwork
                 }
             }
             catch (Exception e)
-            {}
+            {
+                BBSMod.LOGGER.error("Failed to parse player form packet!", e);
+            }
 
             final Form finalForm = form;
 
@@ -285,11 +362,25 @@ public class ServerNetwork
             return;
         }
 
-        crusher.receive(buf, (bytes, packetByteBuf) ->
+        getIncomingCrusher(player).receive(buf, (bytes, packetByteBuf) ->
         {
-            MapType data = (MapType) DataStorageUtils.readFromBytes(bytes);
+            BaseType rawData = DataStorageUtils.readFromBytes(bytes);
+
+            if (!(rawData instanceof MapType data))
+            {
+                return;
+            }
+
             int callbackId = packetByteBuf.readInt();
-            RepositoryOperation op = RepositoryOperation.values()[packetByteBuf.readInt()];
+            int opOrdinal = packetByteBuf.readInt();
+            RepositoryOperation[] operations = RepositoryOperation.values();
+
+            if (opOrdinal < 0 || opOrdinal >= operations.length)
+            {
+                return;
+            }
+
+            RepositoryOperation op = operations[opOrdinal];
             FilmManager films = BBSMod.getFilms();
 
             if (op == RepositoryOperation.LOAD)
@@ -506,7 +597,7 @@ public class ServerNetwork
             return;
         }
 
-        crusher.receive(buf, (bytes, packetByteBuf) ->
+        getIncomingCrusher(player).receive(buf, (bytes, packetByteBuf) ->
         {
             String filmId = packetByteBuf.readString();
             List<String> path = new ArrayList<>();
@@ -539,6 +630,17 @@ public class ServerNetwork
         float bodyYaw = buf.readFloat();
         float pitch = buf.readFloat();
 
+        if (!Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(z)
+            || !Float.isFinite(yaw) || !Float.isFinite(bodyYaw) || !Float.isFinite(pitch))
+        {
+            return;
+        }
+
+        if (Math.abs(x) > 30_000_000D || Math.abs(z) > 30_000_000D || y < -2000D || y > 2000D)
+        {
+            return;
+        }
+
         server.execute(() ->
         {
             player.requestTeleport(x, y, z);
@@ -552,6 +654,11 @@ public class ServerNetwork
 
     private static void handleAnimationStateTriggerPacket(MinecraftServer server, ServerPlayerEntity player, PacketByteBuf buf)
     {
+        if (!PermissionUtils.arePanelsAllowed(server, player))
+        {
+            return;
+        }
+
         String string = buf.readString();
         int type = buf.readInt();
         PacketByteBuf newBuf = PacketByteBufs.create();
@@ -573,10 +680,20 @@ public class ServerNetwork
 
     private static void handleSharedFormPacket(MinecraftServer server, ServerPlayerEntity player, PacketByteBuf buf)
     {
-        crusher.receive(buf, (bytes, packetByteBuf) ->
+        if (!PermissionUtils.arePanelsAllowed(server, player))
+        {
+            return;
+        }
+
+        getIncomingCrusher(player).receive(buf, (bytes, packetByteBuf) ->
         {
             UUID playerUuid = packetByteBuf.readUuid();
-            MapType data = (MapType) DataStorageUtils.readFromBytes(bytes);
+            BaseType raw = DataStorageUtils.readFromBytes(bytes);
+
+            if (!(raw instanceof MapType data))
+            {
+                return;
+            }
 
             server.execute(() ->
             {
@@ -609,6 +726,11 @@ public class ServerNetwork
 
     private static void handlePauseFilmPacket(MinecraftServer server, ServerPlayerEntity player, PacketByteBuf buf)
     {
+        if (!PermissionUtils.arePanelsAllowed(server, player))
+        {
+            return;
+        }
+
         String filmId = buf.readString();
 
         ActionPlayer actionPlayer = BBSMod.getActions().getPlayer(filmId);
@@ -637,6 +759,17 @@ public class ServerNetwork
         float xpProgress = buf.readFloat();
         int selectedSlot = buf.readInt();
         int dressSize = buf.readInt();
+
+        if (!Float.isFinite(hp) || !Float.isFinite(hunger) || !Float.isFinite(xpProgress))
+        {
+            return;
+        }
+
+        if (dressSize < 0 || dressSize > 1_000_000)
+        {
+            return;
+        }
+
         byte[] dressBytes = dressSize > 0 ? new byte[dressSize] : null;
 
         if (dressBytes != null)
@@ -668,7 +801,7 @@ public class ServerNetwork
 
     public static void sendMorph(ServerPlayerEntity player, int playerId, Form form)
     {
-        crusher.send(player, CLIENT_PLAYER_FORM_PACKET, FormUtils.toData(form), (packetByteBuf) ->
+        outgoingCrusher.send(player, CLIENT_PLAYER_FORM_PACKET, FormUtils.toData(form), (packetByteBuf) ->
         {
             packetByteBuf.writeInt(playerId);
         });
@@ -705,7 +838,7 @@ public class ServerNetwork
 
                 BaseType data = film.toData();
 
-                crusher.send(world.getPlayers().stream().map((p) -> (PlayerEntity) p).toList(), CLIENT_PLAY_FILM_PACKET, data, (packetByteBuf) ->
+                outgoingCrusher.send(world.getPlayers().stream().map((p) -> (PlayerEntity) p).toList(), CLIENT_PLAY_FILM_PACKET, data, (packetByteBuf) ->
                 {
                     packetByteBuf.writeString(filmId);
                     packetByteBuf.writeBoolean(withCamera);
@@ -728,7 +861,7 @@ public class ServerNetwork
             {
                 BBSMod.getActions().play(player, player.getServerWorld(), film, 0);
 
-                crusher.send(player, CLIENT_PLAY_FILM_PACKET, film.toData(), (packetByteBuf) ->
+                outgoingCrusher.send(player, CLIENT_PLAY_FILM_PACKET, film.toData(), (packetByteBuf) ->
                 {
                     packetByteBuf.writeString(filmId);
                     packetByteBuf.writeBoolean(withCamera);
@@ -765,7 +898,7 @@ public class ServerNetwork
 
     public static void sendManagerData(ServerPlayerEntity player, int callbackId, RepositoryOperation op, BaseType data)
     {
-        crusher.send(player, CLIENT_MANAGER_DATA_PACKET, data, (packetByteBuf) ->
+        outgoingCrusher.send(player, CLIENT_MANAGER_DATA_PACKET, data, (packetByteBuf) ->
         {
             packetByteBuf.writeInt(callbackId);
             packetByteBuf.writeInt(op.ordinal());
@@ -774,7 +907,7 @@ public class ServerNetwork
 
     public static void sendRecordedActions(ServerPlayerEntity player, String filmId, int replayId, int tick, Clips clips)
     {
-        crusher.send(player, CLIENT_RECORDED_ACTIONS, clips.toData(), (packetByteBuf) ->
+        outgoingCrusher.send(player, CLIENT_RECORDED_ACTIONS, clips.toData(), (packetByteBuf) ->
         {
             packetByteBuf.writeString(filmId);
             packetByteBuf.writeInt(replayId);
@@ -819,13 +952,13 @@ public class ServerNetwork
 
     public static void sendSharedForm(ServerPlayerEntity player, MapType data)
     {
-        crusher.send(player, CLIENT_SHARED_FORM, data, (packetByteBuf) ->
+        outgoingCrusher.send(player, CLIENT_SHARED_FORM, data, (packetByteBuf) ->
         {});
     }
 
     public static void sendEntityForm(ServerPlayerEntity player, IEntityFormProvider actor)
     {
-        crusher.send(player, CLIENT_ENTITY_FORM, FormUtils.toData(actor.getForm()), (packetByteBuf) ->
+        outgoingCrusher.send(player, CLIENT_ENTITY_FORM, FormUtils.toData(actor.getForm()), (packetByteBuf) ->
         {
             packetByteBuf.writeInt(actor.getEntityId());
         });

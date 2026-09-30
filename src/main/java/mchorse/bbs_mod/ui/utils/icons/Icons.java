@@ -65,6 +65,7 @@ public class Icons
     public static final Icon ALL_DIRECTIONS = register(new Icon(ATLAS, "all_directions", 144, 32));
     public static final Icon SPHERE = register(new Icon(ATLAS, "sphere", 160, 32));
     public static final Icon SHIFT_TO = register(new Icon(ATLAS, "shift_to", 176, 32));
+    public static final Icon MAGNET = SHIFT_TO;
     public static final Icon SHIFT_FORWARD = register(new Icon(ATLAS, "shift_forward", 192, 32));
     public static final Icon SHIFT_BACKWARD = register(new Icon(ATLAS, "shift_backward", 208, 32));
     public static final Icon MOVE_TO = register(new Icon(ATLAS, "move_to", 224, 32));

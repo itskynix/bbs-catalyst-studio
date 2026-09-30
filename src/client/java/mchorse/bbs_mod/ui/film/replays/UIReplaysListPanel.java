@@ -12,6 +12,7 @@ import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.UISection;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIIcon;
 import mchorse.bbs_mod.ui.framework.elements.input.text.UITextbox;
+import mchorse.bbs_mod.ui.utils.Scroll;
 import mchorse.bbs_mod.ui.utils.UIConstants;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 
@@ -36,6 +37,9 @@ public class UIReplaysListPanel extends UIElement
      */
     public final UITextbox search;
 
+    public final UIIcon scrollToTop;
+    public final UIIcon scrollToBottom;
+
     public final UIReplayList replays;
     public final UIForms bodyParts;
     private Replay bodyPartsReplay;
@@ -56,15 +60,35 @@ public class UIReplaysListPanel extends UIElement
         this.addReplay = new UIIcon(Icons.ADD, (b) -> this.replays.addReplay());
         this.addReplay.tooltip(UIKeys.SCENE_REPLAYS_CONTEXT_ADD);
 
+        this.scrollToTop = new UIIcon(Icons.ARROW_UP, (b) -> this.replays.scroll.setScroll(0));
+        this.scrollToTop.tooltip(UIKeys.SCENE_REPLAYS_SCROLL_TOP);
+
+        this.scrollToBottom = new UIIcon(Icons.ARROW_DOWN, (b) ->
+        {
+            Scroll scroll = this.replays.scroll;
+            int last = this.replays.getList().size() - 1;
+
+            if (last >= 0)
+            {
+                scroll.setScroll(last * scroll.scrollItemSize);
+            }
+        });
+        this.scrollToBottom.tooltip(UIKeys.SCENE_REPLAYS_SCROLL_BOTTOM);
+
         this.search = new UITextbox(1000, (text) -> this.replays.filter(text));
         this.search.placeholder(UIKeys.GENERAL_SEARCH);
 
         this.bar.relative(this.content).x(0).y(0).w(1F).h(BAR_HEIGHT);
 
         this.addReplay.relative(this.bar).x(0).y(0).w(BAR_ICON_SIZE).h(BAR_HEIGHT);
-        this.search.relative(this.bar).x(BAR_ICON_SIZE + BAR_ICON_MARGIN).y(0).w(1F, -BAR_ICON_SIZE - BAR_ICON_MARGIN).h(BAR_HEIGHT);
+        this.scrollToTop.relative(this.bar).x(1F, -2 * BAR_ICON_SIZE - BAR_ICON_MARGIN).y(0).w(BAR_ICON_SIZE).h(BAR_HEIGHT);
+        this.scrollToBottom.relative(this.bar).x(1F, -BAR_ICON_SIZE).y(0).w(BAR_ICON_SIZE).h(BAR_HEIGHT);
 
-        this.bar.add(this.addReplay, this.search);
+        int leftOffset = BAR_ICON_SIZE + BAR_ICON_MARGIN;
+        int rightOffset = 2 * BAR_ICON_SIZE + BAR_ICON_MARGIN * 2;
+        this.search.relative(this.bar).x(leftOffset).y(0).w(1F, -leftOffset - rightOffset).h(BAR_HEIGHT);
+
+        this.bar.add(this.addReplay, this.search, this.scrollToTop, this.scrollToBottom);
 
         this.replays.relative(this.content).x(0).y(0, BAR_HEIGHT).w(1F).h(1F, -BAR_HEIGHT);
         int padding = UIConstants.MARGIN;

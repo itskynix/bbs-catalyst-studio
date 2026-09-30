@@ -12,7 +12,12 @@ import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
+import com.mojang.blaze3d.platform.GlStateManager;
+import com.mojang.blaze3d.systems.RenderSystem;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL15;
+import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
 
 import java.util.ArrayList;
@@ -378,18 +383,21 @@ public class BOBJModelVAO
     {
         boolean hasShaders = BBSRendering.isIrisShadersEnabled();
 
-        GL30.glVertexAttrib4f(Attributes.COLOR, r, g, b, a);
-        GL30.glVertexAttribI2i(Attributes.OVERLAY_UV, overlay & '\uffff', overlay >> 16 & '\uffff');
-        GL30.glVertexAttribI2i(Attributes.LIGHTMAP_UV, light & '\uffff', light >> 16 & '\uffff');
-
         int currentVAO = GL30.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING);
         int currentElementArrayBuffer = GL30.glGetInteger(GL30.GL_ELEMENT_ARRAY_BUFFER_BINDING);
+        int currentArrayBuffer = GL11.glGetInteger(GL15.GL_ARRAY_BUFFER_BINDING);
+        int currentProgram = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
+        int activeTexture = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
 
         ModelVAORenderer.setupUniforms(shader, modelView, normalMat);
 
         shader.bind();
 
         GL30.glBindVertexArray(this.vao);
+
+        GL30.glVertexAttrib4f(Attributes.COLOR, r, g, b, a);
+        GL30.glVertexAttribI2i(Attributes.OVERLAY_UV, overlay & '\uffff', overlay >> 16 & '\uffff');
+        GL30.glVertexAttribI2i(Attributes.LIGHTMAP_UV, light & '\uffff', light >> 16 & '\uffff');
 
         GL30.glEnableVertexAttribArray(Attributes.POSITION);
         GL30.glEnableVertexAttribArray(Attributes.TEXTURE_UV);
@@ -423,5 +431,13 @@ public class BOBJModelVAO
 
         GL30.glBindVertexArray(currentVAO);
         GL30.glBindBuffer(GL30.GL_ELEMENT_ARRAY_BUFFER, currentElementArrayBuffer);
+        GL30.glBindBuffer(GL15.GL_ARRAY_BUFFER, currentArrayBuffer);
+
+        if (currentProgram > 0)
+        {
+            GlStateManager._glUseProgram(currentProgram);
+        }
+
+        RenderSystem.activeTexture(activeTexture);
     }
 }

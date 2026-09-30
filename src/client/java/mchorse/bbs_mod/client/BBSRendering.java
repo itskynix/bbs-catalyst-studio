@@ -467,11 +467,19 @@ public class BBSRendering
         return 0;
     }
 
-    public static void onRenderBeforeScreen()
+    public static mchorse.bbs_mod.graphics.Framebuffer getExportFramebuffer()
+    {
+        return exportFramebuffer;
+    }
+
+    public static void setExportFramebuffer(mchorse.bbs_mod.graphics.Framebuffer fbo)
+    {
+        exportFramebuffer = fbo;
+    }
+
+    public static mchorse.bbs_mod.graphics.Framebuffer getOrCreateExportFramebuffer(int targetWidth, int targetHeight)
     {
         Texture texture = getTexture();
-        int targetWidth = getVideoWidth();
-        int targetHeight = getVideoHeight();
 
         if (exportFramebuffer == null || texture.width != targetWidth || texture.height != targetHeight)
         {
@@ -488,6 +496,16 @@ public class BBSRendering
             exportFramebuffer.attach(texture, GL30.GL_COLOR_ATTACHMENT0);
             exportFramebuffer.unbind();
         }
+
+        return exportFramebuffer;
+    }
+
+    public static void onRenderBeforeScreen()
+    {
+        int targetWidth = getVideoWidth();
+        int targetHeight = getVideoHeight();
+
+        getOrCreateExportFramebuffer(targetWidth, targetHeight);
 
         if (framebuffer == null)
         {

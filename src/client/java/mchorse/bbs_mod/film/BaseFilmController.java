@@ -642,6 +642,8 @@ public abstract class BaseFilmController
     {
         FilmEvents.SHUTDOWN.invoker().onFilmShutdown(this);
 
+        this.entities.clear();
+
         /* A live morphed player outlives the film - without this its bow would
          * stay drawn forever after the playback stops */
         ThirdPersonItemUse.clear();

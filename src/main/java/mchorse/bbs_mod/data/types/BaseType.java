@@ -42,7 +42,16 @@ public abstract class BaseType
 
         if (output != null)
         {
-            output.read(context);
+            context.enterNesting();
+
+            try
+            {
+                output.read(context);
+            }
+            finally
+            {
+                context.exitNesting();
+            }
 
             return output;
         }

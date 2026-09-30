@@ -714,7 +714,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
 
         menu.action(Icons.HELP, L10n.lang("bbs.ui.film.details.button"), () ->
         {
-            UIOverlay.addOverlay(this.getContext(), new UIFilmDetailsOverlayPanel(this.getData()), 300, 260);
+            UIOverlay.addOverlay(this.getContext(), new UIFilmDetailsOverlayPanel(this.getData()), 320, 310);
         });
     }
 

@@ -270,6 +270,52 @@ public class Wave
         return wave;
     }
 
+    public Wave convertToStereo()
+    {
+        if (this.numChannels == 2)
+        {
+            return this;
+        }
+
+        if (this.numChannels > 2)
+        {
+            return this.downmixToStereo();
+        }
+
+        Wave current = this;
+        if (current.bitsPerSample != 16 || current.audioFormat != 1)
+        {
+            current = current.convertTo16();
+        }
+
+        int inFrames = current.data.length / 2;
+        byte[] outData = new byte[inFrames * 4];
+
+        for (int i = 0; i < inFrames; i++)
+        {
+            byte b0 = current.data[i * 2];
+            byte b1 = current.data[i * 2 + 1];
+
+            int outIdx = i * 4;
+            /* Left channel */
+            outData[outIdx] = b0;
+            outData[outIdx + 1] = b1;
+            /* Right channel (identical copy of left for true 2-channel stereo upmix) */
+            outData[outIdx + 2] = b0;
+            outData[outIdx + 3] = b1;
+        }
+
+        int byteRate = current.sampleRate * 4;
+        int blockAlign = 4;
+        Wave wave = new Wave(1, 2, current.sampleRate, byteRate, blockAlign, 16, outData);
+        if (current.cues != null)
+        {
+            wave.cues = new ArrayList<>(current.cues);
+        }
+
+        return wave;
+    }
+
     public Wave resample(int targetSampleRate)
     {
         if (this.sampleRate == targetSampleRate || targetSampleRate <= 0 || this.sampleRate <= 0)
@@ -295,31 +341,65 @@ public class Wave
 
         double ratio = (double) current.sampleRate / (double) targetSampleRate;
 
+        /* Anti-aliasing cutoff factor:
+         * If downsampling (ratio > 1.0, e.g. 96k -> 48k), bandwidth must be restricted to target Nyquist (1.0 / ratio).
+         * If upsampling (ratio <= 1.0, e.g. 44.1k -> 48k), input Nyquist is already lower than target, so cutoff is 1.0.
+         */
+        double cutoff = ratio > 1.0 ? (1.0 / ratio) * 0.96 : 0.96;
+        int filterRadius = ratio > 1.0 ? (int) Math.ceil(12.0 * ratio) : 12;
+        filterRadius = Math.max(8, Math.min(64, filterRadius));
+
         for (int outF = 0; outF < outFrames; outF++)
         {
             double inPos = outF * ratio;
-            int i1 = (int) Math.floor(inPos);
-            double t = inPos - i1;
+            int center = (int) Math.floor(inPos);
 
-            int i0 = Math.max(0, i1 - 1);
-            int i2 = Math.min(inFrames - 1, i1 + 1);
-            int i3 = Math.min(inFrames - 1, i1 + 2);
-            i1 = Math.min(inFrames - 1, Math.max(0, i1));
+            int start = Math.max(0, center - filterRadius);
+            int end = Math.min(inFrames - 1, center + filterRadius);
+
+            double weightSum = 0.0;
+            double[] accum = new double[channels];
+
+            for (int inF = start; inF <= end; inF++)
+            {
+                double d = inF - inPos;
+                double x = d * cutoff;
+                double sinc;
+
+                if (Math.abs(x) < 1e-9)
+                {
+                    sinc = 1.0;
+                }
+                else
+                {
+                    double piX = Math.PI * x;
+                    sinc = Math.sin(piX) / piX;
+                }
+
+                /* Blackman-Nuttall window for > 90dB stopband attenuation */
+                double u = d / filterRadius;
+                if (u < -1.0 || u > 1.0)
+                {
+                    continue;
+                }
+
+                double piU = Math.PI * u;
+                double window = 0.355768 + 0.487396 * Math.cos(piU) + 0.144232 * Math.cos(2.0 * piU) + 0.012604 * Math.cos(3.0 * piU);
+                double weight = sinc * window * cutoff;
+
+                weightSum += weight;
+
+                for (int c = 0; c < channels; c++)
+                {
+                    accum[c] += current.getSample16(inF, c) * weight;
+                }
+            }
+
+            double norm = Math.abs(weightSum) > 1e-9 ? 1.0 / weightSum : 1.0;
 
             for (int c = 0; c < channels; c++)
             {
-                double p0 = current.getSample16(i0, c);
-                double p1 = current.getSample16(i1, c);
-                double p2 = current.getSample16(i2, c);
-                double p3 = current.getSample16(i3, c);
-
-                /* Catmull-Rom cubic spline interpolation */
-                double a = -0.5 * p0 + 1.5 * p1 - 1.5 * p2 + 0.5 * p3;
-                double b = p0 - 2.5 * p1 + 2.0 * p2 - 0.5 * p3;
-                double cCoeff = -0.5 * p0 + 0.5 * p2;
-                double d = p1;
-
-                double val = ((a * t + b) * t + cCoeff) * t + d;
+                double val = accum[c] * norm;
                 int clamped = Math.max(-32768, Math.min(32767, (int) Math.round(val)));
 
                 int outIdx = (outF * channels + c) * 2;
@@ -366,11 +446,15 @@ public class Wave
         {
             current = current.downmixToStereo();
         }
+        else if (current.numChannels == 1)
+        {
+            current = current.convertToStereo();
+        }
 
+        /* Preserve pristine 44.1 kHz and 48 kHz standard sample rates without downsampling */
         if (current.sampleRate > 48000)
         {
-            int targetRate = (current.sampleRate % 44100 == 0) ? 44100 : 48000;
-            current = current.resample(targetRate);
+            current = current.resample(48000);
         }
 
         return current;
@@ -635,6 +719,68 @@ public class Wave
     private int truncate(int offset)
     {
         return offset - offset % 2;
+    }
+
+    /**
+     * Creates an excerpt (slice copy) of this Wave in the time range [fromSeconds, toSeconds),
+     * preserving all channels (mono, stereo, etc.) and alignment.
+     */
+    public Wave excerpt(float fromSeconds, float toSeconds)
+    {
+        float duration = this.getDuration();
+        float from = MathUtils.clamp(fromSeconds, 0F, duration);
+        float to = MathUtils.clamp(toSeconds, 0F, duration);
+
+        if (to < from)
+        {
+            float tmp = from;
+
+            from = to;
+            to = tmp;
+        }
+
+        int frameSize = this.numChannels * this.getBytesPerSample();
+
+        if (to <= from || this.data == null || this.data.length == 0 || frameSize <= 0)
+        {
+            Wave empty = new Wave(this.audioFormat, this.numChannels, this.sampleRate, this.byteRate, this.blockAlign, this.bitsPerSample, new byte[0]);
+
+            empty.lists = this.lists;
+            empty.cues = this.cues;
+
+            return empty;
+        }
+
+        int fromSample = (int) Math.floor(from * this.sampleRate);
+        int toSample = (int) Math.ceil(to * this.sampleRate);
+        int startByte = fromSample * frameSize;
+        int endByte = toSample * frameSize;
+
+        startByte = MathUtils.clamp(startByte, 0, this.data.length);
+        endByte = MathUtils.clamp(endByte, 0, this.data.length);
+
+        startByte -= startByte % frameSize;
+        endByte -= endByte % frameSize;
+
+        if (endByte <= startByte)
+        {
+            Wave empty = new Wave(this.audioFormat, this.numChannels, this.sampleRate, this.byteRate, this.blockAlign, this.bitsPerSample, new byte[0]);
+
+            empty.lists = this.lists;
+            empty.cues = this.cues;
+
+            return empty;
+        }
+
+        byte[] out = new byte[endByte - startByte];
+        Wave copy = new Wave(this.audioFormat, this.numChannels, this.sampleRate, this.byteRate, this.blockAlign, this.bitsPerSample, out);
+
+        System.arraycopy(this.data, startByte, out, 0, out.length);
+
+        copy.lists = this.lists;
+        copy.cues = this.cues;
+
+        return copy;
     }
 
     /**

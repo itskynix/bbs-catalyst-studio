@@ -10,11 +10,8 @@ import mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D;
 import mchorse.bbs_mod.ui.framework.elements.utils.FontRenderer;
 import mchorse.bbs_mod.utils.StringUtils;
 import mchorse.bbs_mod.utils.colors.Colors;
-import org.lwjgl.system.MemoryUtil;
-
 import java.io.File;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -265,6 +262,27 @@ public class AudioRenderer
         }
     }
 
+    public static float softClip(float x)
+    {
+        if (Float.isNaN(x))
+        {
+            return 0.0F;
+        }
+
+        float threshold = 0.85F;
+
+        if (x > threshold)
+        {
+            return threshold + (1.0F - threshold) * (float) Math.tanh((x - threshold) / (1.0F - threshold));
+        }
+        else if (x < -threshold)
+        {
+            return -threshold - (1.0F - threshold) * (float) Math.tanh((-x - threshold) / (1.0F - threshold));
+        }
+
+        return x;
+    }
+
     public static boolean renderAudio(File file, List<AudioClip> clips, int totalDuration, int sampleRate, float from, float to)
     {
         float total = totalDuration / 20F;
@@ -281,7 +299,10 @@ public class AudioRenderer
             {
                 Wave wave = AudioReader.read(BBSMod.getProvider(), clip.audio.get());
 
-                map.put(clip, wave);
+                if (wave != null)
+                {
+                    map.put(clip, wave);
+                }
             }
             catch (Exception e)
             {
@@ -294,28 +315,100 @@ public class AudioRenderer
             return false;
         }
 
-        int byteRate = sampleRate * 2;
-        int totalBytes = (int) Math.ceil(total * byteRate);
-        /* Ensure the buffer size is large enough to hold all
-         * audio data and maintain byte alignment. */
-        byte[] bytes = new byte[totalBytes + (totalBytes % 2)];
-        Wave finalWave = new Wave(1, 1, sampleRate, 16, bytes);
-        ByteBuffer buffer = MemoryUtil.memAlloc(2);
+        int totalFrames = (int) Math.ceil(total * (double) sampleRate);
+
+        if (totalFrames <= 0)
+        {
+            return false;
+        }
+
+        /* 32-bit float mixing buffers for Left and Right channels with infinite headroom */
+        float[] mixLeft = new float[totalFrames];
+        float[] mixRight = new float[totalFrames];
 
         for (AudioClip clip : clips)
         {
+            if (!clip.enabled.get())
+            {
+                continue;
+            }
+
             try
             {
                 Wave wave = map.get(clip);
 
-                if (wave != null)
+                if (wave == null || wave.data == null || wave.data.length == 0)
                 {
-                    finalWave.add(buffer, wave,
-                        TimeUtils.toSeconds(clip.tick.get()),
-                        TimeUtils.toSeconds(clip.offset.get()),
-                        TimeUtils.toSeconds(clip.duration.get()),
-                        clip.volume.get()
-                    );
+                    continue;
+                }
+
+                /* Ensure 16-bit PCM and resample to project sample rate if needed */
+                wave = wave.normalize();
+
+                if (wave.sampleRate != sampleRate)
+                {
+                    wave = wave.resample(sampleRate);
+                }
+
+                float offsetSeconds = TimeUtils.toSeconds(clip.tick.get());
+                float shiftSeconds = TimeUtils.toSeconds(clip.offset.get());
+                float durationSeconds = TimeUtils.toSeconds(clip.duration.get());
+
+                int destStartFrame = (int) Math.round(offsetSeconds * (double) sampleRate);
+                int destEndFrame = (int) Math.round((offsetSeconds + durationSeconds) * (double) sampleRate);
+
+                destEndFrame = Math.min(destEndFrame, totalFrames);
+
+                if (destStartFrame >= destEndFrame)
+                {
+                    continue;
+                }
+
+                int srcStartFrame = (int) Math.round(shiftSeconds * (double) sampleRate);
+                int srcTotalFrames = wave.data.length / (wave.numChannels * wave.getBytesPerSample());
+
+                float vol = Math.max(0.0F, clip.volume.get());
+                float pan = Math.max(-1.0F, Math.min(1.0F, clip.pan.get()));
+
+                /* Standard constant-gain panning: left/right gains */
+                float panL = pan <= 0.0F ? 1.0F : (1.0F - pan);
+                float panR = pan >= 0.0F ? 1.0F : (1.0F + pan);
+                float gainL = vol * panL;
+                float gainR = vol * panR;
+
+                boolean isStereo = wave.numChannels >= 2;
+
+                for (int frame = Math.max(0, destStartFrame); frame < destEndFrame; frame++)
+                {
+                    int srcFrame = srcStartFrame + (frame - destStartFrame);
+
+                    if (srcFrame < 0)
+                    {
+                        continue;
+                    }
+
+                    if (srcFrame >= srcTotalFrames)
+                    {
+                        break;
+                    }
+
+                    float sampleL;
+                    float sampleR;
+
+                    if (isStereo)
+                    {
+                        sampleL = (wave.getSample16(srcFrame, 0) / 32768.0F) * gainL;
+                        sampleR = (wave.getSample16(srcFrame, 1) / 32768.0F) * gainR;
+                    }
+                    else
+                    {
+                        float mono = (wave.getSample16(srcFrame, 0) / 32768.0F);
+                        sampleL = mono * gainL;
+                        sampleR = mono * gainR;
+                    }
+
+                    mixLeft[frame] += sampleL;
+                    mixRight[frame] += sampleR;
                 }
             }
             catch (Exception e)
@@ -324,13 +417,60 @@ public class AudioRenderer
             }
         }
 
-        MemoryUtil.memFree(buffer);
+        /* Peak amplitude scan */
+        float maxPeak = 0.0F;
+
+        for (int i = 0; i < totalFrames; i++)
+        {
+            float absL = Math.abs(mixLeft[i]);
+            float absR = Math.abs(mixRight[i]);
+
+            if (absL > maxPeak)
+            {
+                maxPeak = absL;
+            }
+
+            if (absR > maxPeak)
+            {
+                maxPeak = absR;
+            }
+        }
+
+        /* If total peak exceeds headroom, apply pre-scaling to prevent excessive squash */
+        float globalScale = 1.0F;
+
+        if (maxPeak > 1.25F)
+        {
+            globalScale = 1.25F / maxPeak;
+        }
+
+        /* Convert float mix buffers to 16-bit Little Endian PCM bytes with smooth soft-clipping */
+        byte[] bytes = new byte[totalFrames * 4];
+
+        for (int i = 0; i < totalFrames; i++)
+        {
+            float l = softClip(mixLeft[i] * globalScale);
+            float r = softClip(mixRight[i] * globalScale);
+
+            short sL = (short) Math.max(-32768, Math.min(32767, Math.round(l * 32767.0F)));
+            short sR = (short) Math.max(-32768, Math.min(32767, Math.round(r * 32767.0F)));
+
+            int idx = i * 4;
+
+            bytes[idx] = (byte) (sL & 0xFF);
+            bytes[idx + 1] = (byte) ((sL >> 8) & 0xFF);
+            bytes[idx + 2] = (byte) (sR & 0xFF);
+            bytes[idx + 3] = (byte) ((sR >> 8) & 0xFF);
+        }
+
+        int byteRate = sampleRate * 4;
+        Wave finalWave = new Wave(1, 2, sampleRate, byteRate, 4, 16, bytes);
 
         try
         {
-            if (from != to && (from >= 0 && to >= 0))
+            if (from != to && (from >= 0.0F && to >= 0.0F))
             {
-                finalWave = finalWave.excerptMono(from, to);
+                finalWave = finalWave.excerpt(from, to);
             }
 
             WaveWriter.write(file, finalWave);

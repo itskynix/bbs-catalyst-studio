@@ -77,6 +77,21 @@ public class ArmorRenderer
                 ModelPart part = this.getPart(bipedModel, type);
 
                 bipedModel.setVisible(true);
+                bipedModel.head.hidden = false;
+                bipedModel.hat.hidden = false;
+                bipedModel.body.hidden = false;
+                bipedModel.rightArm.hidden = false;
+                bipedModel.leftArm.hidden = false;
+                bipedModel.rightLeg.hidden = false;
+                bipedModel.leftLeg.hidden = false;
+
+                part.visible = true;
+                part.hidden = false;
+                part.traverse().forEach((p) ->
+                {
+                    p.visible = true;
+                    p.hidden = false;
+                });
 
                 part.pivotX = part.pivotY = part.pivotZ = 0F;
                 part.pitch = part.yaw = part.roll = 0F;

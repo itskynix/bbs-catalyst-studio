@@ -36,6 +36,9 @@ public class IntArrayType extends BaseType
     public void read(DataStorageContext context) throws IOException
     {
         int c = context.in.readInt();
+
+        DataStorageContext.checkArrayLength(c);
+
         this.value = new int[c];
 
         byte[] bytes = new byte[c * 4];

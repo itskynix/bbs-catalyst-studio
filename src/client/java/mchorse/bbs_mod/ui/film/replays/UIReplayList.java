@@ -10,6 +10,7 @@ import mchorse.bbs_mod.data.types.ListType;
 import mchorse.bbs_mod.data.types.MapType;
 import mchorse.bbs_mod.film.Film;
 import mchorse.bbs_mod.film.replays.Replay;
+import mchorse.bbs_mod.film.replays.ReplayActions;
 import mchorse.bbs_mod.film.replays.Replays;
 import mchorse.bbs_mod.forms.FormUtils;
 import mchorse.bbs_mod.forms.FormUtilsClient;
@@ -126,6 +127,8 @@ public class UIReplayList extends UIList<ReplayListEntry>
 
             menu.icon(MenuVerb.ADD, this::addReplay).label(UIKeys.SCENE_REPLAYS_CONTEXT_ADD);
             menu.icon(MenuVerb.REMOVE, this::removeReplay).label(UIKeys.SCENE_REPLAYS_CONTEXT_REMOVE).enabled(this.hasReplaySelection());
+            menu.action(Icons.ALL_DIRECTIONS, UIKeys.SCENE_REPLAYS_SELECT_ALL, this::selectAllReplays);
+            menu.action(Icons.REFRESH, UIKeys.SCENE_REPLAYS_RESET_ACTORS, this::resetReplayActors);
 
             /* Asked for on a folder row, a new category is made inside that folder: nesting
              * without anyone having to know that a path is spelled with a slash. */
@@ -174,6 +177,8 @@ public class UIReplayList extends UIList<ReplayListEntry>
 
                 menu.action(Icons.ALL_DIRECTIONS, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS, this::processReplays);
                 menu.action(Icons.TIME, UIKeys.SCENE_REPLAYS_CONTEXT_OFFSET_TIME, this::offsetTimeReplays);
+                menu.action(Icons.MATERIAL, UIKeys.SCENE_REPLAYS_SELECT_SAME_MODEL, this::selectSameModel);
+                menu.action(Icons.DUPE, UIKeys.SCENE_REPLAYS_DUPLICATE_TOTAL, this::openDuplicateTotalOverlay);
 
                 if (this.getSelectedReplays().size() > 1)
                 {
@@ -267,25 +272,14 @@ public class UIReplayList extends UIList<ReplayListEntry>
         this.selectAllReplays();
     }
 
-    private void selectAllReplays()
+    public void selectAllReplays()
     {
         if (!this.multi)
         {
             return;
         }
 
-        List<ReplayListEntry> replays = new ArrayList<>();
-
-        for (ReplayListEntry e : this.list)
-        {
-            if (e.isReplay())
-            {
-                replays.add(e);
-            }
-        }
-
-        this.selection.setAll(replays);
-        this.fireSelectionCallback();
+        ReplayActions.selectAll(this);
     }
 
     @Override
@@ -511,8 +505,54 @@ public class UIReplayList extends UIList<ReplayListEntry>
         return replays;
     }
 
+    public void resetReplayActors()
+    {
+        ReplayActions.resetReplays(this, this.panel);
+    }
+
+    public void selectSameModel()
+    {
+        Film film = this.panel.getData();
+
+        if (film != null)
+        {
+            ReplayActions.selectSameModel(this, film);
+        }
+    }
+
+    public void openDuplicateTotalOverlay()
+    {
+        Film film = this.panel.getData();
+
+        if (film == null)
+        {
+            return;
+        }
+
+        UINumberOverlayPanel numberPanel = new UINumberOverlayPanel(
+            UIKeys.SCENE_REPLAYS_DUPLICATE_TOTAL,
+            UIKeys.SCENE_REPLAYS_DUPLICATE_TOTAL_DESCRIPTION,
+            (n) ->
+            {
+                List<Replay> selected = new ArrayList<>(this.getSelectedReplays());
+                Replay last = ReplayActions.duplicateToTotal(film, selected, (int) (double) n);
+
+                this.refreshReplayList();
+
+                if (last != null)
+                {
+                    this.scrollToReplay(last);
+                }
+            });
+
+        numberPanel.value.limit(1).integer();
+        numberPanel.value.setValue(1D);
+
+        UIOverlay.addOverlay(this.getContext(), numberPanel);
+    }
+
     /** Every folder of the film: the recorded ones in their order, then those only a replay is in. */
-    private List<String> collectCategoryPaths(Film film)
+    public List<String> collectCategoryPaths(Film film)
     {
         List<String> used = new ArrayList<>();
 
@@ -525,7 +565,7 @@ public class UIReplayList extends UIList<ReplayListEntry>
     }
 
     /** Open a folder and every folder on the way to it, so that a row inside it is there to be seen. */
-    private void expandTo(String path)
+    public void expandTo(String path)
     {
         Film film = this.panel.getData();
 

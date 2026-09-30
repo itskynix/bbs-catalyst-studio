@@ -51,6 +51,8 @@ public class VideoPlayer
     private static final int STATE_VALID = 1;
     private static final int STATE_INVALID = 2;
 
+    public static volatile boolean forcedRecording = false;
+
     private final File file;
 
     private int width;
@@ -101,7 +103,7 @@ public class VideoPlayer
 
     public VideoPlayer(File file)
     {
-        this.file = file;
+        this.file = file != null ? new File(file.getAbsolutePath().replace('\\', '/')) : null;
     }
 
     /**
@@ -231,6 +233,12 @@ public class VideoPlayer
      */
     private void probe()
     {
+        if (this.file == null || !this.file.exists() || !this.file.isFile())
+        {
+            this.state = STATE_INVALID;
+            return;
+        }
+
         try
         {
             ProcessBuilder builder = new ProcessBuilder(FFMpegUtils.getFFMPEG(), "-i", this.file.getAbsolutePath());
@@ -297,7 +305,7 @@ public class VideoPlayer
             return null;
         }
 
-        boolean recording = BBSModClient.getVideoRecorder().isRecording();
+        boolean recording = BBSModClient.getVideoRecorder().isRecording() || forcedRecording;
 
         if (recording)
         {
@@ -435,6 +443,54 @@ public class VideoPlayer
         return this.texture;
     }
 
+    /**
+     * Synchronously seek to the requested frame timestamp, decode it and upload to texture immediately.
+     * Used for timeline scrubbing and paused playhead positioning in Catalyst Studio.
+     */
+    public Texture seekFrame(float seconds)
+    {
+        if (this.state == STATE_INVALID)
+        {
+            return null;
+        }
+
+        this.finishSeek();
+
+        if (this.state == STATE_UNPROBED)
+        {
+            this.probe();
+        }
+
+        if (this.state != STATE_VALID)
+        {
+            return null;
+        }
+
+        seconds = MathUtils.clamp(seconds, 0F, this.duration);
+        int target = Math.min((int) (seconds * this.fps), (int) (this.duration * this.fps));
+
+        if (this.texture != null && target == this.currentFrame)
+        {
+            return this.texture;
+        }
+
+        this.settlingTarget = -1;
+        this.restart(target / this.fps, target);
+
+        if (this.readFrame())
+        {
+            this.streamFrame = target + 1;
+            this.upload(target);
+        }
+        else
+        {
+            this.streamFrame = target;
+            this.ended = true;
+        }
+
+        return this.texture;
+    }
+
     private void startSeek(float seconds)
     {
         this.seeking = true;
@@ -501,6 +557,12 @@ public class VideoPlayer
     private void restart(float seconds, int frame)
     {
         this.stop();
+
+        if (this.file == null || !this.file.exists() || !this.file.isFile())
+        {
+            this.state = STATE_INVALID;
+            return;
+        }
 
         try
         {

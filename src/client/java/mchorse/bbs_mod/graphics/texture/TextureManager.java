@@ -14,6 +14,7 @@ import mchorse.bbs_mod.utils.resources.Pixels;
 import mchorse.bbs_mod.utils.watchdog.IWatchDogListener;
 import mchorse.bbs_mod.utils.watchdog.WatchDogEvent;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL13;
 
 import java.io.InputStream;
 import java.nio.file.Path;
@@ -131,6 +132,11 @@ public class TextureManager implements IWatchDogListener
 
     public void bindTexture(Texture texture, int unit)
     {
+        if (texture == null || !texture.isValid())
+        {
+            texture = this.getError();
+        }
+
         BBSRendering.trackTexture(texture);
 
         if (unit == 0)
@@ -139,6 +145,9 @@ public class TextureManager implements IWatchDogListener
         }
 
         RenderSystem.setShaderTexture(unit, texture.id);
+        RenderSystem.activeTexture(GL13.GL_TEXTURE0 + unit);
+        RenderSystem.bindTexture(texture.id);
+        GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture.id);
     }
 
     /**

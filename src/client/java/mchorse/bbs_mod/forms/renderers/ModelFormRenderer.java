@@ -78,6 +78,7 @@ import net.minecraft.util.math.RotationAxis;
 import org.joml.Vector3f;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL13;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -424,6 +425,7 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
             stack.pop();
 
             RenderSystem.depthFunc(GL11.GL_ALWAYS);
+            RenderSystem.activeTexture(GL13.GL_TEXTURE0);
         }
     }
 
@@ -678,7 +680,7 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
 
     private void renderArmor(IEntity target, MatrixStack stack, ArmorType type, ArmorSlot armorSlot, Color color, int overlay, int light)
     {
-        Matrix4f matrix = this.bones.get(armorSlot.group).matrix();
+        Matrix4f matrix = this.getArmorBoneMatrix(armorSlot.group, type);
 
         if (matrix != null)
         {
@@ -689,31 +691,87 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
             MatrixStackUtils.applyTransform(stack, armorSlot.transform);
             stack.multiply(RotationAxis.POSITIVE_X.rotationDegrees(180F));
 
-            CustomVertexConsumerProvider.hijackVertexFormat((l) -> RenderSystem.enableBlend());
+            RenderSystem.disableCull();
 
-            /* Translucent armor layers ride the deferred sorted pass (see
-             * CustomVertexConsumerProvider#draw(RenderLayer)); only reached outside picking. */
-            Vector3f armorOrigin = stack.peek().getPositionMatrix().getTranslation(new Vector3f());
-
-            FormTranslucentQueue.setSortOrigin(new Matrix4f(RenderSystem.getModelViewMatrix()).transformPosition(armorOrigin));
-
-            Identifier capeTexture = null;
-            if (this.form != null && this.form.hasCape.get())
+            try
             {
-                capeTexture = CapeRenderer.resolveCapeTexture(this.form.capeTexture.get());
+                CustomVertexConsumerProvider.hijackVertexFormat((l) -> RenderSystem.enableBlend());
+
+                /* Translucent armor layers ride the deferred sorted pass (see
+                 * CustomVertexConsumerProvider#draw(RenderLayer)); only reached outside picking. */
+                Vector3f armorOrigin = stack.peek().getPositionMatrix().getTranslation(new Vector3f());
+
+                FormTranslucentQueue.setSortOrigin(new Matrix4f(RenderSystem.getModelViewMatrix()).transformPosition(armorOrigin));
+
+                Identifier capeTexture = null;
+
+                if (this.form != null && this.form.hasCape.get())
+                {
+                    capeTexture = CapeRenderer.resolveCapeTexture(this.form.capeTexture.get());
+                }
+
+                ActorEntityRenderer.armorRenderer.renderArmorSlot(stack, consumers, target, type.slot, type, light, capeTexture);
+                consumers.draw();
+                FormTranslucentQueue.setSortOrigin(null);
+
+                CustomVertexConsumerProvider.clearRunnables();
             }
-
-            ActorEntityRenderer.armorRenderer.renderArmorSlot(stack, consumers, target, type.slot, type, light, capeTexture);
-            consumers.draw();
-            FormTranslucentQueue.setSortOrigin(null);
-
-            CustomVertexConsumerProvider.clearRunnables();
+            finally
+            {
+                RenderSystem.enableCull();
+            }
 
             stack.pop();
 
             RenderSystem.enableBlend();
             RenderSystem.enableDepthTest();
         }
+    }
+
+    private Matrix4f getArmorBoneMatrix(String primaryGroup, ArmorType type)
+    {
+        if (primaryGroup != null && !primaryGroup.isEmpty())
+        {
+            Matrix4f matrix = this.bones.get(primaryGroup).matrix();
+
+            if (matrix != null)
+            {
+                return matrix;
+            }
+        }
+
+        String[] fallbacks;
+
+        switch (type)
+        {
+            case HELMET -> fallbacks = new String[] {"armor_helmet", "head"};
+            case CHEST -> fallbacks = new String[] {"armor_chest", "body", "torso"};
+            case LEGGINGS -> fallbacks = new String[] {"armor_leggings", "body", "torso", "low_body"};
+            case LEFT_ARM -> fallbacks = new String[] {"armor_left_arm", "left_arm"};
+            case RIGHT_ARM -> fallbacks = new String[] {"armor_right_arm", "right_arm"};
+            case LEFT_LEG -> fallbacks = new String[] {"armor_left_leg", "left_leg"};
+            case RIGHT_LEG -> fallbacks = new String[] {"armor_right_leg", "right_leg"};
+            case LEFT_BOOT -> fallbacks = new String[] {"armor_left_boot", "armor_left_leg", "left_leg"};
+            case RIGHT_BOOT -> fallbacks = new String[] {"armor_right_boot", "armor_right_leg", "right_leg"};
+            default -> fallbacks = new String[0];
+        }
+
+        for (String fallback : fallbacks)
+        {
+            if (fallback.equals(primaryGroup))
+            {
+                continue;
+            }
+
+            Matrix4f matrix = this.bones.get(fallback).matrix();
+
+            if (matrix != null)
+            {
+                return matrix;
+            }
+        }
+
+        return null;
     }
 
     private void renderCape(IEntity target, ModelInstance model, MatrixStack stack, float transition, Color color, int overlay, int light)
@@ -968,6 +1026,7 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
             {
                 this.renderingArm = false;
                 ItemUsePose.setSuppressed(false);
+                RenderSystem.activeTexture(GL13.GL_TEXTURE0);
             }
 
             for (ModelGroup group : model.getModel().getAllGroups())
@@ -1089,6 +1148,8 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
             }
             finally
             {
+                RenderSystem.activeTexture(GL13.GL_TEXTURE0);
+
                 if (FramebufferDebug.inside())
                 {
                     FramebufferDebug.log("model", "after draw | " + FramebufferDebug.bindings());

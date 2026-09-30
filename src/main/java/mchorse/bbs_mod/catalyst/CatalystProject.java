@@ -1,11 +1,14 @@
 package mchorse.bbs_mod.catalyst;
 
+import mchorse.bbs_mod.BBSMod;
 import mchorse.bbs_mod.data.DataToString;
 import mchorse.bbs_mod.data.types.BaseType;
 import mchorse.bbs_mod.data.types.ListType;
 import mchorse.bbs_mod.data.types.MapType;
 
 import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -26,6 +29,130 @@ public class CatalystProject
 
     public final List<CatalystComposition> compositions = new ArrayList<>();
     public int activeCompositionIndex = 0;
+    public final List<CatalystMediaAsset> mediaPool = new ArrayList<>();
+    public transient File file;
+
+    public CatalystMediaAsset getAssetByPath(String path)
+    {
+        if (path == null)
+        {
+            return null;
+        }
+
+        String norm = path.replace('\\', '/');
+        for (CatalystMediaAsset asset : this.mediaPool)
+        {
+            if (norm.equals(asset.path) || path.equals(asset.path) || path.equals(asset.id))
+            {
+                return asset;
+            }
+        }
+
+        return null;
+    }
+
+    public CatalystMediaAsset addAsset(File file)
+    {
+        if (file == null || !file.exists())
+        {
+            return null;
+        }
+
+        String norm = file.getAbsolutePath().replace('\\', '/');
+        for (CatalystMediaAsset existing : this.mediaPool)
+        {
+            if (norm.equals(existing.path) || file.getAbsolutePath().equals(existing.path))
+            {
+                return existing;
+            }
+        }
+
+        CatalystMediaAsset newAsset = new CatalystMediaAsset(file, this.fps);
+        this.mediaPool.add(newAsset);
+        this.lastModified = System.currentTimeMillis();
+
+        return newAsset;
+    }
+
+    public boolean removeAsset(CatalystMediaAsset asset)
+    {
+        if (asset != null && this.mediaPool.remove(asset))
+        {
+            this.lastModified = System.currentTimeMillis();
+            return true;
+        }
+
+        return false;
+    }
+
+    public void syncMediaPoolWithLayers()
+    {
+        for (CatalystComposition comp : this.compositions)
+        {
+            for (CatalystLayer layer : comp.layers)
+            {
+                if (layer.resourcePath != null && !layer.resourcePath.trim().isEmpty())
+                {
+                    String p = layer.resourcePath.trim();
+                    if (this.getAssetByPath(p) == null)
+                    {
+                        File f = new File(p);
+                        CatalystMediaAsset asset;
+                        if (f.exists())
+                        {
+                            asset = new CatalystMediaAsset(f, this.fps);
+                        }
+                        else
+                        {
+                            asset = new CatalystMediaAsset(p, this.fps);
+                        }
+                        if (layer.mediaDuration > 0)
+                        {
+                            asset.durationFrames = layer.mediaDuration;
+                        }
+                        this.mediaPool.add(asset);
+                    }
+                }
+            }
+        }
+    }
+
+    public int cleanUnusedMedia()
+    {
+        java.util.Set<String> usedPaths = new java.util.HashSet<>();
+
+        for (CatalystComposition comp : this.compositions)
+        {
+            for (CatalystLayer layer : comp.layers)
+            {
+                if (layer.resourcePath != null && !layer.resourcePath.trim().isEmpty())
+                {
+                    String p = layer.resourcePath.trim();
+                    usedPaths.add(p);
+                    usedPaths.add(p.replace('\\', '/'));
+                }
+            }
+        }
+
+        int removed = 0;
+
+        for (int i = this.mediaPool.size() - 1; i >= 0; i--)
+        {
+            CatalystMediaAsset asset = this.mediaPool.get(i);
+            if (!usedPaths.contains(asset.path) && !usedPaths.contains(asset.id))
+            {
+                this.mediaPool.remove(i);
+                removed++;
+            }
+        }
+
+        if (removed > 0)
+        {
+            this.lastModified = System.currentTimeMillis();
+        }
+
+        return removed;
+    }
 
     public CatalystProject()
     {
@@ -128,6 +255,15 @@ public class CatalystProject
 
         data.put("compositions", compList);
 
+        ListType poolList = new ListType();
+
+        for (CatalystMediaAsset asset : this.mediaPool)
+        {
+            poolList.add(asset.toData());
+        }
+
+        data.put("mediaPool", poolList);
+
         return data;
     }
 
@@ -171,7 +307,23 @@ public class CatalystProject
             }
         }
 
+        if (data.has("mediaPool"))
+        {
+            this.mediaPool.clear();
+
+            for (BaseType base : data.getList("mediaPool"))
+            {
+                if (base.isMap())
+                {
+                    CatalystMediaAsset asset = new CatalystMediaAsset();
+                    asset.fromData(base.asMap());
+                    this.mediaPool.add(asset);
+                }
+            }
+        }
+
         this.ensureCompositions();
+        this.syncMediaPoolWithLayers();
 
         if (data.has("activeCompositionIndex"))
         {
@@ -197,13 +349,31 @@ public class CatalystProject
             {
                 MapType data = DataToString.read(file).asMap();
                 CatalystProject project = new CatalystProject();
+
+                project.file = file;
                 project.fromData(data);
+
                 return project;
             }
         }
         catch (Exception e)
         {
-            e.printStackTrace();
+            BBSMod.LOGGER.error("Failed to load Catalyst project from " + (file != null ? file.getAbsolutePath() : "null") + "! Creating corrupt backup...", e);
+
+            if (file != null && file.exists() && file.isFile())
+            {
+                try
+                {
+                    File corruptBackup = new File(file.getParentFile(), file.getName() + ".corrupt-" + System.currentTimeMillis());
+
+                    Files.copy(file.toPath(), corruptBackup.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                    BBSMod.LOGGER.info("Saved corrupted Catalyst project backup to: " + corruptBackup.getAbsolutePath());
+                }
+                catch (Exception copyEx)
+                {
+                    BBSMod.LOGGER.error("Failed to create corrupt backup for " + file.getAbsolutePath(), copyEx);
+                }
+            }
         }
 
         return null;

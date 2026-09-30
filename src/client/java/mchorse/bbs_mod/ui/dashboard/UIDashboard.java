@@ -20,6 +20,7 @@ import mchorse.bbs_mod.ui.dashboard.panels.UIDashboardPanel;
 import mchorse.bbs_mod.ui.dashboard.panels.UICatalystPanel;
 import mchorse.bbs_mod.ui.dashboard.panels.UIDashboardPanels;
 import mchorse.bbs_mod.ui.dashboard.panels.UIEditorDashboardPanel;
+import mchorse.bbs_mod.ui.dashboard.panels.hub.UICommunityHubPanel;
 import mchorse.bbs_mod.ui.dashboard.textures.UITextureManagerPanel;
 import mchorse.bbs_mod.ui.dashboard.utils.UIOrbitCamera;
 import mchorse.bbs_mod.ui.dashboard.utils.UIOrbitCameraKeys;
@@ -316,6 +317,7 @@ public class UIDashboard extends UIBaseMenu
         this.buildStep("model editor", () -> this.panels.registerPanel(new UIModelEditorPanel(this), UIKeys.MODEL_EDITOR_TITLE, Icons.POSE));
         this.buildStep("textures", () -> this.panels.registerPanel(new UITextureManagerPanel(this), UIKeys.TEXTURES_TOOLTIP, Icons.MATERIAL));
         this.buildStep("audio", () -> this.panels.registerPanel(new UIAudioEditorPanel(this), UIKeys.AUDIO_TITLE, Icons.SOUND));
+        this.buildStep("community assets", () -> this.panels.registerPanel(new UICommunityHubPanel(this), UIKeys.COMMUNITY_ASSETS_TITLE, Icons.GLOBE));
 
         /* Add-on panels go into the bar after ours, so this waits for the last of ours */
         this.buildStep("add-ons", () -> BBSMod.events.post(new RegisterDashboardPanelsEvent(this)));

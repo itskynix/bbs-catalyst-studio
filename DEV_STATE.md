@@ -1,10 +1,69 @@
 # BBS Mod - Geliştirme Durumu (DEV_STATE)
 
-**Proje:** Blockbuster Studio (BBS) - Fabric 1.20.4 Port (`bbs-cs`)  
-**Tarih:** 25 Eylül 2026  
-**Son Tamamlanan Aşama:** 47. Aşama — Alt Ses Katmanı Oynatma Önceliği, 2K/4K Video Frame Optimizasyonu ve Stereo OpenAL Desteği: getActiveAudioLayer iki aşamalı öncelik taraması (AUDIO katmanları her zaman öncelikli, VIDEO katmanları volume > 0 şartıyla), VideoPlayer dinamik setMaxSize ve renderWidth/renderHeight ölçekleme (FFmpeg -vf scale ile 4K'da 33MB'tan ~8MB'a düşüş), 16ms render bütçeli frame skipping/lag koruması ve OpenAL 2D stereo (AL_SOURCE_RELATIVE + AL_ROLLOFF_FACTOR=0 + setPosition(0,0,0)).
+**Proje:** Blockbuster Studio Catalyst (BBS CS) - Fabric 1.20.4 Port (`bbs-cs`)  
+**Tarih:** 30 Eylül 2026  
+**Son Tamamlanan Aşama:** 59 — Mod Kimliği, Sürüm ve Metadata Güncellemesi (BBS CS - C1.0)  
+*(Aşama 57: BBS Hub Pazaryeri, Aşama 58: Video & Audio Ses Kalitesi, Aşama 59: Mod Kimliği ve Sürüm C1.0)*:
 
----
+1. **FAZ 0: Crash, DoS ve Veri Kaybı Açıkları (%100):**
+   - `[P0-1] DEFECT-18`: `PacketCrusher.java` parçalı paketlerde 32MB ve 4000 parça tavan sınırı ile DoS/OOM koruması.
+   - `[P0-2] DEFECT-19`: `ServerNetwork.java` oyuncu başına izole `incomingCrushers` haritası ve bağlantı kopma temizliği.
+   - `[P0-3] DEFECT-20`: `ServerNetwork.java` sonlu sayı denetimleri (`Double.isFinite`, `Float.isFinite`), dünya sınırları kırpması, 2.000.000 blok yapı hacim limiti ve eksik `arePanelsAllowed` kontrolleri.
+   - `[P0-4] DEFECT-17`: `FolderManager.java` & `BaseManager.java` path traversal (`..` ve dizin dışı) engellemesi ve null-güvenliği.
+   - `[P0-5] DEFECT-02`: `CatalystProject.load()` bozuk projeleri silmeden `.corrupt-<timestamp>` yedeği alma; `CatalystProjectManager` hasarlı proje takibi ve koruması.
+   - `[P0-6] DEFECT-01`: `CatalystProjectManager.getProjectFile()` güvenli slug + 8 karakterlik deterministik SHA-256 hash ve Windows ayrılmış aygıt adı (`CON`, `PRN` vb.) koruması.
+
+2. **FAZ 1: Animasyon & Timeline Kusurları (%100):**
+   - `[P1-1] DEFECT-03 & 13`: `CatalystLayer.computeEffective(frame)` saf hesaplama; oynatma sırasında taban değer kirlenmesi ve kalıcı değer sapması çözüldü.
+   - `[P1-2] DEFECT-05`: `splitChannelsAt()` ile dilimleme sınırlarında interpolasyonlu keyframe enjeksiyonu (`cutSelected()`).
+   - `[P1-3] DEFECT-06`: `copyChannelsTo()` ile katman çoğaltmada 8 kanalın tamamının derin kopyalanması (`duplicateSelected()`).
+   - `[P1-4] DEFECT-07`: `lastClickedChannels` ve `deleteSelectedKeyframes()` ile doğrudan seçili keyframe silme.
+   - `[P1-5] DEFECT-08`: Göreli keyframe sürükleme (`dragStartTicks`), birden çok kanal keyframe'inin tek noktaya çökmesi önlendi.
+   - `[P1-6] DEFECT-09`: Önizleme tuvalinde katman sürükleme bittiğinde animasyonlu katmana otomatik keyframe yazılması (`updatePropertyValue`).
+   - `[P1-7] DEFECT-10`: `addKeyframeSingle()` ve Alt+Click ile X ve Y eksenlerinin birbirinden tamamen bağımsız keyframelenebilmesi.
+   - `[P1-8] DEFECT-14`: `jumpToKeyframe(next)` J/K navigasyonunun seçili katman ve tıklanan kanala odaklanarak gereksiz zıplamaları önlemesi.
+   - `[P1-9] DEFECT-11`: Negatif ölçekleme (`Math.copySign`), işaret korumalı viewport culling, bounding-box ve fare etkileşim dönüşümleri.
+   - `[P1-10] DEFECT-12`: Metin katmanı ölçeğinin matrise uygulanması ve unscaled kutu boyutları ile çift çarpım oluşmadan orantılı render edilmesi.
+
+3. **FAZ 2: Türkçe İşletim Sistemi (`Locale.ROOT`) Güvenceleri (%100):**
+   - `[P2-1]` `MolangParser.java`: `expression.toLowerCase(Locale.ROOT)` ile MoLang parser çökmesi önlendi.
+   - `[P2-2]` `EnumUtils.java`: `e.name().toLowerCase(Locale.ROOT)` ile enum anahtar bozulmaları engellendi.
+   - `[P2-3]` `AudioReader.java`: `link.path.toLowerCase(Locale.ROOT)` ile büyük harfli `.AVI` / `.MP4` uzantı tanıma hatası çözüldü.
+   - `[P2-4]` `CatalystLayer.java`: `s.toUpperCase(Locale.ROOT)` ile `"audio"` ve `"image"` katman türlerinin bozulması engellendi.
+
+4. **FAZ 3: Kod Hijyeni, Bounded Buffers & Thread-Safety (%100):**
+   - `[P3-1] DEFECT-21`: `AudioReader.java` FFmpeg 30 saniye işlem zaman aşımı (`destroyForcibly`) ve 256MB tavan tampon sınırı.
+   - `[P3-2] DEFECT-22`: `CatalystLayer.java` arka plan worker thread'lerinde yüklenen önbelleklere `volatile` güvencesi.
+   - `[P3-3] DEFECT-23`: `ServerNetwork.java` ve `FFMpegUtils.java` boş catch bloklarına `BBSMod.LOGGER` hata ve uyarı logları.
+   - `[OPSIYONEL] DEFECT-16`: `BBSMod.java` `BBS_EDITING_RULE` gamerule varsayılanı `false` yapılarak çok oyunculu sunucularda izinsiz istemci erişimi engellendi.
+
+5. **Render HUD Canlı Önizleme İzolasyonu & MP4 Tavan Siyah Bar Çözümü (`UICatalystPanel.java`):**
+   - Canlı önizleme tuvaline `GL11.glEnable(GL11.GL_SCISSOR_TEST)` ve GUI ölçekleme çarpanlı fiziksel `glScissor` uygulandı; katman animasyonlarının HUD butonlarının veya ekran sınırlarının dışına taşması engellendi.
+   - Pencereli modda ana framebuffer yüksekliği ile export çözünürlüğü arasındaki fark `int offsetY = Math.max(0, screenH - this.exportHeight)` ile tavana hizalandı; `readH < this.exportHeight` durumunda `MemoryUtil.memCopy` ile satırlar doldurularak üretilen videolardaki üst siyah şerit tamamen giderildi.
+
+6. **Catalyst Ses Export Hattı İyileştirmesi (Stereo Desteği, PCM Clipping Koruması ve Codec Uyumluluğu):**
+   - **Gerçek 2-Kanal 48kHz Stereo Miksaj:** `AudioRenderer.renderAudio` 32-bit kayan noktalı `mixLeft` ve `mixRight` sonsuz dinamik tavanlı tamponlarla yeniden yapılandırıldı. Stereo kaynaklar çift kanallı ayrımını korurken mono kaynaklar her iki kanala faz çakışmasız eşit dağıtıldı.
+   - **Analog Tanh Soft-Clipping & Peak Normalization:** Tepe genlik taraması ve aşırı yüklenmelerde dinamik tavan koruması (`maxPeak > 1.25F`) getirildi. 16-bit PCM short sınırında 0.85 eşiğini aşan sinyaller yumuşak hiperbolik tanjant eğrisi ile satüre edilerek dijital clipping ve boğukluk önlendi.
+   - **Çok Kanallı Dilimleme:** `Wave.excerpt(from, to)` metodu ile stereo kanal ve bayt hizalamaları bozulmadan zaman aralığı dilimlemesi sağlandı.
+   - **FFmpeg Codec & Container Uyumluluğu:** AAC ve MP3 için yüksek kaliteli bitrate (varsayılan 320 kbps Studio Master), Opus codec'i MP4 container ile kullanıldığında `-strict -2` parametresi otomatik entegre edildi.
+
+7. **Video Layer ve Audio Layer Ses Kalitesi Düşüklüğü / Resampling Bozulması Onarımı (Aşama 58):**
+   - **Video Ses Demuxer & OpenAL Frekans Uyumu (`AudioReader.java`):** Sabit `-ar 44100` ve çift resampling döngüsü kaldırıldı. OpenAL aygıtının natif frekansı (`ALC_FREQUENCY`, varsayılan 48 kHz) otomatik tespit edilip FFmpeg'e bağlandı. 28-bit Soxr sinc resampler ve triangular dither fallback hattı kuruldu; 16 KB pipe tamponuyla underrun ve cızırtı riski sıfırlandı.
+   - **Kayıpsız Bit Derinliği & 44.1 / 48 kHz Korunması (`Wave.java` & `SoundBuffer.java`):** `Wave.normalize()` metodunun 44.1 kHz ses dosyalarını gereksiz yere 48 kHz'e zorlayarak aşındırması engellendi. `SoundBuffer` yalnızca 48 kHz üstündeki (96k/192k) büyük dosyaları kontrollü indirger; standart 44.1 kHz ve 48 kHz sesler OpenAL donanım mikserine doğrudan ve kayıpsız beslenir.
+   - **Band-Limited Blackman-Nuttall Windowed Sinc Resampler (`Wave.java`):** Tizleri körelten ve anti-aliasing filtresi olmayan 4-noktalı Catmull-Rom cubic spline yerine, >90dB stopband zayıflatmalı ve Nyquist sınırını aşan frekansları matematiksel olarak süzerek yok eden band-limited windowed sinc resampler yazıldı.
+   - **OpenAL 2D Stereo Doğrudan Geçiş (`SoundPlayer.java`):** `configure2DStereo()` ve merkez pan modunda yanlışlıkla açık olan `AL_SOURCE_SPATIALIZE_SOFT` değeri `AL_FALSE` yapıldı. OpenAL Soft'un stereo kanalları kulak pinna filtreleriyle boğuklaştıran 3D HRTF filtrelemesi devreden çıkarıldı.
+   - **Catalyst Playback Senkronizasyon & Scrubbing Düzeltmesi (`UICatalystPanel.java`):** Master clock ses oynatıcısının integer kare yuvarlama sapması yüzünden her render karesinde mikro-seek yapması önlendi. `scrubAudio` metodu sesin natif örnekleme hızına (`wave.sampleRate`) göre dinamik adımlama kazanarak 44.1 kHz seslerin timeline kaydırılırken pitch kayması düzeltildi.
+
+8. **Mod Kimliği, Sürüm ve Metadata Güncellemesi - BBS CS C1.0 (Aşama 59):**
+   - **`fabric.mod.json`:** Mod adı "BBS CS (Catalyst Studio)", açıklaması "Built for machinima creators, animators, and filmmakers. BBS CS upgrades the core studio with the Catalyst NLE timeline, lossless studio-grade audio engine, smart replay LOD culling, and major render stability fixes." olarak güncellendi.
+   - **Yazarlar & Katkıcılar:** "McHorse", "Wemppy (BBS FS)" ve "Kynix" yazarlar listesine tescillendi.
+   - **`gradle.properties`:** Mod sürümü `mod_version=C1.0` olarak güncellendi.
+   - **Oyun İçi UI & Branding (`UILandingScreen.java`):** Giriş ekranı sürüm metni ve afiş başlığı `\u00a7lBBS CS` olarak güncellendi.
+   - **ModMenu Yerelleştirmesi (`en_us.json`, `tr_tr.json`):** `modmenu.nameTranslation.bbs` ve `modmenu.descriptionTranslation.bbs` anahtarları Türkçe ve İngilizce olarak eklendi.
+
+**Derleme sonucu:** `BUILD SUCCESSFUL` — 0 hata, `apiCheck` onaylı, temiz derleme.
+
+
 
 ## 1. Mimari Genel Bakış
 
@@ -558,13 +617,265 @@ BBS moduna, DaVinci Resolve ve modern prodüksiyon araçlarından esinlenen iki 
 ## 4. Derleme & Doğrulama Durumu
 
 * `./gradlew.bat --no-daemon compileJava compileClientJava` komutu çalıştırıldı.
-* **Sonuç (44. Aşama):** `BUILD SUCCESSFUL in 10s` — 0 Hata, 0 Kritik Uyarı.
+* **Sonuç (44. Aşama & Faz 4):** `BUILD SUCCESSFUL in 17s` — 0 Hata, 0 Kritik Uyarı.
+* `./gradlew.bat --no-daemon apiCheck` komutu çalıştırıldı.
+* **Sonuç:** `BUILD SUCCESSFUL in 9s` — Addon API sözleşmesi korundu.
 
 ---
 
-## 5. Sırada Yapılacak Adım (Next Step)
+## 5. Catalyst Timeline Profesyonel Kurgu, Senkronizasyon ve Navigasyon Altyapısı (Faz 4)
 
-* Catalyst Studio 44. Aşama (Dinamik Video Aspect Ratio, Z Rotasyon Matrisi, Canlı Film Viewport Render'ı, Split In-Point Media Offset'i, Görünür Settings Modalı, Akıcı GPU Video Dokusu ve Çözünürlük Bağımsız Sanal Koordinat Sistemi) başarıyla tamamlandı. Sıradaki aşamalarda katman efekt zincirleri (Effects / Filters), maskeleme (Masks) ve keyframe tabanlı canlandırma (Transform Keyframing) geliştirilebilir.
+### Uygulanan 5 Temel Özellik:
+1. **Klip Trim / Kenar Çekme ve Medya İç Ofset Senkronu (Slip / Trim-In & Trim-Out):**
+   - **Sol Kenar (Trim-In / Slip-In):** `startFrame` sağa veya sola çekildiğinde `mediaOffset` dinamik olarak ofsetlenir (`mediaOffset = Math.max(0, initialMediaOffset + deltaFrames)`). Klip asla başa sarmaz, kurgunun kesildiği andan itibaren oynamaya devam eder.
+   - **Sağ Kenar (Trim-Out):** `duration` dinamik olarak uzatılıp kısaltılır; klip süresi `Math.max(1, layer.mediaDuration - mediaOffset)` sınırını aşamaz.
+   - **Kenar Tutamaç İmleci:** Fare katman kenarlarına yaklaştığında (<= 6px) ve kenar çekme esnasında imleç `GLFW.GLFW_HRESIZE_CURSOR` şeklini alır.
+
+2. **Manyetik Hizalama (Magnetic Snapping) ve Toolbar Butonu:**
+   - Zaman çizelgesinin sol üst ruler köşesine `Icons.MAGNET` snap butonu eklendi (tıklama ile veya Premiere/DaVinci standardı olan `N` tuşuyla açılıp kapanabilir, varsayılan açık). Buton üzerinde `Snapping (N)` tooltip'i gösterilir.
+   - After Effects uyumluluğu gözetilerek `S` kısayolu snapping çakışmasından tamamen arındırıldı ve yalnızca seçili katmanın Scale özelliğini genişletmeye (`PROP_SCALE`) tahsis edildi.
+   - Snap Hedefleri: Playhead, diğer katmanların başı ve sonu, tüm katmanların keyframe noktaları, kare 0 ve kompozisyon bitişi. Alt tuşuna basılı tutulduğunda snap durumu tersine çevrilir. Hassasiyet: 8 piksel (`SNAP_DISTANCE = 8`).
+
+3. **Kare Kare (Frame-by-Frame) Ok Tuşları ile Navigasyon:**
+   - Sol Ok: Playhead -1 kare (Shift + Sol: -10 kare, min 0).
+   - Sağ Ok: Playhead +1 kare (Shift + Sağ: +10 kare, max duration - 1).
+   - `UICatalystTimeline` ve `UICatalystPanel` seviyesinde odaklanmış metin kutusu yokken anında senkron frame decoding ve ses çalımı (`seekToFrame`).
+
+4. **Ripple Delete / Boşluk Silme (Gap Deletion):**
+   - `Shift + Delete` / Sağ tık menüsü "Ripple Delete (Shift + Del)": Seçili katmanları siler ve sonraki tüm katmanları silinen süre kadar geri çeker.
+   - Boşluk Seçimi & Silme: Katmanlar arasındaki boşluğa tıklandığında boşluk mavi renkle vurgulanarak seçilir; `Delete` / `Backspace` tuşuna basıldığında sonraki tüm katmanlar boşluk süresi kadar sola kaydırılır (`rippleDeleteGap()`).
+
+5. **Çoklu Katman Seçimi & Kutu / Marquee Seçimi:**
+   - Boş alandan sürükleme yapıldığında kesişen tüm katmanlar seçim kutusu (`this.marquee`) ile toplu seçilir.
+   - `Shift + Click` mevcut seçimi bozmadan yeni katmanları seçime ekler.
+   - Çoklu taşıma modunda (`grabMode == 0`) seçili katmanlar birbirlerine göre bağıl mesafelerini koruyarak timeline 0 sınırına kadar senkron hareket eder.
+
+---
+
+## 6. Catalyst Media Pool (Varlık Yönetimi) & Sürükle-Bırak Altyapısı (Faz 5)
+
+### Uygulanan Temel Özellikler:
+1. **CatalystMediaAsset Veri Modeli:**
+   - Video, Audio ve Image varlıkları için tip güvenli `MediaType`, dosya yolu, dosya boyutu, kare cinsinden süre ve dosya adı modeli.
+   - `formatSize()` (B, KB, MB, GB) ve `formatDuration(fps)` (MM:SS / HH:MM:SS) formatlayıcıları.
+   - Geriye dönük tam uyumlu NBT/JSON serileştirme (`toData` / `fromData`).
+
+2. **Proje Seviyesi Medya Havuzu (`CatalystProject`):**
+   - `mediaPool` listesi, proje dosyasıyla birlikte kaydedilir/yüklenir.
+   - `addAsset`, `removeAsset`, `getAssetByPath`, `syncMediaPoolWithLayers` ve `cleanUnusedMedia` yönetim fonksiyonları.
+
+3. **UIMediaPoolPanel Paneli & Kullanıcı Arayüzü:**
+   - Sol tarafta açılır/kapanır Media Pool paneli (`B` tuşu veya toolbar `Icons.SAVED` butonu ile geçiş).
+   - Başlık çubuğu: Havuz sayaç rozeti, `UIFileDialogs.pickFile` ile "Import Media", "Clean Unused" ve "Open Folder" butonları.
+   - Dinamik metin filtreleme / arama kutusu (`UITextbox`).
+   - Medya kartları: Tür ikonu (`Icons.FILM`, `Icons.SOUND`, `Icons.IMAGE`), renk kodlaması, dosya adı, dosya boyutu, süre ve format rozeti (`VID`, `AUD`, `IMG`).
+   - Sağ tık bağlam menüsü: "Insert to Timeline (At Playhead)", "Reload Asset", "Open Containing Folder", "Delete from Pool".
+
+4. **Sürükle-Bırak Hattı (Drag & Drop Pipeline):**
+   - **Masaüstünden Pencereye:** LWJGL `glfwSetDropCallback` ile işletim sisteminden sürüklenen dosyalar `BBSMod.getAssetsPath("catalyst_media")` dizinine kopyalanarak otomatik havuza eklenir.
+   - **Havuzdan Zaman Çizelgesine:** Havuzdan sürüklenen varlık fare imlecinde yüzen kart olarak takip edilir; zaman çizelgesi üzerinde manyetik snap kılavuz çizgisi ve hedef kare rozeti çizilir.
+   - Bırakıldığında veya çift tıklandığında otomatik katman tipi (`VIDEO`, `AUDIO`, `IMAGE`), renk ve süre atanır; ses katmanları için arka planda asenkron dalga formu üretimi (`ensureWaveformLoaded`) tetiklenir.
+
+---
+
+## 7. Catalyst Katman Trim Mantığı, Audio mediaOffset Senkronu & Canlı Önizleme Stereo/Kristal Netlik (Aşama 50)
+
+### Uygulanan Temel Düzeltmeler ve İyileştirmeler:
+1. **Audio Katmanı mediaOffset Senkronu (Trim-In / Başa Sarma Engeli):**
+   - Sol kenar sağa çekildiğinde oluşan `mediaOffset` değeri `Wave` / `SoundPlayer` oynatma ofsetine (`relSec = ((currentFrame - layer.startFrame) + layer.mediaOffset + layer.audioOffset) / fps`) bağlandı.
+   - `SoundPlayer` içinde `pendingOffset` altyapısı kuruldu; OpenAL'in durdurulmuş/başlatılmış kaynaklarda ofseti 0'a sıfırlama davranışı `alSourcePlay` ardından `setPlaybackPosition` uygulanarak tamamen önlendi.
+   - Timeline dalga formu çiziminde `layer.mediaOffset` hesaba katılarak (`startTime`, `endTime`) görsel dalga formu ile ses ofseti 1:1 senkronize edildi.
+
+2. **Sağ Kenar (Trim-Out) Kelepçe ve Süre Sınırı Düzeltmesi (`UICatalystTimeline`):**
+   - Fiziksel medya sınır kuralı uygulandı: `Oynatılan Son Medya Karesi = layer.mediaOffset + layer.duration <= layer.mediaDuration`.
+   - Sağ kenar çekildiğinde (`grabMode == 2` / `TRIM_END`): `maxDuration = Math.max(1, layer.mediaDuration - layer.mediaOffset)` ile kalan fiziksel medya süresine kadar uzatabilme serbestliği sağlandı.
+   - Sol kenar çekildiğinde (`grabMode == 1` / `TRIM_START`): `startFrame` arttıkça `duration` eşit miktarda azaltılıp `mediaOffset` aynı miktarda artırılarak `endFrame` (`startFrame + duration`) sabit kilitlendi; sol kenar geri çekildiğinde `mediaOffset` 0'a kadar serbestçe indirildi.
+   - `IMAGE`, `SOLID` ve `TEXT` gibi fiziksel medya sınırı olmayan katmanların `mediaDuration` kıskacında kalması önlendi.
+
+3. **Canlı Önizleme Ses Kalitesi (Gerçek 48kHz Stereo & 32-Bit Float Kristal Netlik):**
+   - `Wave.convertToStereo()` metodu eklenerek mono seslerin OpenAL tarafından 3D uzamsal zayıflatmaya uğraması önlendi; 2 kanallı 48000 Hz 16-bit PCM standardı (`AL_FORMAT_STEREO16`) garanti edildi.
+   - `SoundPlayer` 2D stereo yapılandırmasına OpenAL Soft `AL_SOURCE_SPATIALIZE_SOFT` desteği entegre edildi; `layer.pan` (-1.0 .. +1.0) kontrolü canlı önizlemede gerçek stereo pan olarak etki eder hale getirildi.
+   - **Canlı Scrub Miksajı (`playScrubAudio`):** Timeline scrubbing esnasında tüm aktif ses katmanları 32-bit kayan noktalı (float) stereo tamponda anında mikslenir; dinamik peak taraması ve analog tanh soft-clipping uygulanarak hoparlörden gelen dijital çatırtılar/bozulmalar önlendi.
+
+---
+
+## 8. Catalyst Media Pool Dosya Yolu (Path Resolution), Doku Yükleme & Oynatma Onarımı (Aşama 51)
+
+### Uygulanan Temel Düzeltmeler ve İyileştirmeler:
+1. **Absolute Path / Dosya Yolu ve Boşluk Formatlaması (`CatalystMediaAsset`, `CatalystLayer`, `CatalystProject`, `UICatalystPanel`):**
+   - Media Pool'dan timeline'a sürükleme ve inspector dosya yolu girişlerinde Windows ters eğik çizgileri (`\`) tek tip normalize edilmiş mutlak yollara (`/`) dönüştürüldü.
+   - Dosya adındaki boşluklar ve özel karakterler korunurken, `dropAssetToTimeline` içinde `new File(normPath).exists()` doğrulaması yapılarak yetim/boş katman oluşması engellendi.
+
+2. **AssetProvider & Direct File Resolution (Missing Texture / Checkerboard Kök Onarımı):**
+   - Windows sürücü harfi içeren mutlak yolların (`C:/...`, `D:/...`) `Link` tarafından hatalı namespace (`C:`) olarak yorumlanıp `AssetProvider` tarafından reddedilmesi sorunu, `AssetProvider.resolveDirectFile(Link link)` mekanizması ile çözüldü.
+   - `getFile()`, `hasAsset()` ve `getAsset()` metodları diskteki fiziksel dosyaları otomatik tespit ederek doğrudan `FileInputStream` açar hale getirildi.
+   - `VideoManager.getPlayer()` ve `VideoManager.get()` metodlarına doğrudan disk dosyası çözümleme desteği entegre edildi.
+
+3. **IMAGE Katmanı Doku Yüklemesi (`UICatalystPanel`, `CatalystLayer`):**
+   - `UICatalystPanel.getOrLoadImageTexture(layer)` metodu inşa edildi.
+   - `CatalystLayer` üzerine eklenen `cachedImageTexture` ve `cachedImagePath` transient volatile alanları ile doku önbelleği kuruldu.
+   - Harici resimler (`.png`, `.jpg`, `.jpeg`) `Pixels.fromPNGStream()` ve `Texture.textureFromPixels()` ile yüksek kaliteli `GL11.GL_LINEAR` OpenGL dokusu olarak yüklendi; missing texture pembe-mavi dama tahtası engellendi.
+   - `getLayerDimensions()` içerisine görselin gerçek genişlik/yükseklik en-boy oranı entegre edilerek tuval üzerindeki çerçeve ve tutamaçlar kusursuz hizalandı.
+
+4. **VIDEO ve AUDIO Oynatıcı Bağlantısı (`AudioReader`, `VideoPlayer`, `UICatalystTimeline`):**
+   - `AudioReader.readWave(File file)` ve `AudioReader.readVideoAudio(File file)` statik metodları eklendi. Ses ve video dosyalarından WAV/OGG/MP3 çözümleme ve FFmpeg 16-bit PCM stereo ses çıkarma doğrudan dosya referansıyla çalışır kılındı.
+   - `UICatalystTimeline.ensureWaveformLoaded()` ve `UIMediaPoolPanel.probeAsset()` doğrudan ses dosyaları için `AudioReader.readWave()` üzerinden dalga formu ve süre hesaplar hale getirildi.
+   - `VideoPlayer` normalize edilmiş mutlak dosya yolu ile başlatılarak `seekToFrame` ve canlı önizleme karelerinin FBO dokusuna kesintisiz akması sağlandı.
+
+---
+
+## 9. Aşama 52: Catalyst Editör Nihai Stabilite Check-Up'ı, Kaynak/Bellek Güvenliği ve Inspector Cilası
+
+1. **Inspector Sadeleştirmesi ve Arayüz Temizliği (`UICatalystPanel.java`):**
+   - Media Pool entegrasyonu tamamlandığı için Inspector üzerindeki "Browse...", "Open Media Folder" klasör butonları ve altındaki taşan `layerResourceInput` metin kutusu tamamen kaldırıldı.
+   - Ölü yardımcı metodlar (`openMediaPickerForSelectedLayer`, `openMediaFolderForSelectedLayer`) ve kullanılmayan UI overlay importları (`UITexturePicker`, `UISoundOverlayPanel`, `UIStringOverlayPanel`, `UIVideoClip`) temizlendi.
+   - Seçili medya katmanları için salt okunur tek satır kompakt etiket yerleştirildi: `Source: <dosya_adi.uzanti>` (örn: `Source: manifest - KT5 Music Video.mp3`).
+   - `audioControlsGroup` bileşeni ile Volume, Pan ve Audio Offset alanları hiyerarşik olarak gruplandı; sadece ses ayarı barındıran katmanlarda görüntülenerek dikey boşluk ve taşmalar ortadan kaldırıldı.
+
+2. **Kritik Çökme, Bellek Sızıntısı ve Süreç Güvenliği (`UICatalystPanel`, `UICatalystTimeline`):**
+   - `UICatalystPanel.cleanupLayerResources(layer)` ve `cleanupProjectResources(project)` mekanizması inşa edildi.
+   - Panel kapatıldığında (`onClose`), panelden çıkıldığında (`onDisappear`), proje değiştirildiğinde (`setActiveProject`), proje silindiğinde (`deleteSelectedProject`) veya form sıfırlandığında (`clearForm`):
+     * Video katmanlarının `VideoPlayer` FFmpeg alt süreçleri derhal `BBSModClient.getVideos().release(layer)` ile öldürülür.
+     * Image katmanlarının OpenGL dokuları `tex.delete()` ile GPU belleğinden serbest bırakılır.
+     * Scene katmanlarının dondurulmuş BBS film replay'leri `unfreeze()` edilir.
+     * OpenAL ses oynatıcıları (`activeAudioPlayers`) durdurulup `.delete()` edilir; scrub OpenAL kaynak/tamponları serbest bırakılır.
+   - Timeline üzerinden katman silindiğinde (`deleteSelected`, `rippleDeleteSelected`) kaynaklar anında temizlenir.
+
+3. **Eksik Medya Koruması (`VideoPlayer.java`, `UICatalystPanel.java`):**
+   - `VideoPlayer.probe()` ve `restart()` fonksiyonlarında dosya diskte bulunamadığında veya silindiğinde FFmpeg başlatılmadan güvenli `STATE_INVALID` durumuna geçilir; NPE veya fatal crash önlendi.
+   - Dosyası silinmiş/taşınmış katmanlar tuvalde çökme yaratmadan güvenli katman rengi kutusu (fallback box) çizer.
+
+4. **Sıfır Bölme ve Sınır Koruması (`CatalystComposition.java`, `CatalystLayer.java`):**
+   - `CatalystComposition.fromData()` ve `setDurationSeconds()`: `fps >= 1`, `duration >= 1`, `width >= 1`, `height >= 1`, `playhead >= 0`.
+   - `CatalystLayer.fromData()`: `duration >= 1`, `filmFps >= 1`.
+
+---
+
+## 10. Derleme & Doğrulama Durumu (Aşama 52)
+
+* `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 15s** (0 Hata, 0 Kritik Uyarı).
+* `./gradlew.bat --no-daemon apiCheck` -> **BUILD SUCCESSFUL in 8s** (Addon API uyumluluğu korundu).
+* `./gradlew.bat --no-daemon check` -> **BUILD SUCCESSFUL in 23s** (330/330 anchor, migration, 49/49 addonApi testleri eksiksiz geçti).
+
+---
+
+## 11. Modül Durumu (Module Frozen & Stable)
+
+* Catalyst Video Editör modülü tüm çekirdek özellikleri (Timeline, Keyframing, Çoklu Kompozisyon, 4K/60FPS Dışa Aktarma, Media Pool, Senkronize Ses/Video/3D Replay Sahne Katmanları, Bellek/Süreç Güvenliği) ile tam stabiliteye ulaşmış ve dondurulmuştur.
+
+---
+
+## 12. Aşama 53: Hedeflenen Yapılacaklar - Madde 1: 3D Model Dokularında Bozulma (Missing Texture / Render Glitch) Onarımı & OpenGL State İzolasyonu
+
+1. **TextureManager & OpenGL Donanım Senkronizasyonu (`TextureManager.java`):**
+   * `bindTexture(Texture texture, int unit)` fonksiyonuna `texture == null || !texture.isValid()` durumunda `this.getError()` çağrısıyla otomatik güvenli fallback entegre edildi.
+   * `RenderSystem.setShaderTexture(unit, texture.id)` çağrısının hemen ardına `RenderSystem.activeTexture(GL13.GL_TEXTURE0 + unit)`, `RenderSystem.bindTexture(texture.id)` ve doğrudan donanım sürücüsünü besleyen `GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture.id)` eklendi.
+   * Böylece üçüncü parti render ve gölgelendirici modları (Sodium, Iris, Entity Texture Features - ETF, Entity Model Features - ETM) GlStateManager önbelleğini atlayarak harici doku bağlasa dahi, BBS'in GPU doku birimi donanım seviyesinde zorunlu olarak eşitlendi.
+
+2. **ModelVAORenderer Tam OpenGL State Push/Pop İzolasyonu (`ModelVAORenderer.java`):**
+   * Model çizilmeden önce `GL30.GL_VERTEX_ARRAY_BINDING`, `GL30.GL_ELEMENT_ARRAY_BUFFER_BINDING`, `GL15.GL_ARRAY_BUFFER_BINDING` (VBO), `GL20.GL_CURRENT_PROGRAM` (aktif shader) ve `GL13.GL_ACTIVE_TEXTURE` (aktif doku ünitesi) kaydedildi.
+   * `shader.bind()` ve VAO çizimi tamamlanıp `shader.unbind()` çağrıldıktan sonra, tüm bu OpenGL durumları orijinal değerlerine eksiksiz geri yüklendi.
+   * `shader.unbind()` metodunun sampleri bağladıktan sonra aktif doku ünitesini `GL_TEXTURE11` üzerinde bırakıp sonraki tüm Minecraft/mod çizimlerini bozması engellendi.
+
+3. **BOBJModelVAO Erken Vertex Attribute Hatası & Durum İzolasyonu (`BOBJModelVAO.java`):**
+   * `BOBJModelVAO.render()` içinde renk, overlay ve lightmap vertex niteliklerinin (`glVertexAttrib4f`, `glVertexAttribI2i`) `glBindVertexArray(this.vao)` çağrılmadan ÖNCE yürütülmesi hatası düzeltildi; nitelikler VAO bağlandıktan hemen sonraya taşındı.
+   * VAO, EBO, VBO, Program ve ActiveTexture kaydetme/geri yükleme izolasyonu uygulandı.
+
+4. **CubicVAORenderer Per-Material Taban Doku Güvencesi (`CubicVAORenderer.java`):**
+   * `CubicVAORenderer` kurucusunda çizim öncesi modelin taban dokusu `this.baseTexture = BBSModClient.getTextures().getLastBound()` olarak saklandı.
+   * Çok materyalli kübik modellerde bir kemik veya materyal override dokusu kullandığında, sonraki materyallerin taban dokuyu kaybetmesi önlendi ve her materyal çiziminden önce `bindTexture(texture)` çağrısı güvence altına alındı.
+
+5. **ModelFormRenderer Doku Ünitesi Temizliği (`ModelFormRenderer.java`):**
+   * `render3D` (UI önizleme), `renderArm` (birinci şahıs kolu) ve `render` (ana dünya çizimi) bloklarının `finally` kapanışlarına `RenderSystem.activeTexture(GL13.GL_TEXTURE0)` yerleştirilerek aktif doku ünitesinin her zaman sıfırıncı birime dönmesi garanti edildi.
+
+---
+
+## 13. Derleme & Doğrulama Durumu (Aşama 53)
+
+* `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 19s** (0 Hata, 0 Kritik Uyarı).
+* `./gradlew.bat --no-daemon apiCheck` -> **BUILD SUCCESSFUL in 8s** (Addon API sözleşmesi korundu).
+* `./gradlew.bat --no-daemon check` -> **BUILD SUCCESSFUL in 20s** (330/330 anchor, migration, 49/49 addonApi testleri eksiksiz geçti).
+
+---
+
+## 14. Aşama 54: Hedeflenen Yapılacaklar - Madde 2: Zırh Sağ Parçalarının Görünmemesi (Armor Right-Side Visibility Glitch) Onarımı
+
+1. **ArmorRenderer ModelPart Hidden & Traverse Görünürlük Resetleme (`ArmorRenderer.java`):**
+   * `renderArmorSlot` içinde `bipedModel.setVisible(true)` çağrısının hemen ardına, Minecraft 1.20.4'te biped model parçaları (`head, hat, body, rightArm, leftArm, rightLeg, leftLeg`) üzerindeki `hidden = false` bayrağı zorunlu olarak sıfırlandı.
+   * `part.visible = true;` ve `part.hidden = false;` ayarlandı; `part.traverse().forEach(...)` ile seçili zırh parçasının tüm alt çocukları da zorunlu olarak `visible = true` ve `hidden = false` yapılarak `renderCuboids` atlama davranışı engellendi.
+
+2. **ModelFormRenderer OpenGL Backface Culling Koruması (`ModelFormRenderer.java`):**
+   * `renderArmor` metodunda sağ uzuvların simetrik ayna koordinatları ve negatif determinantlı matris dönüşümlerinde yüzey normallerinin ve triangle winding sırasının ters dönmesi sonucu OpenGL `GL_CULL_FACE` tarafından arka yüzey sayılıp elenmesini önlemek için çizim bloğu `RenderSystem.disableCull()` ile korumaya alındı ve çizim bitiminde `finally` bloğunda `RenderSystem.enableCull()` ile eski haline döndürüldü.
+
+3. **ModelFormRenderer Hiyerarşik Kemik Fallback Eşleştirme Motoru (`ModelFormRenderer.java`):**
+   * `getArmorBoneMatrix(primaryGroup, type)` yardımcı metodu inşa edildi.
+   * Model konfigürasyonunda veya rig kemiklerinde `armorSlot.group` bulunamadığında veya matrisi null olduğunda güvenli geri dönüş fallback tablosu tanımlandı:
+     - `RIGHT_ARM` -> `armor_right_arm` -> `right_arm`
+     - `LEFT_ARM` -> `armor_left_arm` -> `left_arm`
+     - `RIGHT_LEG` -> `armor_right_leg` -> `right_leg`
+     - `RIGHT_BOOT` -> `armor_right_boot` -> `armor_right_leg` -> `right_leg`
+     - `LEFT_LEG` -> `armor_left_leg` -> `left_leg`
+     - `LEFT_BOOT` -> `armor_left_boot` -> `armor_left_leg` -> `left_leg`
+     - `CHEST` -> `armor_chest` -> `body` -> `torso`
+     - `LEGGINGS` -> `armor_leggings` -> `body` -> `torso` -> `low_body`
+     - `HELMET` -> `armor_helmet` -> `head`
+   * Böylece özel rig'lerde veya eksik locator kemikli modellerde zırh çiziminin pas geçilmesi önlendi.
+
+4. **CubicMatrixRenderer Koşulsuz Matris Yakalama (`CubicMatrixRenderer.java`):**
+   * `applyGroupTransformations(stack, group)` metodunun sonuna `this.matrices.get(group.index).set(stack.peek().getPositionMatrix());` yerleştirildi.
+   * Böylece `CubicRenderer.processRenderRecursively` içinde `group.isVisible() == false` olan geometrisiz locator/attachment kemiklerinin (örneğin `armor_right_arm`, `armor_right_leg`, `armor_right_boot`) transform matrislerinin birim (identity) matriste kalması kesin olarak önlendi.
+
+---
+
+## 15. Derleme & Doğrulama Durumu (Aşama 54)
+
+* `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 13s** (0 Hata, 0 Kritik Uyarı).
+* `./gradlew.bat --no-daemon apiCheck` -> **BUILD SUCCESSFUL in 8s** (Addon API sözleşmesi korundu).
+* `./gradlew.bat --no-daemon check` -> **BUILD SUCCESSFUL in 20s** (330/330 anchor, migration, 49/49 addonApi testleri eksiksiz geçti).
+
+---
+
+## 16. Aşama 55: bbs-lezy Addon İncelemesi ve Yerel Çekirdek Entegrasyonu
+
+### Genel Bakış & Hedef
+* `HEDEFLENEN YAPILACAKLAR.txt` Madde 3 kapsamında topluluk eklentisi `NotLeji/bbs-lezy` detaylı olarak incelenmiş; Fabric 1.20.1 için mixin tabanlı yazılmış olan performans, replay sahne yönetimi ve kamera araçları yerel BBS 1.20.4 mimarisine doğrudan ve sıfır-mixin entegre edilmiştir.
+
+### Uygulanan Temel İnovasyonlar & Mimari Çözümler
+
+1. **Replay Model Render Limiti ve Frustum/Focus Ağırlıklı LOD Motoru (`LodEngine.java` & `BBSSettings.java`):**
+   * `mchorse.bbs_mod.film.replays.LodEngine` sınıfı oluşturuldu.
+   * `FormRenderEvents.BEFORE`, `FilmEvents.RENDER_AFTER` ve `FilmEvents.SHUTDOWN` olaylarına kancalandı.
+   * **Skorlama & Culling Algoritması:** Kamera mesafesi ile bakış yönü vektörü (yaw/pitch trigonometrisi ile ileri yön birim vektörü) arasındaki nokta çarpım (dot product) hesaplanır. Kameranın görüş açısı dışındaki veya arkasındaki replay aktörleri (`dot < 0.1`) ağır ceza skoru alarak çizim bütçesinden elenir. Odak mesafesi (`focusDistance`) girilmişse, hedeflenen mesafe etrafındaki aktörler önceliklendirilir.
+   * Elenen aktörlerin form görünürlüğü `form.visible.setRuntimeValue(Boolean.FALSE)` ile geçici olarak kapatılır; `RENDER_AFTER` aşamasında tüm geçici override'lar `setRuntimeValue(null)` ile temizlenir.
+   * **Dönüşüm Gizmo Koruması:** Editörde seçili replay culling'e uğrasa bile gizmo `form.visible` kontrol etmediğinden görünür kalır ve manipüle edilebilir.
+   * **Video Dışa Aktarma Güvenliği:** Çevrimdışı video render/dışa aktarma (`BBSModClient.getVideoRecorder().isRecording()`) aktifken ve UI önizlemelerinde culling otomatik olarak bypass edilerek videoya tam kalite ve eksiksiz aktör render'ı yansıtılır.
+   * `BBSSettings.java`'da `performance` kategorisine `replay_lod` (boolean), `replay_lod_limit` (int, 0-2000, varsayılan 100) ve `replay_lod_focus` (double, 0-256) ayarları eklendi.
+
+2. **Toplu Replay Seçim ve Yönetim Araçları (`ReplayActions.java` & `UIReplayList.java`):**
+   * `mchorse.bbs_mod.film.replays.ReplayActions` sınıfı inşa edildi.
+   * **Select All Replays (Tüm Replay'leri Seç):** Kapalı klasörler dahil tüm replay kategorilerini (`setExpanded(catPath, true)`) genişleterek sahnedeki tüm replay'leri tek tıkla seçili hale getirir.
+   * **Select Same Model (Aynı Modeli Kullananları Seç):** Seçili replay(ler) ile aynı `ModelForm` model ID'sine (veya form verisine) sahip olan tüm replay'leri tespit eder, bulundukları klasörleri otomatik açar ve hepsini topluca seçer.
+   * **Duplicate to Total (Toplam Hedefe Çoğalt):** Kalabalık sahneler için seçili replay grubunu kullanıcı tarafından girilen toplam hedef aktör sayısına (örneğin 150) adil olarak bölüştürür; kaynak replay'leri ve kopyalarını otomatik olarak numaralandırılmış kategori klasörlerine (`Replay D #1`, `Replay D #2`, ...) yerleştirir.
+   * **Reset Replay Actors (Replay Aktörlerini Sıfırla):** Dashboard'u kapatıp açmaya gerek kalmadan `ActionState.RESTART` gönderir, sunucu ile `ClientNetwork.sendSyncData` üzerinden filmi yeniden senkronlar ve istemci replay aktörlerini (`createEntities`) başlangıç konumlarına döndürerek hasar almış veya desenkronize olmuş aktörleri canlandırır.
+
+3. **Replay Liste Paneli Hızlı Kaydırma Butonları (`UIReplaysListPanel.java`):**
+   * Replay listesi üst araç çubuğunda arama kutusunun sağına `Icons.ARROW_UP` ve `Icons.ARROW_DOWN` butonları yerleştirildi.
+   * Tıklandığında anında listenin en başına (`scroll.setScroll(0)`) veya en sonuna (`scroll.setScroll(last * itemSize)`) zıplama özelliği kazandırıldı.
+
+4. **Kanal Bazlı Efekt Hiyerarşisi (Per-track Clip Hierarchy Doğrulaması):**
+   * Kamera zaman çizelgesindeki modifier ve overwrite kliplerinin `Clips.getClips(tick)` üzerinden `layer` sırasına göre artan (aşağıdan yukarıya / 0'dan N'e) işlendiği ve katmanlı efekt istiflemesinin (stacking) sorunsuz çalıştığı doğrulandı.
+
+5. **Çift Dilli Yerelleştirme (`en_us.json` & `tr_tr.json`):**
+   * Tüm yeni butonlar, menü öğeleri, ayar etiketleri ve açıklamaları için Türkçe ve İngilizce dil anahtarları eksiksiz tamamlandı.
+
+### Derleme & Doğrulama Durumu (Aşama 55)
+* `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 19s** (0 Hata).
+* `./gradlew.bat --no-daemon apiCheck` -> **BUILD SUCCESSFUL in 9s** (API uyumluluğu korundu).
+* `./gradlew.bat --no-daemon check` -> **BUILD SUCCESSFUL in 26s** (330/330 anchor, migration, 49/49 addonApi testleri eksiksiz geçti).
+
+
+
+
 
 
 

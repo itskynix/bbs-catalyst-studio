@@ -67,7 +67,14 @@ public abstract class BaseManager <T extends ValueGroup> extends FolderManager<T
     {
         try
         {
-            MapType mapType = this.storage.load(this.getFile(id));
+            File file = this.getFile(id);
+
+            if (file == null)
+            {
+                return null;
+            }
+
+            MapType mapType = this.storage.load(file);
 
             if (!this.upgrade(id, mapType))
             {
@@ -136,8 +143,21 @@ public abstract class BaseManager <T extends ValueGroup> extends FolderManager<T
         }
 
         File original = this.getFile(id);
+
+        if (original == null)
+        {
+            return List.of();
+        }
+
         String name = original.getName().substring(0, original.getName().length() - this.getExtension().length());
-        File folder = new File(original.getParentFile(), "_" + name);
+        File parent = original.getParentFile();
+
+        if (parent == null)
+        {
+            return List.of();
+        }
+
+        File folder = new File(parent, "_" + name);
         File[] files = folder.listFiles((file) -> file.isFile()
             && file.getName().startsWith(name + ".") && this.isData(file));
 
@@ -159,32 +179,42 @@ public abstract class BaseManager <T extends ValueGroup> extends FolderManager<T
     {
         File file = this.getFile(id);
 
+        if (file == null)
+        {
+            return false;
+        }
+
         SaveVersion.stamp(data);
 
         try
         {
             if (this.backUps)
             {
-                String path = file.getParentFile().getAbsolutePath();
-                Date date = new Date();
-                String backupFileName = new SimpleDateFormat("yyyy_MM_dd_HH").format(date);
+                File parent = file.getParentFile();
 
-                if (BBSSettings.editorMinutesBackup.get())
+                if (parent != null)
                 {
-                    String minutes = new SimpleDateFormat("mm").format(date);
-                    int m = (int) Math.floor(Integer.parseInt(minutes) / 10F);
+                    String path = parent.getAbsolutePath();
+                    Date date = new Date();
+                    String backupFileName = new SimpleDateFormat("yyyy_MM_dd_HH").format(date);
 
-                    backupFileName += "_" + m + "0";
-                }
+                    if (BBSSettings.editorMinutesBackup.get())
+                    {
+                        String minutes = new SimpleDateFormat("mm").format(date);
+                        int m = (int) Math.floor(Integer.parseInt(minutes) / 10F);
 
-                String filename = StringUtils.fileName(id);
-                File backupFile = new File(path, "_" + filename + "/" + filename + "." + backupFileName + this.getExtension());
+                        backupFileName += "_" + m + "0";
+                    }
 
-                backupFile.getParentFile().mkdirs();
+                    String filename = StringUtils.fileName(id);
+                    File backupFile = new File(path, "_" + filename + "/" + filename + "." + backupFileName + this.getExtension());
 
-                if (file.exists())
-                {
-                    Files.copy(file.toPath(), backupFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                    backupFile.getParentFile().mkdirs();
+
+                    if (file.exists())
+                    {
+                        Files.copy(file.toPath(), backupFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                    }
                 }
             }
         }

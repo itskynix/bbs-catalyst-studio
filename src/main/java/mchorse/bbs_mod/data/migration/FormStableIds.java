@@ -226,6 +226,11 @@ public class FormStableIds
     /** Rewrite one key's leading index segments; also used for anchor attachment paths. */
     public static String rewriteTrackKey(String key, Map<String, String> mapping)
     {
+        if (key == null || key.trim().isEmpty())
+        {
+            return key == null ? "" : key;
+        }
+
         String[] segments = key.split("/");
         int indices = 0;
 

@@ -36,9 +36,14 @@ public class LabelTooltip implements ITooltip
     @Override
     public void renderTooltip(UIContext context)
     {
+        if (this.label == null)
+        {
+            return;
+        }
+
         String label = this.label.get();
 
-        if (label.isEmpty())
+        if (label == null || label.isEmpty())
         {
             return;
         }

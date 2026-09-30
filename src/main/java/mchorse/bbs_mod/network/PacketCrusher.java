@@ -18,6 +18,14 @@ public abstract class PacketCrusher
 {
     public static final int BUFFER_SIZE = 30_000;
 
+    /* Upper bound on how many chunks a single logical packet may declare, and on the fully
+     * assembled byte count. Both are attacker/corruption controlled (they come straight off
+     * the wire) and are used to size allocations, so they must be clamped before any
+     * new byte[]/ByteArrayOutputStream is created - otherwise a single malformed header can
+     * force an OutOfMemoryError on the receiving side. */
+    public static final int MAX_TOTAL_CHUNKS = 4_000;
+    public static final int MAX_ASSEMBLED_SIZE = 32 * 1024 * 1024;
+
     private Map<Integer, ByteArrayOutputStream> chunks = new HashMap<>();
     private int counter;
 
@@ -33,13 +41,43 @@ public abstract class PacketCrusher
         int index = buf.readInt();
         int total = buf.readInt();
         int size = buf.readInt();
+
+        /* Reject malformed or oversized chunk headers before allocating anything. A negative
+         * or absurd total/size/index here means either data corruption or a hostile sender,
+         * and letting it through would size a byte[]/ByteArrayOutputStream off of untrusted
+         * input. */
+        if (total <= 0 || total > MAX_TOTAL_CHUNKS || size < 0 || size > BUFFER_SIZE || index < 0 || index >= total)
+        {
+            return;
+        }
+
+        long declaredAssembledSize = (long) total * (long) BUFFER_SIZE;
+
+        if (declaredAssembledSize > MAX_ASSEMBLED_SIZE)
+        {
+            this.chunks.remove(id);
+
+            return;
+        }
+
         byte[] bytes = new byte[size];
 
         buf.readBytes(bytes);
 
-        ByteArrayOutputStream map = this.chunks.computeIfAbsent(id, (k) -> new ByteArrayOutputStream(total * BUFFER_SIZE));
+        int initialCapacity = (int) Math.min(declaredAssembledSize, MAX_ASSEMBLED_SIZE);
+        ByteArrayOutputStream map = this.chunks.computeIfAbsent(id, (k) -> new ByteArrayOutputStream(initialCapacity));
 
         map.writeBytes(bytes);
+
+        if (map.size() > MAX_ASSEMBLED_SIZE)
+        {
+            /* The assembled buffer grew past the cap chunk by chunk (each chunk itself is
+             * within BUFFER_SIZE, so the earlier header check alone cannot catch this). Drop
+             * the partial transfer instead of letting it keep growing. */
+            this.chunks.remove(id);
+
+            return;
+        }
 
         if (index == total - 1)
         {

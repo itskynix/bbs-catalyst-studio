@@ -13,6 +13,7 @@ import mchorse.bbs_mod.settings.values.core.ValueLinkList;
 import mchorse.bbs_mod.settings.values.core.ValueRecentData;
 import mchorse.bbs_mod.settings.values.core.ValueString;
 import mchorse.bbs_mod.settings.values.numeric.ValueBoolean;
+import mchorse.bbs_mod.settings.values.numeric.ValueDouble;
 import mchorse.bbs_mod.settings.values.numeric.ValueFloat;
 import mchorse.bbs_mod.settings.values.numeric.ValueInt;
 import mchorse.bbs_mod.settings.values.ui.ValueColors;
@@ -179,6 +180,9 @@ public class BBSSettings {
 	public static ValueBoolean framePoseCache;
 	/** Skip rendering replays whose surroundings are entirely off screen. */
 	public static ValueBoolean frustumCulling;
+	public static ValueBoolean replayLod;
+	public static ValueInt replayLodLimit;
+	public static ValueDouble replayLodFocus;
 	public static ValueBoolean editorSnapToMarkers;
 	/** Snapping to the film's own markers &mdash; unlike {@link #editorSnapToMarkers}, which is the ruler's notches. */
 	public static ValueBoolean editorSnapToFilmMarkers;
@@ -811,6 +815,9 @@ public class BBSSettings {
 		translucencyQueue = builder.getBoolean("translucency_queue", false);
 		multiskinMultiThreaded = builder.getBoolean("multiskin_multithreaded", true);
 		frustumCulling = builder.getBoolean("frustum_culling", true);
+		replayLod = builder.getBoolean("replay_lod", true);
+		replayLodLimit = builder.getInt("replay_lod_limit", 100, 0, 2000);
+		replayLodFocus = builder.getDouble("replay_lod_focus", 0D, 0D, 256D);
 		profilerOverlay = builder.getBoolean("profiler_overlay", false);
 		framePoseCache = builder.getBoolean("frame_pose_cache", true);
 		framePoseCache.invisible();

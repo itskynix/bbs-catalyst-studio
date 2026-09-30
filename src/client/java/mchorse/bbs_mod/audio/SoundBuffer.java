@@ -12,16 +12,18 @@ public class SoundBuffer
     private int buffer;
     private float duration;
     private Waveform waveform;
+    private Wave wave;
 
     public SoundBuffer(Link id, Wave wave, Waveform waveform)
     {
         this.id = id;
 
-        if (wave != null && (wave.bitsPerSample != 16 || wave.numChannels > 2 || wave.sampleRate > 48000 || wave.audioFormat != 1))
+        if (wave != null && (wave.bitsPerSample != 16 || wave.numChannels != 2 || wave.sampleRate > 48000 || wave.audioFormat != 1))
         {
             wave = wave.normalize();
         }
 
+        this.wave = wave;
         this.buffer = AL10.alGenBuffers();
         ByteBuffer buffer = MemoryUtil.memAlloc(wave.data.length);
 
@@ -56,11 +58,17 @@ public class SoundBuffer
         return this.waveform;
     }
 
+    public Wave getWave()
+    {
+        return this.wave;
+    }
+
     public void delete()
     {
         AL10.alDeleteBuffers(this.buffer);
 
         this.buffer = -1;
+        this.wave = null;
 
         if (this.waveform != null)
         {

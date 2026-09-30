@@ -20,6 +20,7 @@ import mchorse.bbs_mod.utils.clips.Clips;
 public class CatalystSceneCameraController extends CameraWorkCameraController
 {
     private int tick;
+    private float partialTick;
 
     /** Whether this controller currently has a valid camera track to apply. */
     private boolean active;
@@ -33,6 +34,12 @@ public class CatalystSceneCameraController extends CameraWorkCameraController
     public void setTick(int tick)
     {
         this.tick = tick;
+    }
+
+    /** Set the sub-frame partial tick fraction [0.0 - 1.0) for smooth camera interpolation. */
+    public void setPartialTick(float partialTick)
+    {
+        this.partialTick = partialTick;
     }
 
     /**
@@ -55,7 +62,8 @@ public class CatalystSceneCameraController extends CameraWorkCameraController
             return;
         }
 
-        this.apply(camera, this.tick, transition);
+        /* Apply camera interpolation using the sub-frame partial tick */
+        this.apply(camera, this.tick, this.partialTick);
     }
 
     @Override

@@ -93,7 +93,7 @@ public class FFmpegCommandBuilder
         args.add("-");
 
         // 2. Audio input (if available and supported)
-        boolean hasAudio = this.audioFile != null && this.profile.getFormat().isAudioSupported() && !this.profile.getAudioCodec().isNone();
+        boolean hasAudio = this.profile.isExportAudio() && this.audioFile != null && this.profile.getFormat().isAudioSupported() && !this.profile.getAudioCodec().isNone();
 
         if (hasAudio)
         {
@@ -178,13 +178,31 @@ public class FFmpegCommandBuilder
 
         if (this.profile.getFormat().isAudioSupported() && !this.profile.getAudioCodec().isNone())
         {
+            AudioCodec audioCodec = this.profile.getAudioCodec();
             args.add("-c:a");
-            args.add(this.profile.getAudioCodec().getFfmpegCodec());
+            args.add(audioCodec.getFfmpegCodec());
 
-            if (this.profile.getAudioCodec() != AudioCodec.PCM_16 && this.profile.getAudioCodec() != AudioCodec.COPY)
+            if (audioCodec != AudioCodec.PCM_16 && audioCodec != AudioCodec.COPY)
             {
+                int bitrate = this.profile.getAudioBitrate();
+
+                if (bitrate <= 0)
+                {
+                    bitrate = 320;
+                }
+                else if (audioCodec == AudioCodec.AAC || audioCodec == AudioCodec.MP3)
+                {
+                    bitrate = Math.max(bitrate, 192);
+                }
+
                 args.add("-b:a");
-                args.add(this.profile.getAudioBitrate() + "k");
+                args.add(bitrate + "k");
+            }
+
+            if (audioCodec == AudioCodec.OPUS && this.profile.getFormat() == ExportFormat.MP4)
+            {
+                args.add("-strict");
+                args.add("-2");
             }
         }
         else
@@ -192,13 +210,78 @@ public class FFmpegCommandBuilder
             args.add("-c:a");
             args.add("aac");
             args.add("-b:a");
-            args.add("192k");
+            args.add("320k");
         }
 
         args.add("-shortest");
 
         String outputPattern = this.profile.getFormat().getOutputPattern(outputMovieName);
         args.add(outputPattern);
+
+        return args;
+    }
+
+    /**
+     * Builds command arguments for exporting an audio-only stream directly from the timeline audio track.
+     */
+    public List<String> buildAudioOnlyArgs(File outputFile)
+    {
+        List<String> args = new ArrayList<>();
+
+        args.add(FFMpegUtils.getFFMPEG().replace("\"", "").trim());
+        args.add("-y"); /* overwrite without prompt */
+
+        if (this.audioFile != null)
+        {
+            args.add("-i");
+            args.add(this.audioFile.getAbsolutePath().replace("\"", "").trim());
+        }
+
+        args.add("-vn"); /* No video stream */
+
+        AudioCodec audioCodec = this.profile.getAudioCodec();
+        if (audioCodec != null && !audioCodec.isNone())
+        {
+            args.add("-c:a");
+            args.add(audioCodec.getFfmpegCodec());
+
+            if (audioCodec != AudioCodec.PCM_16 && audioCodec != AudioCodec.COPY)
+            {
+                int bitrate = this.profile.getAudioBitrate();
+
+                if (bitrate <= 0)
+                {
+                    bitrate = 320;
+                }
+                else if (audioCodec == AudioCodec.AAC || audioCodec == AudioCodec.MP3)
+                {
+                    bitrate = Math.max(bitrate, 192);
+                }
+
+                args.add("-b:a");
+                args.add(bitrate + "k");
+            }
+
+            if (audioCodec == AudioCodec.OPUS && this.profile.getFormat() == ExportFormat.MP4)
+            {
+                args.add("-strict");
+                args.add("-2");
+            }
+        }
+
+        String custom = this.profile.getCustomArguments();
+        if (custom != null && !custom.trim().isEmpty())
+        {
+            for (String part : custom.trim().split(" "))
+            {
+                if (!part.isEmpty())
+                {
+                    args.add(part.replace("\"", "").trim());
+                }
+            }
+        }
+
+        args.add(outputFile.getAbsolutePath().replace("\"", "").trim());
 
         return args;
     }
@@ -530,8 +613,25 @@ public class FFmpegCommandBuilder
 
         if (audioCodec != AudioCodec.PCM_16 && audioCodec != AudioCodec.COPY && audioCodec != AudioCodec.NONE)
         {
+            int bitrate = this.profile.getAudioBitrate();
+
+            if (bitrate <= 0)
+            {
+                bitrate = 320;
+            }
+            else if (audioCodec == AudioCodec.AAC || audioCodec == AudioCodec.MP3)
+            {
+                bitrate = Math.max(bitrate, 192);
+            }
+
             args.add("-b:a");
-            args.add(this.profile.getAudioBitrate() + "k");
+            args.add(bitrate + "k");
+        }
+
+        if (audioCodec == AudioCodec.OPUS && this.profile.getFormat() == ExportFormat.MP4)
+        {
+            args.add("-strict");
+            args.add("-2");
         }
 
         args.add("-shortest");

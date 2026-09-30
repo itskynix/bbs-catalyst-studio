@@ -5,6 +5,8 @@ import mchorse.bbs_mod.camera.export.*;
 import mchorse.bbs_mod.client.BBSRendering;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.UIKeys;
+import mchorse.bbs_mod.catalyst.CatalystComposition;
+import mchorse.bbs_mod.ui.dashboard.panels.UICatalystPanel;
 import mchorse.bbs_mod.ui.film.UIFilmPanel;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
@@ -26,6 +28,7 @@ import mchorse.bbs_mod.utils.StringUtils;
 import mchorse.bbs_mod.utils.colors.Colors;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -36,6 +39,7 @@ import java.util.List;
 public class UIDeliverOverlayPanel extends UIOverlayPanel
 {
     private final UIFilmPanel filmPanel;
+    private final UICatalystPanel catalystPanel;
     private VideoExportProfile currentProfile;
 
     /* Top Presets bar */
@@ -79,8 +83,12 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
     public UICirculate gifDitherCirculate;
     public UITrackpad gifColorsTrackpad;
 
-    /* Audio controls */
+    /* Stream toggles */
+    public UIToggle exportVideoToggle;
     public UIToggle exportAudioToggle;
+
+    /* Audio controls */
+    public final List<AudioCodec> availableAudioCodecs = new ArrayList<>();
     public UICirculate audioCodecCirculate;
     public UICirculate audioBitrateCirculate;
     public UIToggle captureMinecraftSoundsToggle;
@@ -101,10 +109,33 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
 
     public UIDeliverOverlayPanel(UIFilmPanel filmPanel)
     {
+        this(filmPanel, null);
+    }
+
+    public UIDeliverOverlayPanel(UICatalystPanel catalystPanel)
+    {
+        this(null, catalystPanel);
+    }
+
+    public UIDeliverOverlayPanel(UIFilmPanel filmPanel, UICatalystPanel catalystPanel)
+    {
         super(IKey.raw("Deliver — Render & Export"));
 
         this.filmPanel = filmPanel;
+        this.catalystPanel = catalystPanel;
         this.currentProfile = ExportProfiles.getSelectedProfile().copy();
+
+        if (this.catalystPanel != null)
+        {
+            CatalystComposition comp = this.catalystPanel.getActiveComposition();
+            if (comp != null)
+            {
+                this.currentProfile.setWidth(comp.width > 0 ? comp.width : 1920);
+                this.currentProfile.setHeight(comp.height > 0 ? comp.height : 1080);
+                this.currentProfile.setFrameRate(comp.fps > 0 ? comp.fps : 60);
+            }
+            this.currentProfile.setRangeType(VideoExportProfile.RangeType.ENTIRE);
+        }
 
         if (!this.currentProfile.getFormat().isGif() && !this.currentProfile.getFormat().isImageSequence())
         {
@@ -191,7 +222,7 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
     private void setupVideoTab()
     {
         // 0. Render Range controls
-        boolean hasInOut = this.filmPanel.cameraEditor.clips.hasInOut();
+        boolean hasInOut = this.filmPanel != null && this.filmPanel.cameraEditor.clips.hasInOut();
         if (hasInOut)
         {
             this.currentProfile.setRangeType(VideoExportProfile.RangeType.IN_OUT);
@@ -205,21 +236,25 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
         {
             this.getContext().replaceContextMenu((menu) ->
             {
-                menu.action(Icons.FILM, IKey.raw("Entire Film"), () ->
+                String entireLabel = this.catalystPanel != null ? "Entire Composition" : "Entire Film";
+                menu.action(Icons.FILM, IKey.raw(entireLabel), () ->
                 {
                     this.currentProfile.setRangeType(VideoExportProfile.RangeType.ENTIRE);
                     this.updateRangeUI();
                 });
 
-                boolean inOutAvailable = this.filmPanel.cameraEditor.clips.hasInOut();
-                String inOutLabel = "In/Out Range" + (inOutAvailable ? " (" + this.filmPanel.cameraEditor.clips.getInPoint() + " - " + this.filmPanel.cameraEditor.clips.getOutPoint() + ")" : " (Not Set)");
-                if (inOutAvailable)
+                if (this.filmPanel != null)
                 {
-                    menu.action(Icons.LEFT_HANDLE, IKey.raw(inOutLabel), () ->
+                    boolean inOutAvailable = this.filmPanel.cameraEditor.clips.hasInOut();
+                    String inOutLabel = "In/Out Range" + (inOutAvailable ? " (" + this.filmPanel.cameraEditor.clips.getInPoint() + " - " + this.filmPanel.cameraEditor.clips.getOutPoint() + ")" : " (Not Set)");
+                    if (inOutAvailable)
                     {
-                        this.currentProfile.setRangeType(VideoExportProfile.RangeType.IN_OUT);
-                        this.updateRangeUI();
-                    });
+                        menu.action(Icons.LEFT_HANDLE, IKey.raw(inOutLabel), () ->
+                        {
+                            this.currentProfile.setRangeType(VideoExportProfile.RangeType.IN_OUT);
+                            this.updateRangeUI();
+                        });
+                    }
                 }
 
                 menu.action(Icons.EDIT, IKey.raw("Custom Range"), () ->
@@ -374,9 +409,16 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
             UI.column(UI.label(IKey.raw("Bitrate (kbps)")), this.bitrateTrackpad)
         );
 
+        this.exportVideoToggle = new UIToggle(IKey.raw("Export Video"), this.currentProfile.isExportVideo(), (t) ->
+        {
+            this.currentProfile.setExportVideo(t.getValue());
+            this.validateRenderButtons();
+        });
+
         UIElement videoCol = UI.column(
             4, 0,
-            UI.label(IKey.raw("Render Range")).color(Colors.LIGHTER_GRAY), this.renderRangeButton,
+            this.exportVideoToggle,
+            UI.label(IKey.raw("Render Range")).color(Colors.LIGHTER_GRAY).marginTop(2), this.renderRangeButton,
             this.rangeInputsRow,
             UI.label(IKey.raw("Container Format")).color(Colors.LIGHTER_GRAY).marginTop(2), this.formatCirculate,
             UI.label(IKey.raw("Video Codec")).color(Colors.LIGHTER_GRAY).marginTop(2), this.codecCirculate,
@@ -394,17 +436,30 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
 
     private void setupAudioTab()
     {
-        this.exportAudioToggle = new UIToggle(IKey.raw("Export Audio Track"), this.currentProfile.getFormat().isAudioSupported(), (t) ->
+        this.exportAudioToggle = new UIToggle(IKey.raw("Export Audio"), this.currentProfile.isExportAudio(), (t) ->
         {
-            this.currentProfile.setAudioCodec(t.getValue() ? AudioCodec.AAC : AudioCodec.NONE);
+            this.currentProfile.setExportAudio(t.getValue());
+            this.validateRenderButtons();
         });
+
+        this.availableAudioCodecs.clear();
+        for (AudioCodec ac : AudioCodec.values())
+        {
+            if (ac != AudioCodec.NONE)
+            {
+                this.availableAudioCodecs.add(ac);
+            }
+        }
 
         this.audioCodecCirculate = new UICirculate((c) ->
         {
-            AudioCodec ac = AudioCodec.values()[c.getValue()];
-            this.currentProfile.setAudioCodec(ac);
+            if (c.getValue() >= 0 && c.getValue() < this.availableAudioCodecs.size())
+            {
+                AudioCodec ac = this.availableAudioCodecs.get(c.getValue());
+                this.currentProfile.setAudioCodec(ac);
+            }
         });
-        for (AudioCodec ac : AudioCodec.values())
+        for (AudioCodec ac : this.availableAudioCodecs)
         {
             this.audioCodecCirculate.addLabel(ac.getLabel());
         }
@@ -418,20 +473,33 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
         this.audioBitrateCirculate.addLabel(IKey.raw("192 kbps (Standard)"));
         this.audioBitrateCirculate.addLabel(IKey.raw("256 kbps (High Quality)"));
         this.audioBitrateCirculate.addLabel(IKey.raw("320 kbps (Studio Master)"));
-        this.audioBitrateCirculate.setValue(1);
+        this.audioBitrateCirculate.setValue(3);
 
         this.captureMinecraftSoundsToggle = new UIToggle(IKey.raw("Capture In-Game Minecraft Sounds"), BBSSettings.videoExportMinecraftSounds.get(), (t) ->
         {
             BBSSettings.videoExportMinecraftSounds.set(t.getValue());
         });
 
-        UIElement audioCol = UI.column(
-            6, 0,
-            this.exportAudioToggle,
-            UI.label(IKey.raw("Audio Codec")).color(Colors.LIGHTER_GRAY).marginTop(4), this.audioCodecCirculate,
-            UI.label(IKey.raw("Audio Bitrate")).color(Colors.LIGHTER_GRAY).marginTop(4), this.audioBitrateCirculate,
-            this.captureMinecraftSoundsToggle.marginTop(8)
-        );
+        UIElement audioCol;
+        if (this.catalystPanel != null)
+        {
+            audioCol = UI.column(
+                6, 0,
+                this.exportAudioToggle,
+                UI.label(IKey.raw("Audio Codec")).color(Colors.LIGHTER_GRAY).marginTop(4), this.audioCodecCirculate,
+                UI.label(IKey.raw("Audio Bitrate")).color(Colors.LIGHTER_GRAY).marginTop(4), this.audioBitrateCirculate
+            );
+        }
+        else
+        {
+            audioCol = UI.column(
+                6, 0,
+                this.exportAudioToggle,
+                UI.label(IKey.raw("Audio Codec")).color(Colors.LIGHTER_GRAY).marginTop(4), this.audioCodecCirculate,
+                UI.label(IKey.raw("Audio Bitrate")).color(Colors.LIGHTER_GRAY).marginTop(4), this.audioBitrateCirculate,
+                this.captureMinecraftSoundsToggle.marginTop(8)
+            );
+        }
 
         audioCol.relative(this.audioTabContent).w(1F);
         this.audioTabContent.add(audioCol);
@@ -439,9 +507,19 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
 
     private void setupFileTab()
     {
-        String defaultName = this.filmPanel != null && this.filmPanel.getData() != null
-            ? this.filmPanel.getData().getId()
-            : StringUtils.createTimestampFilename();
+        String defaultName = "export";
+        if (this.filmPanel != null && this.filmPanel.getData() != null)
+        {
+            defaultName = this.filmPanel.getData().getId();
+        }
+        else if (this.catalystPanel != null && this.catalystPanel.getActiveComposition() != null)
+        {
+            defaultName = this.catalystPanel.getActiveComposition().name.replaceAll("[^a-zA-Z0-9._-]", "_");
+        }
+        else
+        {
+            defaultName = StringUtils.createTimestampFilename();
+        }
 
         this.filenameTextbox = new UITextbox((t) -> {});
         this.filenameTextbox.setText(defaultName);
@@ -531,11 +609,58 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
         this.gifFpsTrackpad.setValue(this.currentProfile.getGifFps());
         this.gifColorsTrackpad.setValue(this.currentProfile.getGifMaxColors());
 
-        this.exportAudioToggle.setValue(this.currentProfile.getFormat().isAudioSupported() && !this.currentProfile.getAudioCodec().isNone());
-        this.audioCodecCirculate.setValue(this.currentProfile.getAudioCodec().ordinal());
+        if (this.exportVideoToggle != null) this.exportVideoToggle.setValue(this.currentProfile.isExportVideo());
+        if (this.exportAudioToggle != null) this.exportAudioToggle.setValue(this.currentProfile.isExportAudio());
+        int acIdx = this.availableAudioCodecs.indexOf(this.currentProfile.getAudioCodec());
+        this.audioCodecCirculate.setValue(Math.max(0, acIdx));
+
+        if (this.audioBitrateCirculate != null)
+        {
+            int ab = this.currentProfile.getAudioBitrate();
+            int bitIdx = 3;
+
+            if (ab <= 128)
+            {
+                bitIdx = 0;
+            }
+            else if (ab <= 192)
+            {
+                bitIdx = 1;
+            }
+            else if (ab <= 256)
+            {
+                bitIdx = 2;
+            }
+
+            this.audioBitrateCirculate.setValue(bitIdx);
+        }
 
         this.updateRangeUI();
         this.updateVideoVisibility();
+        this.validateRenderButtons();
+    }
+
+    public void validateRenderButtons()
+    {
+        boolean valid = this.currentProfile != null && (this.currentProfile.isExportVideo() || this.currentProfile.isExportAudio());
+        if (this.renderNowButton != null)
+        {
+            this.renderNowButton.setEnabled(valid);
+            if (!valid) this.renderNowButton.tooltip(IKey.raw("En az bir akış seçilmeli (Video veya Ses)!"));
+            else this.renderNowButton.removeTooltip();
+        }
+        if (this.addToQueueButton != null)
+        {
+            this.addToQueueButton.setEnabled(valid);
+            if (!valid) this.addToQueueButton.tooltip(IKey.raw("En az bir akış seçilmeli (Video veya Ses)!"));
+            else this.addToQueueButton.removeTooltip();
+        }
+        if (this.renderAllButton != null)
+        {
+            this.renderAllButton.setEnabled(valid);
+            if (!valid) this.renderAllButton.tooltip(IKey.raw("En az bir akış seçilmeli (Video veya Ses)!"));
+            else this.renderAllButton.removeTooltip();
+        }
     }
 
     private void switchTab(int tab)
@@ -664,7 +789,7 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
     {
         VideoExportProfile.RangeType type = this.currentProfile.getRangeType();
         String label = "Range: " + type.getLabel();
-        if (type == VideoExportProfile.RangeType.IN_OUT && this.filmPanel.cameraEditor.clips.hasInOut())
+        if (type == VideoExportProfile.RangeType.IN_OUT && this.filmPanel != null && this.filmPanel.cameraEditor.clips.hasInOut())
         {
             label += " (" + this.filmPanel.cameraEditor.clips.getInPoint() + " - " + this.filmPanel.cameraEditor.clips.getOutPoint() + ")";
         }
@@ -681,9 +806,18 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
 
         if (isCustom && this.rangeStartTextbox != null && this.rangeEndTextbox != null)
         {
-            int filmDuration = this.filmPanel.getData() != null ? this.filmPanel.getData().camera.calculateDuration() : 200;
+            int defaultDuration = 200;
+            if (this.filmPanel != null && this.filmPanel.getData() != null)
+            {
+                defaultDuration = this.filmPanel.getData().camera.calculateDuration();
+            }
+            else if (this.catalystPanel != null && this.catalystPanel.getActiveComposition() != null)
+            {
+                defaultDuration = this.catalystPanel.getActiveComposition().duration;
+            }
+
             int start = this.currentProfile.getCustomStartTick();
-            int end = this.currentProfile.getCustomEndTick() > 0 ? this.currentProfile.getCustomEndTick() : filmDuration;
+            int end = this.currentProfile.getCustomEndTick() > 0 ? this.currentProfile.getCustomEndTick() : defaultDuration;
             this.rangeStartTextbox.setText(this.formatTicksToDisplay(start));
             this.rangeEndTextbox.setText(this.formatTicksToDisplay(end));
         }
@@ -698,31 +832,53 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
     {
         this.syncUIToProfile();
 
-        String filmId = this.filmPanel != null && this.filmPanel.getData() != null
-            ? this.filmPanel.getData().getId()
-            : "Film";
-        int duration = this.filmPanel != null && this.filmPanel.getData() != null
-            ? this.filmPanel.getData().camera.calculateDuration()
-            : 100;
-
-        if (this.currentProfile.getRangeType() == VideoExportProfile.RangeType.IN_OUT && this.filmPanel.cameraEditor.clips.hasInOut())
+        if (!this.currentProfile.isExportVideo() && !this.currentProfile.isExportAudio())
         {
-            duration = Math.max(1, this.filmPanel.cameraEditor.clips.getOutPoint() - this.filmPanel.cameraEditor.clips.getInPoint());
+            mchorse.bbs_mod.utils.VideoRecorder.sendChatMessage("§c[Deliver] En az bir akış (Video veya Ses) seçilmeli!");
+            return;
         }
-        else if (this.currentProfile.getRangeType() == VideoExportProfile.RangeType.CUSTOM)
+
+        String filmId = "Film";
+        int duration = 100;
+
+        if (this.filmPanel != null && this.filmPanel.getData() != null)
         {
-            int start = this.currentProfile.getCustomStartTick();
-            int end = this.currentProfile.getCustomEndTick() > 0 ? this.currentProfile.getCustomEndTick() : duration;
-            duration = Math.max(1, end - start);
+            filmId = this.filmPanel.getData().getId();
+            duration = this.filmPanel.getData().camera.calculateDuration();
+
+            if (this.currentProfile.getRangeType() == VideoExportProfile.RangeType.IN_OUT && this.filmPanel.cameraEditor.clips.hasInOut())
+            {
+                duration = Math.max(1, this.filmPanel.cameraEditor.clips.getOutPoint() - this.filmPanel.cameraEditor.clips.getInPoint());
+            }
+            else if (this.currentProfile.getRangeType() == VideoExportProfile.RangeType.CUSTOM)
+            {
+                int start = this.currentProfile.getCustomStartTick();
+                int end = this.currentProfile.getCustomEndTick() > 0 ? this.currentProfile.getCustomEndTick() : duration;
+                duration = Math.max(1, end - start);
+            }
+        }
+        else if (this.catalystPanel != null)
+        {
+            CatalystComposition comp = this.catalystPanel.getActiveComposition();
+            filmId = comp != null ? "catalyst:" + comp.name : "Catalyst";
+            duration = comp != null ? Math.max(1, comp.duration) : 100;
+
+            if (this.currentProfile.getRangeType() == VideoExportProfile.RangeType.CUSTOM)
+            {
+                int start = this.currentProfile.getCustomStartTick();
+                int end = this.currentProfile.getCustomEndTick() > 0 ? this.currentProfile.getCustomEndTick() : duration;
+                duration = Math.max(1, end - start);
+            }
         }
 
         String filename = this.filenameTextbox.getText();
         if (filename.isEmpty())
         {
-            filename = filmId + "_" + StringUtils.createTimestampFilename();
+            String base = filmId.startsWith("catalyst:") ? filmId.substring(9) : filmId;
+            filename = base.replaceAll("[^a-zA-Z0-9._-]", "_") + "_" + StringUtils.createTimestampFilename();
         }
 
-        File folder = new File(this.outputFolderTextbox.getText());
+        File folder = new File(this.outputFolderTextbox.getText().replace("\"", "").trim());
         RenderJob job = new RenderJob(filmId, filename, this.currentProfile, folder, filename, duration);
         RenderQueue.addJob(job);
         this.jobList.updateList();
@@ -740,6 +896,12 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
     {
         this.syncUIToProfile();
 
+        if (!this.currentProfile.isExportVideo() && !this.currentProfile.isExportAudio())
+        {
+            mchorse.bbs_mod.utils.VideoRecorder.sendChatMessage("§c[Deliver] En az bir akış (Video veya Ses) seçilmeli!");
+            return;
+        }
+
         if (RenderQueue.getJobs().isEmpty())
         {
             this.addCurrentToQueue();
@@ -751,10 +913,42 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
         this.processNextQueueJob();
     }
 
-    private void processNextQueueJob()
+    public void processNextQueueJob()
     {
         RenderJob job = RenderQueue.getNextPendingJob();
         if (job == null)
+        {
+            RenderQueue.setProcessingQueue(false);
+            return;
+        }
+
+        boolean isCatalystJob = (job.getFilmId() != null && job.getFilmId().startsWith("catalyst:")) || this.catalystPanel != null;
+
+        if (isCatalystJob && this.catalystPanel != null)
+        {
+            RenderQueue.setActiveJob(job);
+            job.setStatus(RenderJob.Status.RENDERING);
+            if (this.jobList != null)
+            {
+                this.jobList.updateList();
+            }
+
+            VideoExportProfile prof = job.getProfile();
+            File folder = job.getOutputFolder();
+            if (folder != null && !folder.exists()) folder.mkdirs();
+            File targetOut = new File(folder, prof.getFormat().getOutputPattern(job.getFilename()));
+
+            this.catalystPanel.startExportFromProfile(prof, targetOut, job.getDuration(), job, () ->
+            {
+                if (RenderQueue.isProcessingQueue())
+                {
+                    this.processNextQueueJob();
+                }
+            });
+            return;
+        }
+
+        if (this.filmPanel == null)
         {
             RenderQueue.setProcessingQueue(false);
             return;
@@ -838,13 +1032,68 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
     }
 
     /**
-     * Immediately renders the current film with currently selected profile.
+     * Immediately renders the current film/composition with currently selected profile.
      */
     private void startImmediateRender()
     {
         this.syncUIToProfile();
 
+        if (!this.currentProfile.isExportVideo() && !this.currentProfile.isExportAudio())
+        {
+            mchorse.bbs_mod.utils.VideoRecorder.sendChatMessage("§c[Deliver] En az bir akış (Video veya Ses) seçilmeli!");
+            return;
+        }
+
         this.close();
+
+        if (this.catalystPanel != null)
+        {
+            CatalystComposition comp = this.catalystPanel.getActiveComposition();
+            int duration = comp != null ? Math.max(1, comp.duration) : 100;
+            if (this.currentProfile.getRangeType() == VideoExportProfile.RangeType.CUSTOM && this.currentProfile.getCustomEndTick() > 0)
+            {
+                int start = this.currentProfile.getCustomStartTick();
+                int end = this.currentProfile.getCustomEndTick();
+                duration = Math.max(1, end - start);
+            }
+
+            String rawFilename = this.filenameTextbox.getText().trim();
+            final String finalFilename = rawFilename.isEmpty()
+                ? (comp != null ? comp.name.replaceAll("[^a-zA-Z0-9._-]", "_") : "catalyst") + "_" + StringUtils.createTimestampFilename()
+                : rawFilename;
+
+            File folder = new File(this.outputFolderTextbox.getText().replace("\"", "").trim());
+            if (!folder.exists()) folder.mkdirs();
+            File targetOut = new File(folder, this.currentProfile.getFormat().getOutputPattern(finalFilename));
+
+            String compFilmId = comp != null ? "catalyst:" + comp.name : "Catalyst";
+            RenderJob matchingJob = null;
+            for (RenderJob j : RenderQueue.getJobs())
+            {
+                if (j.getStatus() == RenderJob.Status.PENDING)
+                {
+                    if (j.getFilename().equalsIgnoreCase(finalFilename)
+                        || j.getFilename().equalsIgnoreCase(rawFilename)
+                        || j.getTitle().equalsIgnoreCase(finalFilename)
+                        || j.getTitle().equalsIgnoreCase(rawFilename)
+                        || (j.getFilmId() != null && j.getFilmId().equals(compFilmId)))
+                    {
+                        matchingJob = j;
+                        break;
+                    }
+                }
+            }
+            if (matchingJob != null)
+            {
+                matchingJob.setStatus(RenderJob.Status.RENDERING);
+                RenderQueue.setActiveJob(matchingJob);
+            }
+
+            this.catalystPanel.startExportFromProfile(this.currentProfile, targetOut, duration, matchingJob, null);
+            return;
+        }
+
+        if (this.filmPanel == null || this.filmPanel.getData() == null) return;
 
         int duration = this.filmPanel.getData().camera.calculateDuration();
         if (this.currentProfile.getRangeType() == VideoExportProfile.RangeType.CUSTOM && this.currentProfile.getCustomEndTick() > duration)

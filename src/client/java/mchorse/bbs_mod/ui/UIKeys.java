@@ -1372,6 +1372,13 @@ public class UIKeys
     public static final IKey SCENE_REPLAYS_CONTEXT_ENABLE_CATEGORY = L10n.lang("bbs.ui.scene.replays.context.enable_category");
     public static final IKey SCENE_REPLAYS_CONTEXT_DISABLE_CATEGORY = L10n.lang("bbs.ui.scene.replays.context.disable_category");
     public static final IKey SCENE_REPLAYS_CONTEXT_MOVE_TO_CATEGORY = L10n.lang("bbs.ui.scene.replays.context.move_to_category");
+    public static final IKey SCENE_REPLAYS_SELECT_ALL = L10n.lang("bbs.ui.scene.replays.context.select_all");
+    public static final IKey SCENE_REPLAYS_RESET_ACTORS = L10n.lang("bbs.ui.scene.replays.context.reset_actors");
+    public static final IKey SCENE_REPLAYS_SELECT_SAME_MODEL = L10n.lang("bbs.ui.scene.replays.context.select_same_model");
+    public static final IKey SCENE_REPLAYS_DUPLICATE_TOTAL = L10n.lang("bbs.ui.scene.replays.context.duplicate_total");
+    public static final IKey SCENE_REPLAYS_DUPLICATE_TOTAL_DESCRIPTION = L10n.lang("bbs.ui.scene.replays.context.duplicate_total_description");
+    public static final IKey SCENE_REPLAYS_SCROLL_TOP = L10n.lang("bbs.ui.scene.replays.scroll_top");
+    public static final IKey SCENE_REPLAYS_SCROLL_BOTTOM = L10n.lang("bbs.ui.scene.replays.scroll_bottom");
     public static final IKey SCENE_REPLAYS_ADD_CATEGORY_TITLE = L10n.lang("bbs.ui.scene.replays.add_category.title");
     public static final IKey SCENE_REPLAYS_ADD_CATEGORY_DESCRIPTION = L10n.lang("bbs.ui.scene.replays.add_category.description");
     public static final IKey SCENE_REPLAYS_ADD_CATEGORY_PLACEHOLDER = L10n.lang("bbs.ui.scene.replays.add_category.placeholder");
@@ -1832,6 +1839,32 @@ public class UIKeys
     public static final IKey VIDEO_SETTINGS_SWAP = L10n.lang("bbs.ui.video_settings.swap");
     public static final IKey VIDEO_SETTINGS_WIDTH = L10n.lang("bbs.ui.video_settings.width");
     public static final IKey WORLD_KEYS_CYCLE_PANELS = L10n.lang("bbs.ui.world.keys.cycle_panels");
+
+    /* Community Hub / Marketplace */
+    public static final IKey COMMUNITY_ASSETS_TITLE = L10n.lang("bbs.ui.community_assets.title");
+    public static final IKey HUB_CATEGORY_ALL = L10n.lang("bbs.ui.hub.category.all");
+    public static final IKey HUB_CATEGORY_MODELS = L10n.lang("bbs.ui.hub.category.models");
+    public static final IKey HUB_CATEGORY_PARTICLES = L10n.lang("bbs.ui.hub.category.particles");
+    public static final IKey HUB_CATEGORY_ANIMATIONS = L10n.lang("bbs.ui.hub.category.animations");
+    public static final IKey HUB_CATEGORY_SOUNDS = L10n.lang("bbs.ui.hub.category.sounds");
+    public static final IKey HUB_CATEGORY_RIGS = L10n.lang("bbs.ui.hub.category.rigs");
+    public static final IKey HUB_CATEGORY_STRUCTURES = L10n.lang("bbs.ui.hub.category.structures");
+    public static final IKey HUB_SORT_POPULAR = L10n.lang("bbs.ui.hub.sort.popular");
+    public static final IKey HUB_SORT_TOP_RATED = L10n.lang("bbs.ui.hub.sort.top_rated");
+    public static final IKey HUB_SORT_RECENT = L10n.lang("bbs.ui.hub.sort.recent");
+    public static final IKey HUB_SORT_ALPHABETICAL = L10n.lang("bbs.ui.hub.sort.alphabetical");
+    public static final IKey HUB_SEARCH_PLACEHOLDER = L10n.lang("bbs.ui.hub.search_placeholder");
+    public static final IKey HUB_INSTALL = L10n.lang("bbs.ui.hub.install");
+    public static final IKey HUB_REINSTALL = L10n.lang("bbs.ui.hub.reinstall");
+    public static final IKey HUB_UNINSTALL = L10n.lang("bbs.ui.hub.uninstall");
+    public static final IKey HUB_INSTALLED = L10n.lang("bbs.ui.hub.installed");
+    public static final IKey HUB_NOT_INSTALLED = L10n.lang("bbs.ui.hub.not_installed");
+    public static final IKey HUB_OPEN_FOLDER = L10n.lang("bbs.ui.hub.open_folder");
+    public static final IKey HUB_REFRESH = L10n.lang("bbs.ui.hub.refresh");
+    public static final IKey HUB_NO_ASSETS = L10n.lang("bbs.ui.hub.no_assets");
+    public static final IKey HUB_SELECT_ASSET = L10n.lang("bbs.ui.hub.select_asset");
+    public static final IKey HUB_FILES_INCLUDED = L10n.lang("bbs.ui.hub.files_included");
+    public static final IKey HUB_TAGS = L10n.lang("bbs.ui.hub.tags");
 
     /* Key collections */
     public static final KeyCollection C_CLIP = new KeyCollection("bbs.ui.camera.clips.^")

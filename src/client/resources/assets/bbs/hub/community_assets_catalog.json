@@ -1,0 +1,132 @@
+[
+  {
+    "id": "community_medieval_weapons",
+    "name": "Medieval Weapons & Shields",
+    "author": "BBSCommunity",
+    "category": "models",
+    "description": "High quality low-poly medieval armaments: Broadsword, Greatshield, Halberd, and Knight Dagger. Fully textured and ready for player and replay morphing in BBS films.",
+    "version": "1.2.0",
+    "download_url": "https://raw.githubusercontent.com/mchorse/bbs-hub-assets/main/packages/medieval_weapons.zip",
+    "thumbnail_url": "https://raw.githubusercontent.com/mchorse/bbs-hub-assets/main/thumbnails/medieval_weapons.png",
+    "downloads": 4250,
+    "likes": 1120,
+    "size_bytes": 1850000,
+    "files": [
+      "models/medieval_weapons/model.bbs.json",
+      "models/medieval_weapons/model.png",
+      "textures/medieval/sword_sheath.png"
+    ],
+    "tags": ["medieval", "weapon", "sword", "shield", "prop", "rpg"]
+  },
+  {
+    "id": "community_anime_slashes",
+    "name": "Anime Slash VFX & Trails",
+    "author": "KyotoAnimations",
+    "category": "particles",
+    "description": "Dynamic anime-style slash arcs, dimensional cleave particles, and impact sparks. Perfect for fast-paced anime fight choreographies in the BBS Film Editor.",
+    "version": "2.0.1",
+    "download_url": "https://raw.githubusercontent.com/mchorse/bbs-hub-assets/main/packages/anime_slashes.zip",
+    "thumbnail_url": "https://raw.githubusercontent.com/mchorse/bbs-hub-assets/main/thumbnails/anime_slashes.png",
+    "downloads": 6180,
+    "likes": 2430,
+    "size_bytes": 620000,
+    "files": [
+      "particles/anime_slash_arc.json",
+      "particles/anime_dimensional_burst.json",
+      "textures/particles/anime_slash.png"
+    ],
+    "tags": ["anime", "vfx", "slash", "particle", "action", "combat"]
+  },
+  {
+    "id": "community_cinematic_sfx",
+    "name": "Cinematic Impact & Whoosh Sound Pack",
+    "author": "AudioCrafters",
+    "category": "sounds",
+    "description": "Mastered 48kHz audio pack containing deep cinematic sub-drops, aggressive sword swooshes, punch impacts, and dramatic riser transitions for film audio tracks.",
+    "version": "1.0.0",
+    "download_url": "https://raw.githubusercontent.com/mchorse/bbs-hub-assets/main/packages/cinematic_sfx.zip",
+    "thumbnail_url": "https://raw.githubusercontent.com/mchorse/bbs-hub-assets/main/thumbnails/cinematic_sfx.png",
+    "downloads": 3890,
+    "likes": 940,
+    "size_bytes": 4820000,
+    "files": [
+      "audio/cinematic_sub_drop.ogg",
+      "audio/heavy_sword_whoosh.ogg",
+      "audio/punch_impact_crunch.ogg",
+      "audio/cinematic_riser.ogg"
+    ],
+    "tags": ["audio", "sfx", "cinematic", "impact", "whoosh", "sound"]
+  },
+  {
+    "id": "community_biped_hero_rig",
+    "name": "Ultimate Humanoid Biped Rig",
+    "author": "RigMaster_Studios",
+    "category": "rigs",
+    "description": "Advanced biped rig featuring IK-compatible limb joints, custom finger bones, facial blend shapes, and cape physics compatibility for cinematic character animation.",
+    "version": "3.1.0",
+    "download_url": "https://raw.githubusercontent.com/mchorse/bbs-hub-assets/main/packages/hero_biped_rig.zip",
+    "thumbnail_url": "https://raw.githubusercontent.com/mchorse/bbs-hub-assets/main/thumbnails/hero_biped_rig.png",
+    "downloads": 8950,
+    "likes": 3210,
+    "size_bytes": 2340000,
+    "files": [
+      "models/hero_biped_rig/model.bbs.json",
+      "models/hero_biped_rig/model.png"
+    ],
+    "tags": ["rig", "biped", "character", "ik", "bones", "humanoid"]
+  },
+  {
+    "id": "community_combat_animations",
+    "name": "Sword & Shield Combat Animation Pack",
+    "author": "ChoreoX",
+    "category": "animations",
+    "description": "Collection of 12 fluid keyframed combat motions: 3-hit light combo, heavy overhead slam, shield parry recoil, and idle stance transitions.",
+    "version": "1.4.0",
+    "download_url": "https://raw.githubusercontent.com/mchorse/bbs-hub-assets/main/packages/combat_animations.zip",
+    "thumbnail_url": "https://raw.githubusercontent.com/mchorse/bbs-hub-assets/main/thumbnails/combat_animations.png",
+    "downloads": 5420,
+    "likes": 1890,
+    "size_bytes": 980000,
+    "files": [
+      "models/combat_actions/animations/combo_light.json",
+      "models/combat_actions/animations/heavy_slam.json"
+    ],
+    "tags": ["animation", "combat", "sword", "keyframe", "fight"]
+  },
+  {
+    "id": "community_medieval_watchtower",
+    "name": "Nordic Stone Watchtower Structure",
+    "author": "BuilderGuild",
+    "category": "structures",
+    "description": "Detailed medieval outpost watchtower with interior ladder, defensive crenellations, and torch illumination. Ready for structure morph placement in sets.",
+    "version": "1.0.5",
+    "download_url": "https://raw.githubusercontent.com/mchorse/bbs-hub-assets/main/packages/nordic_watchtower.zip",
+    "thumbnail_url": "https://raw.githubusercontent.com/mchorse/bbs-hub-assets/main/thumbnails/nordic_watchtower.png",
+    "downloads": 2760,
+    "likes": 760,
+    "size_bytes": 1420000,
+    "files": [
+      "structures/nordic_watchtower.bbs.structure"
+    ],
+    "tags": ["structure", "building", "medieval", "tower", "nordic", "castle"]
+  },
+  {
+    "id": "community_scifi_drone",
+    "name": "Cyber Recon Drone Model & Particles",
+    "author": "NeoTokyoDev",
+    "category": "models",
+    "description": "Futuristic aerial reconnaissance drone with rotating thrusters, pulsating scanner light, and holographic particle projection.",
+    "version": "1.0.2",
+    "download_url": "https://raw.githubusercontent.com/mchorse/bbs-hub-assets/main/packages/scifi_drone.zip",
+    "thumbnail_url": "https://raw.githubusercontent.com/mchorse/bbs-hub-assets/main/thumbnails/scifi_drone.png",
+    "downloads": 3120,
+    "likes": 890,
+    "size_bytes": 1560000,
+    "files": [
+      "models/cyber_drone/model.bbs.json",
+      "models/cyber_drone/model.png",
+      "particles/drone_scanner_pulse.json"
+    ],
+    "tags": ["scifi", "cyberpunk", "drone", "tech", "robot", "flying"]
+  }
+]

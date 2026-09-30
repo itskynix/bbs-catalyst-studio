@@ -44,6 +44,7 @@ import mchorse.bbs_mod.api.client.events.RegisterKeybindsEvent;
 import mchorse.bbs_mod.api.client.events.RegisterModelLoadersEvent;
 import mchorse.bbs_mod.api.client.events.RegisterPreviewOverlaysEvent;
 import mchorse.bbs_mod.api.client.events.RegisterTrackStylesEvent;
+import mchorse.bbs_mod.film.replays.LodEngine;
 import mchorse.bbs_mod.film.replays.tracks.TrackStyle;
 import mchorse.bbs_mod.importers.Importers;
 import mchorse.bbs_mod.ui.film.clips.renderer.UIClipRenderers;
@@ -546,6 +547,7 @@ public class BBSModClient implements ClientModInitializer
         selectors = new EntitySelectors();
         selectors.read();
         films = new Films();
+        LodEngine.register();
 
         BBSResources.init();
 
@@ -796,7 +798,7 @@ public class BBSModClient implements ClientModInitializer
             dashboard = null;
             DashboardWarmup.reset();
             worldExportSession.stop();
-            videos.delete();
+            client.execute(() -> videos.delete());
 
             /* Corners are raw coordinates: kept across a world change they would point the wand
              * at whatever now stands in their place */

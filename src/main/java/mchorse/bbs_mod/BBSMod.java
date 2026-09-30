@@ -136,6 +136,7 @@ import java.util.function.Consumer;
 public class BBSMod implements ModInitializer
 {
     public static final String MOD_ID = "bbs";
+    public static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("bbs_mod");
 
     public static final EventBus events = new EventBus();
 
@@ -215,7 +216,7 @@ public class BBSMod implements ModInitializer
     public static final BlockItem CHROMA_BLACK_BLOCK_ITEM = new BlockItem(CHROMA_BLACK_BLOCK, new Item.Settings());
     public static final BlockItem CHROMA_WHITE_BLOCK_ITEM = new BlockItem(CHROMA_WHITE_BLOCK, new Item.Settings());
 
-    public static final GameRules.Key<GameRules.BooleanRule> BBS_EDITING_RULE = GameRuleRegistry.register("bbsEditing", GameRules.Category.MISC, GameRuleFactory.createBooleanRule(true));
+    public static final GameRules.Key<GameRules.BooleanRule> BBS_EDITING_RULE = GameRuleRegistry.register("bbsEditing", GameRules.Category.MISC, GameRuleFactory.createBooleanRule(false));
 
     public static final BlockEntityType<ModelBlockEntity> MODEL_BLOCK_ENTITY = Registry.register(
         Registries.BLOCK_ENTITY_TYPE,
@@ -557,7 +558,11 @@ public class BBSMod implements ModInitializer
 
         ServerLifecycleEvents.SERVER_STARTED.register((event) -> worldFolder = event.getSavePath(WorldSavePath.ROOT).toFile());
         ServerPlayConnectionEvents.JOIN.register((a, b, c) -> ServerNetwork.sendHandshake(c, b));
-        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> actions.stopFor(handler.getPlayer()));
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
+        {
+            actions.stopFor(handler.getPlayer());
+            ServerNetwork.forgetPlayer(handler.getPlayer().getUuid());
+        });
 
         ActionHandler.registerHandlers(actions);
 

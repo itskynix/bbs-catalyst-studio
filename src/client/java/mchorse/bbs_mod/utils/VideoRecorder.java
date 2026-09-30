@@ -64,6 +64,22 @@ public class VideoRecorder
     private int[] pbos;
     private int pboIndex;
 
+    private int customExportFboId = -1;
+
+    public void setExportFboId(int id)
+    {
+        this.customExportFboId = id;
+    }
+
+    public int getExportFboId()
+    {
+        if (this.customExportFboId > 0)
+        {
+            return this.customExportFboId;
+        }
+        return BBSRendering.getExportFboId();
+    }
+
     private mchorse.bbs_mod.camera.export.VideoExportProfile currentProfile;
     private String lastErrorMessage = "";
 
@@ -486,10 +502,12 @@ public class VideoRecorder
             int pbo = this.pboIndex;
             int nextPbo = (this.pboIndex + 1) % this.pbos.length;
 
-            int targetFbo = BBSRendering.getExportFboId();
+            MinecraftClient mc = MinecraftClient.getInstance();
+            int targetFbo = (mc != null && mc.getFramebuffer() != null) ? mc.getFramebuffer().fbo : 0;
             int prevRead = GL30.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
 
             GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, targetFbo);
+            GL11.glReadBuffer(targetFbo != 0 ? GL30.GL_COLOR_ATTACHMENT0 : GL11.GL_BACK);
 
             GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, 4);
             GL11.glPixelStorei(GL12.GL_PACK_ROW_LENGTH, 0);
@@ -505,6 +523,19 @@ public class VideoRecorder
 
             if (mappedBuffer != null && this.counter != 0)
             {
+                mappedBuffer.position(0);
+                mappedBuffer.limit(this.textureWidth * this.textureHeight * 4);
+
+                if (this.counter < 10)
+                {
+                    byte r = mappedBuffer.get(0);
+                    byte g = mappedBuffer.get(1);
+                    byte b = mappedBuffer.get(2);
+                    byte a = mappedBuffer.get(3);
+                    System.out.println("[VideoRecorder PBO Capture CHECK] Frame " + this.counter + " -> R:" + (r & 0xFF) + " G:" + (g & 0xFF) + " B:" + (b & 0xFF) + " A:" + (a & 0xFF));
+                    mappedBuffer.rewind();
+                }
+
                 this.channel.write(mappedBuffer);
             }
 
@@ -529,10 +560,12 @@ public class VideoRecorder
     {
         this.buffer.clear();
 
-        int targetFbo = BBSRendering.getExportFboId();
+        MinecraftClient mc = MinecraftClient.getInstance();
+        int targetFbo = (mc != null && mc.getFramebuffer() != null) ? mc.getFramebuffer().fbo : 0;
         int prevRead = GL30.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
 
         GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, targetFbo);
+        GL11.glReadBuffer(targetFbo != 0 ? GL30.GL_COLOR_ATTACHMENT0 : GL11.GL_BACK);
 
         GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, 4);
         GL11.glPixelStorei(GL12.GL_PACK_ROW_LENGTH, 0);
@@ -541,11 +574,25 @@ public class VideoRecorder
 
         GL11.glReadPixels(0, 0, this.textureWidth, this.textureHeight, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, this.buffer);
         this.buffer.rewind();
+        this.buffer.position(0);
+        this.buffer.limit(this.textureWidth * this.textureHeight * 4);
 
         GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, prevRead);
 
+        if (this.counter < 10)
+        {
+            byte r = this.buffer.get(0);
+            byte g = this.buffer.get(1);
+            byte b = this.buffer.get(2);
+            byte a = this.buffer.get(3);
+            System.out.println("[VideoRecorder Capture CHECK] Frame " + this.counter + " -> R:" + (r & 0xFF) + " G:" + (g & 0xFF) + " B:" + (b & 0xFF) + " A:" + (a & 0xFF));
+            this.buffer.rewind();
+        }
+
         try
         {
+            this.buffer.position(0);
+            this.buffer.limit(this.textureWidth * this.textureHeight * 4);
             this.channel.write(this.buffer);
         }
         catch (Exception e)

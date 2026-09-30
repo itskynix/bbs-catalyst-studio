@@ -45,6 +45,8 @@ public class CubicMatrixRenderer implements ICubicRenderer
         ICubicRenderer.rotateGroup(stack, group);
         ICubicRenderer.scaleGroup(stack, group);
         ICubicRenderer.moveBackFromGroupPivot(stack, group);
+
+        this.matrices.get(group.index).set(stack.peek().getPositionMatrix());
     }
 
     @Override

@@ -1,11 +1,16 @@
 package mchorse.bbs_mod.cubic.render.vao;
 
+import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.gl.GlUniform;
 import net.minecraft.client.gl.ShaderProgram;
 import net.minecraft.client.util.math.MatrixStack;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL13;
+import org.lwjgl.opengl.GL15;
+import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
 
 public class ModelVAORenderer
@@ -36,6 +41,9 @@ public class ModelVAORenderer
     {
         int currentVAO = GL30.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING);
         int currentElementArrayBuffer = GL30.glGetInteger(GL30.GL_ELEMENT_ARRAY_BUFFER_BINDING);
+        int currentArrayBuffer = GL11.glGetInteger(GL15.GL_ARRAY_BUFFER_BINDING);
+        int currentProgram = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
+        int activeTexture = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
 
         setupUniforms(shader, modelView, normalMat);
 
@@ -45,6 +53,14 @@ public class ModelVAORenderer
 
         GL30.glBindVertexArray(currentVAO);
         GL30.glBindBuffer(GL30.GL_ELEMENT_ARRAY_BUFFER, currentElementArrayBuffer);
+        GL30.glBindBuffer(GL15.GL_ARRAY_BUFFER, currentArrayBuffer);
+
+        if (currentProgram > 0)
+        {
+            GlStateManager._glUseProgram(currentProgram);
+        }
+
+        RenderSystem.activeTexture(activeTexture);
     }
 
     public static void setupUniforms(MatrixStack stack, ShaderProgram shader)

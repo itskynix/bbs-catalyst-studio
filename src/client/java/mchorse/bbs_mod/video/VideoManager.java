@@ -1,6 +1,7 @@
 package mchorse.bbs_mod.video;
 
 import mchorse.bbs_mod.BBSMod;
+import mchorse.bbs_mod.resources.AssetProvider;
 import mchorse.bbs_mod.resources.Link;
 
 import java.io.File;
@@ -51,6 +52,10 @@ public class VideoManager
         if (!this.players.containsKey(link))
         {
             File file = BBSMod.getProvider().getFile(link);
+            if (file == null || !file.isFile())
+            {
+                file = AssetProvider.resolveDirectFile(link);
+            }
             VideoPlayer player = null;
 
             if (file != null && file.isFile())
@@ -94,6 +99,10 @@ public class VideoManager
             }
 
             File file = BBSMod.getProvider().getFile(link);
+            if (file == null || !file.isFile())
+            {
+                file = AssetProvider.resolveDirectFile(link);
+            }
             VideoPlayer player = file != null && file.isFile() ? new VideoPlayer(file) : null;
 
             entry = new PlayerEntry(link, player);
@@ -203,6 +212,13 @@ public class VideoManager
 
     public void delete()
     {
+        net.minecraft.client.MinecraftClient mc = net.minecraft.client.MinecraftClient.getInstance();
+        if (mc != null && !mc.isOnThread())
+        {
+            mc.execute(this::delete);
+            return;
+        }
+
         for (VideoPlayer player : this.players.values())
         {
             if (player != null)

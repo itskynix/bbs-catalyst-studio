@@ -51,7 +51,18 @@ public class UIFilmDetailsOverlayPanel extends UIOverlayPanel
         this.description.valueBinding(() -> this.description.setText(this.film.description.get()));
         this.description.background().wrap(true).padding(8);
         /* The one field that grows with the panel — the stats below it are single lines */
-        this.description.h(88).expand();
+        this.description.h(68).expand();
+
+        /* Film FPS controls */
+        UILabel fpsHeading = UI.label(mchorse.bbs_mod.l10n.keys.IKey.raw("Timebase / FPS:")).color(Colors.LIGHTER_GRAY);
+        mchorse.bbs_mod.ui.framework.elements.input.UITrackpad fpsTrackpad = new mchorse.bbs_mod.ui.framework.elements.input.UITrackpad((v) -> this.film.fps.set(v.intValue()));
+        fpsTrackpad.limit(1, 240, true).setValue(this.film.fps.get());
+        mchorse.bbs_mod.ui.framework.elements.buttons.UIButton fps24 = new mchorse.bbs_mod.ui.framework.elements.buttons.UIButton(mchorse.bbs_mod.l10n.keys.IKey.raw("24"), (b) -> fpsTrackpad.setValue(24));
+        mchorse.bbs_mod.ui.framework.elements.buttons.UIButton fps25 = new mchorse.bbs_mod.ui.framework.elements.buttons.UIButton(mchorse.bbs_mod.l10n.keys.IKey.raw("25"), (b) -> fpsTrackpad.setValue(25));
+        mchorse.bbs_mod.ui.framework.elements.buttons.UIButton fps30 = new mchorse.bbs_mod.ui.framework.elements.buttons.UIButton(mchorse.bbs_mod.l10n.keys.IKey.raw("30"), (b) -> fpsTrackpad.setValue(30));
+        mchorse.bbs_mod.ui.framework.elements.buttons.UIButton fps60 = new mchorse.bbs_mod.ui.framework.elements.buttons.UIButton(mchorse.bbs_mod.l10n.keys.IKey.raw("60"), (b) -> fpsTrackpad.setValue(60));
+        UIElement fpsRow = UI.row(fpsTrackpad, fps24, fps25, fps30, fps60);
+        fpsRow.h(20);
 
         /* Layout: grouped spacing — meta, then description block, then stats */
         UIElement column = UI.column(
@@ -59,9 +70,11 @@ public class UIFilmDetailsOverlayPanel extends UIOverlayPanel
             0,
             nameLabel,
             createdLabel.marginTop(2),
-            descriptionHeading.marginTop(8),
-            this.description.marginTop(3),
-            statsLabel.marginTop(10),
+            descriptionHeading.marginTop(6),
+            this.description.marginTop(2),
+            fpsHeading.marginTop(6),
+            fpsRow.marginTop(2),
+            statsLabel.marginTop(8),
             durationLabel.marginTop(3),
             this.timeLabel.marginTop(3)
         );

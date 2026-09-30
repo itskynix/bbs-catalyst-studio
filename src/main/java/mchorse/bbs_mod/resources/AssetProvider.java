@@ -1,6 +1,7 @@
 package mchorse.bbs_mod.resources;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -41,6 +42,51 @@ public class AssetProvider
         return sourcePacks == null ? Collections.emptyList() : sourcePacks;
     }
 
+    public static File resolveDirectFile(Link link)
+    {
+        if (link == null)
+        {
+            return null;
+        }
+
+        /* 1. Windows drive letter in source, e.g. source="C", path="/Users/..." */
+        if (link.source != null && link.source.length() == 1 && Character.isLetter(link.source.charAt(0)))
+        {
+            String p = link.path;
+            if (!p.startsWith("/") && !p.startsWith("\\"))
+            {
+                p = "/" + p;
+            }
+            File f = new File(link.source + ":" + p);
+            if (f.exists())
+            {
+                return f;
+            }
+        }
+
+        /* 2. Direct path in link.path */
+        if (link.path != null && !link.path.isEmpty())
+        {
+            File f = new File(link.path);
+            if (f.exists())
+            {
+                return f;
+            }
+        }
+
+        /* 3. Recombined source:path */
+        if (link.source != null && link.path != null)
+        {
+            File f = new File(link.source + ":" + link.path);
+            if (f.exists())
+            {
+                return f;
+            }
+        }
+
+        return null;
+    }
+
     /**
      * Whether any pack can answer for this link. Asking first is how a caller tells "there is no
      * such file" from "the file is broken" — {@link #getAsset(Link)} throws for both.
@@ -60,7 +106,8 @@ public class AssetProvider
             }
         }
 
-        return false;
+        File direct = resolveDirectFile(link);
+        return direct != null && direct.exists();
     }
 
     public InputStream getAsset(Link link) throws IOException
@@ -73,6 +120,12 @@ public class AssetProvider
             {
                 return pack.getAsset(link);
             }
+        }
+
+        File direct = resolveDirectFile(link);
+        if (direct != null && direct.exists() && direct.isFile())
+        {
+            return new FileInputStream(direct);
         }
 
         throw new FileNotFoundException("Asset " + link + " couldn't be found!");
@@ -95,6 +148,12 @@ public class AssetProvider
             {
                 return file;
             }
+        }
+
+        File direct = resolveDirectFile(link);
+        if (direct != null && direct.exists())
+        {
+            return direct;
         }
 
         return null;

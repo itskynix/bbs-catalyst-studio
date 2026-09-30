@@ -17,6 +17,7 @@ public class AudioClip extends CameraClip
     public ValueLink audio = new ValueLink("audio", null);
     public ValueInt offset = new ValueInt("offset", 0, Integer.MIN_VALUE, Integer.MAX_VALUE);
     public ValueFloat volume = new ValueFloat("volume", 1F, 0F, 2F);
+    public ValueFloat pan = new ValueFloat("pan", 0F, -1F, 1F);
 
     public AudioClip()
     {
@@ -25,6 +26,7 @@ public class AudioClip extends CameraClip
         this.add(this.audio);
         this.add(this.offset);
         this.add(this.volume);
+        this.add(this.pan);
     }
 
     @Override

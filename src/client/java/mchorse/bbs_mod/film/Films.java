@@ -329,8 +329,16 @@ public class Films
      */
     public void freeze(Film film, int tick, boolean animated)
     {
+        this.freeze(film, tick, 0.0F, animated);
+    }
+
+    /**
+     * Leave the film standing in the world at {@code tick} and {@code partialTick} fraction.
+     */
+    public void freeze(Film film, int tick, float partialTick, boolean animated)
+    {
         this.unfreeze(film.getId());
-        this.controllers.add(new FrozenFilmController(film, tick, animated));
+        this.controllers.add(new FrozenFilmController(film, tick, partialTick, animated));
     }
 
     /**

@@ -2,6 +2,7 @@ package mchorse.bbs_mod.utils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Function;
 
 public class EnumUtils
@@ -22,7 +23,7 @@ public class EnumUtils
 
         for (Enum e : clazz.getEnumConstants())
         {
-            keys.add(e.name().toLowerCase());
+            keys.add(e.name().toLowerCase(Locale.ROOT));
         }
 
         return keys;

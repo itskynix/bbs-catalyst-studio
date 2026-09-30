@@ -140,7 +140,9 @@ public class FFMpegUtils
             }
         }
         catch (Exception e)
-        {}
+        {
+            BBSMod.LOGGER.warn("Failed to check FFmpeg version: " + e.getMessage());
+        }
 
         return Optional.empty();
     }

@@ -38,6 +38,7 @@ public class CubicVAORenderer extends CubicCubeRenderer
     private ShaderProgram program;
     private ModelInstance model;
     private Function<String, Link> textureResolver;
+    private Texture baseTexture;
 
     /**
      * Non-null puts the renderer in hybrid mode (a welded model): these groups — and any group with no baked VAO —
@@ -53,6 +54,7 @@ public class CubicVAORenderer extends CubicCubeRenderer
         this.program = program;
         this.model = model;
         this.textureResolver = textureResolver;
+        this.baseTexture = BBSModClient.getTextures().getLastBound();
         this.setMaterialVisibility((material) -> FormMaterialLevels.materialVisible(model.form instanceof ModelForm form ? form : null, material));
     }
 
@@ -167,14 +169,18 @@ public class CubicVAORenderer extends CubicCubeRenderer
                 {
                     texture = BBSModClient.getTextures().getTexture(link);
                     texture = FormPbr.resolveAlbedo(modelForm, material, link, texture);
-                    BBSModClient.getTextures().bindTexture(texture);
                 }
             }
 
             if (texture == null)
             {
                 /* No per-material override — the draw uses the form's base texture bound earlier. */
-                texture = BBSModClient.getTextures().getLastBound();
+                texture = this.baseTexture != null ? this.baseTexture : BBSModClient.getTextures().getLastBound();
+            }
+
+            if (texture != null)
+            {
+                BBSModClient.getTextures().bindTexture(texture);
             }
 
             float r = groupR;

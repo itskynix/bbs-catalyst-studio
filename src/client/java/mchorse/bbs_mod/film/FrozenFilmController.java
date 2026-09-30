@@ -29,12 +29,19 @@ public class FrozenFilmController extends BaseFilmController
 {
     private final int tick;
     private final boolean animated;
+    private final float partialTick;
 
     public FrozenFilmController(Film film, int tick, boolean animated)
+    {
+        this(film, tick, 0.0F, animated);
+    }
+
+    public FrozenFilmController(Film film, int tick, float partialTick, boolean animated)
     {
         super(film);
 
         this.tick = tick;
+        this.partialTick = partialTick;
         this.animated = animated;
 
         this.createEntities();
@@ -72,16 +79,35 @@ public class FrozenFilmController extends BaseFilmController
 
         if (!this.animated)
         {
-            /* Nothing moves, so the previous tick is this tick — otherwise the entity would render
-             * interpolating towards its keyframed spot from wherever it was created. Animated, the
-             * entity's own update keeps that snapshot, same as in the editor. */
-            entity.setPrevX(entity.getX());
-            entity.setPrevY(entity.getY());
-            entity.setPrevZ(entity.getZ());
-            entity.setPrevYaw(entity.getYaw());
-            entity.setPrevHeadYaw(entity.getHeadYaw());
-            entity.setPrevBodyYaw(entity.getBodyYaw());
-            entity.setPrevPitch(entity.getPitch());
+            if (this.partialTick > 0.0F && replay != null)
+            {
+                /* Sub-frame interpolation from Catalyst Studio: entity keyframes at tick+1 are sampled
+                 * so that vanilla rendering (which interpolates prev to curr via partial tick) renders
+                 * the interpolated sub-frame smoothly. */
+                entity.setPrevX(entity.getX());
+                entity.setPrevY(entity.getY());
+                entity.setPrevZ(entity.getZ());
+                entity.setPrevYaw(entity.getYaw());
+                entity.setPrevHeadYaw(entity.getHeadYaw());
+                entity.setPrevBodyYaw(entity.getBodyYaw());
+                entity.setPrevPitch(entity.getPitch());
+
+                int nextTicks = ticks + 1;
+                replay.keyframes.apply(nextTicks, entity);
+            }
+            else
+            {
+                /* Nothing moves, so the previous tick is this tick — otherwise the entity would render
+                 * interpolating towards its keyframed spot from wherever it was created. Animated, the
+                 * entity's own update keeps that snapshot, same as in the editor. */
+                entity.setPrevX(entity.getX());
+                entity.setPrevY(entity.getY());
+                entity.setPrevZ(entity.getZ());
+                entity.setPrevYaw(entity.getYaw());
+                entity.setPrevHeadYaw(entity.getHeadYaw());
+                entity.setPrevBodyYaw(entity.getBodyYaw());
+                entity.setPrevPitch(entity.getPitch());
+            }
         }
     }
 
@@ -89,10 +115,16 @@ public class FrozenFilmController extends BaseFilmController
      * Frozen, properties must resolve at the captured tick exactly, not at tick + partial, or the
      * pose would sit a fraction of a tick ahead of the one the editor drew. Animated, the partial
      * has to come through &mdash; it is what makes the forms move between ticks.
+     * When partialTick > 0 (e.g. sub-frame interpolation from Catalyst Studio), that partial is used.
      */
     @Override
     protected float getTransition(IEntity entity, float transition)
     {
+        if (this.partialTick > 0.0F)
+        {
+            return this.partialTick;
+        }
+
         return this.animated ? transition : 0F;
     }
 }

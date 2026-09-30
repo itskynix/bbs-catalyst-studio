@@ -18,6 +18,7 @@ import mchorse.bbs_mod.math.molang.functions.SinDegrees;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * MoLang parser
@@ -230,7 +231,7 @@ public class MolangParser extends MathBuilder
     {
         List<String> lines = new ArrayList<>();
 
-        for (String split : expression.toLowerCase().trim().split(";"))
+        for (String split : expression.toLowerCase(Locale.ROOT).trim().split(";"))
         {
             if (!split.trim().isEmpty())
             {

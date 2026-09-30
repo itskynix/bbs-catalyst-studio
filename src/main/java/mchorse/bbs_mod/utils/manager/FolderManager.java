@@ -3,6 +3,7 @@ package mchorse.bbs_mod.utils.manager;
 import mchorse.bbs_mod.settings.values.core.ValueGroup;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
@@ -22,9 +23,14 @@ public abstract class FolderManager <T extends ValueGroup> implements IManager<T
 
     public File getFolder()
     {
+        if (this.folder == null)
+        {
+            return null;
+        }
+
         File file = this.folder.get();
 
-        if (!file.exists())
+        if (file != null && !file.exists())
         {
             file.mkdirs();
         }
@@ -35,17 +41,20 @@ public abstract class FolderManager <T extends ValueGroup> implements IManager<T
     @Override
     public boolean exists(String name)
     {
-        return this.getFile(name).exists();
+        File file = this.getFile(name);
+
+        return file != null && file.exists();
     }
 
     @Override
     public boolean rename(String from, String to)
     {
         File file = this.getFile(from);
+        File toFile = this.getFile(to);
 
-        if (file != null && file.exists())
+        if (file != null && file.exists() && toFile != null)
         {
-            if (file.renameTo(this.getFile(to)))
+            if (file.renameTo(toFile))
             {
                 return true;
             }
@@ -67,9 +76,14 @@ public abstract class FolderManager <T extends ValueGroup> implements IManager<T
      */
     public boolean addFolder(String path)
     {
+        if (path == null)
+        {
+            return false;
+        }
+
         File folder = this.getFolder(this.normalizePath(path));
 
-        if (folder.exists())
+        if (folder == null || folder.exists())
         {
             return false;
         }
@@ -82,14 +96,20 @@ public abstract class FolderManager <T extends ValueGroup> implements IManager<T
      */
     public boolean renameFolder(String from, String to)
     {
+        if (from == null || to == null)
+        {
+            return false;
+        }
+
         from = this.normalizePath(from);
         to = this.normalizePath(to);
 
         File folder = this.getFolder(from);
+        File toFolder = this.getFolder(to);
 
-        if (folder.isDirectory())
+        if (folder != null && folder.isDirectory() && toFolder != null)
         {
-            if (folder.renameTo(this.getFolder(to)))
+            if (folder.renameTo(toFolder))
             {
                 return true;
             }
@@ -103,9 +123,14 @@ public abstract class FolderManager <T extends ValueGroup> implements IManager<T
      */
     public boolean deleteFolder(String path)
     {
+        if (path == null)
+        {
+            return false;
+        }
+
         File folder = this.getFolder(this.normalizePath(path));
 
-        if (folder.isDirectory())
+        if (folder != null && folder.isDirectory())
         {
             if (folder.delete())
             {
@@ -118,6 +143,11 @@ public abstract class FolderManager <T extends ValueGroup> implements IManager<T
 
     private String normalizePath(String path)
     {
+        if (path == null)
+        {
+            return "";
+        }
+
         return path.endsWith("/") ? path : path + "/";
     }
 
@@ -138,7 +168,19 @@ public abstract class FolderManager <T extends ValueGroup> implements IManager<T
 
     private void recursiveFind(Set<String> set, File folder, String prefix)
     {
-        for (File file : folder.listFiles())
+        if (folder == null)
+        {
+            return;
+        }
+
+        File[] files = folder.listFiles();
+
+        if (files == null)
+        {
+            return;
+        }
+
+        for (File file : files)
         {
             String name = file.getName();
 
@@ -148,9 +190,9 @@ public abstract class FolderManager <T extends ValueGroup> implements IManager<T
             }
             else if (file.isDirectory() && !file.getName().startsWith("_"))
             {
-                File[] files = file.listFiles();
+                File[] children = file.listFiles();
 
-                if (files == null || files.length == 0)
+                if (children == null || children.length == 0)
                 {
                     set.add(prefix + name + "/");
                 }
@@ -164,27 +206,77 @@ public abstract class FolderManager <T extends ValueGroup> implements IManager<T
 
     protected boolean isData(File file)
     {
-        return file.getName().endsWith(this.getExtension());
+        return file != null && file.getName().endsWith(this.getExtension());
     }
 
     public File getFile(String name)
     {
-        if (this.folder == null)
+        if (this.folder == null || name == null)
         {
             return null;
         }
 
-        return new File(this.getFolder(), name + this.getExtension());
+        File base = this.getFolder();
+
+        if (base == null)
+        {
+            return null;
+        }
+
+        File file = new File(base, name + this.getExtension());
+
+        try
+        {
+            Path basePath = base.toPath().toAbsolutePath().normalize();
+            Path filePath = file.toPath().toAbsolutePath().normalize();
+
+            /* Prevent directory traversal outside the base folder */
+            if (!filePath.startsWith(basePath))
+            {
+                return null;
+            }
+        }
+        catch (Exception e)
+        {
+            return null;
+        }
+
+        return file;
     }
 
     public File getFolder(String path)
     {
-        if (this.folder == null)
+        if (this.folder == null || path == null)
         {
             return null;
         }
 
-        return new File(this.getFolder(), path);
+        File base = this.getFolder();
+
+        if (base == null)
+        {
+            return null;
+        }
+
+        File file = new File(base, path);
+
+        try
+        {
+            Path basePath = base.toPath().toAbsolutePath().normalize();
+            Path filePath = file.toPath().toAbsolutePath().normalize();
+
+            /* Prevent directory traversal outside the base folder */
+            if (!filePath.startsWith(basePath))
+            {
+                return null;
+            }
+        }
+        catch (Exception e)
+        {
+            return null;
+        }
+
+        return file;
     }
 
     protected String getExtension()
