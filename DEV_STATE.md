@@ -1,4 +1,4 @@
-﻿# BBS Mod - GeliÅŸtirme Durumu (DEV_STATE)
+# BBS Mod - GeliÅŸtirme Durumu (DEV_STATE)
 
 **Proje:** Blockbuster Studio Catalyst (BBS CS) - Fabric 1.20.4 Port (`bbs-cs`)  
 **Tarih:** 01 Ekim 2026  
@@ -1087,4 +1087,52 @@ BBS moduna, DaVinci Resolve ve modern prodÃ¼ksiyon araÃ§larÄ±ndan esinlene
 
 ### Derleme Durumu
 * `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL**.
+
+
+## AŞAMA 76: F1 Tam Ekran Siyahlığı, Fast Mod Yaprak Şeffaflığı ve Fabulous Su Katmanı (Translucent) Düzeltmesi (Tamamlandı)
+
+### Kök Nedenler
+1. **F1 Siyah Ekran Sorunu:**
+   - `UIFilmPanel.renderPanelBackground(context)` yalnızca `BBSRendering.getTexture()` nesnesini çizmeye çalışıyordu. Oysa `getTexture()` sadece aktif video kaydı / export sırasında kare yakalanırken dolduruluyordu. Normal önizleme sırasında `texture.id` boş/siyah kaldığı ve metot tüm ekranı `Colors.A100` (siyah) ile kapladığı için F1'e basıldığında ekran tamamen kararıyordu.
+   - Ayrıca F1'den çıkıldığında `UIDashboard` panel görünürlüğünü açarken `filmPanel.restorePreviewSize()` çağırmıyordu.
+2. **Fast Grafik Modunda Yaprak Deliklerinden Gökyüzü Sızıntısı:**
+   - Vanilla Minecraft `RenderLayers.getBlockLayer()` ve `getMovingBlockLayer()` içinde grafik modu Fast (`fancyGraphicsOrBetter == false`) olduğunda `LeavesBlock` nesnelerini `RenderLayer.getSolid()` katmanına yönlendiriyordu.
+   - `solid` shader'ında şeffaf pikseller için `discard` bulunmadığından yaprak dokusundaki boşluklar da derinlik tamponuna (Z-buffer) yazılıyor; arkadaki arazi blokları derinlik testine takılıp elenerek geriye gökyüzü kalıyordu.
+3. **Fabulous! Modunda Suların Kaybolması (Translucent Framebuffer Compositing):**
+   - Minecraft Fabulous! grafik modunda şeffaf arazi ve suları `translucentFramebuffer` içine çizer ve ardından `WorldRenderer.transparencyPostProcessor.render(tickDelta)` ile ana hedef framebuffer'a (`mainTarget`) harmanlar.
+   - `transparencyPostProcessor` oyun açılışında oluşturulurken `mainTarget` ve `"minecraft:main"` haritası pencerenin `WindowFramebuffer`'ına sabitleniyordu. BBS özel `framebuffer`'a çizim yaparken bu işlemci hâlâ pencere framebuffer'ına harmanlama yapıyor, BBS'in `framebuffer`'ına sular hiç aktarılmıyordu.
+   - Ayrıca `defaultSizedTargets` ve sampler'lar (`DiffuseDepthSampler`) BBS'in özel çözünürlüğüne senkronize edilmiyordu.
+
+### Uygulanan Düzeltmeler
+* **UIFilmPanel.java:**
+  - `renderPanelBackground()` metodu `BBSRendering.getFramebuffer()`'ın `getColorAttachment()` çıktısını en-boy oranı (`BBSRendering.getVideoWidth() / getVideoHeight()`) korunacak şekilde ve sis rengi (`fogColor`) zemin desteğiyle çizecek şekilde güncellendi. F1 tam ekran modu artık kusursuz canlı önizleme veriyor.
+* **UIDashboard.java:**
+  - `TOGGLE_VISIBILITY` (F1) kancasında görünürlük tekrar açıldığında `filmPanel.restorePreviewSize()` tetiklenerek önizleme pencere boyutuna güvenle geri dönmesi sağlandı.
+* **RenderLayersMixin.java (Yeni Mixin):**
+  - `RenderLayers.getBlockLayer` ve `getMovingBlockLayer` metotlarına HEAD injection yapılarak `state.getBlock() instanceof LeavesBlock` durumunda her zaman `RenderLayer.getCutoutMipped()` döndürüldü. Böylece Fast modda yaprak delikleri derinlik tamponuna yazılmadan `discard` edilir ve arkadaki arazi blokları gökyüzünü delmeden görünür.
+* **WorldRendererAccessor.java & PostEffect Processor Accessor'ları:**
+  - `WorldRendererAccessor`: `transparencyPostProcessor` erişimcisi eklendi.
+  - `PostEffectProcessorAccessor` (Yeni): `mainTarget`, `targetsByName`, `passes`, `width`, `height` erişimcileri oluşturuldu.
+  - `PostEffectPassAccessor` (Yeni): `input`, `output`, `samplerNames`, `samplerValues`, `samplerWidths`, `samplerHeights` erişimcileri oluşturuldu.
+* **BBSRendering.java:**
+  - `updateFabulousTransparency(boolean forBBS)` metodu yazıldı: Fabulous modunda `transparencyPostProcessor`'ın `mainTarget`'ı, `"minecraft:main"` girdisi ve pass'lerdeki `DiffuseDepthSampler` derinlik sağlayıcısı BBS `framebuffer`'ına dinamik olarak bağlandı. Çözünürlük değiştiğinde `setupDimensions` ile ikincil framebuffer'lar senkronize edildi.
+  - `toggleFramebuffer(true)` içinde Fabulous compositing BBS'e yönlendirildi, `setCustomSize(false)` ile normal oyuna dönüldüğünde pencere framebuffer'ına güvenle restore edildi.
+  - `resizeFramebuffer` özel çözünürlükleri (`customSize`) destekleyecek şekilde güncellendi.
+* **bbs.client.mixins.json:**
+  - `RenderLayersMixin`, `PostEffectProcessorAccessor` ve `PostEffectPassAccessor` mixin listesine kaydedildi.
+
+### Derleme Durumu
+* `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 17s** (0 hata).
+
+
+## AŞAMA 77: RenderLayersMixin'in Kaldırılması ve Fast Mod Doğal Katı Yaprak Mantığına Dönüş (Tamamlandı)
+
+### Gerekçe ve Düzeltme
+1. **RenderLayersMixin Kaldırıldı:**
+   - Aşama 76'da `LeavesBlock` nesnelerini her koşulda `RenderLayer.getCutoutMipped()` katmanına zorlayan Mixin, Fast grafik modunun doğasını (opak/katı yaprak blokları) bozduğu için `RenderLayersMixin.java` tamamen silindi ve `bbs.client.mixins.json` içerisinden kaydı kaldırıldı.
+2. **Vanilla Fast Mod Yaprak Davranışı:**
+   - Minecraft'ın orijinal `RenderLayers.setFancyGraphicsOrBetter()` mantığına geri dönüldü.
+   - Fast modda yaprak dokuları Vanilla'daki gibi katı/opak (`solid` pass) olarak işlenir; Aşama 75'te `UIFilmPreview` ve `clearColor(..., 1.0F)` ile sağlanan opak zemin alfa düzeltmesi sayesinde arkadaki siyah boşluk veya panel sızıntısı zaten önlenmiştir.
+3. **Derleme Durumu:**
+   - `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 9s** (0 hata).
 

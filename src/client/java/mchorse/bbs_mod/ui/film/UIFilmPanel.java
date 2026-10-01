@@ -70,7 +70,9 @@ import mchorse.bbs_mod.utils.PlayerUtils;
 import mchorse.bbs_mod.utils.Timer;
 import mchorse.bbs_mod.utils.clips.Clip;
 import mchorse.bbs_mod.utils.clips.Clips;
+import mchorse.bbs_mod.utils.colors.Color;
 import mchorse.bbs_mod.utils.colors.Colors;
+import net.minecraft.client.gl.Framebuffer;
 import mchorse.bbs_mod.utils.joml.Vectors;
 import mchorse.bbs_mod.utils.keyframes.Keyframe;
 import mchorse.bbs_mod.utils.keyframes.KeyframeChannel;
@@ -1688,21 +1690,45 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
     {
         super.renderPanelBackground(context);
 
+        Framebuffer fb = BBSRendering.getFramebuffer();
         Texture texture = BBSRendering.getTexture();
 
-        if (texture != null)
+        int textureId = -1;
+        int texW = 0;
+        int texH = 0;
+
+        if (fb != null && fb.getColorAttachment() > 0)
+        {
+            textureId = fb.getColorAttachment();
+            texW = fb.textureWidth;
+            texH = fb.textureHeight;
+        }
+        else if (texture != null && texture.id > 0)
+        {
+            textureId = texture.id;
+            texW = texture.width;
+            texH = texture.height;
+        }
+
+        if (textureId > 0 && texW > 0 && texH > 0)
         {
             context.batcher.box(0, 0, context.menu.width, context.menu.height, Colors.A100);
 
             int w = context.menu.width;
             int h = context.menu.height;
-            Vector2i resize = Vectors.resize(texture.width / (float) texture.height, w, h);
+            float aspect = BBSRendering.getVideoWidth() > 0 && BBSRendering.getVideoHeight() > 0
+                ? BBSRendering.getVideoWidth() / (float) BBSRendering.getVideoHeight()
+                : texW / (float) texH;
+            Vector2i resize = Vectors.resize(aspect, w, h);
             Area area = new Area();
 
             area.setSize(resize.x, resize.y);
             area.setPos((w - area.w) / 2, (h - area.h) / 2);
 
-            context.batcher.texturedBox(texture.id, Colors.WHITE, area.x, area.y, area.w, area.h, 0, texture.height, texture.width, 0, texture.width, texture.height);
+            int fogColor = new Color(BBSRendering.getFogRed(), BBSRendering.getFogGreen(), BBSRendering.getFogBlue(), 1F).getARGBColor();
+            context.batcher.box(area.x, area.y, area.ex(), area.ey(), fogColor);
+
+            context.batcher.texturedBox(textureId, Colors.WHITE, area.x, area.y, area.w, area.h, 0, texH, texW, 0, texW, texH);
         }
 
         this.updateLogic(context);

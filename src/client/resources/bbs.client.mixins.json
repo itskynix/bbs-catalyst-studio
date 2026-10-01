@@ -32,6 +32,8 @@
         "KeyboardMixin",
         "ResourceReloadLoggerMixin",
         "RenderLayerMixin",
+        "PostEffectProcessorAccessor",
+        "PostEffectPassAccessor",
         "RenderPhaseMixin",
         "ClientWorldPropertiesMixin",
         "sodium.SodiumBufferBuilderAccessor",

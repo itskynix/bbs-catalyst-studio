@@ -148,6 +148,10 @@ public class UIDashboard extends UIBaseMenu
                 {
                     UIFilmPanel.applyExportSizeToBBS();
                 }
+                else if (this.main.isVisible() && this.panels.panel instanceof UIFilmPanel filmPanel)
+                {
+                    filmPanel.restorePreviewSize();
+                }
             }
         }).category(category);
         this.overlay.keys().register(Keys.TOGGLE_DEBUG, () ->

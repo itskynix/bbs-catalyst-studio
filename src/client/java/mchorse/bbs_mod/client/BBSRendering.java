@@ -61,6 +61,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.IntSupplier;
+import net.minecraft.client.gl.PostEffectPass;
+import net.minecraft.client.gl.PostEffectProcessor;
+import mchorse.bbs_mod.mixin.client.PostEffectPassAccessor;
+import mchorse.bbs_mod.mixin.client.PostEffectProcessorAccessor;
+import mchorse.bbs_mod.mixin.client.WorldRendererAccessor;
 
 public class BBSRendering
 {
@@ -252,6 +258,7 @@ public class BBSRendering
 
         if (!customSize)
         {
+            updateFabulousTransparency(false);
             resizeExtraFramebuffers();
         }
     }
@@ -338,6 +345,12 @@ public class BBSRendering
         int w = Math.max(1, mc.getWindow().getFramebufferWidth());
         int h = Math.max(1, mc.getWindow().getFramebufferHeight());
 
+        if (customSize && width > 0 && height > 0)
+        {
+            w = width;
+            h = height;
+        }
+
         if (framebuffer.textureWidth == w && framebuffer.textureHeight == h)
         {
             return;
@@ -381,6 +394,12 @@ public class BBSRendering
             int w = Math.max(1, mc.getWindow().getFramebufferWidth());
             int h = Math.max(1, mc.getWindow().getFramebufferHeight());
 
+            if (customSize && width > 0 && height > 0)
+            {
+                w = width;
+                h = height;
+            }
+
             resizeExtraFramebuffers();
 
             if (framebuffer == null)
@@ -396,6 +415,8 @@ public class BBSRendering
             clientFramebuffer = mc.getFramebuffer();
 
             reassignFramebuffer(framebuffer);
+
+            updateFabulousTransparency(true);
 
             framebuffer.beginWrite(true);
 
@@ -439,6 +460,11 @@ public class BBSRendering
             int drawH = window.getFramebufferHeight();
             reassignFramebuffer(clientFramebuffer);
 
+            if (!customSize)
+            {
+                updateFabulousTransparency(false);
+            }
+
             mc.getFramebuffer().beginWrite(true);
 
             if (width != 0)
@@ -459,6 +485,108 @@ public class BBSRendering
     private static void reassignFramebuffer(Framebuffer framebuffer)
     {
         MinecraftClient.getInstance().framebuffer = framebuffer;
+    }
+
+    public static Framebuffer getClientFramebuffer()
+    {
+        return clientFramebuffer;
+    }
+
+    public static void updateFabulousTransparency(boolean forBBS)
+    {
+        if (!MinecraftClient.isFabulousGraphicsOrBetter())
+        {
+            return;
+        }
+
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc == null || mc.worldRenderer == null)
+        {
+            return;
+        }
+
+        PostEffectProcessor processor = ((WorldRendererAccessor) mc.worldRenderer).bbs$getTransparencyPostProcessor();
+        if (processor == null)
+        {
+            return;
+        }
+
+        Framebuffer targetFb = forBBS ? framebuffer : clientFramebuffer;
+        if (targetFb == null)
+        {
+            return;
+        }
+
+        int targetW = targetFb.textureWidth;
+        int targetH = targetFb.textureHeight;
+
+        PostEffectProcessorAccessor procAcc = (PostEffectProcessorAccessor) processor;
+        procAcc.setMainTarget(targetFb);
+        if (procAcc.getTargetsByName() != null)
+        {
+            procAcc.getTargetsByName().put("minecraft:main", targetFb);
+        }
+
+        if (procAcc.getPasses() != null)
+        {
+            for (PostEffectPass pass : procAcc.getPasses())
+            {
+                PostEffectPassAccessor passAcc = (PostEffectPassAccessor) pass;
+                if (forBBS)
+                {
+                    if (clientFramebuffer != null && pass.input == clientFramebuffer)
+                    {
+                        passAcc.setInput(framebuffer);
+                    }
+                    if (clientFramebuffer != null && pass.output == clientFramebuffer)
+                    {
+                        passAcc.setOutput(framebuffer);
+                    }
+                }
+                else
+                {
+                    if (pass.input == framebuffer)
+                    {
+                        passAcc.setInput(clientFramebuffer);
+                    }
+                    if (pass.output == framebuffer)
+                    {
+                        passAcc.setOutput(clientFramebuffer);
+                    }
+                }
+
+                List<String> names = passAcc.getSamplerNames();
+                List<IntSupplier> values = passAcc.getSamplerValues();
+                List<Integer> widths = passAcc.getSamplerWidths();
+                List<Integer> heights = passAcc.getSamplerHeights();
+
+                if (names != null && values != null)
+                {
+                    for (int i = 0; i < names.size(); i++)
+                    {
+                        String name = names.get(i);
+                        if ("DiffuseDepthSampler".equals(name))
+                        {
+                            final Framebuffer depthFb = targetFb;
+                            values.set(i, depthFb::getDepthAttachment);
+                        }
+                        if (widths != null && i < widths.size())
+                        {
+                            widths.set(i, targetW);
+                        }
+                        if (heights != null && i < heights.size())
+                        {
+                            heights.set(i, targetH);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (procAcc.getWidth() != targetW || procAcc.getHeight() != targetH)
+        {
+            processor.setupDimensions(targetW, targetH);
+        }
     }
 
     /* Rendering */
