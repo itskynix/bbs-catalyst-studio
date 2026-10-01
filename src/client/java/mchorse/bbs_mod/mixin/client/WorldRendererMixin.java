@@ -53,7 +53,7 @@ public class WorldRendererMixin
         {
             Camera cam = camera != null ? camera : mc.gameRenderer.getCamera();
 
-            if (BBSModClient.getCameraController().getCurrent() != null)
+            if (this.shouldUseStudioCameraForSky() && cam != null)
             {
                 int chunkX = ChunkSectionPos.getSectionCoord(cam.getPos().x);
                 int chunkZ = ChunkSectionPos.getSectionCoord(cam.getPos().z);
@@ -61,25 +61,24 @@ public class WorldRendererMixin
                 mc.world.getChunkManager().setChunkMapCenter(chunkX, chunkZ);
             }
 
-            Vec3d skyColor = mc.world.getSkyColor(cam.getPos(), tickDelta);
-
-            if (skyColor != null)
+            if (BBSRendering.getFramebuffer() != null)
             {
-                float r = (float) skyColor.x;
-                float g = (float) skyColor.y;
-                float b = (float) skyColor.z;
-
-                RenderSystem.clearColor(r, g, b, 1F);
-                GL11.glClearColor(r, g, b, 1F);
-
-                if (BBSRendering.getFramebuffer() != null)
+                if (BBSSettings.chromaSkyEnabled.get())
                 {
-                    BBSRendering.getFramebuffer().setClearColor(r, g, b, 1F);
+                    Integer fromCurve = BBSRendering.getChromaSkyColorArgb();
+                    int argb = fromCurve != null ? fromCurve : BBSSettings.chromaSkyColor.get();
+                    Color color = Color.rgba(argb);
+
+                    BBSRendering.getFramebuffer().setClearColor(color.r, color.g, color.b, 1F);
                 }
-
-                if (mc.getFramebuffer() != null)
+                else
                 {
-                    mc.getFramebuffer().setClearColor(r, g, b, 1F);
+                    BBSRendering.getFramebuffer().setClearColor(
+                        BBSRendering.getFogRed(),
+                        BBSRendering.getFogGreen(),
+                        BBSRendering.getFogBlue(),
+                        1F
+                    );
                 }
             }
         }
@@ -125,17 +124,6 @@ public class WorldRendererMixin
             FormTranslucentQueue.flush();
         }
 
-        if (!BBSRendering.isOrthoActive())
-        {
-            MinecraftClient mc = MinecraftClient.getInstance();
-            if (mc.world != null)
-            {
-                Camera camera = mc.gameRenderer.getCamera();
-                float viewDistance = Math.max(mc.options.getClampedViewDistance() * 16.0F - 16.0F, 32.0F);
-                BackgroundRenderer.applyFog(camera, BackgroundRenderer.FogType.FOG_TERRAIN, viewDistance, false, mc.getTickDelta());
-            }
-        }
-
         if (BBSSettings.chromaSkyEnabled.get() && !BBSSettings.chromaSkyTerrain.get())
         {
             BBSRendering.onRenderChunkLayer(matrices);
@@ -170,10 +158,38 @@ public class WorldRendererMixin
         BBSRendering.resizeExtraFramebuffers();
     }
 
+    private boolean shouldUseStudioCameraForSky()
+    {
+        if (BBSModClient.getCameraController().getCurrent() != null)
+        {
+            return true;
+        }
+
+        if (BBSRendering.isRenderingWorld() || BBSRendering.isCustomSize())
+        {
+            return true;
+        }
+
+        if (BBSModClient.getVideoRecorder() != null && BBSModClient.getVideoRecorder().isRecording())
+        {
+            return true;
+        }
+
+        mchorse.bbs_mod.ui.framework.UIBaseMenu currentMenu = mchorse.bbs_mod.ui.framework.UIScreen.getCurrentMenu();
+
+        if (currentMenu instanceof mchorse.bbs_mod.ui.dashboard.UIDashboard dashboard
+            && dashboard.getPanels().panel instanceof mchorse.bbs_mod.ui.film.UIFilmPanel)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
     @Redirect(method = "renderSky(Lnet/minecraft/client/util/math/MatrixStack;Lorg/joml/Matrix4f;FLnet/minecraft/client/render/Camera;ZLjava/lang/Runnable;)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/network/ClientPlayerEntity;getCameraPosVec(F)Lnet/minecraft/util/math/Vec3d;"))
     private Vec3d redirectRenderSkyCameraPos(ClientPlayerEntity player, float tickDelta)
     {
-        if (BBSModClient.getCameraController().getCurrent() != null)
+        if (this.shouldUseStudioCameraForSky())
         {
             MinecraftClient mc = MinecraftClient.getInstance();
 
@@ -183,6 +199,6 @@ public class WorldRendererMixin
             }
         }
 
-        return player.getCameraPosVec(tickDelta);
+        return player != null ? player.getCameraPosVec(tickDelta) : Vec3d.ZERO;
     }
 }

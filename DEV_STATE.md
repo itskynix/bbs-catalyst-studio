@@ -1,8 +1,8 @@
 # BBS Mod - Geliştirme Durumu (DEV_STATE)
 
 **Proje:** Blockbuster Studio Catalyst (BBS CS) - Fabric 1.20.4 Port (`bbs-cs`)  
-**Tarih:** 30 Eylül 2026  
-**Son Tamamlanan Aşama:** 64 — Aktif Film Olmadığında Film Seçim / Karşılama Ekranının (Welcome Overlay) Geri Getirilmesi  
+**Tarih:** 01 Ekim 2026  
+**Son Tamamlanan Aşama:** 65 — Gökyüzü / Ufuk Geçişi ve Sis Render Hatasının Onarımı (Sky Dome Void & Fog Pass Fix)  
 *(Aşama 57: BBS Hub Pazaryeri, Aşama 58: Video & Audio Ses Kalitesi, Aşama 59: Mod Kimliği ve Sürüm C1.0)*:
 
 1. **FAZ 0: Crash, DoS ve Veri Kaybı Açıkları (%100):**
@@ -1019,3 +1019,37 @@ BBS moduna, DaVinci Resolve ve modern prodüksiyon araçlarından esinlenen iki 
 * `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 17s** (0 Hata).
 * `./gradlew.bat --no-daemon apiCheck` -> **BUILD SUCCESSFUL in 8s** (0 Hata).
 * `./gradlew.bat --no-daemon check` -> **BUILD SUCCESSFUL in 22s** (addonApiCheck: 49 passed, anchorInterpolationTest: 330 passed, migrationTest: all PASS).
+
+---
+
+## AŞAMA 65: Gökyüzü / Ufuk Geçişi ve Sis Render Hatasının Onarımı (Sky Dome Void & Fog Pass Fix) (Tamamlandı)
+
+### 1. Kök Neden Analizi (KURALLAR 5.2 / 10.1)
+1. **Siyah Disk / Void Dome (`WorldRenderer.renderSky`):**
+   - `WorldRendererMixin.redirectRenderSkyCameraPos`, yalnızca `BBSModClient.getCameraController().getCurrent() != null` iken kamera konumunu döndürüyordu. Editörde duraklatıldığında, panel gezintisinde veya export sırasında aktif controller null olduğunda oyuncunun gerçek zemin koordinatı (`player.getCameraPosVec`) kullanılıyordu.
+   - Vanilla `renderSky`, `d = player.y - skyDarknessHeight < 0` olduğunda ufkun altına devasa bir siyah "karanlık disk" (`darkSkyBuffer`) çizer. Kamera yüksekte (Y=247..399) olsa bile oyuncu yerdeyken (Y=60) bu siyah disk çizilip sis ile karışarak ufkun altında sert, eğik ve koyu gri bir düzlem oluşturuyordu.
+2. **Clear Color Ezmesi:**
+   - `WorldRendererMixin.onRenderWorldStart`, `BBSRendering.toggleFramebuffer(true)` ve `BBSRendering.captureExportFrame` içerisinde clear color el ile `mc.world.getSkyColor()` ile eziliyordu.
+   - Oysa vanilla Minecraft, zemin/ekran temizleme rengini `BackgroundRenderer.render()` içinde hesaplanan **sis rengi (fog color)** olarak ayarlar (gökyüzü rengi değil). Bu durum ufuk çizgisinde sis ile gökyüzü arasındaki ton uyumunu bozarak uzak chunk'ların arkasında sert renk geçişi bırakıyordu.
+3. **onRenderLayer İçindeki Gereksiz Sis Enjeksiyonu:**
+   - `WorldRendererMixin.onRenderLayer` içinde her katmanda fazladan `BackgroundRenderer.applyFog(camera, FOG_TERRAIN, ...)` çağrısı yapılıyordu. Bu çağrı vanilla'nın `FOG_SKY` sis durumunu bozuyor ve gökyüzü geçişlerini kirletiyordu.
+
+### 2. Uygulanan Mimari Çözümler
+1. **Vanilla Sis Renginin Stüdyo Boru Hattına Aktarılması:**
+   - `src/client/java/mchorse/bbs_mod/mixin/client/BackgroundRendererMixin.java`:
+     * `BackgroundRenderer.red`, `green`, `blue` statik alanları `@Shadow` ile bağlandı.
+     * `BackgroundRenderer.render(...)` metodunun sonuna (`TAIL`) enjekte edilerek vanillanın her karede hesapladığı saf atmosferik sis rengi `BBSRendering.setFogColor(red, green, blue)` çağrısıyla stüdyo boru hattına aktarıldı.
+2. **Framebuffer Clear Color Düzeltmesi ve Chroma Sky Desteği:**
+   - `src/client/java/mchorse/bbs_mod/client/BBSRendering.java`:
+     * `fogRed`, `fogGreen`, `fogBlue` alanları ve getter'ları (`getFogRed()`, `getFogGreen()`, `getFogBlue()`) eklendi.
+     * `toggleFramebuffer(true)` ve `captureExportFrame()` içindeki manuel `getSkyColor()` ezmeleri kaldırıldı; temizleme rengi vanilla sis rengine (veya Chroma Sky aktifse eğri/ayar rengine) bağlandı.
+3. **WorldRendererMixin Sky ve Kamera Optimizasyonu:**
+   - `src/client/java/mchorse/bbs_mod/mixin/client/WorldRendererMixin.java`:
+     * `onRenderWorldStart`: `RenderSystem.clearColor`, `GL11.glClearColor` ve `mc.getFramebuffer().setClearColor` ezmeleri kaldırıldı; BBS stüdyo framebuffer'ına sis rengi (veya Chroma rengi) atandı.
+     * `onRenderLayer`: Katman render döngüsündeki gereksiz `BackgroundRenderer.applyFog(camera, FOG_TERRAIN, ...)` kaldırıldı; `FOG_SKY` ve Sodium/Iris uyumluluğu korundu.
+     * `shouldUseStudioCameraForSky()` metodu eklendi: Kamera kontrolcüsü, dünya render'ı, özel boyutlandırma (`isCustomSize`), video kaydı veya `UIFilmPanel` açık olduğunda her zaman stüdyo kamerasının konumu (`mc.gameRenderer.getCamera().getPos()`) döndürüldü; böylece `d < 0` kontrolü sahte siyah disk (`darkSkyBuffer`) çizilmesini %100 engelledi.
+
+### 3. Derleme & Doğrulama Durumu (Aşama 65)
+* `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 12s** (0 Hata).
+* `./gradlew.bat --no-daemon apiCheck` -> **BUILD SUCCESSFUL in 8s** (0 Hata).
+* `./gradlew.bat --no-daemon check` -> **BUILD SUCCESSFUL in 21s** (addonApiCheck: 49 passed, anchorInterpolationTest: 330 passed, migrationTest: all PASS).

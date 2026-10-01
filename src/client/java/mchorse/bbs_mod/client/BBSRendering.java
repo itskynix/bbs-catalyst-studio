@@ -96,6 +96,32 @@ public class BBSRendering
     private static Texture texture;
     private static mchorse.bbs_mod.graphics.Framebuffer /* NECESSARY */ exportFramebuffer;
 
+    private static float fogRed = 0.5F;
+    private static float fogGreen = 0.7F;
+    private static float fogBlue = 1.0F;
+
+    public static void setFogColor(float r, float g, float b)
+    {
+        fogRed = r;
+        fogGreen = g;
+        fogBlue = b;
+    }
+
+    public static float getFogRed()
+    {
+        return fogRed;
+    }
+
+    public static float getFogGreen()
+    {
+        return fogGreen;
+    }
+
+    public static float getFogBlue()
+    {
+        return fogBlue;
+    }
+
     private static Runnable pendingExportResolutionAction;
 
     public static int getMotionBlur()
@@ -372,21 +398,25 @@ public class BBSRendering
 
             framebuffer.beginWrite(true);
 
-            float r = 0.5F;
-            float g = 0.7F;
-            float b = 1F;
+            float r;
+            float g;
+            float b;
 
-            if (mc.world != null)
+            if (BBSSettings.chromaSkyEnabled.get())
             {
-                net.minecraft.client.render.Camera cam = mc.gameRenderer.getCamera();
-                net.minecraft.util.math.Vec3d skyColor = mc.world.getSkyColor(cam.getPos(), mc.getTickDelta());
+                Integer fromCurve = BBSRendering.getChromaSkyColorArgb();
+                int argb = fromCurve != null ? fromCurve : BBSSettings.chromaSkyColor.get();
+                Color color = Color.rgba(argb);
 
-                if (skyColor != null)
-                {
-                    r = (float) skyColor.x;
-                    g = (float) skyColor.y;
-                    b = (float) skyColor.z;
-                }
+                r = color.r;
+                g = color.g;
+                b = color.b;
+            }
+            else
+            {
+                r = fogRed;
+                g = fogGreen;
+                b = fogBlue;
             }
 
             framebuffer.setClearColor(r, g, b, 1F);
@@ -584,22 +614,25 @@ public class BBSRendering
         GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, framebuffer.fbo);
         GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, exportFramebuffer.id);
 
-        float r = 0.5F;
-        float g = 0.7F;
-        float b = 1F;
-        MinecraftClient mc = MinecraftClient.getInstance();
+        float r;
+        float g;
+        float b;
 
-        if (mc.world != null)
+        if (BBSSettings.chromaSkyEnabled.get())
         {
-            net.minecraft.client.render.Camera cam = mc.gameRenderer.getCamera();
-            net.minecraft.util.math.Vec3d skyColor = mc.world.getSkyColor(cam.getPos(), mc.getTickDelta());
+            Integer fromCurve = BBSRendering.getChromaSkyColorArgb();
+            int argb = fromCurve != null ? fromCurve : BBSSettings.chromaSkyColor.get();
+            Color color = Color.rgba(argb);
 
-            if (skyColor != null)
-            {
-                r = (float) skyColor.x;
-                g = (float) skyColor.y;
-                b = (float) skyColor.z;
-            }
+            r = color.r;
+            g = color.g;
+            b = color.b;
+        }
+        else
+        {
+            r = fogRed;
+            g = fogGreen;
+            b = fogBlue;
         }
 
         GL11.glClearColor(r, g, b, 1F);

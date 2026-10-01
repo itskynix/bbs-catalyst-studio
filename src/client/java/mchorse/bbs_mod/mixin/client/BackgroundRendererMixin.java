@@ -12,9 +12,21 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import net.minecraft.client.world.ClientWorld;
+import org.spongepowered.asm.mixin.Shadow;
+
 @Mixin(BackgroundRenderer.class)
 public class BackgroundRendererMixin
 {
+    @Shadow private static float red;
+    @Shadow private static float green;
+    @Shadow private static float blue;
+
+    @Inject(method = "render", at = @At("TAIL"))
+    private static void onBackgroundRender(Camera camera, float tickDelta, ClientWorld world, int viewDistance, float skyDarkness, CallbackInfo info)
+    {
+        BBSRendering.setFogColor(red, green, blue);
+    }
     /**
      * Under the orthographic projection the whole frame sits at roughly the
      * same depth, but blocks near the screen edges are laterally further from
