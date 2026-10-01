@@ -144,7 +144,14 @@ public abstract class VideoExportSession
     {
         if (this.isExporting() || this.getRecorder().isRecording())
         {
-            return false;
+            if (this.getRecorder() != null && !this.getRecorder().isRecording() && this.state != State.IDLE)
+            {
+                this.reset();
+            }
+            else
+            {
+                return false;
+            }
         }
 
         this.textureId = textureId;

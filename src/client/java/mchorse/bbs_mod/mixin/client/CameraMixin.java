@@ -33,6 +33,16 @@ public abstract class CameraMixin
 
             this.setPos(position.x, position.y, position.z);
             this.setRotation(yaw, pitch);
+
+            net.minecraft.client.MinecraftClient mc = net.minecraft.client.MinecraftClient.getInstance();
+
+            if (mc.world != null)
+            {
+                int chunkX = net.minecraft.util.math.ChunkSectionPos.getSectionCoord(position.x);
+                int chunkZ = net.minecraft.util.math.ChunkSectionPos.getSectionCoord(position.z);
+
+                mc.world.getChunkManager().setChunkMapCenter(chunkX, chunkZ);
+            }
         }
     }
 }

@@ -1,11 +1,8 @@
 package mchorse.bbs_mod.ui.dashboard.panels.landing;
 
 import mchorse.bbs_mod.BBSMod;
-import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.BBSSettings;
-import mchorse.bbs_mod.graphics.texture.Texture;
 import mchorse.bbs_mod.l10n.keys.IKey;
-import mchorse.bbs_mod.resources.Link;
 import mchorse.bbs_mod.settings.values.core.ValueRecentData.Entry;
 import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.framework.UIContext;
@@ -29,7 +26,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * What an empty tab shows: a menu on the left — new, the list, the folder, the community links —
+ * What an empty tab shows: a menu on the left — new, the list, the folder, the wiki —
  * and on the right what was opened last, so the way back into yesterday's work is one click.
  *
  * <p>Nothing here changes files. Renaming, removing, folders, duplicates all live in the data
@@ -58,21 +55,11 @@ public class UILandingScreen extends UIElement
     private static final int DIMMED = Colors.setA(Colors.WHITE, 0.7F);
     private static final int MUTED = Colors.setA(Colors.WHITE, 0.5F);
 
-    private static final Link[] BANNERS = {
-        Link.assets("textures/banners/bg1.png"),
-        Link.assets("textures/banners/bg2.png"),
-        Link.assets("textures/banners/bg3.png")
-    };
-    private static final double BANNER_HOLD_SECONDS = 6;
-    private static final double BANNER_FADE_SECONDS = 2;
+    private static final String BANNER_BRAND = "\u00a7lBBS Catalyst Studio";
+    private static final String BANNER_VERSION = "C1.0";
 
-    /** One monotonic clock keeps the banner continuous when switching editor panels. */
-    private static long bannerStarted;
-
-    /* Where the community lives; the same in every language, so not in the language files */
-    public static final String DISCORD_LINK = "https://discord.gg/66mVb7Ezjj";
-    public static final String TUTORIALS_LINK = "https://www.youtube.com/watch?v=yY5uE3PVd5Y&list=PLM5Z4FJ0AVdw";
-    public static final String WIKI_LINK = "https://github.com/Wemppy4/bbs-fs/wiki";
+    /* Where the documentation lives; the same in every language, so not in the language files */
+    public static final String WIKI_LINK = "https://github.com/itskynix/bbs-catalyst-studio/wiki";
 
     private final ILandingHost host;
     private final LandingBackdrop backdrop = new LandingBackdrop();
@@ -81,7 +68,6 @@ public class UILandingScreen extends UIElement
     private final UIElement menu;
     private final UILandingRow folder;
     private final UIRecentDataList recent;
-    private final String bannerVersion = getReleaseVersion();
 
     /** Ids the repository reported last; null until it answered, when nothing is filtered out. */
     private Set<String> known;
@@ -97,7 +83,6 @@ public class UILandingScreen extends UIElement
         this.banner = new UIElement();
         this.banner.relative(this.card).xy(0, 0).w(1F).h(BANNER_H);
         this.banner.add(new UIRenderable((context) -> this.renderBanner(context, this.banner.area)));
-        this.banner.add(new UIRenderable((context) -> this.renderBannerCaption(context, this.banner.area)));
 
         UILabel title = UI.label(host.getTitle()).color(DIMMED);
         title.labelAnchor(0, 0.5F);
@@ -111,8 +96,6 @@ public class UILandingScreen extends UIElement
         IKey createLabel = host.getCreateLabel();
         UILandingRow list = new UILandingRow(Icons.MORE, host.getListLabel(), (b) -> host.openDataManager());
         UIElement gap = new UIElement();
-        UILandingRow discord = new UILandingRow(Icons.DISCORD, IKey.constant("Discord"), (b) -> UIUtils.openWebLink(DISCORD_LINK));
-        UILandingRow tutorials = new UILandingRow(Icons.PLAY, UIKeys.SUPPORTERS_TUTORIALS, (b) -> UIUtils.openWebLink(TUTORIALS_LINK));
         UILandingRow wiki = new UILandingRow(Icons.HELP, UIKeys.SUPPORTERS_WIKI, (b) -> UIUtils.openWebLink(WIKI_LINK));
 
         this.folder = new UILandingRow(Icons.FOLDER, UIKeys.PANELS_CONTEXT_OPEN, (b) -> this.openFolder());
@@ -138,8 +121,6 @@ public class UILandingScreen extends UIElement
         rows.add(list);
         rows.add(this.folder);
         rows.add(gap);
-        rows.add(discord);
-        rows.add(tutorials);
         rows.add(wiki);
 
         this.menu = UI.column(0, rows.toArray(new UIElement[0]));
@@ -163,7 +144,7 @@ public class UILandingScreen extends UIElement
         return this.card;
     }
 
-    /** "BBS FS 2.6.0" — the mod's own version, without the Minecraft version the build appends. */
+    /** "BBS CS 2.6.0" — the mod's own version, without the Minecraft version the build appends. */
     public static String getVersion()
     {
         String version = getReleaseVersion();
@@ -308,114 +289,29 @@ public class UILandingScreen extends UIElement
         }
     }
 
-    private void renderBannerCaption(UIContext context, Area area)
+    private void renderBanner(UIContext context, Area area)
     {
         FontRenderer font = context.batcher.getFont();
-        String brand = "\u00a7lBBS CS";
-        String credit = "render by ";
-        String artist = "Kizrum";
-        int brandWidth = font.getWidth(brand);
-        int versionWidth = this.bannerVersion.isEmpty() ? 0 : font.getWidth(this.bannerVersion) + 16;
+        int brandWidth = font.getWidth(BANNER_BRAND);
+        int versionWidth = font.getWidth(BANNER_VERSION) + 16;
         int x = area.x + PADDING;
         int height = font.getHeight() + 14;
         int y = area.ey() - PADDING - height;
         int width = brandWidth + versionWidth + 18;
         int textY = y + 7;
+        int dividerX = x + 9 + brandWidth + 7;
 
-        /* These captions sit on artwork in either theme, so use fixed light ink. */
+        /* The banner is dark in either theme, so the text uses fixed light ink. */
         int ink = 0xfff2f4f8;
         int secondary = 0xffb4bccb;
 
-        context.batcher.gradientVBox(area.x, y - 24, area.ex(), area.ey(), 0x00070910, 0xa0070910);
+        context.batcher.gradientVBox(area.x, area.y, area.ex(), area.ey(), 0xff0b0e16, 0xff141a28);
+        context.batcher.box(area.x, area.ey() - 2, area.ex(), area.ey(), Colors.A100 | BBSSettings.primaryColor.get());
         context.batcher.box(x, y, x + width, y + height, 0xc010141d);
         context.batcher.outline(x, y, x + width, y + height, 0x28f2f4f8);
         context.batcher.box(x, y + 4, x + 2, y + height - 4, Colors.A100 | BBSSettings.primaryColor.get());
-        context.batcher.text(brand, x + 9, textY, ink, false);
-
-        if (!this.bannerVersion.isEmpty())
-        {
-            int dividerX = x + 9 + brandWidth + 7;
-
-            context.batcher.box(dividerX, textY, dividerX + 1, textY + font.getHeight(), 0x40b4bccb);
-            context.batcher.text(this.bannerVersion, dividerX + 8, textY, secondary, false);
-        }
-
-        int creditX = area.ex() - PADDING - font.getWidth(credit) - font.getWidth(artist);
-
-        context.batcher.text(credit, creditX, textY, secondary, false);
-        context.batcher.text(artist, creditX + font.getWidth(credit), textY, ink, false);
-    }
-
-    private void renderBanner(UIContext context, Area area)
-    {
-        /* Warm the texture cache before timing the slideshow, including after a reload. */
-        for (Link link : BANNERS)
-        {
-            BBSModClient.getTextures().getTexture(link);
-        }
-
-        if (bannerStarted == 0)
-        {
-            bannerStarted = System.nanoTime();
-        }
-
-        double duration = BANNER_HOLD_SECONDS + BANNER_FADE_SECONDS;
-        double time = (System.nanoTime() - bannerStarted) / 1_000_000_000.0;
-        double cycle = time % (duration * BANNERS.length);
-        int current = (int) (cycle / duration);
-        float progress = (float) Math.max(0, (cycle % duration - BANNER_HOLD_SECONDS) / BANNER_FADE_SECONDS);
-        float alpha = progress * progress * (3F - 2F * progress);
-
-        /* Keep the lower image opaque: fading both layers would darken the midpoint. */
-        this.renderBannerImage(context, area, BANNERS[current], 1F);
-
-        if (alpha > 0F)
-        {
-            this.renderBannerImage(context, area, BANNERS[(current + 1) % BANNERS.length], alpha);
-        }
-    }
-
-    private void renderBannerImage(UIContext context, Area area, Link bannerLink, float alpha)
-    {
-        Texture texture = BBSModClient.getTextures().getTexture(bannerLink);
-
-        if (texture == null)
-        {
-            return;
-        }
-
-        float texW = texture.width;
-        float texH = texture.height;
-        float areaW = area.w;
-        float areaH = area.h;
-
-        float texAspect = texW / texH;
-        float areaAspect = areaW / areaH;
-
-        float u1;
-        float u2;
-        float v1;
-        float v2;
-
-        if (areaAspect > texAspect)
-        {
-            float cropH = texW / areaAspect;
-
-            u1 = 0;
-            u2 = texW;
-            v1 = (texH - cropH) * 0.5F;
-            v2 = v1 + cropH;
-        }
-        else
-        {
-            float cropW = texH * areaAspect;
-
-            u1 = (texW - cropW) * 0.5F;
-            u2 = u1 + cropW;
-            v1 = 0;
-            v2 = texH;
-        }
-
-        context.batcher.texturedBox(texture, Colors.setA(Colors.WHITE, alpha), area.x, area.y, area.w, area.h, u1, v1, u2, v2, texture.width, texture.height);
+        context.batcher.text(BANNER_BRAND, x + 9, textY, ink, false);
+        context.batcher.box(dividerX, textY, dividerX + 1, textY + font.getHeight(), 0x40b4bccb);
+        context.batcher.text(BANNER_VERSION, dividerX + 8, textY, secondary, false);
     }
 }

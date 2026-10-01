@@ -245,10 +245,11 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         IKey editor = UIKeys.CAMERA_EDITOR_KEYS_EDITOR_TITLE;
         IKey looping = UIKeys.CAMERA_EDITOR_KEYS_LOOPING_TITLE;
         Supplier<Boolean> active = () -> !this.isFlying();
+        Supplier<Boolean> hasFilm = () -> active.get() && this.data != null;
 
         this.keys().register(Keys.PLAUSE, () -> this.preview.plause.clickItself()).active(active).category(editor);
-        this.keys().register(Keys.NEXT_CLIP, () -> this.setCursor(this.data.camera.findNextTick(this.getCursor()))).active(active).category(editor);
-        this.keys().register(Keys.PREV_CLIP, () -> this.setCursor(this.data.camera.findPreviousTick(this.getCursor()))).active(active).category(editor);
+        this.keys().register(Keys.NEXT_CLIP, () -> this.setCursor(this.data.camera.findNextTick(this.getCursor()))).active(hasFilm).category(editor);
+        this.keys().register(Keys.PREV_CLIP, () -> this.setCursor(this.data.camera.findPreviousTick(this.getCursor()))).active(hasFilm).category(editor);
         this.keys().register(Keys.NEXT, () -> this.setCursor(this.getCursor() + 1)).active(active).category(editor);
         this.keys().register(Keys.PREV, () -> this.setCursor(this.getCursor() - 1)).active(active).category(editor);
         this.keys().register(Keys.UNDO, this::undo).category(editor);
@@ -265,7 +266,6 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.keys().register(Keys.TIMELINE_MARK_OUT, () -> this.cameraEditor.clips.setOutPoint()).active(active).category(looping);
         this.keys().register(Keys.TIMELINE_MARK_CLIP, () -> this.cameraEditor.clips.markClip()).active(active).category(looping);
         this.keys().register(Keys.TIMELINE_CLEAR_IN_OUT, () -> this.cameraEditor.clips.clearInOut()).active(active).category(looping);
-        Supplier<Boolean> hasFilm = () -> active.get() && this.data != null;
 
         this.keys().register(Keys.MARKER_ADD, this::addMarkerAtCursor).active(hasFilm).category(editor);
         this.keys().register(Keys.MARKER_NEXT, () -> this.setCursor(this.data.markers.findNextTick(this.getCursor()))).active(hasFilm).category(editor);
@@ -1474,6 +1474,11 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
     @Override
     public void fill(Film data)
     {
+        if (data != null && (data.getId() == null || data.getId().trim().isEmpty()))
+        {
+            data = null;
+        }
+
         this.notifyServer(ActionState.STOP);
         this.captureTimelineScroll();
         super.fill(data);
@@ -1484,6 +1489,11 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
     @Override
     protected void fillData(Film data)
     {
+        if (data != null && (data.getId() == null || data.getId().trim().isEmpty()))
+        {
+            data = null;
+        }
+
         if (this.data != null)
         {
             this.disableContext();
@@ -1505,7 +1515,11 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.layoutLock.setEnabled(data != null);
         this.openCameraEditor.setEnabled(data != null);
         this.openReplayEditor.setEnabled(data != null);
-        this.duplicateFilm.setEnabled(data != null);
+
+        if (this.duplicateFilm != null)
+        {
+            this.duplicateFilm.setEnabled(data != null);
+        }
 
         this.actionEditor.setClips(null);
         this.runner.setWork(data == null ? null : data.camera);
@@ -1516,9 +1530,9 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.fillData();
         this.controller.createEntities();
 
-        if (this.newFilm)
+        if (this.newFilm && data != null && data.camera != null && !data.camera.get().isEmpty())
         {
-            Clip main = this.data.camera.get(0);
+            Clip main = data.camera.get(0);
 
             this.cameraEditor.clips.setSelected(main);
             this.cameraEditor.pickClip(main);
@@ -1639,7 +1653,10 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
             max = clips.loopMax;
         }
 
-        max = Math.min(max, this.data.camera.calculateDuration());
+        if (this.data != null && this.data.camera != null)
+        {
+            max = Math.min(max, this.data.camera.calculateDuration());
+        }
 
         return new Vector2i(min, max);
     }

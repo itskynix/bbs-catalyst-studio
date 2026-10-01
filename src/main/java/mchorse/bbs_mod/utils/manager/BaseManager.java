@@ -69,7 +69,7 @@ public abstract class BaseManager <T extends ValueGroup> extends FolderManager<T
         {
             File file = this.getFile(id);
 
-            if (file == null)
+            if (file == null || !file.exists())
             {
                 return null;
             }
@@ -82,6 +82,10 @@ public abstract class BaseManager <T extends ValueGroup> extends FolderManager<T
             }
 
             return this.create(id, mapType);
+        }
+        catch (java.io.FileNotFoundException e)
+        {
+            return null;
         }
         catch (Exception e)
         {

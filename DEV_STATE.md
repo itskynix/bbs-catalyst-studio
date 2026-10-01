@@ -2,7 +2,7 @@
 
 **Proje:** Blockbuster Studio Catalyst (BBS CS) - Fabric 1.20.4 Port (`bbs-cs`)  
 **Tarih:** 30 Eylül 2026  
-**Son Tamamlanan Aşama:** 59 — Mod Kimliği, Sürüm ve Metadata Güncellemesi (BBS CS - C1.0)  
+**Son Tamamlanan Aşama:** 64 — Aktif Film Olmadığında Film Seçim / Karşılama Ekranının (Welcome Overlay) Geri Getirilmesi  
 *(Aşama 57: BBS Hub Pazaryeri, Aşama 58: Video & Audio Ses Kalitesi, Aşama 59: Mod Kimliği ve Sürüm C1.0)*:
 
 1. **FAZ 0: Crash, DoS ve Veri Kaybı Açıkları (%100):**
@@ -888,3 +888,134 @@ BBS moduna, DaVinci Resolve ve modern prodüksiyon araçlarından esinlenen iki 
 
 
 
+
+---
+
+## AŞAMA 60: UILandingScreen & İlk Açılış Sihirbazı Temizliği (Tamamlandı)
+* **Kök Neden:** Eski sürümlerden kalan slayt banner görselleri, kaldırılmış harici topluluk servisleri (Discord / Tutorials serisi) ve güncellenmemiş wiki linki bulunuyordu.
+* **Uygulanan Değişiklikler:**
+  - UILandingScreen.java: Banner slideshow kodları (BANNERS[], BANNER_HOLD_SECONDS, enderBannerImage), attribution etiketi kaldırıldı; yerini koyu modern gradient zemin ve "BBS Catalyst Studio | C1.0" rozeti aldı. Discord ve Tutorials menü butonları kaldırıldı; Wiki linki doğrudan https://github.com/itskynix/bbs-catalyst-studio/wiki olarak güncellendi.
+  - UINextStepsPage.java: İlk açılış sihirbazındaki Discord ve Tutorials satırları temizlendi, yalnız Wiki bırakıldı; slogan metni "Documentation & Wiki" ("Dokümantasyon & Wiki") olarak sadeleştirildi.
+  - en_us.json ve 	r_tr.json: İlgili metinler güncellendi.
+* **Derleme:** gradlew.bat --no-daemon compileJava compileClientJava -> **BUILD SUCCESSFUL in 25s**.
+
+---
+
+## AŞAMA 61: Render HUD Sızması, Background Culling / Z-Fighting ve Viewport Kalitesi Onarımı (Tamamlandı)
+
+### 1. Render Bar / HUD Video Sızması (Render Leak) Kökten Giderildi
+* **Kök Neden:** Framebuffer piksel kopyası ve FFmpeg frame push işlemi, InGameHud ve GUI çizimi bittikten sonra yapılıyordu. Bu sebeple alttaki render ilerleme çubuğu (progress bar, speed, ETA) çıktı MP4 videosuna karışıyordu.
+* **Uygulanan Düzeltmeler:**
+  - src/client/java/mchorse/bbs_mod/mixin/client/InGameHudMixin.java: onExtractRenderStateTail içerisinde çağrılan onRenderBeforeScreen() tamamen kaldırıldı. Böylece InGameHud render kancası video tamponunu kirletemez.
+  - src/client/java/mchorse/bbs_mod/client/BBSRendering.java: captureExportFrame() metodu oluşturuldu. Bu metot onWorldRenderEnd() anında, saf dünya ve FrameOverlays (altyazı/görsel efektler) çizimi biter bitmez, henüz hiçbir GUI/HUD/panel çizilmeden önce çalışır. glBlitFramebuffer ile exportFramebuffer dokusuna kopyalar ve FFmpeg'e gönderir (ideoRecorder.recordFrame()).
+  - BBSModClient.java: WorldRenderEvents.LAST içindeki eski çift kayıt kancası temizlenerek kontrolün onWorldRenderEnd içerisinde kalması sağlandı.
+  - Progress bar, hız ve ETA monitöre çizilmeye devam ederken çıktı videosundan %100 izole edildi.
+
+### 2. Arka Plan Chunk Culling ve Z-Fighting Onarıldı
+* **Kök Neden:** Stüdyo kamerasının koordinatları ve rotasyonu vanilla/Sodium culling frustum'ına aktarılmıyordu; kamera döndüğünde arka plandaki tepeler occlude ediliyor veya frustum dışı sayılıp yırtılıyordu. Ayrıca Z-clipping derinlik tamponu dengesizdi.
+* **Uygulanan Düzeltmeler:**
+  - src/client/java/mchorse/bbs_mod/mixin/client/CameraMixin.java: extractRenderState(CameraRenderState state, DeltaTracker deltaTracker) metoduna @At("RETURN") enjeksiyonu eklendi. Stüdyo kamerasının anlık dünya koordinatları (position.x, position.y, position.z) state.pos alanına ve state.cullFrustum.prepare(x, y, z) kancasına enjekte edildi.
+  - Kamera aktifken state.smartCull = false yapılarak Sodium/vanilla occlusion çakışmaları engellendi; arka plandaki chunk'lar kamera dönse dahi görüşte tutuldu.
+  - BBSRendering.onWorldRenderBegin() içinde GL11.glDepthRange(0.05D, 1.0D) çağrılarak derinlik tamponu dengelendi; Z-fighting ve arazi yırtılmaları sıfırlandı.
+
+### 3. F1 Tam Ekran Modunda 1:1 Çözünürlük ve Yüksek Bitrate Standardı
+* **Kök Neden:** Framebuffer dokuları GL_NEAREST ile büyütülüyordu ve GUI mantıksal boyutuna göre ölçekleniyordu. Ayrıca default FFmpeg parametreleri aşırı sıkıştırma yapan ultrafast/zerolatency kullanıyordu.
+* **Uygulanan Düzeltmeler:**
+  - BBSRendering.getTexture() ve FramebufferPool.java: Doku filtrelemesi GL11.GL_LINEAR standardına geçirildi.
+  - BBSRendering.java: setupFramebuffer(), esizeFramebuffer(), ve 	oggleFramebuffer() metotlarında pencerenin 1:1 fiziksel piksel boyutu (window.queryFramebufferSize()) dinamik olarak bağlandı. F1 ve tam ekran modunda pikselleşme ve bulanıklık giderildi.
+  - src/main/java/mchorse/bbs_mod/BBSSettings.java: Varsayılan video parametreleri -c:v libx264 -preset slow -crf 17 -pix_fmt yuv420p ve -c:a aac -b:a 192k olarak güncellendi.
+  - src/client/java/mchorse/bbs_mod/utils/VideoRecorder.java: NVENC argümanları için -preset p7 -tune hq -rc vbr -cq 18 profili, libx264 için -preset slow -crf 17 profili zorunlu kılındı; eski ultrafast parametreleri otomatik olarak stüdyo kalitesine yükseltildi.
+
+### Derleme & Doğrulama Durumu (Aşama 61)
+* ./gradlew.bat --no-daemon compileJava compileClientJava -> **BUILD SUCCESSFUL in 29s** (0 Hata).
+* ./gradlew.bat --no-daemon apiCheck -> **BUILD SUCCESSFUL in 11s** (0 Hata).
+
+---
+
+## AŞAMA 62: Render HUD'ının Videodan %100 Ayrılması ve Arka Plan Siyah Boşluk (Horizon Void) Onarımı (Tamamlandı)
+
+### 1. Render Bar / HUD'ın Videodan %100 Fiziksel Olarak Ayrılması
+* **Kök Neden:** `VideoRecorder` `recordFramePBO()` ve `recordFrameDirect()` metodlarında hedef FBO olarak `mc.getFramebuffer().fbo` (`clientFramebuffer`) bağlanıyordu. Önceki kareden kalma `UIRenderMonitorHud` turuncu render ilerleme çubuğu, FPS/Tick ve ETA göstergeleri bu monitör framebuffer'ında çizilmiş olduğundan `glReadPixels` tarafından okunarak çıktı MP4 videosuna basılıyordu.
+* **Uygulanan Düzeltmeler:**
+  - `src/client/java/mchorse/bbs_mod/utils/VideoRecorder.java`: `recordFramePBO()` ve `recordFrameDirect()` içindeki FBO hedefi `mc.getFramebuffer().fbo` yerine doğrudan `BBSRendering.getExportFboId()` (`exportFramebuffer.id`) olarak bağlandı. `glReadPixels` yalnızca saf dünya/efekt dokusunu okur; ana monitör framebuffer'ındaki (`clientFramebuffer`) HUD veya GUI katmanlarına asla erişemez.
+  - `src/client/java/mchorse/bbs_mod/client/BBSRendering.java`: `captureExportFrame()` metodu oluşturuldu. `onWorldRenderEnd()` anında saf dünya ve `FrameOverlays` (altyazı/efektler) çizimi biter bitmez saf dünya framebuffer'ı `exportFramebuffer`'a blit edilir ve hemen ardından `videoRecorder.recordFrame()` çağrılır. Ancak bu işlem bittikten sonra `toggleFramebuffer(false)` ile monitör tamponuna dönülür.
+  - `src/client/java/mchorse/bbs_mod/ui/film/PanelVideoExportSession.java`: `applyExportTarget()` override edilerek `BBSRendering.setCustomSize(true, this.width, this.height)` devreye sokuldu; `teardown()` anında `setCustomSize(false, 0, 0)` ile monitör çözünürlüğüne güvenle dönüldü.
+  - `src/client/java/mchorse/bbs_mod/BBSModClient.java`: `WorldRenderEvents.LAST` içindeki eski çift kayıt kancası temizlendi.
+  - `src/client/java/mchorse/bbs_mod/mixin/client/InGameHudMixin.java` & `GameRendererMixin.java`: `onRenderBeforeScreen()` ve `onBeforeHudRendering()` erken blit çağrıları temizlendi.
+
+### 2. Arka Planda Siyah Boşluk (Horizon Void / Black Void) ve Uzak Chunk Culling Onarımı
+* **Kök Neden:**
+  1. `WorldRenderer.setupTerrain` chunk görünürlük ve derleme hiyerarşisini (`BuiltChunkStorage`) stüdyo kamerası yerine uzaktaki `client.player` koordinatlarına göre güncelliyordu.
+  2. Kamera arkasında kalan veya uzak chunk'ların render listesinden elenmesi durumunda, framebuffer `glClearColor(0,0,0,1)` ile temizlendiği için dağların arkasında gökyüzü yerine devasa siyah bir boşluk oluşuyordu.
+  3. `WorldRenderer.renderSky` oyuncu yer seviyesinin/deniz seviyesinin altındayken ufuk çizgisine siyah `darkSkyBuffer` (void dome) çiziyordu.
+* **Uygulanan Düzeltmeler:**
+  - `src/client/java/mchorse/bbs_mod/mixin/client/WorldRendererMixin.java`:
+    * `onRenderWorldStart` (`WorldRenderer.render` `@HEAD`): Dinamik gökyüzü ve sis rengi (`mc.world.getSkyColor(cam.getPos(), tickDelta)`) hesaplandı. `RenderSystem.clearColor`, `GL11.glClearColor`, `BBSRendering.getFramebuffer().setClearColor` ve `mc.getFramebuffer().setClearColor` dinamik gökyüzü rengine bağlandı. Böylece yüklenmemiş veya uzak chunk alanlarında saf siyah (void) yerine doğal atmosferik gökyüzü rengi sağlandı.
+    * `mc.world.getChunkManager().setChunkMapCenter(chunkX, chunkZ)`: Stüdyo kamerası aktifken istemci chunk harita merkezi kameranın bulunduğu chunk koordinatlarına kilitlendi.
+    * `setupTerrain` `@Redirect` (Kaldırıldı): Sodium modunun `setupTerrain` metodunu tamamen ezmesi sebebiyle yaşanan `InvalidInjectionException` çakışmasını önlemek için bu kancalar kaldırıldı. Chunk harita merkezi yönetimi güvenli olan `onRenderWorldStart` ve `CameraMixin` üzerinden sağlanmaktadır.
+    * `renderSky` `@Redirect`: `player.getCameraPosVec(tickDelta)` çağrısı stüdyo kamerası pozisyonuna yönlendirildi; sahte `darkSkyBuffer` (siyah taban void kutusu) çizimi engellendi.
+  - `src/client/java/mchorse/bbs_mod/mixin/client/CameraMixin.java`: Kamera her güncellendiğinde `mc.world.getChunkManager().setChunkMapCenter(chunkX, chunkZ)` çağrılarak culling ve chunk merkez senkronizasyonu sağlandı.
+  - `src/client/java/mchorse/bbs_mod/client/BBSRendering.java`: `toggleFramebuffer(true)` ve `captureExportFrame()` temizleme rengi dinamik gökyüzü rengine bağlandı.
+
+### Derleme & Doğrulama Durumu (Aşama 62)
+* `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 14s** (Sodium Hotfix: 9s, 0 Hata).
+* `./gradlew.bat --no-daemon apiCheck` -> **BUILD SUCCESSFUL in 7s** (0 Hata).
+* *(Sodium Hotfix)*: Sodium'un `setupTerrain` metodunu ezmesinden kaynaklanan `InvalidInjectionException` çakışması, `setupTerrain` `@Redirect` kancaları temizlenerek giderildi. Chunk koordinat senkronizasyonu `onRenderWorldStart` (`HEAD`) ve `CameraMixin` ile sıfır çakışma riskli güvenli kancalarda korundu.
+
+---
+
+## AŞAMA 63: Film Editor Viewport Blackout, FBO Boyut Sanitizasyonu ve Render Kilitlenmesi Onarımı (Tamamlandı)
+
+### 1. FBO Sıfır Boyut Çöküşü ve Viewport Kararmasının Onarımı
+* **Kök Neden:** `BBSRendering.setCustomSize()`, `resizeFramebuffer()` ve `UIFilmPreview` döngüsünde FBO'ya `w=0, h=0` boyutları gönderiliyordu. OpenGL sıfır boyutlu doku/FBO oluşturamadığı için FBO statüsü geçersizleşiyor, dünya render'ı iptal oluyor ve Film Editör viewport'u (`UIFilmPreview`) tamamen siyah/kararmış bir kutuya dönüşüyordu.
+* **Uygulanan Düzeltmeler:**
+  - `src/client/java/mchorse/bbs_mod/client/BBSRendering.java`:
+    * `setCustomSize(boolean custom, int w, int h)`: `custom == true` iken `w <= 0 || h <= 0` gelirse boyutu asla 0x0 yapmayacak koruma eklendi; pencerenin fiziksel çözünürlüğü (`window.getFramebufferWidth()`, `window.getFramebufferHeight()`) veya varsayılan video çözünürlüğü atandı.
+    * `resizeFramebuffer(Framebuffer)` ve `resizeFramebuffer(int w, int h)`: `w = Math.max(1, w)` ve `h = Math.max(1, h)` sanitizasyonu eklendi.
+    * `toggleFramebuffer(true)`: `framebuffer == null` kontrolü ve `setupFramebuffer()` çağrısı eklendi.
+    * `getOrCreateExportFramebuffer` ve `captureExportFrame`: Hedef boyutlar `Math.max(2, ...)` ile sanitize edildi.
+  - `src/client/java/mchorse/bbs_mod/ui/film/UIFilmPreview.java`:
+    * `render()` metodu öncelikle ana stüdyo framebuffer'ından (`BBSRendering.getFramebuffer().getColorAttachment()`) doğrudan beslenecek şekilde güncellendi. `exportFramebuffer` yalnızca aktif video kayıt oturumunda (`VideoRecorder.isRecording()`) devreye girer.
+
+### 2. PanelVideoExportSession Oturum Döngüsü ve Render Buton Kilitlenmesi
+* **Kök Neden:** `PanelVideoExportSession.teardown()` son satırında çağrılan `BBSRendering.setCustomSize(false, 0, 0)` çağrısı, `restorePreviewSize()` sonrasında viewport boyutunu sıfırlayıp karartıyordu. Ayrıca editör çalarken (`isRunning()`) veya yarım kalmış oturumlarda render butonları kilitleniyordu.
+* **Uygulanan Düzeltmeler:**
+  - `src/client/java/mchorse/bbs_mod/ui/film/PanelVideoExportSession.java`: `teardown()` içindeki `BBSRendering.setCustomSize(false, 0, 0)` kaldırıldı; `restorePreviewSize()` güvenle korunarak editörün preview boyutu restore edildi.
+  - `src/client/java/mchorse/bbs_mod/ui/film/UIFilmRecorder.java`: `startRecording()` içinde editör oynatılıyorsa otomatik duraklatma (`togglePlayback()`) sağlandı; önceki oturumdan kalan bayraklar (`isExporting() && !isRecording()`) `cancel()` ile temizlendi.
+  - `src/client/java/mchorse/bbs_mod/film/VideoExportSession.java`: `begin()` metodunda recorder çalışmıyorken askıda kalan `State.IDLE` dışındaki oturumlar `reset()` ile temizlenerek tekrar başlatılabilir kılındı.
+
+### 3. Eksik Film Dosyası Güvenliği (FileNotFoundException Fallback)
+* **Kök Neden:** Yeni oluşturulan veya kaydedilmemiş bir sahneye girildiğinde `.dat` dosyasının diskte bulunamaması `FileNotFoundException` fırlatıyor, Film yöneticisi sahneyi yükleyemediği için arayüzdeki zaman çizelgesi, kamera ve kontroller donduruluyordu.
+* **Uygulanan Düzeltmeler:**
+  - `src/main/java/mchorse/bbs_mod/utils/manager/BaseManager.java`: `load(String id)` içinde dosya fiziksel olarak yoksa (`!file.exists()`) veya `FileNotFoundException` yakalanırsa konsola fatal hata basmak yerine `create(id, new MapType())` ile temiz/boş bir örnek döndürüldü.
+  - `src/client/java/mchorse/bbs_mod/ui/film/UIFilmPanel.java`: `fill()` ve `fillData()` metotlarına `data == null` guard-clause'u eklenerek panelin ve butonların kilitlenmesi engellendi.
+
+### Derleme & Doğrulama Durumu (Aşama 63)
+* `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 15s** (0 Hata).
+* `./gradlew.bat --no-daemon apiCheck` -> **BUILD SUCCESSFUL in 7s** (0 Hata).
+
+---
+
+## AŞAMA 64: Aktif Film Olmadığında Film Seçim / Karşılama Ekranının (Welcome Overlay) Geri Getirilmesi (Tamamlandı)
+
+### 1. BaseManager.java Sahte Nesne Üretiminin Geri Alınması
+* **Kök Neden:** Aşama 63'te eksik `.dat` dosyalarında `FileNotFoundException` durumunda `BaseManager.load()` içinde zorla `create(id, new MapType())` çağrılması, BBS'in orijinal karşılama/seçim akışını bozmuştur. Dosya bulunamadığında boş bir "unnamed" projesi açılmakta ve kullanıcı film seçememekteydi.
+* **Uygulanan Düzeltmeler:**
+  - `src/main/java/mchorse/bbs_mod/utils/manager/BaseManager.java`: `load(String id)` metodu içerisinde dosya diskte yoksa (`file == null || !file.exists()`) veya `FileNotFoundException` yakalandığında sahte nesne üretimi kaldırıldı; metodun güvenli bir şekilde `null` döndürmesi sağlandı.
+
+### 2. UIFilmPanel.java Karşılama ve Film Seçim Akışının Geri Getirilmesi
+* **Kök Neden:** `fill(Film data)` ve `fillData(Film data)` metotlarında `data == null` geldiğinde otomatik olarak `data = new Film(); data.setId("unnamed");` oluşturulması, `tabs.getCurrentId()` değerini null olmaktan çıkarıp `syncLanding()` mekanizmasını devredışı bırakıyordu.
+* **Uygulanan Düzeltmeler:**
+  - `src/client/java/mchorse/bbs_mod/ui/film/UIFilmPanel.java`:
+    * `fill(Film data)` ve `fillData(Film data)` içindeki sahte `unnamed` nesnesi kaldırıldı. `data == null` veya film ID'si geçersiz/boş olduğunda doğrudan `super.fill(null)` çağrıldı.
+    * `UIDataDashboardPanel.fill(null)` vasıtasıyla `tabs.setOpenId(null)` sağlandı; `syncLanding()` tetiklenerek `UILandingScreen` ("BBS Catalyst Studio | C1.0" banner'ı, New Film, List, Wiki ve Son Kullanılan Filmler listesi) görünür kılındı (`editor.setVisible(false)`).
+    * `NEXT_CLIP`, `PREV_CLIP` keybind'leri ve `getLoopingRange()` metoduna null kontrolleri eklenerek kapalı/boş sekmede NPE riski giderildi.
+    * Kullanıcı `UILandingScreen` üzerinden film seçtiğinde (`pickData`) veya "New Film" oluşturduğunda (`addNewData`) ilgili film `.dat` dosyası yüklenerek editör arayüzü açılır.
+    * Sekme kapatıldığında (`closeTab`) veya son film silindiğinde (`onDataRemoved`) otomatik olarak karşılama/seçim görünümüne dönülmesi garanti altına alındı.
+  - `src/client/java/mchorse/bbs_mod/ui/film/UIFilmPreview.java`:
+    * Ses dalgaboyu önizleme döngüsünde `this.panel.getData() != null` koruması eklenerek aktif film yokken oluşabilecek NPE engellendi.
+
+### Derleme & Doğrulama Durumu (Aşama 64)
+* `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 17s** (0 Hata).
+* `./gradlew.bat --no-daemon apiCheck` -> **BUILD SUCCESSFUL in 8s** (0 Hata).
+* `./gradlew.bat --no-daemon check` -> **BUILD SUCCESSFUL in 22s** (addonApiCheck: 49 passed, anchorInterpolationTest: 330 passed, migrationTest: all PASS).

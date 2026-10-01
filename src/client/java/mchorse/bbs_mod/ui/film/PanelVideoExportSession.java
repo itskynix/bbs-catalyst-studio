@@ -201,6 +201,12 @@ public class PanelVideoExportSession extends VideoExportSession
     }
 
     @Override
+    protected void applyExportTarget()
+    {
+        BBSRendering.setCustomSize(true, this.width, this.height);
+    }
+
+    @Override
     protected void onWarmupStarted()
     {
         System.out.println("[PanelVideoExportSession] onWarmupStarted: pausing editor controller");

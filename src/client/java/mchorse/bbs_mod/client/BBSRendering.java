@@ -186,6 +186,23 @@ public class BBSRendering
 
     public static void setCustomSize(boolean customSize, int w, int h)
     {
+        if (customSize && (w <= 0 || h <= 0))
+        {
+            MinecraftClient mc = MinecraftClient.getInstance();
+            Window window = mc != null ? mc.getWindow() : null;
+
+            if (window != null && window.getFramebufferWidth() > 0 && window.getFramebufferHeight() > 0)
+            {
+                w = window.getFramebufferWidth();
+                h = window.getFramebufferHeight();
+            }
+            else
+            {
+                w = Math.max(2, BBSSettings.videoWidth.get());
+                h = Math.max(2, BBSSettings.videoHeight.get());
+            }
+        }
+
         int newWidth = !customSize ? 0 : w;
         int newHeight = !customSize ? 0 : h;
 
@@ -291,8 +308,26 @@ public class BBSRendering
         }
 
         MinecraftClient mc = MinecraftClient.getInstance();
-        int w = mc.getWindow().getFramebufferWidth();
-        int h = mc.getWindow().getFramebufferHeight();
+        int w = Math.max(1, mc.getWindow().getFramebufferWidth());
+        int h = Math.max(1, mc.getWindow().getFramebufferHeight());
+
+        if (framebuffer.textureWidth == w && framebuffer.textureHeight == h)
+        {
+            return;
+        }
+
+        framebuffer.resize(w, h, MinecraftClient.IS_SYSTEM_MAC);
+    }
+
+    public static void resizeFramebuffer(int w, int h)
+    {
+        if (framebuffer == null)
+        {
+            return;
+        }
+
+        w = Math.max(1, w);
+        h = Math.max(1, h);
 
         if (framebuffer.textureWidth == w && framebuffer.textureHeight == h)
         {
@@ -316,10 +351,15 @@ public class BBSRendering
 
         if (toggleFramebuffer)
         {
-            int w = mc.getWindow().getFramebufferWidth();
-            int h = mc.getWindow().getFramebufferHeight();
+            int w = Math.max(1, mc.getWindow().getFramebufferWidth());
+            int h = Math.max(1, mc.getWindow().getFramebufferHeight());
 
             resizeExtraFramebuffers();
+
+            if (framebuffer == null)
+            {
+                setupFramebuffer();
+            }
 
             if (framebuffer.textureWidth != w || framebuffer.textureHeight != h)
             {
@@ -331,11 +371,26 @@ public class BBSRendering
             reassignFramebuffer(framebuffer);
 
             framebuffer.beginWrite(true);
-            float[] fogColor = RenderSystem.getShaderFogColor();
-            if (fogColor != null && fogColor.length >= 3 && (fogColor[0] > 0 || fogColor[1] > 0 || fogColor[2] > 0))
+
+            float r = 0.5F;
+            float g = 0.7F;
+            float b = 1F;
+
+            if (mc.world != null)
             {
-                framebuffer.setClearColor(fogColor[0], fogColor[1], fogColor[2], 1.0F);
+                net.minecraft.client.render.Camera cam = mc.gameRenderer.getCamera();
+                net.minecraft.util.math.Vec3d skyColor = mc.world.getSkyColor(cam.getPos(), mc.getTickDelta());
+
+                if (skyColor != null)
+                {
+                    r = (float) skyColor.x;
+                    g = (float) skyColor.y;
+                    b = (float) skyColor.z;
+                }
             }
+
+            framebuffer.setClearColor(r, g, b, 1F);
+            RenderSystem.clearColor(r, g, b, 1F);
             framebuffer.clear(MinecraftClient.IS_SYSTEM_MAC);
         }
         else
@@ -429,24 +484,32 @@ public class BBSRendering
             FrameOverlays.render(batcher.getContext().getMatrices(), batcher, controller.getContext());
         }
 
-        if (!customSize)
+        if (customSize)
         {
-            renderingWorld = false;
+            UIBaseMenu currentMenu = UIScreen.getCurrentMenu();
 
-            return;
-        }
-
-        UIBaseMenu currentMenu = UIScreen.getCurrentMenu();
-
-        if (currentMenu instanceof UIDashboard dashboard)
-        {
-            if (dashboard.getPanels().panel instanceof UIFilmPanel panel)
+            if (currentMenu instanceof UIDashboard dashboard)
             {
-                FrameOverlays.render(currentMenu.context.batcher.getContext().getMatrices(), currentMenu.context.batcher, panel.getRunner().getContext());
+                if (dashboard.getPanels().panel instanceof UIFilmPanel panel)
+                {
+                    FrameOverlays.render(currentMenu.context.batcher.getContext().getMatrices(), currentMenu.context.batcher, panel.getRunner().getContext());
+                }
             }
         }
 
+        if (BBSModClient.getVideoRecorder().isRecording() && canRender)
+        {
+            BBSModClient.getMinecraftSoundCapture().captureFrame();
+            captureExportFrame();
+            BBSModClient.getVideoRecorder().recordFrame();
+        }
+
         renderingWorld = false;
+
+        if (customSize)
+        {
+            toggleFramebuffer(false);
+        }
     }
 
     public static int getExportFboId()
@@ -479,6 +542,9 @@ public class BBSRendering
 
     public static mchorse.bbs_mod.graphics.Framebuffer getOrCreateExportFramebuffer(int targetWidth, int targetHeight)
     {
+        targetWidth = Math.max(2, targetWidth);
+        targetHeight = Math.max(2, targetHeight);
+
         Texture texture = getTexture();
 
         if (exportFramebuffer == null || texture.width != targetWidth || texture.height != targetHeight)
@@ -500,38 +566,43 @@ public class BBSRendering
         return exportFramebuffer;
     }
 
-    public static void onRenderBeforeScreen()
+    public static void captureExportFrame()
     {
-        int targetWidth = getVideoWidth();
-        int targetHeight = getVideoHeight();
+        int targetWidth = Math.max(2, getVideoWidth());
+        int targetHeight = Math.max(2, getVideoHeight());
 
         getOrCreateExportFramebuffer(targetWidth, targetHeight);
 
-        if (framebuffer == null)
+        if (framebuffer == null || exportFramebuffer == null)
         {
             return;
         }
 
-        /* The export framebuffer is rendered at the display's native resolution, which on
-         * HiDPI screens (such as Retina) is larger than the requested video size. Downscale
-         * it into the export texture with a linear blit so the recording stays at the
-         * resolution the user asked for (and gains free supersampling). A plain
-         * glCopyTexSubImage2D can't rescale, so it would copy the full-size frame and
-         * overflow the video recorder's frame buffer (macOS crashes in storeVecColor_BGR_UB). */
         int prevRead = GL30.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
         int prevDraw = GL30.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
 
         GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, framebuffer.fbo);
         GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, exportFramebuffer.id);
-        float[] fogColor = RenderSystem.getShaderFogColor();
-        if (fogColor != null && fogColor.length >= 3 && (fogColor[0] > 0 || fogColor[1] > 0 || fogColor[2] > 0))
+
+        float r = 0.5F;
+        float g = 0.7F;
+        float b = 1F;
+        MinecraftClient mc = MinecraftClient.getInstance();
+
+        if (mc.world != null)
         {
-            GL11.glClearColor(fogColor[0], fogColor[1], fogColor[2], 1.0f);
+            net.minecraft.client.render.Camera cam = mc.gameRenderer.getCamera();
+            net.minecraft.util.math.Vec3d skyColor = mc.world.getSkyColor(cam.getPos(), mc.getTickDelta());
+
+            if (skyColor != null)
+            {
+                r = (float) skyColor.x;
+                g = (float) skyColor.y;
+                b = (float) skyColor.z;
+            }
         }
-        else
-        {
-            GL11.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        }
+
+        GL11.glClearColor(r, g, b, 1F);
         GL11.glClear(GL11.GL_COLOR_BUFFER_BIT);
         GL30.glBlitFramebuffer(
             0, 0, framebuffer.textureWidth, framebuffer.textureHeight,
@@ -541,6 +612,11 @@ public class BBSRendering
 
         GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, prevRead);
         GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, prevDraw);
+    }
+
+    public static void onRenderBeforeScreen()
+    {
+        captureExportFrame();
 
         renderRecordingOverlay();
 

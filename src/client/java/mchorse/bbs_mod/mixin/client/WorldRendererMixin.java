@@ -1,6 +1,7 @@
 package mchorse.bbs_mod.mixin.client;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.client.BBSRendering;
 import mchorse.bbs_mod.forms.FormTranslucentQueue;
@@ -8,19 +9,26 @@ import mchorse.bbs_mod.forms.renderers.utils.FramebufferDebug;
 import mchorse.bbs_mod.utils.colors.Color;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gl.Framebuffer;
+import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.render.BackgroundRenderer;
 import net.minecraft.client.render.Camera;
+import net.minecraft.client.render.GameRenderer;
+import net.minecraft.client.render.LightmapTextureManager;
 import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.render.WorldRenderer;
 import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.client.world.ClientChunkManager;
+import net.minecraft.util.math.ChunkSectionPos;
+import net.minecraft.util.math.Vec3d;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Constant;
+import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyConstant;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(WorldRenderer.class)
@@ -34,10 +42,47 @@ public class WorldRendererMixin
      * blending sits under water/glass the way vanilla entities do. The RETURN hook is a safety
      * net for frames where the translucent layer never draws (e.g. a replaced terrain pipeline). */
     @Inject(method = "render", at = @At("HEAD"))
-    public void onRenderWorldStart(CallbackInfo info)
+    public void onRenderWorldStart(MatrixStack matrices, float tickDelta, long limitTime, boolean renderBlockOutline, Camera camera, GameRenderer gameRenderer, LightmapTextureManager lightmapTextureManager, Matrix4f projectionMatrix, CallbackInfo info)
     {
         FormTranslucentQueue.begin();
         FramebufferDebug.newFrame();
+
+        MinecraftClient mc = MinecraftClient.getInstance();
+
+        if (mc.world != null)
+        {
+            Camera cam = camera != null ? camera : mc.gameRenderer.getCamera();
+
+            if (BBSModClient.getCameraController().getCurrent() != null)
+            {
+                int chunkX = ChunkSectionPos.getSectionCoord(cam.getPos().x);
+                int chunkZ = ChunkSectionPos.getSectionCoord(cam.getPos().z);
+
+                mc.world.getChunkManager().setChunkMapCenter(chunkX, chunkZ);
+            }
+
+            Vec3d skyColor = mc.world.getSkyColor(cam.getPos(), tickDelta);
+
+            if (skyColor != null)
+            {
+                float r = (float) skyColor.x;
+                float g = (float) skyColor.y;
+                float b = (float) skyColor.z;
+
+                RenderSystem.clearColor(r, g, b, 1F);
+                GL11.glClearColor(r, g, b, 1F);
+
+                if (BBSRendering.getFramebuffer() != null)
+                {
+                    BBSRendering.getFramebuffer().setClearColor(r, g, b, 1F);
+                }
+
+                if (mc.getFramebuffer() != null)
+                {
+                    mc.getFramebuffer().setClearColor(r, g, b, 1F);
+                }
+            }
+        }
     }
 
     @Inject(method = "render", at = @At("RETURN"))
@@ -123,5 +168,21 @@ public class WorldRendererMixin
         }
 
         BBSRendering.resizeExtraFramebuffers();
+    }
+
+    @Redirect(method = "renderSky(Lnet/minecraft/client/util/math/MatrixStack;Lorg/joml/Matrix4f;FLnet/minecraft/client/render/Camera;ZLjava/lang/Runnable;)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/network/ClientPlayerEntity;getCameraPosVec(F)Lnet/minecraft/util/math/Vec3d;"))
+    private Vec3d redirectRenderSkyCameraPos(ClientPlayerEntity player, float tickDelta)
+    {
+        if (BBSModClient.getCameraController().getCurrent() != null)
+        {
+            MinecraftClient mc = MinecraftClient.getInstance();
+
+            if (mc.gameRenderer != null && mc.gameRenderer.getCamera() != null)
+            {
+                return mc.gameRenderer.getCamera().getPos();
+            }
+        }
+
+        return player.getCameraPosVec(tickDelta);
     }
 }

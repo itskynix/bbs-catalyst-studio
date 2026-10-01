@@ -787,9 +787,6 @@ public class BBSModClient implements ClientModInitializer
                 RenderSystem.depthMask(true);
                 GL11.glEnable(GL11.GL_DEPTH_TEST);
                 GL11.glDepthMask(true);
-                minecraftSoundCapture.captureFrame();
-                BBSRendering.onRenderBeforeScreen();
-                videoRecorder.recordFrame();
             }
         });
 

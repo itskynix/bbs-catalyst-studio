@@ -89,9 +89,19 @@ public class UIFilmRecorder extends UIElement
 
     public void startRecording(int duration, int id, int w, int h, mchorse.bbs_mod.camera.export.VideoExportProfile profile, String movieName)
     {
-        if (this.editor.isRunning() || duration <= 0)
+        if (this.editor.isRunning())
+        {
+            this.editor.togglePlayback();
+        }
+
+        if (duration <= 0)
         {
             return;
+        }
+
+        if (this.session.isExporting() && !mchorse.bbs_mod.BBSModClient.getVideoRecorder().isRecording())
+        {
+            this.session.cancel();
         }
 
         this.session.start(duration, id, w, h, profile, movieName);

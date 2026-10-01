@@ -16,6 +16,7 @@ import mchorse.bbs_mod.ui.framework.UIScreen;
 import mchorse.bbs_mod.film.Films;
 import mchorse.bbs_mod.graphics.texture.Texture;
 import mchorse.bbs_mod.graphics.window.Window;
+import net.minecraft.client.gl.Framebuffer;
 import mchorse.bbs_mod.settings.ui.UISettingsOverlayPanel;
 import mchorse.bbs_mod.ui.Keys;
 import mchorse.bbs_mod.ui.UIKeys;
@@ -442,6 +443,7 @@ public class UIFilmPreview extends UIElement
     @Override
     public void render(UIContext context)
     {
+        Framebuffer fb = BBSRendering.getFramebuffer();
         Texture texture = BBSRendering.getTexture();
         Area area = this.getViewport();
         Camera camera = this.panel.getCamera();
@@ -451,7 +453,11 @@ public class UIFilmPreview extends UIElement
         camera.projection.set(this.panel.lastProjection);
         context.batcher.flush();
 
-        if (texture != null)
+        if (fb != null && fb.getColorAttachment() > 0)
+        {
+            context.batcher.texturedBox(fb.getColorAttachment(), Colors.WHITE, area.x, area.y, area.w, area.h, 0, fb.textureHeight, fb.textureWidth, 0, fb.textureWidth, fb.textureHeight);
+        }
+        else if (texture != null && texture.id > 0)
         {
             context.batcher.texturedBox(texture.id, Colors.WHITE, area.x, area.y, area.w, area.h, 0, texture.height, texture.width, 0, texture.width, texture.height);
         }
@@ -567,11 +573,14 @@ public class UIFilmPreview extends UIElement
 
             this.clips.clear();
 
-            for (Clip clip : this.panel.getData().camera.get())
+            if (this.panel.getData() != null && this.panel.getData().camera != null)
             {
-                if (clip instanceof AudioClip)
+                for (Clip clip : this.panel.getData().camera.get())
                 {
-                    this.clips.add((AudioClip) clip);
+                    if (clip instanceof AudioClip)
+                    {
+                        this.clips.add((AudioClip) clip);
+                    }
                 }
             }
 

@@ -502,8 +502,14 @@ public class VideoRecorder
             int pbo = this.pboIndex;
             int nextPbo = (this.pboIndex + 1) % this.pbos.length;
 
-            MinecraftClient mc = MinecraftClient.getInstance();
-            int targetFbo = (mc != null && mc.getFramebuffer() != null) ? mc.getFramebuffer().fbo : 0;
+            int targetFbo = BBSRendering.getExportFboId();
+
+            if (targetFbo <= 0)
+            {
+                MinecraftClient mc = MinecraftClient.getInstance();
+
+                targetFbo = (mc != null && mc.getFramebuffer() != null) ? mc.getFramebuffer().fbo : 0;
+            }
             int prevRead = GL30.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
 
             GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, targetFbo);
@@ -560,8 +566,14 @@ public class VideoRecorder
     {
         this.buffer.clear();
 
-        MinecraftClient mc = MinecraftClient.getInstance();
-        int targetFbo = (mc != null && mc.getFramebuffer() != null) ? mc.getFramebuffer().fbo : 0;
+        int targetFbo = BBSRendering.getExportFboId();
+
+        if (targetFbo <= 0)
+        {
+            MinecraftClient mc = MinecraftClient.getInstance();
+
+            targetFbo = (mc != null && mc.getFramebuffer() != null) ? mc.getFramebuffer().fbo : 0;
+        }
         int prevRead = GL30.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
 
         GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, targetFbo);
