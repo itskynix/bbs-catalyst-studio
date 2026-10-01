@@ -43,6 +43,7 @@ import mchorse.bbs_mod.utils.ScreenshotRecorder;
 import mchorse.bbs_mod.utils.StringUtils;
 import mchorse.bbs_mod.utils.clips.Clip;
 import mchorse.bbs_mod.utils.clips.Clips;
+import mchorse.bbs_mod.utils.colors.Color;
 import mchorse.bbs_mod.utils.colors.Colors;
 import mchorse.bbs_mod.utils.joml.Vectors;
 import net.minecraft.client.MinecraftClient;
@@ -451,7 +452,8 @@ public class UIFilmPreview extends UIElement
         camera.copy(this.panel.getWorldCamera());
         camera.view.set(this.panel.lastView);
         camera.projection.set(this.panel.lastProjection);
-        context.batcher.flush();
+        int fogColor = new Color(BBSRendering.getFogRed(), BBSRendering.getFogGreen(), BBSRendering.getFogBlue(), 1F).getARGBColor();
+        context.batcher.box(area.x, area.y, area.ex(), area.ey(), fogColor);
 
         if (fb != null && fb.getColorAttachment() > 0)
         {

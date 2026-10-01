@@ -20,7 +20,14 @@ public class InGameHudMixin
 
         if (current instanceof PlayCameraController)
         {
+            mchorse.bbs_mod.client.BBSRendering.onRenderBeforeScreen();
             info.cancel();
         }
+    }
+
+    @Inject(method = "render", at = @At("TAIL"))
+    public void onRenderEnd(CallbackInfo info)
+    {
+        mchorse.bbs_mod.client.BBSRendering.onRenderBeforeScreen();
     }
 }

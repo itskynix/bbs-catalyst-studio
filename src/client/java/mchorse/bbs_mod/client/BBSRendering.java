@@ -91,6 +91,7 @@ public class BBSRendering
     private static float orthoDistance = -1F;
 
     private static boolean toggleFramebuffer;
+    private static boolean frameCapturedThisRender;
     private static Framebuffer framebuffer;
     private static Framebuffer clientFramebuffer;
     private static Texture texture;
@@ -398,6 +399,10 @@ public class BBSRendering
 
             framebuffer.beginWrite(true);
 
+            RenderSystem.enableDepthTest();
+            RenderSystem.depthMask(true);
+            RenderSystem.depthFunc(org.lwjgl.opengl.GL11.GL_LEQUAL);
+
             float r;
             float g;
             float b;
@@ -422,6 +427,11 @@ public class BBSRendering
             framebuffer.setClearColor(r, g, b, 1F);
             RenderSystem.clearColor(r, g, b, 1F);
             framebuffer.clear(MinecraftClient.IS_SYSTEM_MAC);
+
+            framebuffer.beginWrite(true);
+            RenderSystem.enableDepthTest();
+            RenderSystem.depthMask(true);
+            RenderSystem.depthFunc(org.lwjgl.opengl.GL11.GL_LEQUAL);
         }
         else
         {
@@ -493,6 +503,7 @@ public class BBSRendering
         }
 
         renderingWorld = true;
+        frameCapturedThisRender = false;
 
         if (!customSize)
         {
@@ -527,19 +538,57 @@ public class BBSRendering
             }
         }
 
+        renderingWorld = false;
+    }
+
+    public static void onRenderBeforeScreen()
+    {
+        if (frameCapturedThisRender)
+        {
+            return;
+        }
+
+        frameCapturedThisRender = true;
+
+        boolean needsExportFrame = pendingExportResolutionAction != null || BBSModClient.getVideoRecorder().isRecording();
+
+        if (needsExportFrame && canRender)
+        {
+            captureExportFrame();
+        }
+
         if (BBSModClient.getVideoRecorder().isRecording() && canRender)
         {
             BBSModClient.getMinecraftSoundCapture().captureFrame();
-            captureExportFrame();
             BBSModClient.getVideoRecorder().recordFrame();
         }
 
-        renderingWorld = false;
+        renderRecordingOverlay();
 
         if (customSize)
         {
             toggleFramebuffer(false);
         }
+
+        runPendingExportAction();
+    }
+
+    /**
+     * Hand over the action waiting for a frame rendered at the new export size. Nothing else
+     * calls it: without this a queued "Render Now" never leaves the queue.
+     */
+    private static void runPendingExportAction()
+    {
+        if (pendingExportResolutionAction == null)
+        {
+            return;
+        }
+
+        Runnable action = pendingExportResolutionAction;
+
+        pendingExportResolutionAction = null;
+
+        MinecraftClient.getInstance().execute(action);
     }
 
     public static int getExportFboId()
@@ -647,21 +696,6 @@ public class BBSRendering
         GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, prevDraw);
     }
 
-    public static void onRenderBeforeScreen()
-    {
-        captureExportFrame();
-
-        renderRecordingOverlay();
-
-        toggleFramebuffer(false);
-
-        if (pendingExportResolutionAction != null)
-        {
-            Runnable action = pendingExportResolutionAction;
-            pendingExportResolutionAction = null;
-            MinecraftClient.getInstance().execute(action);
-        }
-    }
 
     public static void scheduleAfterNextExportFrame(Runnable action)
     {
