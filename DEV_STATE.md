@@ -1330,6 +1330,32 @@ BBS moduna, DaVinci Resolve ve modern prodÃ¼ksiyon araÃ§larÄ±ndan esinlene
    - `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 13s** (0 hata).
 
 
+## AŞAMA 85: Güvenli Alan Toggle'ı, Media Pool İkon Değişimi ve Başlık/Süre Hizalama Cilası (Tamamlandı)
+
+### Yapılanlar:
+1. **Güvenli Alan Göstergeleri (Safe Areas & Guides Toggle) ve Görünürlük İyileştirmesi:**
+   - Önizleme monitörünün sağ alt araç çubuğuna (`[Full]` çözünürlük butonunun soluna) `safeAreasToggleBtn` eklendi (`Icons.OUTLINE`).
+   - Buton `Direction.BOTTOM` vurgusu ve sol tıkla açma/kapama (`toggleSafeAreas`), sağ tıkla bağlam menüsü desteğine sahiptir.
+   - **Çizgi Kalınlığı & Kontrast İyileştirmesi:**
+     * Kılavuz çizgileri `Math.max(2, Math.round(2.0F / scale))` ile ekranda her zaman en az 2 piksel kalınlıkta çizilecek şekilde dinamik hale getirildi.
+     * Çizgilerin opaklığı artırıldı (Rule of Thirds için `0xAAFFFFFF`, Action Safe için `0xCC00E5FF`, Title Safe için `0xAA00E5FF`, merkez artı için `0xCCFFFFFF`).
+     * Açık/koyu her türlü video arka planında net okunabilirlik sağlamak amacıyla tüm kılavuz çizgilerinin ve güvenli alan kutularının arkasına 1px koyu gölge/kontur katmanı (`0x88000000`) entegre edildi.
+   - `showSafeAreas == true` olduğunda tuval üzerinde:
+     * **Rule of Thirds:** 1/3 ve 2/3 oranlarında 2px kalınlıkta ve gölgeli 4 adet ızgara çizgisi.
+     * **Action Safe Area (%90):** EBU R95/SMPTE standartlarında %5 kenar boşluklu hareket güvenli alanı (konturlu camgöbeği).
+     * **Title Safe Area (%80):** %10 kenar boşluklu metin/başlık güvenli alanı (konturlu camgöbeği).
+     * **Merkez Artı İmleci (Center Crosshair):** Kadraj ortalama için çift eksenli gölgeli merkez artı kılavuzu.
+   - `showSafeAreas == false` yapıldığında tuval kılavuz kalabalığından arındırılarak temizlenir; yalnızca seçili katmanın sınır çizgileri gösterilir. Dışa aktarma (export) anında buton otomatik gizlenir.
+2. **Toggle Media Pool Buton İkonunun Güncellenmesi:**
+   - Üst araç çubuğundaki `Toggle Media Pool (B)` butonundaki eski disket ikonu (`Icons.SAVED`) kaldırıldı; yerine BBS ikon sisteminden `Icons.FOLDER` entegre edildi.
+3. **Kompozisyon Süresi Senkronu ve Dikey Başlık Hizalaması:**
+   - **Süre Senkronu:** `updateTitleLabel()` metodu doğrudan aktif kompozisyonun `fps` ve `duration` değerlerine bağlandı (`comp.duration / comp.fps`). `Composition Settings` penceresinden süre veya FPS değiştirilip uygulandığında sol üstteki `[60 FPS / X.Xs]` rozeti anında yeni süreyle senkronize edilir.
+   - **Dikey Ortalama (Y-Axis Alignment):** Sol üst köşedeki `activeProjectLabel` bileşenine `labelAnchor(0F, 0.5F)` ve `y(0).h(24)` atanarak 24px yüksekliğindeki üst çubuğa göre dikey eksende kusursuz şekilde ortalandı; yukarı kayma ve dengesizlik giderildi.
+4. **Derleme Doğrulaması:**
+   - `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 11s** (0 hata).
+
+
+
 
 
 

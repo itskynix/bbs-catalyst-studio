@@ -260,6 +260,8 @@ public class UICatalystPanel extends UIDashboardPanel
 
     public static PreviewResolution previewResolution = PreviewResolution.FULL;
     public UIButton previewResolutionBtn;
+    public static boolean showSafeAreas = true;
+    public UIIcon safeAreasToggleBtn;
     private Framebuffer previewFbo = null;
     private Texture previewFboTexture = null;
 
@@ -522,9 +524,13 @@ public class UICatalystPanel extends UIDashboardPanel
         {
             CatalystComposition comp = this.activeProject.getActiveComposition();
             String compName = (comp != null) ? " > " + comp.name : "";
+            int fps = (comp != null && comp.fps > 0) ? comp.fps : this.activeProject.fps;
+            double durS = (comp != null && comp.duration > 0 && fps > 0)
+                ? (double) comp.duration / (double) fps
+                : this.activeProject.durationSeconds;
             String info = " • " + this.activeProject.name + compName
-                        + " [" + this.activeProject.fps + " FPS / "
-                        + String.format("%.1fs", this.activeProject.durationSeconds) + "]";
+                        + " [" + fps + " FPS / "
+                        + String.format(java.util.Locale.ROOT, "%.1fs", durS) + "]";
             this.activeProjectLabel.label = IKey.raw(info);
         }
         else
@@ -1101,13 +1107,14 @@ public class UICatalystPanel extends UIDashboardPanel
         this.tabEditor.relative(this.topBar).x(88).y(2).w(75).h(20);
 
         this.activeProjectLabel = new UILabel(IKey.raw(""));
-        this.activeProjectLabel.relative(this.topBar).x(170).y(4).w(340).h(16);
+        this.activeProjectLabel.labelAnchor(0F, 0.5F);
+        this.activeProjectLabel.relative(this.topBar).x(170).y(0).w(450).h(24);
 
         /* Action buttons — editor-only group */
         this.editorActions = new UIElement();
         this.editorActions.relative(this.topBar).x(1F, -118).y(2).w(114).h(20);
 
-        this.mediaPoolToggleBtn = new UIIcon(Icons.SAVED, (b) -> this.toggleMediaPool());
+        this.mediaPoolToggleBtn = new UIIcon(Icons.FOLDER, (b) -> this.toggleMediaPool());
         this.mediaPoolToggleBtn.tooltip(IKey.raw("Toggle Media Pool (B)"));
         this.mediaPoolToggleBtn.highlight(() -> this.showMediaPool, Direction.BOTTOM);
 
@@ -1285,6 +1292,11 @@ public class UICatalystPanel extends UIDashboardPanel
     public void cyclePreviewResolution()
     {
         this.setPreviewResolution(previewResolution.next());
+    }
+
+    public void toggleSafeAreas()
+    {
+        showSafeAreas = !showSafeAreas;
     }
 
     private Framebuffer getOrCreatePreviewFramebuffer(int targetW, int targetH)
@@ -1745,11 +1757,13 @@ public class UICatalystPanel extends UIDashboardPanel
                 if (isExporting)
                 {
                     if (previewResolutionBtn != null) previewResolutionBtn.setVisible(false);
+                    if (safeAreasToggleBtn != null) safeAreasToggleBtn.setVisible(false);
                     stepExport(context);
                 }
                 else
                 {
                     if (previewResolutionBtn != null) previewResolutionBtn.setVisible(true);
+                    if (safeAreasToggleBtn != null) safeAreasToggleBtn.setVisible(true);
                     tickPlayback(comp);
                 }
                 renderPreviewCanvas(context, this.area, comp);
@@ -1759,6 +1773,29 @@ public class UICatalystPanel extends UIDashboardPanel
         this.renderMonitorHud.relative(this.previewArea).y(1F, -50).w(1F).h(50);
         this.renderMonitorHud.setVisible(false);
         this.previewArea.add(this.renderMonitorHud);
+
+        this.safeAreasToggleBtn = new UIIcon(Icons.OUTLINE, (b) -> this.toggleSafeAreas())
+        {
+            @Override
+            public boolean subMouseClicked(UIContext context)
+            {
+                if (this.area.isInside(context) && context.mouseButton == 1)
+                {
+                    context.replaceContextMenu((menu) ->
+                    {
+                        menu.action(showSafeAreas ? Icons.CHECKMARK : Icons.NONE,
+                            IKey.raw("Show Guides & Safe Areas"),
+                            () -> toggleSafeAreas());
+                    });
+                    return true;
+                }
+                return super.subMouseClicked(context);
+            }
+        };
+        this.safeAreasToggleBtn.tooltip(IKey.raw("Toggle Guides & Safe Areas (Rule of Thirds, Title/Action Safe)"));
+        this.safeAreasToggleBtn.highlight(() -> showSafeAreas, Direction.BOTTOM);
+        this.safeAreasToggleBtn.relative(this.previewArea).x(1F, -100).y(1F, -26).w(20).h(18);
+        this.previewArea.add(this.safeAreasToggleBtn);
 
         this.previewResolutionBtn = new UIButton(IKey.raw("[" + previewResolution.title + "]"), (b) -> this.cyclePreviewResolution())
         {
@@ -2201,15 +2238,66 @@ public class UICatalystPanel extends UIDashboardPanel
         overlayStack.scale(scale, scale, 1.0F);
 
         context.batcher.clip(canvasArea, context);
-        context.batcher.outline(0, 0, compW, compH, 0xFF2A2A38, 1);
+        context.batcher.outline(0, 0, compW, compH, 0xFF3E3E50, Math.max(1, Math.round(1.0F / scale)));
 
-        /* Rule of Thirds grid */
-        int thirdW = compW / 3;
-        int thirdH = compH / 3;
-        context.batcher.box(thirdW,     0, thirdW + 1,     compH, 0x1AFFFFFF);
-        context.batcher.box(thirdW * 2, 0, thirdW * 2 + 1, compH, 0x1AFFFFFF);
-        context.batcher.box(0, thirdH,     compW, thirdH + 1,     0x1AFFFFFF);
-        context.batcher.box(0, thirdH * 2, compW, thirdH * 2 + 1, 0x1AFFFFFF);
+        if (showSafeAreas)
+        {
+            int lw = Math.max(2, Math.round(2.0F / scale));
+            int shadow = Math.max(1, Math.round(1.0F / scale));
+            int half = lw / 2;
+            int shadowCol = 0x88000000;
+            int gridCol = 0xAAFFFFFF;
+            int actionCol = 0xCC00E5FF;
+            int titleCol = 0xAA00E5FF;
+            int crossCol = 0xCCFFFFFF;
+
+            /* ── Rule of Thirds grid ── */
+            int thirdW = compW / 3;
+            int thirdH = compH / 3;
+
+            /* Vertical lines at 1/3 and 2/3 */
+            int[] vLines = new int[] {thirdW, thirdW * 2};
+            for (int vx : vLines)
+            {
+                context.batcher.box(vx - half - shadow, 0, vx - half + lw + shadow, compH, shadowCol);
+                context.batcher.box(vx - half,          0, vx - half + lw,          compH, gridCol);
+            }
+
+            /* Horizontal lines at 1/3 and 2/3 */
+            int[] hLines = new int[] {thirdH, thirdH * 2};
+            for (int hy : hLines)
+            {
+                context.batcher.box(0, hy - half - shadow, compW, hy - half + lw + shadow, shadowCol);
+                context.batcher.box(0, hy - half,          compW, hy - half + lw,          gridCol);
+            }
+
+            /* ── Action Safe Area (90% - 5% border) ── */
+            int actionMarginX = (int) (compW * 0.05F);
+            int actionMarginY = (int) (compH * 0.05F);
+            int actionMaxX = compW - actionMarginX;
+            int actionMaxY = compH - actionMarginY;
+            context.batcher.outline(actionMarginX - shadow, actionMarginY - shadow, actionMaxX + shadow, actionMaxY + shadow, shadowCol, lw + shadow * 2);
+            context.batcher.outline(actionMarginX, actionMarginY, actionMaxX, actionMaxY, actionCol, lw);
+
+            /* ── Title Safe Area (80% - 10% border) ── */
+            int titleMarginX = (int) (compW * 0.10F);
+            int titleMarginY = (int) (compH * 0.10F);
+            int titleMaxX = compW - titleMarginX;
+            int titleMaxY = compH - titleMarginY;
+            context.batcher.outline(titleMarginX - shadow, titleMarginY - shadow, titleMaxX + shadow, titleMaxY + shadow, shadowCol, lw + shadow * 2);
+            context.batcher.outline(titleMarginX, titleMarginY, titleMaxX, titleMaxY, titleCol, lw);
+
+            /* ── Center Crosshair ── */
+            int cx = compW / 2;
+            int cy = compH / 2;
+            int arm = Math.max(10, Math.round(16 / scale));
+            /* Shadow */
+            context.batcher.box(cx - arm - shadow, cy - half - shadow, cx + arm + shadow, cy - half + lw + shadow, shadowCol);
+            context.batcher.box(cx - half - shadow, cy - arm - shadow, cx - half + lw + shadow, cy + arm + shadow, shadowCol);
+            /* Main cross */
+            context.batcher.box(cx - arm, cy - half, cx + arm, cy - half + lw, crossCol);
+            context.batcher.box(cx - half, cy - arm, cx - half + lw, cy + arm, crossCol);
+        }
 
         context.batcher.unclip(context);
 
@@ -4191,6 +4279,11 @@ public class UICatalystPanel extends UIDashboardPanel
             comp.duration = (int) Math.round(durS * comp.fps);
             comp.width = (int) modalWidthInput.getValue();
             comp.height = (int) modalHeightInput.getValue();
+
+            this.activeProject.durationSeconds = durS;
+            this.activeProject.fps = comp.fps;
+            this.activeProject.width = comp.width;
+            this.activeProject.height = comp.height;
 
             this.saveAndRefresh();
             this.rebuildCompTabs();
