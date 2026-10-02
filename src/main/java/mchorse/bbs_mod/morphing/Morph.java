@@ -106,6 +106,11 @@ public class Morph
         this.entity.getMcEntity().calculateDimensions();
     }
 
+    public void setFormRaw(Form form)
+    {
+        this.form = form;
+    }
+
     public void update()
     {
         this.entity.update();

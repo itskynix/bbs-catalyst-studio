@@ -2,7 +2,7 @@
 
 **Proje:** Blockbuster Studio Catalyst (BBS CS) - Fabric 1.20.4 Port (`bbs-cs`)  
 **Tarih:** 02 Ekim 2026  
-**Son Tamamlanan Aşama:** 84 — Media Pool İlk Açılış Desync Düzeltmesi ve Önizleme Kalite Seçenekleri (Full, Half, Third, Quarter)  
+**Son Tamamlanan Aşama:** Kritik Çökme Düzeltmesi (Crash Fix) — GameRendererMixin @Shadow resetProjectionMatrix Hatası & Bağımsız El Projeksiyonu  
 *(AÅŸama 57: BBS Hub Pazaryeri, AÅŸama 58: Video & Audio Ses Kalitesi, AÅŸama 59: Mod KimliÄŸi ve SÃ¼rÃ¼m C1.0)*:
 
 1. **FAZ 0: Crash, DoS ve Veri KaybÄ± AÃ§Ä±klarÄ± (%100):**
@@ -1353,6 +1353,155 @@ BBS moduna, DaVinci Resolve ve modern prodÃ¼ksiyon araÃ§larÄ±ndan esinlene
    - **Dikey Ortalama (Y-Axis Alignment):** Sol üst köşedeki `activeProjectLabel` bileşenine `labelAnchor(0F, 0.5F)` ve `y(0).h(24)` atanarak 24px yüksekliğindeki üst çubuğa göre dikey eksende kusursuz şekilde ortalandı; yukarı kayma ve dengesizlik giderildi.
 4. **Derleme Doğrulaması:**
    - `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 11s** (0 hata).
+
+
+## AŞAMA 86: Yerel PoV (First-Person) Kamera Altyapısı - Aşama 1 (POV Klip Türü & Kafa Senkronizasyonu) (Tamamlandı)
+
+### Yapılanlar:
+1. **Natif POV Kamera Klip Türü (`POVClip`):**
+   - `mchorse.bbs_mod.camera.clips.overwrite.POVClip` sınıfı `CameraClip` hiyerarşisinde oluşturuldu.
+   - Değer alanları:
+     * `selector`: Takip edilecek replay aktörünün stabil UUID/ID dizesi (`ValueString`).
+     * `offset`: Göz pozisyonuna göre 3 eksenli kamera ofseti (`ValuePoint`).
+     * `perspective`: 3 kademeli perspektif modu (`ValueInt` — 0: First Person, 1: Third Person Back, 2: Third Person Front).
+     * `headLook`: Aktörün baktığı kafa açısına (Pitch, Yaw, Roll) senkronize olma kontrolü (`ValueBoolean`).
+     * `fov`: Kamera görüş alanı açısı (`ValueFloat`, varsayılan 70, sınır 10-150).
+     * `povOutput`: POV çıktısının aktif/pasif durumu (`ValueBoolean`).
+   - Kamera klip fabrikasına (`BBSMod.java` -> `factoryCameraClips`) `Link.bbs("pov")` kimliği, `Icons.VISIBLE` ikonu, turkuaz rengi (`0x00e5ff`) ve `IdleConverter.CONVERTER` dönüştürücüsü ile kaydedildi.
+
+2. **Kafa ve Göz Senkronizasyonu (`applyClip`):**
+   - `CameraClipContext` üzerinden `selector` ile hedeflenen aktör (`IEntity`) tespit edilir; id bulunamazsa film replay listesinden isim ve indeks fallback'i ile eşleşme sağlanır.
+   - `context.transition` ara değeri kullanılarak:
+     * Göz Pozisyonu: `Lerps.lerp(actor.getPrevX(), actor.getX(), transition) + offset.x`, Y ekseninde `+ actor.getEyeHeight() + offset.y`, Z ekseninde `+ offset.z`.
+     * Kafa Rotasyonu: `Lerps.lerpYaw(actor.getPrevHeadYaw(), actor.getHeadYaw(), transition)`, `Lerps.lerp(actor.getPrevPitch(), actor.getPitch(), transition)` ve `actor.getRoll()`.
+   - **Perspektif Modları & Blok Çarpışma Raytrace:**
+     * `0 (First Person)`: Kamera doğrudan aktörün gözüne ve `yaw + 180F, pitch, roll` açısına yerleştirilir.
+     * `1 (Third Person Back)`: Kamera aktörün arkasına (4 blok mesafe) alınır; `RayTracing.rayTrace` ile dünya blok çarpışması hesaplanarak duvarların içine girmesi engellenir (`WALL_MARGIN = 0.1F`).
+     * `2 (Third Person Front)`: Kamera aktörün önüne yerleştirilir; aktörün yüzüne bakacak şekilde `yaw, -pitch, -roll` açısı verilir ve önündeki bloklara göre mesafe daraltılır.
+   - `position.angle.fov` değeri klibin `fov` alanından atanır. `CameraClip.apply` taban metodundaki zarf (envelope) desteği sayesinde klipler arası yumuşak geçişler ve sönümlenmeler korunur.
+
+3. **POV Klip Editör Paneli (`UIPovClip`):**
+   - `mchorse.bbs_mod.ui.film.clips.UIPovClip` sınıfı `UIClip<POVClip>` türevi olarak geliştirildi.
+   - **Aktör Seçici (`selector`):** `UIAnchorKeyframeFactory.displayActors` menüsüne bağlandı; buton üzerinde seçili aktörün/replay'in adı dinamik olarak görüntülenir.
+   - **Perspektif Butonu (`perspective`):** Tıklamayla 3 mod arasında döngüsel geçiş (`First Person -> Third Person (Back) -> Third Person (Front)`), sağ tıkla ikonlu bağlam menüsü üzerinden anında seçim desteği.
+   - `povOutput` ve `headLook` için switch/toggle bileşenleri, `offset` için `UIPointModule`, `fov` için `UITrackpad` kontrolleri entegre edildi.
+   - `UIClip.register(POVClip.class, UIPovClip::new)` ve `UIClipsPanel.setClip` içerisinde tam bağlandı.
+
+4. **Yerelleştirme (Localization):**
+   - `UIKeys.java` içerisine `CAMERA_PANELS_POV_*` anahtarları eklendi.
+   - `en_us.json` ve `tr_tr.json` dil dosyalarına klip adı, replay seçimi, perspektif modları ve buton açıklamaları eksiksiz işlendi.
+
+5. **Derleme Doğrulaması:**
+   - `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 22s** (0 hata).
+
+
+## AŞAMA 87: PoV Cam İsimlendirme Revizyonu & El/Kol Sallantı (Hands & Bobbing) Altyapısı (Tamamlandı)
+
+### Yapılanlar:
+1. **İsimlendirme ve Renk Revizyonu:**
+   - Dil dosyalarında (`en_us.json`, `tr_tr.json`) ve arayüzde klip adı ile panellerdeki genel ibareler güncellendi:
+     * İngilizce: **"PoV Cam"**
+     * Türkçe: **"PoV Kamera"**
+   - Kamera klip fabrikasında (`BBSMod.java`) `Link.bbs("pov")` klip rengi `#331050` (`0x331050` - koyu mor) olarak güncellendi.
+2. **El ve Kol Render Altyapısı (Hands Layer):**
+   - `POVClip` içerisine el görünürlüğünü kontrol eden ayarlar eklendi:
+     * `renderHands` (`ValueBoolean`, varsayılan: `true`)
+     * `leftHandVisible` (`ValueBoolean`, varsayılan: `true`)
+     * `rightHandVisible` (`ValueBoolean`, varsayılan: `true`)
+   - `POVClientState` oturum durumu ile kamera playback sırasında aktif PoV klibi, aktör (`IEntity`) ve ara değer (`transition`) paylaşıldı.
+   - `mchorse.bbs_mod.camera.pov.POVHandRenderer` ve `GameRendererMixin.onRenderHand` aracılığıyla birinci şahıs modunda aktörün elinde tuttuğu eşyalar (`MAINHAND`, `OFFHAND`) Minecraft'ın yerel `HeldItemRenderer` pipeline'ı üzerinden film kesintiye uğramadan ekrana renderlandı. `finally` bloğu ile istemci oyuncusunun eşyaları güvenli bir şekilde eski haline getirilir.
+   - Sol ve sağ el görünürlüğü bağımsız olarak kontrol edilebilir kılındı.
+3. **Yürüme ve El Sallantı Dinamiği (Bobbing & Tilt):**
+   - `POVClip` içerisine sallantı kontrolleri eklendi:
+     * `bobbing` (`ValueBoolean`, varsayılan: `true`)
+     * `bobStrength` (`ValueFloat`, varsayılan: `1.0F`, min: `0.0F`, max: `2.0F`)
+   - Aktörün `getLimbPos(transition)` ve `getLimbSpeed(transition)` verileri üzerinden yürüyüş salınımı hesaplandı:
+     * Kamera rotasyonuna (Roll açı tilt'i ve Pitch kafa adımlama hareketi) ve dünya pozisyonuna (X, Y, Z adım kaymaları) uygulandı.
+     * `POVHandRenderer` içerisinde de el matrislerine adım ritmine uygun sallantı (`RotationAxis.POSITIVE_Z` ve `POSITIVE_X`) uygulandı.
+4. **UI Paneli ve Kontroller (`UIPovClip`):**
+   - `UIPovClip` paneline `renderHands` ve yatay sırada `leftHandVisible` ile `rightHandVisible` toggle butonları eklendi.
+   - Sallantı bölümünde `bobbing` toggle ve `bobStrength` trackpad bileşeni eklendi.
+   - `UIKeys.java`, `en_us.json` ve `tr_tr.json` dosyalarına yeni parametre anahtarları ve çevirileri eksiksiz işlendi.
+5. **Derleme Doğrulaması:**
+   - `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 16s** (0 hata).
+
+
+## AŞAMA 88: Replay Culling Analizi/Uygulaması & Yumuşak View Bobbing (Smooth Bobbing) Kalibrasyonu (Tamamlandı)
+
+### Yapılanlar:
+1. **Referans Mod Replay Culling Analizi ve Uygulaması:**
+   - **Mimari Analiz:** Referans mod `.jar` arşivi (`FilmEditorControllerPovMixin`, `FilmStencilPickerPovMixin`) incelendi: Birinci şahıs modunda (`isFirstPerson() == true`) hedeflenen replay aktörünün kafa içi, göz dokuları ve gövdesinin kameraya çarpmasını (near-plane clipping) engellemek için aktörün dünya ve stencil render'ının tamamen culling edildiği (gizlendiği) ve yalnızca bağımsız birinci şahıs ellerinin (`HeldItemRenderer`) çizildiği tespit edildi.
+   - **Culling Pipeline Entegrasyonu:**
+     * `POVClientState.isActorCulled(IEntity entity, Replay replay)` metodu geliştirildi. Bu metot, yalnızca PoV klibi aktif, `povOutput == true` ve `perspective == 0` (First Person) iken hedeflenen aktör veya replay ile eşleştiğinde `true` döndürür.
+     * `FilmEntityRenderer.renderEntity`, `FilmEditorController.renderEntity` ve `BaseFilmController.renderEntity` metotlarının başına culling kontrolü yerleştirildi. Böylece hem stüdyo içi önizlemede (onion skin dahil) hem de dünya oynatımı/video export sırasında hedef aktörün dünya modeli gizlenerek kamera içi poligon kırpılması ve yüzün kamerayı tıkaması tamamen önlendi.
+     * Kamera `Third Person Back` veya `Third Person Front` moduna geçtiğinde veya PoV Cam devre dışı kaldığında aktörün tamamı eksiksiz şekilde renderlanmaya devam eder.
+2. **Yumuşak View Bobbing (Smooth Sine Bobbing Kalibrasyonu):**
+   - **Frekans Düzeltmesi:** Önceki `limbPos * Math.PI` frekans çarpanı (~5 kat fazla hızlı ve titreşimliydi); Minecraft'ın biped yürüme adım periyoduyla birebir uyumlu `limbPos * 0.6662F` sinüs salınım frekansına kalibre edildi.
+   - **Smoothstep Damping (Yumuşak Sönümleme):** Aktörün hareket hızına `smoothstep` (hermite interpolasyon: `speed * speed * (3.0F - 2.0F * speed)`) eğrisi uygulandı; duruş ve kalkışlardaki ani ivmelenme sıçramaları giderildi.
+   - **Kamera Salınımı (`POVClip.java`):**
+     * Roll (yana yatış): `rollSway * bobFactor * 0.5F` (azami yarım derece organik sinematik salınım).
+     * Pitch (kafa adımlaması): `pitchDip * bobFactor * 0.35F` (yumuşak baş hareketi).
+     * Pozisyonel adım salınımı: `bobY = -pitchDip * bobFactor * 0.012` ve `bobSide = rollSway * bobFactor * 0.010` (milimetrik, sarsıntısız adımlama).
+   - **El Salınımı (`POVHandRenderer.java`):** FPS el/kol matrisleri adım frekansına ve sönümlenmiş hıza göre `rollSway * 0.9F` roll ve `pitchDip * 0.7F` pitch rotasyonu ile `1.8cm` / `1.4cm` süzülen ofsetlerle akıcı ve sinematik hale getirildi.
+3. **Derleme Doğrulaması:**
+   - `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 16s** (0 hata).
+
+
+## AŞAMA 89: FPS El/Kol (Hands) Render Mantığının Referans Mod Mimarisinden Uyarlanması (Tamamlandı)
+
+### Yapılanlar:
+1. **Skin ve Model Tipi Uyuşmazlığının Çözümü (Problem 1):**
+   - **Kök Neden:** Vanilla `HeldItemRenderer.renderItem` içerisine `client.player` verildiğinde, `PlayerEntityRendererMixin` oyuncunun `Morph` kaydını kontrol ediyordu. PoV sırasında oyuncuya herhangi bir morph atanmadığı için çağrı vanilla `renderArm`'a düşüyor ve kullanıcının kendi Minecraft hesabı skini (kırmızı manşetli kahverengi kol) çiziliyordu.
+   - **Çözüm:** 
+     * `Morph.java` içerisine `setFormRaw(Form form)` metodu eklendi; animasyon tetikleyicileri ve fiziksel boyut hesaplamalarını gereksiz yere çalıştırmadan doğrudan geçici form ataması sağlandı.
+     * `POVHandRenderer.render` başlangıcında hedef replay aktörünün formu (`actor.getForm()` veya `replay.form.get()`) dinamik olarak çözülerek `Morph.getMorph(player).setFormRaw(actorForm)` ile oyuncuya bağlandı.
+     * `ModelFormRenderer.renderFirstPersonHand` metodu başında `ensureAnimator(0F)` çağrısı zorunlu kılınarak animatörün her zaman başlatılması güvenceye alındı.
+     * Aktörün modeli `player/alex` (ince 3px kol) veya `player/steve` (klasik 4px kol) olduğunda, `ModelFormRenderer.renderFirstPersonHand` aktörün kendi dokusunu (`form.texture.get()`, polis üniforması) ve model kol geometrisini çizip `true` döndürerek vanilla kol çizimini iptal eder.
+     * `finally` bloğunda `morph.setFormRaw(origForm)` çağrılarak istemci oyuncusunun orijinal morph durumu temizlendi.
+2. **El Toggle Hataları ve Boş Sol El Render'ı (Problem 2):**
+   - **Kök Neden:** Vanilla Minecraft `HeldItemRenderer`, sol el (OFF_HAND) boş olduğunda (`item.isEmpty()`) birinci şahısta sol kolu asla çizmez. Ayrıca `HeldItemRenderer` içerisindeki `equipProgressMainHand` ve `equipProgressOffHand` alanları güncellenmediği için kuşanma animasyonu tetiklenerek kol ekranın altına düşüyordu.
+   - **Çözüm:**
+     * `HeldItemRendererAccessor.java` (`@Mixin(HeldItemRenderer.class)`) oluşturuldu: `mainHand`, `offHand`, `equipProgress` alanlarına erişim ve `renderArmHoldingItem` metodunu çağıran `@Invoker` sağlandı.
+     * `HeldItemRendererMixin.java` oluşturuldu: `renderFirstPersonItem` metodunun başına kanca atıldı.
+       - `hand == Hand.MAIN_HAND && !shouldRenderHand(Hand.MAIN_HAND)` -> çizim anında iptal edilir (`ci.cancel()`), sağ el ve tutulan eşya tamamen gizlenir.
+       - `hand == Hand.OFF_HAND && !shouldRenderHand(Hand.OFF_HAND)` -> çizim anında iptal edilir (`ci.cancel()`), sol el ve tutulan eşya tamamen gizlenir.
+       - `hand == Hand.OFF_HAND && shouldRenderHand(Hand.OFF_HAND) && item.isEmpty()` -> Vanilla'nın boş sol eli atlaması engellenerek `invokeRenderArmHoldingItem(..., Arm.LEFT)` çağrıldı ve boş sol kol aktörün skiniyle çizildi.
+     * `POVHandRenderer` içerisinde `heldAccessor.setEquipProgressMainHand(1.0F)` ve `setEquipProgressOffHand(1.0F)` sabitlenerek kuşanma geçişi olmadan kolların anında ekranda tam yükseklikte kalması sağlandı.
+     * `actor.getHandSwingProgress(tickDelta)` aktörden okunup `player.handSwingProgress` alanına eşitlenerek aktörün vuruş/sallama animasyonları ellere yansıtıldı.
+3. **Pozisyon, Kamera Açısı ve Matris Kurulumu (Problem 3):**
+   - **Kök Neden:** `GameRendererMixin.onRenderHand` kancasında daha önce dünya sahnesine ait kamera açısı (pitch, yaw, roll) ve projeksiyon matrisi içeren kirli `matrices` nesnesi `POVHandRenderer`'a aktarılıyordu; bu da ellerin kameraya yanlış açıyla girip ekranda çarpık görünmesine neden oluyordu.
+   - **Çözüm:**
+     * `GameRendererMixin.onRenderHand` içerisinde PoV Cam aktifken vanilla el projeksiyon matrisi `this.resetProjectionMatrix(this.getBasicProjectionMatrix(this.getFov(camera, tickDelta, false)))` ile sıfırlandı.
+     * Kamera uzayında temiz bir birim matris (`handMatrices.peek().getPositionMatrix().identity()`) oluşturularak `POVHandRenderer.render`'a verildi.
+     * `POVHandRenderer` içinde el sallantısı (walking bobbing sway) kamera uzayında `0.015F` ve `0.012F` kayma ile `0.7F` roll / `0.5F` pitch oranlarında yumuşak ve doğal olarak uygulandı.
+     * `RenderSystem.enableDepthTest()`, `depthMask(true)` ve `depthFunc(515)` ile el derinlik tamponu stabil hale getirildi.
+4. **Derleme Doğrulaması:**
+   - `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 12s** (0 hata).
+
+
+## KRİTİK ÇÖKME DÜZELTMESİ: GameRendererMixin @Shadow resetProjectionMatrix Hatası (Tamamlandı)
+
+### Kök Neden:
+Oyun başlangıçta Fabric Mixin başlatıcısında şu hata ile çökmekteydi:
+`InvalidMixinException: @Shadow method resetProjectionMatrix in GameRendererMixin was not located in the target class net.minecraft.client.render.GameRenderer.`
+1.20.4 Yarn eşlemelerinde `GameRenderer` sınıfında `resetProjectionMatrix` adında bir metot yer almamaktadır; eşdeğer metot `loadProjectionMatrix(Matrix4f)` olup dahili olarak tek satırdan (`RenderSystem.setProjectionMatrix(matrix, VertexSorter.BY_DISTANCE)`) ibarettir. Ayrıca `GameRendererMixin` içerisine eklenen `@Shadow` metotları (`resetProjectionMatrix`, `getBasicProjectionMatrix`, `getFov`) hedef sınıfın imza ve erişim kısıtlamaları nedeniyle mixin validasyonunda çökmeye yol açıyordu.
+
+### Yapılanlar:
+1. **GameRendererMixin @Shadow Temizliği:**
+   - `GameRendererMixin.java` içerisindeki tüm yapay `@Shadow` metotları (`resetProjectionMatrix`, `getBasicProjectionMatrix`, `getFov`) tamamen kaldırıldı.
+   - Mixin yalnızca varlığı kesin olan `@Shadow @Final private HeldItemRenderer firstPersonRenderer;` alanını koruyacak şekilde sadeleştirildi.
+   - `onRenderHand` enjeksiyonu doğrudan `POVHandRenderer.render(matrices, camera, tickDelta, this.firstPersonRenderer)` metoduna delege edildi; el çizimi yapıldığında `info.cancel()` çağrılarak vanilla render'ın iptal edilmesi sağlandı.
+2. **POVHandRenderer Bağımsız Projeksiyon ve Matris Yönetimi:**
+   - Projeksiyon matrisi kurulumu ve sıfırlanması doğrudan `POVHandRenderer.java` içerisine taşındı:
+     * Mevcut projeksiyon matrisi ve `VertexSorter` referansı saklandı (`origProj`, `origSorter`).
+     * Framebuffer en/boy oranına ve PoV klip FOV değerine göre `setPerspective((float) Math.toRadians(fov), aspect, 0.05F, 100.0F)` ile birinci şahıs el projeksiyon matrisi oluşturulup `RenderSystem.setProjectionMatrix(handProj, VertexSorter.BY_DISTANCE)` ile uygulandı.
+     * `matrices.push()` ardından `matrices.peek().getPositionMatrix().identity()` ve `getNormalMatrix().identity()` ile kamera uzayı birim matrisi oluşturuldu.
+     * `finally` bloğu içerisinde `matrices.pop()` ve `RenderSystem.setProjectionMatrix(origProj, origSorter)` ile oyunun orijinal projeksiyon matrisi ve matris yığını kalıntısız ve güvenli biçimde geri yüklendi.
+3. **Derleme Doğrulaması:**
+   - `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 10s** (0 hata).
+
+
+
 
 
 

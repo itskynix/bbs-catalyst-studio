@@ -58,7 +58,9 @@
         "EntityRenderDispatcherMixin",
         "CameraInvoker",
         "ParticleManagerInvoker",
-        "ParticleMixin"
+        "ParticleMixin",
+        "HeldItemRendererAccessor",
+        "HeldItemRendererMixin"
     ],
     "injectors": {
         "defaultRequire": 1

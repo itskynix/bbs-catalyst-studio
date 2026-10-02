@@ -38,6 +38,7 @@ import mchorse.bbs_mod.camera.clips.overwrite.IdleClip;
 import mchorse.bbs_mod.camera.clips.overwrite.KeyframeClip;
 import mchorse.bbs_mod.camera.clips.overwrite.PathClip;
 import mchorse.bbs_mod.camera.clips.overwrite.ProCameraClip;
+import mchorse.bbs_mod.camera.clips.overwrite.POVClip;
 import mchorse.bbs_mod.camera.data.Placement;
 import mchorse.bbs_mod.camera.data.Position;
 import mchorse.bbs_mod.camera.utils.TimeUtils;
@@ -121,6 +122,7 @@ public abstract class UIClip <T extends Clip> extends UIElement
         register(PathClip.class, UIPathClip::new);
         register(KeyframeClip.class, UIKeyframeClip::new);
         register(ProCameraClip.class, UIProCameraClip::new);
+        register(POVClip.class, UIPovClip::new);
         register(TranslateClip.class, UITranslateClip::new);
         register(AngleClip.class, UIAngleClip::new);
         register(DragClip.class, UIDragClip::new);

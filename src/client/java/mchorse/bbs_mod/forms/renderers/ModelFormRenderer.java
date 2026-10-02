@@ -12,6 +12,7 @@ import mchorse.bbs_mod.client.renderer.ThirdPersonItemUse;
 import mchorse.bbs_mod.client.renderer.entity.ActorEntityRenderer;
 import mchorse.bbs_mod.cubic.IBoneHierarchy;
 import mchorse.bbs_mod.cubic.ModelInstance;
+import mchorse.bbs_mod.camera.pov.POVHandRenderer;
 import mchorse.bbs_mod.cubic.animation.ActionsConfig;
 import mchorse.bbs_mod.cubic.animation.Animator;
 import mchorse.bbs_mod.cubic.animation.IAnimator;
@@ -957,6 +958,13 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
      */
     public boolean renderFirstPersonHand(MatrixStack matrices, int light, Hand hand)
     {
+        this.ensureAnimator(0F);
+
+        if (POVHandRenderer.isRendering() && !POVHandRenderer.shouldRenderHand(hand))
+        {
+            return true;
+        }
+
         ModelInstance model = this.getModel();
 
         if (this.animator != null && model != null)

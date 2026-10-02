@@ -2,6 +2,7 @@ package mchorse.bbs_mod.film;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.BBSModClient;
+import mchorse.bbs_mod.camera.clips.overwrite.POVClientState;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -622,6 +623,11 @@ public abstract class BaseFilmController
 
     protected void renderEntity(WorldRenderContext context, Replay replay, IEntity entity)
     {
+        if (POVClientState.isActorCulled(entity, replay))
+        {
+            return;
+        }
+
         FilmControllerContext filmContext = getFilmControllerContext(context, replay, entity);
 
         filmContext.transition = getTransition(entity, context.tickDelta());

@@ -3,20 +3,24 @@ package mchorse.bbs_mod.mixin.client;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.systems.VertexSorter;
 import mchorse.bbs_mod.BBSModClient;
+import org.joml.Matrix4f;
 import mchorse.bbs_mod.camera.controller.CameraController;
 import mchorse.bbs_mod.camera.controller.ICameraController;
 import mchorse.bbs_mod.camera.controller.PlayCameraController;
 import mchorse.bbs_mod.client.BBSRendering;
 import mchorse.bbs_mod.client.PixelArt;
 import mchorse.bbs_mod.items.GunZoom;
+import mchorse.bbs_mod.camera.pov.POVHandRenderer;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gl.ShaderProgram;
 import net.minecraft.client.render.GameRenderer;
+import net.minecraft.client.render.item.HeldItemRenderer;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.util.math.RotationAxis;
-import org.joml.Matrix4f;
 import org.objectweb.asm.Opcodes;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
@@ -24,8 +28,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(GameRenderer.class)
-public class GameRendererMixin
+public abstract class GameRendererMixin
 {
+    @Shadow
+    @Final
+    private HeldItemRenderer firstPersonRenderer;
+
     /**
      * This injection cancels bobbing when camera controller takes over
      */
@@ -78,8 +86,14 @@ public class GameRendererMixin
     }
 
     @Inject(method = "renderHand", at = @At("HEAD"), cancellable = true)
-    public void onRenderHand(CallbackInfo info)
+    public void onRenderHand(MatrixStack matrices, net.minecraft.client.render.Camera camera, float tickDelta, CallbackInfo info)
     {
+        if (POVHandRenderer.render(matrices, camera, tickDelta, this.firstPersonRenderer))
+        {
+            info.cancel();
+            return;
+        }
+
         ICameraController current = BBSModClient.getCameraController().getCurrent();
 
         if (current instanceof PlayCameraController)

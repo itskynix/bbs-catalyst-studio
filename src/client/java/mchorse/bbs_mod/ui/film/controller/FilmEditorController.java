@@ -1,6 +1,7 @@
 package mchorse.bbs_mod.ui.film.controller;
 
 import mchorse.bbs_mod.ui.framework.elements.input.drag.TransformSpace;
+import mchorse.bbs_mod.camera.clips.overwrite.POVClientState;
 import mchorse.bbs_mod.film.BaseFilmController;
 import mchorse.bbs_mod.film.FilmEntityRenderer;
 import mchorse.bbs_mod.film.Film;
@@ -185,6 +186,11 @@ public class FilmEditorController extends BaseFilmController
     @Override
     protected void renderEntity(WorldRenderContext context, Replay replay, IEntity entity)
     {
+        if (POVClientState.isActorCulled(entity, replay))
+        {
+            return;
+        }
+
         boolean current = this.isCurrent(entity);
 
         if (!(this.controller.getPovMode() == UIFilmController.CAMERA_MODE_FIRST_PERSON && current))
