@@ -1175,3 +1175,12 @@ BBS moduna, DaVinci Resolve ve modern prodÃ¼ksiyon araÃ§larÄ±ndan esinlene
 ### Derleme Durumu
 * `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 15s** (0 hata).
 
+
+## AŞAMA 79: Mod Sürümünün C1.1 Olarak Güncellenmesi (Tamamlandı)
+
+### Yapılan Güncellemeler
+* **`gradle.properties`:** `mod_version=C1.1` olarak güncellendi.
+* **`fabric.mod.json`:** `expand "version": project.version` üzerinden `C1.1-1.20.4` sürümü otomatik bağlandı.
+* **`UILandingScreen.java`:** Karşılama ve banner rozetindeki `BANNER_VERSION` sabiti `"C1.1"` olarak güncellendi.
+
+
