@@ -2,7 +2,7 @@
 
 **Proje:** Blockbuster Studio Catalyst (BBS CS) - Fabric 1.20.4 Port (`bbs-cs`)  
 **Tarih:** 02 Ekim 2026  
-**Son Tamamlanan Aşama:** Kritik Çökme Düzeltmesi (Crash Fix) — GameRendererMixin @Shadow resetProjectionMatrix Hatası & Bağımsız El Projeksiyonu  
+**Son Tamamlanan Aşama:** 89.4 — Stüdyodan/Film Editöründen Çıkışta El Durumu Sızıntısı (State Leak / Delayed Reset) Düzeltmesi  
 *(AÅŸama 57: BBS Hub Pazaryeri, AÅŸama 58: Video & Audio Ses Kalitesi, AÅŸama 59: Mod KimliÄŸi ve SÃ¼rÃ¼m C1.0)*:
 
 1. **FAZ 0: Crash, DoS ve Veri KaybÄ± AÃ§Ä±klarÄ± (%100):**
@@ -1499,6 +1499,75 @@ Oyun başlangıçta Fabric Mixin başlatıcısında şu hata ile çökmekteydi:
      * `finally` bloğu içerisinde `matrices.pop()` ve `RenderSystem.setProjectionMatrix(origProj, origSorter)` ile oyunun orijinal projeksiyon matrisi ve matris yığını kalıntısız ve güvenli biçimde geri yüklendi.
 3. **Derleme Doğrulaması:**
    - `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 10s** (0 hata).
+
+
+## AŞAMA 89.2: Hand Bobbing Arc, View Bobbing ve FPS Çizim Matematiğinin Uyarlanması (Tamamlandı)
+
+### Yapılanlar:
+1. **El Sallantı Yayı (Hand Bobbing Arc & Pendulum):**
+   - Referans modun `applyBob` ve `HeldItemRenderer` kanca yapısı decompile edilerek uyarlandı:
+     * Düz çizgisel/rijit kaydırma tamamen kaldırıldı.
+     * `HeldItemRendererMixin` içerisine `renderFirstPersonItem` için `@At("HEAD")` ve `@At("RETURN")` kancaları eklendi.
+     * Her kol çizilmeden önce kamera uzayında `matrices.push()` yapılıp dönüşümler uygulandı ve dönüşte `matrices.pop()` ile matris yığını temizlendi.
+     * Kolun ekrandaki konumu (ör. sağ el `(0.56, -0.52)`) belirlenmeden önce kamera ekseninde rotasyon (`Z` roll ve `X` pitch) uygulandığı için, ekranın alt köşesindeki kollar doğal bir pivotla içeri-dışarı 3D kavis (arc) çizerek ve yaylanarak hareket eder hale getirildi.
+     * Matematiksel formül:
+       - `phase = - (limbPos * 0.6662F / PI)`
+       - `sin = sin(phase * PI)`, `cos = cos(phase * PI)`
+       - Öteleme: `translate(sin * bobStrength * 0.5F, -abs(cos * bobStrength), 0.0F)` (adım ritmiyle aşağı basma ve yana salınım)
+       - Roll Salınımı: `rotateZ(sin * bobStrength * 3.0F)`
+       - Pitch Salınımı: `rotateX(abs(cos(phase * PI - 0.2F) * bobStrength) * 5.0F)` (`-0.2F` faz gecikmesi sayesinde elipssi sarkaç yayı).
+2. **Kamera & Baş Dönüşü Eylemsizliği (Inertia Lag):**
+   - `POVHandRenderer.applyHandAnimations` metodunda aktörün kafa dönüşü (`headYaw`, `headPitch`) ile gövde açısı ve önceki açı arasındaki farklar (`yawDelta`, `pitchDelta`, `MathHelper.wrapDegrees` ile 360° sıçramaları önlenerek) hesaplandı:
+     * `matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(pitchDelta * 0.1F))`
+     * `matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(yawDelta * 0.1F))`
+     * Kamera sağa/sola ve yukarı/aşağı dönerken kolların kameraya yapışık kalması önlendi; fiziksel bir vücut ağırlığı ve eylemsizliği ile süzülmesi sağlandı.
+3. **Kamera View Bobbing Kalibrasyonu (`POVClip.java`):**
+   - `POVClip.java` içerisindeki kamera sallantısı vanilla Minecraft `GameRenderer.bobView` matematiksel ağırlıklarına uyarlandı:
+     * Roll: `roll += sin * stride * 3.0F`
+     * Pitch (Adım eğilmesi): `pitch += abs(cos(phase * PI - 0.2F) * stride) * 5.0F`
+     * Konumsal adım basması: `bobVertical = -abs(cos * stride) * 0.5` ve `bobLateral = sin * stride * 0.25`
+     * Dünya ekseninde kamera açısına göre trigonometrik `px += cos(yawRad) * bobLateral` ve `pz += sin(yawRad) * bobLateral` koordinat dönüşümü ile entegre edildi.
+4. **Derleme Doğrulaması:**
+   - `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 12s** (0 hata).
+
+
+## AŞAMA 89.3: Kamera Dönüşünde El Takılması / Titremesi Düzeltmesi (Yaw Jitter / Stutter Fix) (Tamamlandı)
+
+### Kök Neden & Çözüm:
+1. **Discontinuous BodyYaw / Pitch Eylemsizliğinin Kaldırılması:**
+   - `POVHandRenderer.applyHandAnimations` içerisindeki `yawDelta = MathHelper.wrapDegrees(headYaw - bodyYaw)` ve `pitchDelta = MathHelper.wrapDegrees(headPitch - prevPitch)` hesaplamaları kaldırıldı.
+   - Minecraft replay aktörlerinde `bodyYaw` gövde açısı yalnızca `|headYaw - bodyYaw| > 75°` limitine ulaşıldığında ayrık tick adımlarıyla (discrete snapping) güncellendiği için, kamera yatayda pürüzsüz dönerken ellerin titremesine, takılmasına ve sarsıntılı sıçramasına yol açıyordu.
+2. **ClientPlayerEntity Açı Hizalaması & Vanilla HeldItemRenderer İzolasyonu:**
+   - Referans modun `HandPlaybackSession.apply` mimarisi incelenerek `POVHandRenderer.render` içine aktarıldı:
+     * Orijinal `player.getYaw()`, `prevYaw`, `renderYaw`, `lastRenderYaw`, `headYaw`, `prevHeadYaw`, `bodyYaw`, `prevBodyYaw` ve pitch değerleri saklandı.
+     * `player`'ın tüm yönelim alanları anlık kamera açısına (`camera.getYaw()`, `camera.getPitch()`) eşitlendi.
+     * Bu sayede vanilla `HeldItemRenderer.renderItem` içerisindeki `(player.getYaw(tickDelta) - lastRenderYaw) * 0.1F` rotasyon farkı tam olarak `0.0F` yapılarak yerel oyuncunun fare hareketlerinden kaynaklanan gereksiz sapmalar ve takılmalar bütünüyle nötrlendi.
+     * `finally` bloğu içerisinde tüm orijinal oyuncu açıları ve matris yığını kalıntısız ve güvenle geri yüklendi.
+3. **Yürüyüş Sarkaç Sallantısının (Bobbing Arc) Korunması:**
+   - Aşama 89.2'de kalibre edilen doğal 3D sarkaç yaylanması (`applyBob`) yalnızca aktör yürüdüğünde (`limbSpeed > 0.001F`) çalışacak şekilde kusursuz biçimde korundu; kamera dönerken eller kameraya kilitli ve tereyağı kıvamında (butter-smooth) akıcı hale getirildi.
+4. **Derleme Doğrulaması:**
+   - `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 10s** (0 hata).
+
+
+## AŞAMA 89.4: Stüdyodan/Film Editöründen Çıkışta El Durumu Sızıntısı (State Leak / Delayed Reset) Düzeltmesi (Tamamlandı)
+
+### Kök Neden & Çözüm:
+1. **Anlık Durum Sıfırlama (Immediate State Reset) & Aktiflik Denetleyicisi:**
+   - `POVClientState.java` içerisine `reset()` metodu tanımlandı (`clear()` metodu ile alias bağlandı). `activeClip = null`, `activeActor = null`, `activeReplay = null`, `activeTransition = 0F`, `lastTimestamp = 0L` anında temizlenir.
+   - `POVClientState` içine `BooleanSupplier activeChecker` ve `Runnable onReset` geri çağrımları (callbacks) eklendi.
+   - `POVHandRenderer` statik başlatıcısında `activeChecker` tanımlanarak, kamera kontrolcüsü (`BBSModClient.getCameraController().getCurrent()`) aktif bir `CameraWorkCameraController` olmadığı anda `POVClientState.getActiveClip()` çağrısının otomatik olarak `reset()` tetiklemesi ve `null` dönmesi sağlandı. Zaman aşımı tavanı da 250ms'den 100ms'ye düşürüldü.
+   - `POVHandRenderer.render` ve `isPovActive` metotlarının başına kamera kontrolcüsü güvenlik kontrolü eklendi; stüdyodan çıkıldığı anda ilk render karesinde (`frame 0`) derhal `false` dönerek vanilla birinci şahıs el çizimine gecikmesiz izin verildi.
+2. **Ekran Kapanış & Kamera Geçiş Kancaları (UI Screen Close Hooks):**
+   - `UIFilmPanel.java`: `leaveEditing()` (`onDisappear`) ve `leaveScreen()` (`onClose`) metotlarına doğrudan `POVClientState.reset()` eklendi.
+   - `UICatalystPanel.java`: `onDisappear` ve `onClose` yaşam döngüsü kancalarına doğrudan `POVClientState.reset()` eklendi.
+   - `CameraController.java`: `updateCurrent()` ve `reset()` metotlarına kontrolcü yığını değiştiğinde `!(current instanceof CameraWorkCameraController)` durumunda anlık `POVClientState.reset()` çağrısı entegre edildi.
+3. **Oyuncu Morph Durum İzolasyonu:**
+   - `POVHandRenderer` içerisinde PoV el çizimi başlatılmadan önce `client.player`'ın orijinal morph formu `originalMorphForm` ve `morphOverridden` bayrağı ile kaydedildi.
+   - `POVClientState.onReset` geri çağrımı tanımlanarak, editör kapandığında veya render kesintiye uğradığında istemci oyuncusunun morph durumu anında orijinal haline geri döndürülerek el sızıntısı bütünüyle önlendi.
+4. **Derleme Doğrulaması:**
+   - `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 16s** (0 hata).
+
+
 
 
 

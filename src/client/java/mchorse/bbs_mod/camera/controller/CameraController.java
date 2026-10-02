@@ -1,6 +1,7 @@
 package mchorse.bbs_mod.camera.controller;
 
 import mchorse.bbs_mod.camera.Camera;
+import mchorse.bbs_mod.camera.clips.overwrite.POVClientState;
 import mchorse.bbs_mod.utils.MathUtils;
 import org.joml.Vector3d;
 
@@ -56,6 +57,11 @@ public class CameraController implements ICameraController
         }
 
         this.current = current;
+
+        if (this.current == null || !(this.current instanceof CameraWorkCameraController))
+        {
+            POVClientState.reset();
+        }
     }
 
     public ICameraController getCurrent()
@@ -145,5 +151,6 @@ public class CameraController implements ICameraController
     public void reset()
     {
         this.current = null;
+        POVClientState.reset();
     }
 }

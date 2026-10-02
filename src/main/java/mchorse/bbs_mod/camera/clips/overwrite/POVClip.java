@@ -206,7 +206,7 @@ public class POVClip extends CameraClip
         float pitch = Lerps.lerp(actor.getPrevPitch(), actor.getPitch(), transition);
         float roll = actor.getRoll();
 
-        /* Dynamic Walking and Camera Sway Bobbing (Smooth Sine Calibration) */
+        /* Dynamic Walking and Camera Sway Bobbing (Exact Vanilla & Reference Mod Calibration) */
         float strength = this.bobStrength.get();
         if (this.bobbing.get() && strength > 0.001F)
         {
@@ -218,25 +218,28 @@ public class POVClip extends CameraClip
                 /* Smoothstep ease-in damping on movement speed */
                 float speed = Math.min(limbSpeed, 1.0F);
                 float smoothSpeed = speed * speed * (3.0F - 2.0F * speed);
-                float bobFactor = smoothSpeed * strength;
+                float stride = smoothSpeed * 0.1F * strength;
 
-                /* Stride cycle frequency matching Minecraft's native leg cycle (0.6662F) */
-                float stepCycle = limbPos * 0.6662F;
-                float rollSway = (float) Math.sin(stepCycle);
-                float pitchDip = (float) (Math.cos(stepCycle * 2.0F) * 0.5 + 0.5);
+                /* Phase matching vanilla walk cycle (0.6662F is biped step cycle) */
+                float phase = -(limbPos * 0.6662F / (float) Math.PI);
 
-                /* Gentle cinematic sway and tilt */
-                roll += rollSway * bobFactor * 0.5F;
-                pitch += pitchDip * bobFactor * 0.35F;
+                float sin = (float) Math.sin(phase * Math.PI);
+                float cos = (float) Math.cos(phase * Math.PI);
 
-                /* Subtle lateral and vertical stepping offsets */
-                double bobY = -pitchDip * bobFactor * 0.012;
-                double bobSide = rollSway * bobFactor * 0.010;
+                /* Camera roll sway (3.0F weight matching vanilla bobView) */
+                roll += sin * stride * 3.0F;
+
+                /* Camera pitch step nod with -0.2F phase lag (5.0F weight matching vanilla bobView) */
+                pitch += (float) Math.abs(Math.cos(phase * Math.PI - 0.2F) * stride) * 5.0F;
+
+                /* Camera lateral and vertical stepping displacements */
+                double bobVertical = -Math.abs(cos * stride) * 0.5;
+                double bobLateral = sin * stride * 0.25;
 
                 float yawRad = (float) Math.toRadians(yaw);
-                px += Math.cos(yawRad) * bobSide;
-                pz += Math.sin(yawRad) * bobSide;
-                py += bobY;
+                px += Math.cos(yawRad) * bobLateral;
+                pz += Math.sin(yawRad) * bobLateral;
+                py += bobVertical;
             }
         }
 

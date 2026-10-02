@@ -3,6 +3,8 @@ package mchorse.bbs_mod.camera.clips.overwrite;
 import mchorse.bbs_mod.film.replays.Replay;
 import mchorse.bbs_mod.forms.entities.IEntity;
 
+import java.util.function.BooleanSupplier;
+
 /**
  * Client session state tracking the currently active POV clip and its target actor.
  *
@@ -16,6 +18,9 @@ public class POVClientState
     private static Replay activeReplay;
     private static float activeTransition;
     private static long lastTimestamp;
+
+    public static Runnable onReset;
+    public static BooleanSupplier activeChecker;
 
     public static void setActive(POVClip clip, IEntity actor, float transition)
     {
@@ -33,9 +38,16 @@ public class POVClientState
 
     public static POVClip getActiveClip()
     {
-        if (System.currentTimeMillis() - lastTimestamp > 250)
+        if (activeChecker != null && !activeChecker.getAsBoolean())
         {
-            clear();
+            reset();
+            return null;
+        }
+
+        if (System.currentTimeMillis() - lastTimestamp > 100)
+        {
+            reset();
+            return null;
         }
 
         return activeClip;
@@ -43,9 +55,9 @@ public class POVClientState
 
     public static IEntity getActiveActor()
     {
-        if (System.currentTimeMillis() - lastTimestamp > 250)
+        if (getActiveClip() == null)
         {
-            clear();
+            return null;
         }
 
         return activeActor;
@@ -53,9 +65,9 @@ public class POVClientState
 
     public static Replay getActiveReplay()
     {
-        if (System.currentTimeMillis() - lastTimestamp > 250)
+        if (getActiveClip() == null)
         {
-            clear();
+            return null;
         }
 
         return activeReplay;
@@ -102,10 +114,22 @@ public class POVClientState
         return false;
     }
 
-    public static void clear()
+    public static void reset()
     {
         activeClip = null;
         activeActor = null;
         activeReplay = null;
+        activeTransition = 0F;
+        lastTimestamp = 0L;
+
+        if (onReset != null)
+        {
+            onReset.run();
+        }
+    }
+
+    public static void clear()
+    {
+        reset();
     }
 }

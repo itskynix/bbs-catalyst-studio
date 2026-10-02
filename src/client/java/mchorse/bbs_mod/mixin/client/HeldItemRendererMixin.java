@@ -16,8 +16,18 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(HeldItemRenderer.class)
 public class HeldItemRendererMixin
 {
+    @Inject(method = "renderFirstPersonItem", at = @At("HEAD"))
+    private void bbsBeforeRenderFirstPersonItem(AbstractClientPlayerEntity player, float tickDelta, float pitch, Hand hand, float swingProgress, ItemStack item, float equipProgress, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light, CallbackInfo ci)
+    {
+        if (POVHandRenderer.isRendering() && POVHandRenderer.shouldRenderHand(hand))
+        {
+            matrices.push();
+            POVHandRenderer.applyHandAnimations(matrices, hand);
+        }
+    }
+
     @Inject(method = "renderFirstPersonItem", at = @At("HEAD"), cancellable = true)
-    private void onRenderFirstPersonItem(AbstractClientPlayerEntity player, float tickDelta, float pitch, Hand hand, float swingProgress, ItemStack item, float equipProgress, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light, CallbackInfo ci)
+    private void bbsProcessFirstPersonItem(AbstractClientPlayerEntity player, float tickDelta, float pitch, Hand hand, float swingProgress, ItemStack item, float equipProgress, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light, CallbackInfo ci)
     {
         if (POVHandRenderer.isRendering())
         {
@@ -33,6 +43,15 @@ public class HeldItemRendererMixin
                 ((HeldItemRendererAccessor) this).bbs$invokeRenderArmHoldingItem(matrices, vertexConsumers, light, equipProgress, swingProgress, arm);
                 ci.cancel();
             }
+        }
+    }
+
+    @Inject(method = "renderFirstPersonItem", at = @At("RETURN"))
+    private void bbsAfterRenderFirstPersonItem(AbstractClientPlayerEntity player, float tickDelta, float pitch, Hand hand, float swingProgress, ItemStack item, float equipProgress, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light, CallbackInfo ci)
+    {
+        if (POVHandRenderer.isRendering() && POVHandRenderer.shouldRenderHand(hand))
+        {
+            matrices.pop();
         }
     }
 }
