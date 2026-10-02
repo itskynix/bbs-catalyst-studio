@@ -1,8 +1,8 @@
 # BBS Mod - GeliÅŸtirme Durumu (DEV_STATE)
 
 **Proje:** Blockbuster Studio Catalyst (BBS CS) - Fabric 1.20.4 Port (`bbs-cs`)  
-**Tarih:** 01 Ekim 2026  
-**Son Tamamlanan AÅŸama:** 65 â€” GÃ¶kyÃ¼zÃ¼ / Ufuk GeÃ§iÅŸi ve Sis Render HatasÄ±nÄ±n OnarÄ±mÄ± (Sky Dome Void & Fog Pass Fix)  
+**Tarih:** 02 Ekim 2026  
+**Son Tamamlanan Aşama:** 84 — Media Pool İlk Açılış Desync Düzeltmesi ve Önizleme Kalite Seçenekleri (Full, Half, Third, Quarter)  
 *(AÅŸama 57: BBS Hub Pazaryeri, AÅŸama 58: Video & Audio Ses Kalitesi, AÅŸama 59: Mod KimliÄŸi ve SÃ¼rÃ¼m C1.0)*:
 
 1. **FAZ 0: Crash, DoS ve Veri KaybÄ± AÃ§Ä±klarÄ± (%100):**
@@ -1178,9 +1178,158 @@ BBS moduna, DaVinci Resolve ve modern prodÃ¼ksiyon araÃ§larÄ±ndan esinlene
 
 ## AŞAMA 79: Mod Sürümünün C1.1 Olarak Güncellenmesi (Tamamlandı)
 
-### Yapılan Güncellemeler
+### Yapılan Güncellemeler:
 * **`gradle.properties`:** `mod_version=C1.1` olarak güncellendi.
 * **`fabric.mod.json`:** `expand "version": project.version` üzerinden `C1.1-1.20.4` sürümü otomatik bağlandı.
 * **`UILandingScreen.java`:** Karşılama ve banner rozetindeki `BANNER_VERSION` sabiti `"C1.1"` olarak güncellendi.
+
+### Derleme Durumu:
+* `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL** (0 hata).
+
+
+## AŞAMA 80: Inspector Başlık Düzeltmesi ve Blend/Visible/Lock Düğmelerinin Katmana Taşınması (Tamamlandı)
+
+### Yapılanlar:
+1. **Inspector Başlığı:**
+   - `INSPECTOR` büyük harfli başlık metni `Inspector` olarak güncellendi.
+   - `en_us.json` ve `tr_tr.json` dil dosyaları kontrol edilerek `ui.catalyst.inspector` anahtarının yerelleştirmesi sağlandı.
+2. **Inspector Panelindeki Düğmelerin Temizlenmesi:**
+   - `UICatalystPanel.java` içerisindeki Inspector formundan `Blend`, `Visible` ve `Lock` butonları/kontrolleri kaldırıldı.
+3. **Blend Seçeneğinin Katman Satırına Eklenmesi:**
+   - Katman listesindeki satırlarda (`Visible`, `Solo`, `Lock` ikonlarının yanına `x: 66..96`) `Blend` modu göstergesi ve seçicisi eklendi (sol tık ile mod döngüsü, sağ tık ile context menü).
+
+### Derleme Durumu:
+* `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL** (0 hata).
+
+
+## AŞAMA 81: Audio Keyframe Altyapısı (Volume/Pan), 'L' Kısayolu, Motion/Audio Grupları ve Elle Değer Girişi (Tamamlandı)
+
+### Yapılanlar:
+1. **Volume ve Pan Keyframe Desteği:**
+   - `CatalystLayer.java`: `channelVolume`, `channelPan`, `animVolume`, `animPan` kanal ve animasyon bayrakları entegre edildi.
+   - Bitmask'lar (`PROP_VOLUME = 32`, `PROP_PAN = 64`) ve alt kanal ID'leri (`SUB_PROP_VOLUME = 109`, `SUB_PROP_PAN = 110`) tanımlandı.
+   - `computeEffectiveVolume(int frame)` ve `computeEffectivePan(int frame)` metotları yazılarak oynatma (`syncAudioPlayback`) ve timeline kaydırma (`playScrubAudio`) anlarında ses motorunun dinamik ve enterpolasyonlu değerleri okuması sağlandı.
+   - `splitChannelsAt`, `copyChannelsTo`, `hasKeyframeAt`, `addKeyframeSingle`, `removeKeyframeSingle`, `updatePropertyValue` ve MapType serileştirme/deserileştirme akışları ses kanallarını tam kapsayacak şekilde genişletildi.
+2. **Kısayol ve Özellik Gruplandırması (Timeline ve Katman Listesi):**
+   - Zaman çizelgesinde ve sol katman listesinde açılır menü (twirl-down) özellikleri iki ana kategoriye ayrıldı:
+     * **Motion** başlığı altında: `Position (X, Y)`, `Scale (X, Y)`, `Rotation`, `Opacity`, `Anchor (X, Y)`
+     * **Audio** başlığı altında: `Volume`, `Audio Pan`
+   - Hem zaman çizelgesi track'leri hem de sol katman listesi (`UICatalystTimeline.getSubRowCount(layer) * 18`) ile 1:1 piksel hizalanarak dikey kayma/drift tamamen önlendi.
+   - Kategori başlıklarına tıklandığında ilgili grubun bağımsız açılıp kapanması sağlandı.
+   - **'L' Kısayolu (After Effects Standardı):** Bir ses veya video katmanı seçiliyken klavyeden `L` tuşuna basıldığında doğrudan `Audio` grubunu (`Volume` ve `Pan` satırlarını) genişletip/daraltma özelliği eklendi.
+   - 'U' kısayolu güncellenerek animasyonlu volume ve pan kanallarını da görünür kılması sağlandı.
+3. **Elle Sayısal Değer Girişi (Direct Value Input):**
+   - **Inspector Panelinde (`UITrackpad.java`):** Kullanıcı fareyi kaydırmadan yalnızca tıkladığında veya çift tıkladığında alan doğrudan odaklanır ve tüm metni seçer (`selectAll(context)`). Kullanıcı doğrudan sayı yazıp `Enter` ile değeri onaylayabilir.
+   - **Zaman Çizelgesi Özellik Satırlarında (`UICatalystPanel.java`):** Özellik satırlarındaki değer kutucuklarına çift tıklandığında veya kaydırma yapılmadan tıklandığında anında inline `UITextbox` (`inlinePropInput`) açılır. Kullanıcı klavyeden doğrudan sayı yazıp `Enter` tuşuna basarak veya dışarı tıklayarak değeri onaylar, `Escape` ile iptal edebilir. Hem tek bileşenli (Rotation, Opacity, Volume, Pan) hem çift bileşenli (Position, Scale, Anchor) eksenler desteklenir. Yüzdelik değer girişleri (örn. Volume için "80" yazıldığında 0.8'e dönüştürülmesi) akıllıca normalize edilir.
+4. **Derleme Doğrulaması:**
+   - `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 19s** (0 hata).
+
+
+## AŞAMA 82: Media Pool Görünüm Seçenekleri (Liste ve Thumbnail / Grid Modu) (Tamamlandı)
+
+### Yapılanlar:
+1. **Görünüm Modu Altyapısı (List & Grid/Thumbnail):**
+   - `UIMediaPoolPanel.java`: `ViewMode` enum'ı (`LIST`, `GRID`) ve oturumlar/panel açılıp kapanmaları boyunca geçerli modun korunması için `public static ViewMode currentViewMode = ViewMode.LIST;` eklendi.
+   - **List (Satırsal Görünüm):** Medya varlıklarını kompakt liste kartları halinde (36px yükseklik, dosya adı, boyutu, süresi, tip rozeti: IMG/VID/AUD) sıralamaya devam eder.
+   - **Grid / Thumbnail (Kutucuklu Görünüm):** Medya varlıklarını panel genişliğine dinamik uyum sağlayan responsive sütun hesaplamalı (`cols = Math.max(1, availableW / 70)`) kutucuklar halinde sunar:
+     * Üst kısımda thumbnail alanı (arka plan kutusu, resimler için aspect-ratio korunarak letterbox/fitted doku gösterimi veya video/ses için ortalanmış medya ikonu).
+     * Sol üst köşede tip rozeti (`IMG`, `VID`, `AUD`), sağ alt köşede süre rozeti (video ve ses dosyaları için).
+     * Alt kısımda ortalanmış ve panel kart sınırını aşmayacak şekilde kısaltılmış dosya adı metni.
+     * Seçim ve fare üzerine gelme (hover) için vurgu ve çerçeve hatları.
+2. **Görünüm Değiştirme Kontrolleri (Toggle Buttons):**
+   - Media Pool filtre çubuğuna (`search` arama kutusunun sağına `x(1F, -40)` ve `x(1F, -20)` koordinatlarında) iki adet ikonlu buton eklendi:
+     * `listViewBtn` (`Icons.LIST`): Liste görünümüne geçer.
+     * `gridViewBtn` (`Icons.GALLERY`): Grid/Thumbnail görünümüne geçer.
+   - Aktif olan görünüm modunun alt çizgisi `Direction.BOTTOM` vurgusu ile otomatik aydınlatılır ve açıklayıcı tooltip'ler sunar.
+   - Mod değiştiğinde scroll sıfırlanıp liste anında yeniden çizilir (`setViewMode`).
+3. **Sürükle-Bırak ve Çift Tıklama / Context Menü Uyumu:**
+   - `subMouseClicked` metodu hem Liste (dikey satırsal aralık) hem de Grid (çok sütunlu matris koordinatları) için birleşik `handleAssetClick` metodunu kullanacak şekilde uyarlandı.
+   - Grid modunda da varlıkların zaman çizelgesine sürüklenmesi (drag-and-drop), çift tıklanarak playhead konumuna katman olarak eklenmesi ve sağ tık context menüsü (Playhead'e Ekle, Yeniden Yükle, Klasörde Göster, Havuzdan Sil) %100 uyumlu ve eksiksiz çalışır.
+4. **Thumbnail Doku Önbelleği ve Kaynak Yönetimi:**
+   - Resim varlıklarının küçük resimleri için `thumbnailTextures` haritası üzerinden OpenGL doku (`Texture`) önbelleği oluşturuldu (`Texture.textureFromPixels`).
+   - Varlık silindiğinde (`showAssetContextMenu` -> Delete from Pool), yeniden yüklendiğinde (Reload) veya kullanılmayanlar temizlendiğinde (`cleanUnused`) ilgili dokular bellek ve GPU sızıntılarını önlemek amacıyla `tex.delete()` çağrısı ile güvenli şekilde serbest bırakılır.
+5. **Derleme Doğrulaması:**
+   - `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 12s** (0 hata).
+
+
+## AŞAMA 82.1: Media Pool Grid Görünümü Metin Sadeleştirmesi ve Tooltip Düzenlemesi (Tamamlandı)
+
+### Yapılanlar:
+1. **Grid Kartlarında Metin Sadeleştirmesi:**
+   - Grid görünümünde (`ViewMode.GRID`) thumbnail ve kart altındaki frame/süre metinleri (`... fr (... s)`) kaldırıldı.
+   - Kutucukların altında yalnızca tek satır dosya ismi bırakıldı ve taşmaları önlemek için mevcut ellipsis kısaltması korundu.
+2. **Tooltip Metninin Sadeleştirilmesi:**
+   - Grid butonu (`gridViewBtn`) tooltip metni `"Grid / Thumbnail View"` yerine `"Grid View"` olarak sadeleştirildi.
+3. **Derleme Doğrulaması:**
+   - `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 16s** (0 hata).
+
+
+## AŞAMA 83: Catalyst Editor Dinamik ve Boyutlandırılabilir Panel Bölücüleri (Resizable Splitters) (Tamamlandı)
+
+### Yapılanlar:
+1. **Dinamik Bölücü (Splitter) Hatları:**
+   - **Yatay Bölücü (Önizleme / Alt Alan Ayrımı):**
+     * Üstteki Preview tuvali ile alttaki zaman çizelgesi / katmanlar bloğu (`compTabStrip` ve `bottomArea`) arasına etkileşimli yatay splitter entegre edildi.
+     * Fare bu yatay sınır hattına geldiğinde dikey yeniden boyutlandırma imleci (`GLFW_VRESIZE_CURSOR`) tetiklenir.
+     * Tıklanıp yukarı/aşağı sürüklendiğinde `horizontalSplitRatio` dinamik olarak güncellenir; önizleme ve zaman çizelgesi alanları akıcı şekilde yeniden boyutlandırılır.
+   - **Dikey Bölücüler (Sol Panel & Inspector Ayrımı):**
+     * Sol panel (`layersContainer` ve üstte açıksa `mediaPoolPanel`) ile ortadaki `catalystTimeline` arasındaki dikey sınır hattı oluşturuldu.
+     * Ortadaki `catalystTimeline` ile sağdaki `inspectorContainer` arasındaki dikey sınır hattı oluşturuldu.
+     * Fare bu sınırlara geldiğinde yatay boyutlandırma imleci (`GLFW_HRESIZE_CURSOR`) tetiklenir; sağa/sola sürüklendiğinde `leftPanelWidth` ve `rightPanelWidth` anlık olarak güncellenir.
+2. **Görsel Geri Bildirim ve Kılavuz Çizgileri:**
+   - Fare bölücü hatlarının üzerine geldiğinde (hover) yarı saydam camgöbeği kılavuz çizgisi (`0x6600E5FF`) çizilir.
+   - Bölücü aktif olarak sürüklenirken (active drag) parlak neon camgöbeği kılavuz çizgisi (`0xFF00E5FF`) çizilir.
+3. **Güvenli Sınırlar ve Durum Korunumu:**
+   - Minimum boyut sınırları: Sol panel için `minW = 140px`, Inspector için `minW = 140px`, Timeline için garanti edilen minimum genişlik `minTimelineW = 200px`.
+   - Yükseklik sınırları: Önizleme alanı için minimum `100px`, alt alan için minimum `120px`.
+   - `clampSplitterDimensions()` ve `updateEditorLayout()` metotları ile pencere yeniden boyutlandırıldığında, paneller açılıp kapandığında (Media Pool, Fullscreen) veya tam ekrandan çıkıldığında kullanıcı ayarları korunur ve otomatik taşma engellenir.
+4. **Derleme Doğrulaması:**
+   - `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 13s** (0 hata).
+
+
+## AŞAMA 84: Media Pool İlk Açılış Desync Düzeltmesi ve Önizleme Kalite Seçenekleri (Full, Half, Third, Quarter) (Tamamlandı)
+
+### Yapılanlar:
+1. **Media Pool İlk Açılış Senkronizasyon Bugfix'i:**
+   - Sorun Çözümü: `showMediaPool` bayrağı varsayılan olarak `false` yapıldı ve editör açılışında `updateVisibility()` içerisine `updateEditorLayout()` çağrısı entegre edildi.
+   - Panel ilk açılışta kapalı başlar ve üst araç çubuğundaki butona veya klavyeden `B` kısayoluna ilk basışta tek tetiklemeyle anında açılır; ikinci bir basışa gerek kalmaz.
+   - `mediaPoolToggleBtn` butonuna `Direction.BOTTOM` vurgusu eklenerek panel açıkken aydınlatılması sağlandı.
+2. **After Effects Tarzı Önizleme Kalitesi (Playback Resolution):**
+   - Dört Kalite Modu: `Full` (1/1 - Tam Çözünürlük), `Half` (1/2 Çözünürlük), `Third` (1/3 Çözünürlük), `Quarter` (1/4 Çözünürlük) modlarını içeren `PreviewResolution` mimarisi kuruldu.
+   - Video Oynatıcı Downsampling: Canlı önizleme sırasında video oynatıcılara (`VideoPlayer`) kompozisyon çözünürlüğü kalite çarpanıyla çarpılarak (`compW * q`, `compH * q`) uygulanır; GPU bellek yükü ve CPU video decode maliyeti büyük ölçüde hafifletilir. Scrubbing anında da anlık olarak geçerlidir.
+   - SCENE 3D FBO Ölçekleme: SCENE katmanlarında 3D dünya sahnesi yakalanırken FBO boyutu seçilen kaliteye göre küçültülür (`BBSRendering.setCustomSize(true, compW * q, compH * q)`).
+   - Dışa Aktarma İzolasyonu: Video export (`isExporting == true`) sırasında kalite modu her zaman `1.0F` (Full) kalarak render kalitesi korunur.
+3. **Arayüz Kontrolü & OSD Entegrasyonu:**
+   - Önizleme monitörünün sağ alt OSD köşesine (`x(1F, -76).y(1F, -26).w(68).h(18)`) kompakt `previewResolutionBtn` yerleştirildi:
+     * Sol Tıklama: Kalite modları arasında sırayla döngü (`[Full]` -> `[Half]` -> `[Third]` -> `[Quarter]`).
+     * Sağ Tıklama: Doğrudan seçim yapmayı sağlayan context menü (onay işareti ikonlu).
+   - Önizleme OSD bilgi çubuğuna aktif kalite ve oran bilgisi (`COMP 1 • 1920×1080 [Full 1/1] • 60 FPS...`) eklendi.
+4. **Derleme Doğrulaması:**
+   - `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 15s** (0 hata).
+
+
+## AŞAMA 84.1: Önizleme Kalitesi (Playback Resolution) Düzeltmesi (Third/Quarter Doku Kaybı Fix) (Tamamlandı)
+
+### Yapılanlar:
+1. **VideoPlayer Çözünürlük ve FFmpeg Pipe İzolasyonu:**
+   - Sorun Analizi: Canlı önizleme sırasında `Third (1/3)` ve `Quarter (1/4)` modlarında `VideoPlayer.setMaxSize()` fonksiyonunun kesirli ve tek sayılı boyutlarla çağrılması, video akışının/pipe'ının sonlanmasına veya `seeking` durumunda kalarak `null` doku dönmesine ve tuvalde düz mavi fallback kutusunun çizilmesine neden oluyordu.
+   - Çözüm: `VideoPlayer.setMaxSize(compW, compH)` video oynatıcının natif kompozisyon boyutunda kalması sağlandı; video çözücünün dahili boru hattına ve çözünürlüğüne dokunulmadı.
+2. **Önizleme Doku / FBO Ölçeklemesi (Viewport Downscale):**
+   - Kalite seçeneği (`Half`, `Third`, `Quarter`) doğrudan önizleme tuvalinin özel ara FBO'su (`previewFbo`) üzerinden işletildi.
+   - `previewFbo` çift sayılı (even-number) ve minimum 16x16 piksel garantisiyle oluşturuldu:
+     * `Half`: 0.5x FBO çözünürlüğü (`compW * 0.5F`).
+     * `Third`: 0.33x FBO çözünürlüğü (`compW * (1.0F/3.0F)`).
+     * `Quarter`: 0.25x FBO çözünürlüğü (`compW * 0.25F`).
+     * `Full`: FBO aracı olmaksızın 1.0x doğrudan tuval çizimi.
+   - `previewFboTexture` için `GL11.GL_NEAREST` örnekleme filtresi tanımlanarak After Effects tarzı pikselli draft önizleme sağlandı.
+3. **Tuval ve Katman Çizim Senkronizasyonu:**
+   - FBO aktifken `fbo.applyClear()` ve `RenderSystem.viewport(0, 0, fboW, fboH)` ile OpenGL ve Blaze3D viewport durumları senkronize edildi.
+   - Çizilen FBO dokusu `canvasArea` üzerine `batcher.texturedBox` ile gerildi; Rule of Thirds kılavuz çizgileri ve katman seçim sınırları/handle'ları ara FBO dışına alınarak yüksek çözünürlüklü vektörel netliğini koruması sağlandı.
+   - SCENE 3D katmanları FBO downscale sürecine dahil edildiğinden `BBSRendering.setCustomSize` çağrısı canlı önizlemede standart moda döndürüldü.
+4. **Derleme Doğrulaması:**
+   - `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 13s** (0 hata).
+
+
+
 
 

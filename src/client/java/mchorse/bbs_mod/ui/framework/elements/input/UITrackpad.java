@@ -42,6 +42,7 @@ public class UITrackpad extends UINumericInput<UITrackpad>
 
     private Area plusOne = new Area();
     private Area minusOne = new Area();
+    private long lastClickTime = 0L;
 
     public UITrackpad()
     {
@@ -251,6 +252,19 @@ public class UITrackpad extends UINumericInput<UITrackpad>
 
             if (this.wasInside && !this.textbox.isFocused())
             {
+                long now = System.currentTimeMillis();
+                if (now - this.lastClickTime < 300L)
+                {
+                    /* Double click directly enters text editing mode */
+                    context.focus(this);
+                    this.selectAll(context);
+                    this.wasInside = false;
+                    this.dragging = false;
+                    this.lastClickTime = 0L;
+                    return true;
+                }
+                this.lastClickTime = now;
+
                 if (Window.isCtrlPressed())
                 {
                     this.setValueAndNotify(Math.round(this.value));
@@ -290,9 +304,10 @@ public class UITrackpad extends UINumericInput<UITrackpad>
 
         this.textbox.mouseReleased(context.mouseX, context.mouseY, context.mouseButton);
 
-        if (context.mouseButton == 0 && !this.isDraggingTime() && !this.textbox.isFocused())
+        if (context.mouseButton == 0 && !this.textbox.isFocused())
         {
-            if (this.wasInside)
+            boolean wasJustClicked = !this.isDraggingTime() || (Math.abs(this.initialX - context.mouseX) < 3 && Math.abs(this.initialY - context.mouseY) < 3);
+            if (this.wasInside && wasJustClicked)
             {
                 if (this.plusOne.isInside(context))
                 {
@@ -305,6 +320,7 @@ public class UITrackpad extends UINumericInput<UITrackpad>
                 else
                 {
                     context.focus(this);
+                    this.selectAll(context);
                 }
             }
         }

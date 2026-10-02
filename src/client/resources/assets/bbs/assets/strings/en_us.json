@@ -728,6 +728,7 @@
 	"bbs.ui.catalyst.preview": "Viewport Preview",
 	"bbs.ui.catalyst.timeline": "Timeline",
 	"bbs.ui.catalyst.layers": "Layers",
+	"bbs.ui.catalyst.inspector": "Inspector",
 	"bbs.ui.catalyst.tabs.projects": "Projects",
 	"bbs.ui.catalyst.tabs.editor": "Editor",
 	"bbs.ui.catalyst.projects.title": "Catalyst Projects",

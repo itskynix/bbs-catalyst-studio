@@ -235,6 +235,7 @@ public class UIKeys
     public static final IKey CATALYST_PREVIEW = L10n.lang("bbs.ui.catalyst.preview");
     public static final IKey CATALYST_TIMELINE = L10n.lang("bbs.ui.catalyst.timeline");
     public static final IKey CATALYST_LAYERS = L10n.lang("bbs.ui.catalyst.layers");
+    public static final IKey CATALYST_INSPECTOR = L10n.lang("bbs.ui.catalyst.inspector");
     public static final IKey CATALYST_TAB_PROJECTS = L10n.lang("bbs.ui.catalyst.tabs.projects");
     public static final IKey CATALYST_TAB_EDITOR = L10n.lang("bbs.ui.catalyst.tabs.editor");
     public static final IKey CATALYST_PROJECTS_TITLE = L10n.lang("bbs.ui.catalyst.projects.title");

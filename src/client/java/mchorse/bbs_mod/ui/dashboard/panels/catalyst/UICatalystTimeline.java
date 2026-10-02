@@ -68,6 +68,11 @@ public class UICatalystTimeline extends UITimelineCanvas
     public static final int PROP_ROTATION  = 4;
     public static final int PROP_OPACITY   = 8;
     public static final int PROP_ANCHOR    = 16;
+    public static final int PROP_VOLUME    = 32;
+    public static final int PROP_PAN       = 64;
+
+    public static final int MOTION_MASK    = PROP_POSITION | PROP_SCALE | PROP_ROTATION | PROP_OPACITY | PROP_ANCHOR;
+    public static final int AUDIO_MASK     = PROP_VOLUME | PROP_PAN;
 
     /* Vertical scrolling for track lanes */
     public Scroll vertical = new Scroll(new Area());
@@ -211,14 +216,37 @@ public class UICatalystTimeline extends UITimelineCanvas
     public int getExpandedLayerHeight(CatalystLayer layer)
     {
         if (!layer.expanded) return LAYER_ROW_H;
-        int subRows = Integer.bitCount(layer.expandedProps);
+        int subRows = getSubRowCount(layer);
         return LAYER_ROW_H + subRows * PROP_ROW_H;
     }
 
     /** Number of expanded (visible) property rows for a layer. */
     public static int propRowCount(CatalystLayer layer)
     {
-        return layer.expanded ? Integer.bitCount(layer.expandedProps) : 0;
+        return getSubRowCount(layer);
+    }
+
+    public static int getSubRowCount(CatalystLayer layer)
+    {
+        if (layer == null || !layer.expanded || layer.expandedProps == 0) return 0;
+
+        int rows = 0;
+        boolean supportsMotion = (layer.layerType != CatalystLayer.LayerType.AUDIO);
+        boolean supportsAudio = (layer.layerType == CatalystLayer.LayerType.AUDIO || layer.layerType == CatalystLayer.LayerType.VIDEO);
+
+        if (supportsMotion && (layer.expandedProps & MOTION_MASK) != 0)
+        {
+            rows += 1; /* Motion header row */
+            rows += Integer.bitCount(layer.expandedProps & MOTION_MASK);
+        }
+
+        if (supportsAudio && (layer.expandedProps & AUDIO_MASK) != 0)
+        {
+            rows += 1; /* Audio header row */
+            rows += Integer.bitCount(layer.expandedProps & AUDIO_MASK);
+        }
+
+        return rows;
     }
 
     public int getRulerBottom()
@@ -513,145 +541,39 @@ public class UICatalystTimeline extends UITimelineCanvas
 
                 int ly = this.toLayerY(this.getLayerIndex(l));
                 int py = ly + LAYER_ROW_H;
-                int bits = l.expandedProps;
-                int[] propBits = {PROP_POSITION, PROP_SCALE, PROP_ROTATION, PROP_OPACITY, PROP_ANCHOR};
+                boolean supportsMotion = (l.layerType != CatalystLayer.LayerType.AUDIO);
+                boolean supportsAudio = (l.layerType == CatalystLayer.LayerType.AUDIO || l.layerType == CatalystLayer.LayerType.VIDEO);
 
-                for (int p = 0; p < propBits.length; p++)
+                if (supportsMotion && (l.expandedProps & MOTION_MASK) != 0)
                 {
-                    if ((bits & propBits[p]) == 0) continue;
-
-                    int midY = py + PROP_ROW_H / 2;
-                    if (Math.abs(mouseY - midY) <= 6)
+                    py += PROP_ROW_H; /* Skip "Motion" header row */
+                    int[] motionBits = {PROP_POSITION, PROP_SCALE, PROP_ROTATION, PROP_OPACITY, PROP_ANCHOR};
+                    for (int pBit : motionBits)
                     {
-                        KeyframeChannel<?>[] channels = getChannelsForProp(l, propBits[p]);
-                        for (KeyframeChannel<?> ch : channels)
+                        if ((l.expandedProps & pBit) == 0) continue;
+                        int midY = py + PROP_ROW_H / 2;
+                        if (Math.abs(mouseY - midY) <= 6)
                         {
-                            if (ch == null) continue;
-                            for (Keyframe<?> kf : ch.getKeyframes())
-                            {
-                                int kfTick = Math.round(kf.getTick());
-                                int kx = this.toGraphX(kfTick);
-                                if (Math.abs(mouseX - kx) <= 6)
-                                {
-                                    /* Hit keyframe diamond! */
-                                    if (this.onPreModify != null)
-                                    {
-                                        this.onPreModify.run();
-                                    }
-
-                                    boolean isAlreadySelected = (this.lastClickedKfLayer == l)
-                                        && this.lastClickedKeyframes.stream().anyMatch(item -> Math.round(item.getTick()) == kfTick);
-
-                                    if (shift)
-                                    {
-                                        if (this.lastClickedKfLayer != l)
-                                        {
-                                            this.lastClickedKfLayer = l;
-                                            this.lastClickedChannels.clear();
-                                            this.lastClickedKeyframes.clear();
-                                        }
-
-                                        if (isAlreadySelected)
-                                        {
-                                            /* Toggle off clicked keyframes */
-                                            for (KeyframeChannel<?> c : channels)
-                                            {
-                                                if (c == null)
-                                                {
-                                                    continue;
-                                                }
-                                                for (Keyframe<?> item : c.getKeyframes())
-                                                {
-                                                    if (Math.round(item.getTick()) == kfTick)
-                                                    {
-                                                        this.lastClickedKeyframes.remove(item);
-                                                    }
-                                                }
-                                            }
-                                            if (this.lastClickedKeyframes.isEmpty())
-                                            {
-                                                this.lastClickedChannels.clear();
-                                                this.lastClickedKfLayer = null;
-                                            }
-                                            this.setSelected(l);
-                                            return true;
-                                        }
-                                        else
-                                        {
-                                            /* Add clicked keyframes to selection */
-                                            for (KeyframeChannel<?> c : channels)
-                                            {
-                                                if (c == null)
-                                                {
-                                                    continue;
-                                                }
-                                                if (!this.lastClickedChannels.contains(c))
-                                                {
-                                                    this.lastClickedChannels.add(c);
-                                                }
-                                                for (Keyframe<?> item : c.getKeyframes())
-                                                {
-                                                    if (Math.round(item.getTick()) == kfTick && !this.lastClickedKeyframes.contains(item))
-                                                    {
-                                                        this.lastClickedKeyframes.add(item);
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                    else if (!isAlreadySelected)
-                                    {
-                                        /* Single click on an unselected keyframe selects only this keyframe */
-                                        this.lastClickedKfLayer = l;
-                                        this.lastClickedChannels.clear();
-                                        this.lastClickedKeyframes.clear();
-
-                                        for (KeyframeChannel<?> c : channels)
-                                        {
-                                            if (c == null)
-                                            {
-                                                continue;
-                                            }
-                                            this.lastClickedChannels.add(c);
-                                            for (Keyframe<?> item : c.getKeyframes())
-                                            {
-                                                if (Math.round(item.getTick()) == kfTick)
-                                                {
-                                                    this.lastClickedKeyframes.add(item);
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    /* Start dragging all selected keyframes */
-                                    this.isDraggingKeyframe = true;
-                                    this.draggedKfLayer = l;
-                                    this.draggedKfChannels.clear();
-                                    this.draggedKeyframes.clear();
-                                    this.dragStartTicks.clear();
-                                    this.dragInitialTick = kfTick;
-
-                                    for (KeyframeChannel<?> c : this.lastClickedChannels)
-                                    {
-                                        if (c != null && !this.draggedKfChannels.contains(c))
-                                        {
-                                            this.draggedKfChannels.add(c);
-                                        }
-                                    }
-                                    for (Keyframe<?> item : this.lastClickedKeyframes)
-                                    {
-                                        this.draggedKeyframes.add(item);
-                                        this.dragStartTicks.put(item, Math.round(item.getTick()));
-                                    }
-
-                                    this.setSelected(l);
-                                    this.setMouse(mouseX, mouseY);
-                                    return true;
-                                }
-                            }
+                            if (this.checkKeyframeDiamondClick(l, pBit, mouseX, mouseY, shift)) return true;
                         }
+                        py += PROP_ROW_H;
                     }
-                    py += PROP_ROW_H;
+                }
+
+                if (supportsAudio && (l.expandedProps & AUDIO_MASK) != 0)
+                {
+                    py += PROP_ROW_H; /* Skip "Audio" header row */
+                    int[] audioBits = {PROP_VOLUME, PROP_PAN};
+                    for (int pBit : audioBits)
+                    {
+                        if ((l.expandedProps & pBit) == 0) continue;
+                        int midY = py + PROP_ROW_H / 2;
+                        if (Math.abs(mouseY - midY) <= 6)
+                        {
+                            if (this.checkKeyframeDiamondClick(l, pBit, mouseX, mouseY, shift)) return true;
+                        }
+                        py += PROP_ROW_H;
+                    }
                 }
             }
         }
@@ -959,8 +881,150 @@ public class UICatalystTimeline extends UITimelineCanvas
             this.jumpToKeyframe(true);
             return true;
         }
+        if (context.isPressed(GLFW.GLFW_KEY_L))
+        {
+            CatalystLayer sel = this.getFirstSelectedLayer();
+            if (sel != null && (sel.layerType == CatalystLayer.LayerType.AUDIO || sel.layerType == CatalystLayer.LayerType.VIDEO))
+            {
+                if (sel.expanded && (sel.expandedProps & AUDIO_MASK) != 0)
+                {
+                    sel.expandedProps &= ~AUDIO_MASK;
+                    if (sel.expandedProps == 0) sel.expanded = false;
+                }
+                else
+                {
+                    sel.expanded = true;
+                    sel.expandedProps |= AUDIO_MASK;
+                }
+                if (this.onModified != null) this.onModified.run();
+                return true;
+            }
+        }
 
         return super.subKeyPressed(context);
+    }
+
+    private boolean checkKeyframeDiamondClick(CatalystLayer l, int propBit, int mouseX, int mouseY, boolean shift)
+    {
+        KeyframeChannel<?>[] channels = getChannelsForProp(l, propBit);
+        for (KeyframeChannel<?> ch : channels)
+        {
+            if (ch == null) continue;
+            for (Keyframe<?> kf : ch.getKeyframes())
+            {
+                int kfTick = Math.round(kf.getTick());
+                int kx = this.toGraphX(kfTick);
+                if (Math.abs(mouseX - kx) <= 6)
+                {
+                    /* Hit keyframe diamond! */
+                    if (this.onPreModify != null)
+                    {
+                        this.onPreModify.run();
+                    }
+
+                    boolean isAlreadySelected = (this.lastClickedKfLayer == l)
+                        && this.lastClickedKeyframes.stream().anyMatch(item -> Math.round(item.getTick()) == kfTick);
+
+                    if (shift)
+                    {
+                        if (this.lastClickedKfLayer != l)
+                        {
+                            this.lastClickedKfLayer = l;
+                            this.lastClickedChannels.clear();
+                            this.lastClickedKeyframes.clear();
+                        }
+
+                        if (isAlreadySelected)
+                        {
+                            /* Toggle off clicked keyframes */
+                            for (KeyframeChannel<?> c : channels)
+                            {
+                                if (c == null) continue;
+                                for (Keyframe<?> item : c.getKeyframes())
+                                {
+                                    if (Math.round(item.getTick()) == kfTick)
+                                    {
+                                        this.lastClickedKeyframes.remove(item);
+                                    }
+                                }
+                            }
+                            if (this.lastClickedKeyframes.isEmpty())
+                            {
+                                this.lastClickedChannels.clear();
+                                this.lastClickedKfLayer = null;
+                            }
+                            this.setSelected(l);
+                            return true;
+                        }
+                        else
+                        {
+                            /* Add clicked keyframes to selection */
+                            for (KeyframeChannel<?> c : channels)
+                            {
+                                if (c == null) continue;
+                                if (!this.lastClickedChannels.contains(c))
+                                {
+                                    this.lastClickedChannels.add(c);
+                                }
+                                for (Keyframe<?> item : c.getKeyframes())
+                                {
+                                    if (Math.round(item.getTick()) == kfTick && !this.lastClickedKeyframes.contains(item))
+                                    {
+                                        this.lastClickedKeyframes.add(item);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else if (!isAlreadySelected)
+                    {
+                        /* Single click on an unselected keyframe selects only this keyframe */
+                        this.lastClickedKfLayer = l;
+                        this.lastClickedChannels.clear();
+                        this.lastClickedKeyframes.clear();
+
+                        for (KeyframeChannel<?> c : channels)
+                        {
+                            if (c == null) continue;
+                            this.lastClickedChannels.add(c);
+                            for (Keyframe<?> item : c.getKeyframes())
+                            {
+                                if (Math.round(item.getTick()) == kfTick)
+                                {
+                                    this.lastClickedKeyframes.add(item);
+                                }
+                            }
+                        }
+                    }
+
+                    /* Start dragging all selected keyframes */
+                    this.isDraggingKeyframe = true;
+                    this.draggedKfLayer = l;
+                    this.draggedKfChannels.clear();
+                    this.draggedKeyframes.clear();
+                    this.dragStartTicks.clear();
+                    this.dragInitialTick = kfTick;
+
+                    for (KeyframeChannel<?> c : this.lastClickedChannels)
+                    {
+                        if (c != null && !this.draggedKfChannels.contains(c))
+                        {
+                            this.draggedKfChannels.add(c);
+                        }
+                    }
+                    for (Keyframe<?> item : this.lastClickedKeyframes)
+                    {
+                        this.draggedKeyframes.add(item);
+                        this.dragStartTicks.put(item, Math.round(item.getTick()));
+                    }
+
+                    this.setSelected(l);
+                    this.setMouse(mouseX, mouseY);
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     public static KeyframeChannel<?>[] getChannelsForProp(CatalystLayer layer, int propBit)
@@ -969,7 +1033,10 @@ public class UICatalystTimeline extends UITimelineCanvas
         if (propBit == PROP_SCALE) return new KeyframeChannel<?>[]{layer.channelScaleX, layer.channelScaleY};
         if (propBit == PROP_ROTATION) return new KeyframeChannel<?>[]{layer.channelRotation};
         if (propBit == PROP_OPACITY) return new KeyframeChannel<?>[]{layer.channelOpacity};
-        return new KeyframeChannel<?>[]{layer.channelAnchorX, layer.channelAnchorY};
+        if (propBit == PROP_ANCHOR) return new KeyframeChannel<?>[]{layer.channelAnchorX, layer.channelAnchorY};
+        if (propBit == PROP_VOLUME) return new KeyframeChannel<?>[]{layer.channelVolume};
+        if (propBit == PROP_PAN) return new KeyframeChannel<?>[]{layer.channelPan};
+        return new KeyframeChannel<?>[]{};
     }
 
     /**
@@ -1006,7 +1073,7 @@ public class UICatalystTimeline extends UITimelineCanvas
         else if (!this.selectedLayers.isEmpty())
         {
             /* 2. Navigate within selected layer(s) */
-            int[] propBits = {PROP_POSITION, PROP_SCALE, PROP_ROTATION, PROP_OPACITY, PROP_ANCHOR};
+            int[] propBits = {PROP_POSITION, PROP_SCALE, PROP_ROTATION, PROP_OPACITY, PROP_ANCHOR, PROP_VOLUME, PROP_PAN};
 
             for (CatalystLayer layer : this.selectedLayers)
             {
@@ -1037,7 +1104,8 @@ public class UICatalystTimeline extends UITimelineCanvas
                         layer.channelPosX, layer.channelPosY,
                         layer.channelScaleX, layer.channelScaleY,
                         layer.channelRotation, layer.channelOpacity,
-                        layer.channelAnchorX, layer.channelAnchorY
+                        layer.channelAnchorX, layer.channelAnchorY,
+                        layer.channelVolume, layer.channelPan
                     };
                     for (KeyframeChannel<?> ch : allChannels)
                     {
@@ -1066,7 +1134,8 @@ public class UICatalystTimeline extends UITimelineCanvas
                     layer.channelPosX, layer.channelPosY,
                     layer.channelScaleX, layer.channelScaleY,
                     layer.channelRotation, layer.channelOpacity,
-                    layer.channelAnchorX, layer.channelAnchorY
+                    layer.channelAnchorX, layer.channelAnchorY,
+                    layer.channelVolume, layer.channelPan
                 };
                 for (KeyframeChannel<?> ch : allChannels)
                 {
@@ -1793,47 +1862,45 @@ public class UICatalystTimeline extends UITimelineCanvas
             if (layer.expanded && layer.expandedProps != 0)
             {
                 int py = ly + LAYER_ROW_H;
-                int bits = layer.expandedProps;
-                String[] propNames = {"Position", "Scale", "Rotation", "Opacity", "Anchor"};
-                int[] propBits   = {PROP_POSITION, PROP_SCALE, PROP_ROTATION, PROP_OPACITY, PROP_ANCHOR};
-                for (int p = 0; p < propBits.length; p++)
+                boolean supportsMotion = (layer.layerType != CatalystLayer.LayerType.AUDIO);
+                boolean supportsAudio = (layer.layerType == CatalystLayer.LayerType.AUDIO || layer.layerType == CatalystLayer.LayerType.VIDEO);
+
+                /* ── MOTION GROUP ── */
+                if (supportsMotion && (layer.expandedProps & MOTION_MASK) != 0)
                 {
-                    if ((bits & propBits[p]) == 0) continue;
-                    context.batcher.box(leftEdge, py, this.area.ex(), py + PROP_ROW_H - 1, 0xFF16161A);
+                    /* Header row: Motion */
+                    context.batcher.box(leftEdge, py, this.area.ex(), py + PROP_ROW_H - 1, 0xFF121216);
                     context.batcher.box(this.area.x, py + PROP_ROW_H - 1, this.area.ex(), py + PROP_ROW_H, 0xFF222228);
-                    /* Property name label (clipped by left edge of graph) */
-                    context.batcher.text(propNames[p], leftEdge + 4, py + (PROP_ROW_H - context.batcher.getFont().getHeight()) / 2, 0xFF8899AA, false);
-
-                    /* Keyframe Diamonds (◆) for this property */
-                    KeyframeChannel<?>[] channels = getChannelsForProp(layer, propBits[p]);
-
-                    java.util.Set<Integer> renderedTicks = new java.util.HashSet<>();
-                    for (KeyframeChannel<?> ch : channels)
-                    {
-                        if (ch == null) continue;
-                        for (Keyframe<?> kf : ch.getKeyframes())
-                        {
-                            int kfTick = Math.round(kf.getTick());
-                            if (!renderedTicks.add(kfTick)) continue;
-
-                            int kx = this.toGraphX(kfTick);
-                            if (kx >= this.area.x - 6 && kx <= this.area.ex() + 6)
-                            {
-                                int midY = py + PROP_ROW_H / 2;
-                                boolean isDragged = this.isDraggingKeyframe && this.draggedKeyframes.stream().anyMatch(k -> Math.round(k.getTick()) == kfTick);
-                                boolean isSelected = this.lastClickedKfLayer == layer && this.lastClickedKeyframes.stream().anyMatch(k -> Math.round(k.getTick()) == kfTick);
-                                int diamondCol = isDragged ? 0xFFFFCC00 : (isSelected ? 0xFFFFEE55 : 0xFF55AAFF);
-                                /* Draw diamond ◆ */
-                                context.batcher.box(kx, midY - 4, kx + 1, midY + 5, diamondCol);
-                                context.batcher.box(kx - 1, midY - 3, kx + 2, midY + 4, diamondCol);
-                                context.batcher.box(kx - 2, midY - 2, kx + 3, midY + 3, diamondCol);
-                                context.batcher.box(kx - 3, midY - 1, kx + 4, midY + 2, diamondCol);
-                                context.batcher.box(kx - 4, midY, kx + 5, midY + 1, diamondCol);
-                            }
-                        }
-                    }
-
+                    context.batcher.text("Motion", leftEdge + 4, py + (PROP_ROW_H - context.batcher.getFont().getHeight()) / 2, 0xFF7799AA, false);
                     py += PROP_ROW_H;
+
+                    int[] motionBits = {PROP_POSITION, PROP_SCALE, PROP_ROTATION, PROP_OPACITY, PROP_ANCHOR};
+                    String[] motionNames = {"Position", "Scale", "Rotation", "Opacity", "Anchor"};
+                    for (int p = 0; p < motionBits.length; p++)
+                    {
+                        if ((layer.expandedProps & motionBits[p]) == 0) continue;
+                        this.renderPropSubRow(context, layer, motionBits[p], motionNames[p], leftEdge, py);
+                        py += PROP_ROW_H;
+                    }
+                }
+
+                /* ── AUDIO GROUP ── */
+                if (supportsAudio && (layer.expandedProps & AUDIO_MASK) != 0)
+                {
+                    /* Header row: Audio */
+                    context.batcher.box(leftEdge, py, this.area.ex(), py + PROP_ROW_H - 1, 0xFF121216);
+                    context.batcher.box(this.area.x, py + PROP_ROW_H - 1, this.area.ex(), py + PROP_ROW_H, 0xFF222228);
+                    context.batcher.text("Audio", leftEdge + 4, py + (PROP_ROW_H - context.batcher.getFont().getHeight()) / 2, 0xFF55BBAA, false);
+                    py += PROP_ROW_H;
+
+                    int[] audioBits = {PROP_VOLUME, PROP_PAN};
+                    String[] audioNames = {"Volume", "Audio Pan"};
+                    for (int p = 0; p < audioBits.length; p++)
+                    {
+                        if ((layer.expandedProps & audioBits[p]) == 0) continue;
+                        this.renderPropSubRow(context, layer, audioBits[p], audioNames[p], leftEdge, py);
+                        py += PROP_ROW_H;
+                    }
                 }
             }
         }
@@ -2029,6 +2096,43 @@ public class UICatalystTimeline extends UITimelineCanvas
             String label = String.format("%d:%02d [%d/%d]", secs, frames, playhead, duration);
 
             UITimelineCanvas.renderCursor(context, label, this.area, phX);
+        }
+    }
+
+    private void renderPropSubRow(UIContext context, CatalystLayer layer, int propBit, String propName, int leftEdge, int py)
+    {
+        context.batcher.box(leftEdge, py, this.area.ex(), py + PROP_ROW_H - 1, 0xFF16161A);
+        context.batcher.box(this.area.x, py + PROP_ROW_H - 1, this.area.ex(), py + PROP_ROW_H, 0xFF222228);
+        /* Property name label (clipped by left edge of graph) */
+        context.batcher.text(propName, leftEdge + 4, py + (PROP_ROW_H - context.batcher.getFont().getHeight()) / 2, 0xFF8899AA, false);
+
+        /* Keyframe Diamonds (◆) for this property */
+        KeyframeChannel<?>[] channels = getChannelsForProp(layer, propBit);
+
+        java.util.Set<Integer> renderedTicks = new java.util.HashSet<>();
+        for (KeyframeChannel<?> ch : channels)
+        {
+            if (ch == null) continue;
+            for (Keyframe<?> kf : ch.getKeyframes())
+            {
+                int kfTick = Math.round(kf.getTick());
+                if (!renderedTicks.add(kfTick)) continue;
+
+                int kx = this.toGraphX(kfTick);
+                if (kx >= this.area.x - 6 && kx <= this.area.ex() + 6)
+                {
+                    int midY = py + PROP_ROW_H / 2;
+                    boolean isDragged = this.isDraggingKeyframe && this.draggedKeyframes.stream().anyMatch(k -> Math.round(k.getTick()) == kfTick);
+                    boolean isSelected = this.lastClickedKfLayer == layer && this.lastClickedKeyframes.stream().anyMatch(k -> Math.round(k.getTick()) == kfTick);
+                    int diamondCol = isDragged ? 0xFFFFCC00 : (isSelected ? 0xFFFFEE55 : 0xFF55AAFF);
+                    /* Draw diamond ◆ */
+                    context.batcher.box(kx, midY - 4, kx + 1, midY + 5, diamondCol);
+                    context.batcher.box(kx - 1, midY - 3, kx + 2, midY + 4, diamondCol);
+                    context.batcher.box(kx - 2, midY - 2, kx + 3, midY + 3, diamondCol);
+                    context.batcher.box(kx - 3, midY - 1, kx + 4, midY + 2, diamondCol);
+                    context.batcher.box(kx - 4, midY, kx + 5, midY + 1, diamondCol);
+                }
+            }
         }
     }
 

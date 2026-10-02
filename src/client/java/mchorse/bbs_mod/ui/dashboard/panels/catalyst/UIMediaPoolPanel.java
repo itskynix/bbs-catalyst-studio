@@ -8,6 +8,7 @@ import mchorse.bbs_mod.catalyst.CatalystComposition;
 import mchorse.bbs_mod.catalyst.CatalystLayer;
 import mchorse.bbs_mod.catalyst.CatalystMediaAsset;
 import mchorse.bbs_mod.catalyst.CatalystProject;
+import mchorse.bbs_mod.graphics.texture.Texture;
 import mchorse.bbs_mod.graphics.window.Window;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.resources.Link;
@@ -26,15 +27,22 @@ import mchorse.bbs_mod.ui.utils.UIUtils;
 import mchorse.bbs_mod.ui.utils.context.ContextMenuManager;
 import mchorse.bbs_mod.ui.utils.icons.Icon;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
+import mchorse.bbs_mod.utils.Direction;
 import mchorse.bbs_mod.utils.colors.Colors;
+import mchorse.bbs_mod.utils.resources.Pixels;
 import mchorse.bbs_mod.video.VideoPlayer;
+import org.lwjgl.opengl.GL11;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -44,6 +52,13 @@ import java.util.function.Supplier;
  */
 public class UIMediaPoolPanel extends UIElement
 {
+    public enum ViewMode
+    {
+        LIST, GRID
+    }
+
+    public static ViewMode currentViewMode = ViewMode.LIST;
+
     private final UICatalystPanel panel;
     private final Supplier<CatalystProject> projectSupplier;
     private final Consumer<CatalystMediaAsset> onAssetDoubleClicked;
@@ -54,6 +69,8 @@ public class UIMediaPoolPanel extends UIElement
     public UIIcon cleanBtn;
     public UIIcon openFolderBtn;
     public UITextbox search;
+    public UIIcon listViewBtn;
+    public UIIcon gridViewBtn;
     public UIScrollView scroll;
 
     public CatalystMediaAsset selectedAsset = null;
@@ -62,6 +79,8 @@ public class UIMediaPoolPanel extends UIElement
     private int pressY = 0;
     private long lastClickTime = 0L;
     private CatalystMediaAsset lastClickedAsset = null;
+
+    private final Map<String, Texture> thumbnailTextures = new HashMap<>();
 
     public UIMediaPoolPanel(UICatalystPanel panel,
                             Supplier<CatalystProject> projectSupplier,
@@ -111,14 +130,54 @@ public class UIMediaPoolPanel extends UIElement
 
         this.header.add(this.importBtn, this.cleanBtn, this.openFolderBtn);
 
-        /* ── Search bar ── */
+        /* ── Search bar & view toggle buttons ── */
         this.search = new UITextbox(120, (text) -> this.rebuildList());
         this.search.placeholder(IKey.raw("Filter media..."));
-        this.search.relative(this).y(26).x(4).w(1F, -8).h(18);
+        this.search.relative(this).y(26).x(4).w(1F, -46).h(18);
+
+        this.listViewBtn = new UIIcon(Icons.LIST, (b) -> this.setViewMode(ViewMode.LIST));
+        this.listViewBtn.tooltip(IKey.raw("List View"));
+        this.listViewBtn.highlight(() -> currentViewMode == ViewMode.LIST, Direction.BOTTOM);
+        this.listViewBtn.relative(this).y(26).x(1F, -40).w(18).h(18);
+
+        this.gridViewBtn = new UIIcon(Icons.GALLERY, (b) -> this.setViewMode(ViewMode.GRID));
+        this.gridViewBtn.tooltip(IKey.raw("Grid View"));
+        this.gridViewBtn.highlight(() -> currentViewMode == ViewMode.GRID, Direction.BOTTOM);
+        this.gridViewBtn.relative(this).y(26).x(1F, -20).w(18).h(18);
 
         /* ── Scroll view for media items ── */
         this.scroll = new UIScrollView(ScrollDirection.VERTICAL)
         {
+            private boolean handleAssetClick(UIContext context, CatalystMediaAsset asset)
+            {
+                if (context.mouseButton == 0)
+                {
+                    selectedAsset = asset;
+                    pressedAsset = asset;
+                    pressX = context.mouseX;
+                    pressY = context.mouseY;
+
+                    long now = System.currentTimeMillis();
+                    if (lastClickedAsset == asset && now - lastClickTime < 400)
+                    {
+                        if (onAssetDoubleClicked != null)
+                        {
+                            onAssetDoubleClicked.accept(asset);
+                        }
+                    }
+                    lastClickedAsset = asset;
+                    lastClickTime = now;
+                    return true;
+                }
+                else if (context.mouseButton == 1)
+                {
+                    selectedAsset = asset;
+                    showAssetContextMenu(context, asset);
+                    return true;
+                }
+                return false;
+            }
+
             @Override
             protected boolean subMouseClicked(UIContext context)
             {
@@ -128,39 +187,43 @@ public class UIMediaPoolPanel extends UIElement
                     if (project != null)
                     {
                         List<CatalystMediaAsset> list = getFilteredAssets(project);
-                        int itemY = this.area.y - (int) this.scroll.getScroll();
+                        int scrollY = (int) this.scroll.getScroll();
 
-                        for (CatalystMediaAsset asset : list)
+                        if (currentViewMode == ViewMode.LIST)
                         {
-                            if (context.mouseY >= itemY && context.mouseY < itemY + 36)
-                            {
-                                if (context.mouseButton == 0)
-                                {
-                                    selectedAsset = asset;
-                                    pressedAsset = asset;
-                                    pressX = context.mouseX;
-                                    pressY = context.mouseY;
+                            int itemY = this.area.y - scrollY;
 
-                                    long now = System.currentTimeMillis();
-                                    if (lastClickedAsset == asset && now - lastClickTime < 400)
-                                    {
-                                        if (onAssetDoubleClicked != null)
-                                        {
-                                            onAssetDoubleClicked.accept(asset);
-                                        }
-                                    }
-                                    lastClickedAsset = asset;
-                                    lastClickTime = now;
-                                    return true;
-                                }
-                                else if (context.mouseButton == 1)
+                            for (CatalystMediaAsset asset : list)
+                            {
+                                if (context.mouseY >= itemY && context.mouseY < itemY + 36)
                                 {
-                                    selectedAsset = asset;
-                                    showAssetContextMenu(context, asset);
-                                    return true;
+                                    return this.handleAssetClick(context, asset);
+                                }
+                                itemY += 38;
+                            }
+                        }
+                        else
+                        {
+                            int availableW = this.area.w - 12;
+                            int spacing = 4;
+                            int cols = Math.max(1, availableW / 70);
+                            int cardW = cols > 1 ? (availableW - (cols - 1) * spacing) / cols : availableW;
+                            int cardH = cardW + 8;
+
+                            for (int i = 0; i < list.size(); i++)
+                            {
+                                CatalystMediaAsset asset = list.get(i);
+                                int col = i % cols;
+                                int row = i / cols;
+                                int cardX = this.area.x + 4 + col * (cardW + spacing);
+                                int cardY = this.area.y - scrollY + 4 + row * (cardH + spacing);
+
+                                if (context.mouseX >= cardX && context.mouseX < cardX + cardW &&
+                                    context.mouseY >= cardY && context.mouseY < cardY + cardH)
+                                {
+                                    return this.handleAssetClick(context, asset);
                                 }
                             }
-                            itemY += 38;
                         }
                     }
                 }
@@ -199,7 +262,17 @@ public class UIMediaPoolPanel extends UIElement
 
         this.scroll.add(new UIRenderable((context) -> this.renderMediaList(context)));
 
-        this.add(this.header, this.search, this.scroll);
+        this.add(this.header, this.search, this.listViewBtn, this.gridViewBtn, this.scroll);
+    }
+
+    public void setViewMode(ViewMode mode)
+    {
+        currentViewMode = mode;
+        if (this.scroll != null)
+        {
+            this.scroll.scroll.setScroll(0);
+        }
+        this.rebuildList();
     }
 
     private List<CatalystMediaAsset> getFilteredAssets(CatalystProject project)
@@ -228,6 +301,41 @@ public class UIMediaPoolPanel extends UIElement
         /* Dynamic scroll bounds update handled in renderMediaList */
     }
 
+    public Texture getOrLoadAssetTexture(CatalystMediaAsset asset)
+    {
+        if (asset == null || asset.type != CatalystMediaAsset.MediaType.IMAGE || asset.path == null)
+        {
+            return null;
+        }
+
+        if (this.thumbnailTextures.containsKey(asset.path))
+        {
+            return this.thumbnailTextures.get(asset.path);
+        }
+
+        File imgFile = new File(asset.path);
+        if (imgFile.exists() && imgFile.isFile())
+        {
+            try (InputStream stream = new FileInputStream(imgFile))
+            {
+                Pixels pixels = Pixels.fromPNGStream(stream);
+                if (pixels != null)
+                {
+                    Texture tex = Texture.textureFromPixels(pixels, GL11.GL_LINEAR);
+                    pixels.delete();
+                    this.thumbnailTextures.put(asset.path, tex);
+                    return tex;
+                }
+            }
+            catch (Throwable ignored)
+            {
+            }
+        }
+
+        this.thumbnailTextures.put(asset.path, null);
+        return null;
+    }
+
     private void renderMediaList(UIContext context)
     {
         CatalystProject project = this.projectSupplier != null ? this.projectSupplier.get() : null;
@@ -237,86 +345,211 @@ public class UIMediaPoolPanel extends UIElement
         }
 
         List<CatalystMediaAsset> list = this.getFilteredAssets(project);
-        int totalH = list.size() * 38;
-        this.scroll.scroll.setSize(totalH);
-        this.scroll.scroll.clamp();
-
         Area a = this.scroll.area;
         int scrollY = (int) this.scroll.scroll.getScroll();
-        int itemY = a.y - scrollY;
         FontRenderer font = context.batcher.getFont();
 
-        for (CatalystMediaAsset asset : list)
+        if (currentViewMode == ViewMode.LIST)
         {
-            if (itemY + 36 >= a.y && itemY < a.ey())
+            int totalH = list.size() * 38;
+            this.scroll.scroll.setSize(totalH);
+            this.scroll.scroll.clamp();
+
+            int itemY = a.y - scrollY;
+
+            for (CatalystMediaAsset asset : list)
             {
-                boolean isSelected = this.selectedAsset == asset;
-                boolean isHovered = context.mouseX >= a.x + 2 && context.mouseX < a.ex() - 2
-                    && context.mouseY >= itemY && context.mouseY < itemY + 36;
-
-                int bg = isSelected ? 0xDD2A3A55 : (isHovered ? 0xAA222834 : 0x66181C24);
-                context.batcher.box(a.x + 2, itemY, a.ex() - 2, itemY + 36, bg);
-
-                if (isSelected)
+                if (itemY + 36 >= a.y && itemY < a.ey())
                 {
-                    context.batcher.outline(a.x + 2, itemY, a.ex() - 2, itemY + 36, 0xFF55AAFF, 1);
-                }
-                else
-                {
-                    context.batcher.box(a.x + 2, itemY + 35, a.ex() - 2, itemY + 36, 0x33FFFFFF);
-                }
+                    boolean isSelected = this.selectedAsset == asset;
+                    boolean isHovered = context.mouseX >= a.x + 2 && context.mouseX < a.ex() - 2
+                        && context.mouseY >= itemY && context.mouseY < itemY + 36;
 
-                /* Media Icon */
-                Icon icon = Icons.IMAGE;
-                int iconColor = 0xFFEEAA44; // Image orange
-                String extBadge = "IMG";
+                    int bg = isSelected ? 0xDD2A3A55 : (isHovered ? 0xAA222834 : 0x66181C24);
+                    context.batcher.box(a.x + 2, itemY, a.ex() - 2, itemY + 36, bg);
 
-                if (asset.type == CatalystMediaAsset.MediaType.VIDEO)
-                {
-                    icon = Icons.FILM;
-                    iconColor = 0xFF5599FF; // Video blue
-                    extBadge = "VID";
-                }
-                else if (asset.type == CatalystMediaAsset.MediaType.AUDIO)
-                {
-                    icon = Icons.SOUND;
-                    iconColor = 0xFF44DD88; // Audio green
-                    extBadge = "AUD";
-                }
-
-                context.batcher.icon(icon, iconColor, a.x + 6, itemY + 10);
-
-                /* Title */
-                String displayName = asset.name;
-                int maxTextW = a.w - 75;
-                if (font.getWidth(displayName) > maxTextW)
-                {
-                    while (displayName.length() > 3 && font.getWidth(displayName + "...") > maxTextW)
+                    if (isSelected)
                     {
-                        displayName = displayName.substring(0, displayName.length() - 1);
+                        context.batcher.outline(a.x + 2, itemY, a.ex() - 2, itemY + 36, 0xFF55AAFF, 1);
                     }
-                    displayName += "...";
-                }
-                context.batcher.text(displayName, a.x + 26, itemY + 4, Colors.WHITE, false);
+                    else
+                    {
+                        context.batcher.box(a.x + 2, itemY + 35, a.ex() - 2, itemY + 36, 0x33FFFFFF);
+                    }
 
-                /* Subtitle: Size & Duration */
-                String subtitle = asset.formatSize();
-                String dur = asset.formatDuration(project.fps);
-                if (!dur.isEmpty() && asset.type != CatalystMediaAsset.MediaType.IMAGE)
-                {
-                    subtitle += " • " + dur;
-                }
-                context.batcher.text(subtitle, a.x + 26, itemY + 19, 0xFF8899AA, false);
+                    /* Media Icon */
+                    Icon icon = Icons.IMAGE;
+                    int iconColor = 0xFFEEAA44; // Image orange
+                    String extBadge = "IMG";
 
-                /* Extension Badge */
-                int badgeW = font.getWidth(extBadge) + 6;
-                int badgeX = a.ex() - badgeW - 6;
-                int badgeY = itemY + 11;
-                context.batcher.box(badgeX, badgeY, badgeX + badgeW, badgeY + 14, 0x44000000 | (iconColor & 0xFFFFFF));
-                context.batcher.text(extBadge, badgeX + 3, badgeY + 3, iconColor, false);
+                    if (asset.type == CatalystMediaAsset.MediaType.VIDEO)
+                    {
+                        icon = Icons.FILM;
+                        iconColor = 0xFF5599FF; // Video blue
+                        extBadge = "VID";
+                    }
+                    else if (asset.type == CatalystMediaAsset.MediaType.AUDIO)
+                    {
+                        icon = Icons.SOUND;
+                        iconColor = 0xFF44DD88; // Audio green
+                        extBadge = "AUD";
+                    }
+
+                    context.batcher.icon(icon, iconColor, a.x + 6, itemY + 10);
+
+                    /* Title */
+                    String displayName = asset.name;
+                    int maxTextW = a.w - 75;
+                    if (font.getWidth(displayName) > maxTextW)
+                    {
+                        while (displayName.length() > 3 && font.getWidth(displayName + "...") > maxTextW)
+                        {
+                            displayName = displayName.substring(0, displayName.length() - 1);
+                        }
+                        displayName += "...";
+                    }
+                    context.batcher.text(displayName, a.x + 26, itemY + 4, Colors.WHITE, false);
+
+                    /* Subtitle: Size & Duration */
+                    String subtitle = asset.formatSize();
+                    String dur = asset.formatDuration(project.fps);
+                    if (!dur.isEmpty() && asset.type != CatalystMediaAsset.MediaType.IMAGE)
+                    {
+                        subtitle += " • " + dur;
+                    }
+                    context.batcher.text(subtitle, a.x + 26, itemY + 19, 0xFF8899AA, false);
+
+                    /* Extension Badge */
+                    int badgeW = font.getWidth(extBadge) + 6;
+                    int badgeX = a.ex() - badgeW - 6;
+                    int badgeY = itemY + 11;
+                    context.batcher.box(badgeX, badgeY, badgeX + badgeW, badgeY + 14, 0x44000000 | (iconColor & 0xFFFFFF));
+                    context.batcher.text(extBadge, badgeX + 3, badgeY + 3, iconColor, false);
+                }
+
+                itemY += 38;
             }
+        }
+        else
+        {
+            /* GRID / THUMBNAIL MODE */
+            int availableW = a.w - 12;
+            int spacing = 4;
+            int cols = Math.max(1, availableW / 70);
+            int cardW = cols > 1 ? (availableW - (cols - 1) * spacing) / cols : availableW;
+            int cardH = cardW + 8;
+            int rows = (list.size() + cols - 1) / cols;
+            int totalH = rows * (cardH + spacing) + 8;
+            this.scroll.scroll.setSize(totalH);
+            this.scroll.scroll.clamp();
 
-            itemY += 38;
+            for (int i = 0; i < list.size(); i++)
+            {
+                CatalystMediaAsset asset = list.get(i);
+                int col = i % cols;
+                int row = i / cols;
+                int cardX = a.x + 4 + col * (cardW + spacing);
+                int cardY = a.y - scrollY + 4 + row * (cardH + spacing);
+
+                if (cardY + cardH >= a.y && cardY < a.ey())
+                {
+                    boolean isSelected = this.selectedAsset == asset;
+                    boolean isHovered = context.mouseX >= cardX && context.mouseX < cardX + cardW
+                        && context.mouseY >= cardY && context.mouseY < cardY + cardH;
+
+                    int bg = isSelected ? 0xDD2A3A55 : (isHovered ? 0xAA222834 : 0x66181C24);
+                    context.batcher.box(cardX, cardY, cardX + cardW, cardY + cardH, bg);
+
+                    if (isSelected)
+                    {
+                        context.batcher.outline(cardX, cardY, cardX + cardW, cardY + cardH, 0xFF55AAFF, 1);
+                    }
+                    else if (isHovered)
+                    {
+                        context.batcher.outline(cardX, cardY, cardX + cardW, cardY + cardH, 0x44FFFFFF, 1);
+                    }
+                    else
+                    {
+                        context.batcher.box(cardX, cardY + cardH - 1, cardX + cardW, cardY + cardH, 0x22FFFFFF);
+                    }
+
+                    int thumbH = cardH - 18;
+                    int thumbX = cardX + 2;
+                    int thumbY = cardY + 2;
+                    int thumbW = cardW - 4;
+
+                    context.batcher.box(thumbX, thumbY, thumbX + thumbW, thumbY + thumbH, 0x55000000);
+
+                    Icon icon = Icons.IMAGE;
+                    int iconColor = 0xFFEEAA44; // Image orange
+                    String extBadge = "IMG";
+
+                    if (asset.type == CatalystMediaAsset.MediaType.VIDEO)
+                    {
+                        icon = Icons.FILM;
+                        iconColor = 0xFF5599FF; // Video blue
+                        extBadge = "VID";
+                    }
+                    else if (asset.type == CatalystMediaAsset.MediaType.AUDIO)
+                    {
+                        icon = Icons.SOUND;
+                        iconColor = 0xFF44DD88; // Audio green
+                        extBadge = "AUD";
+                    }
+
+                    boolean renderedThumb = false;
+                    if (asset.type == CatalystMediaAsset.MediaType.IMAGE)
+                    {
+                        Texture tex = this.getOrLoadAssetTexture(asset);
+                        if (tex != null && tex.isValid())
+                        {
+                            float imgAspect = (float) tex.width / Math.max(1, tex.height);
+                            float boxAspect = (float) thumbW / (float) thumbH;
+                            float drawW, drawH;
+                            if (imgAspect > boxAspect)
+                            {
+                                drawW = thumbW;
+                                drawH = drawW / imgAspect;
+                            }
+                            else
+                            {
+                                drawH = thumbH;
+                                drawW = drawH * imgAspect;
+                            }
+                            float drawX = thumbX + (thumbW - drawW) / 2.0F;
+                            float drawY = thumbY + (thumbH - drawH) / 2.0F;
+                            context.batcher.texturedBox(tex, Colors.WHITE, drawX, drawY, drawW, drawH, 0, 0, tex.width, tex.height);
+                            renderedThumb = true;
+                        }
+                    }
+
+                    if (!renderedThumb)
+                    {
+                        int iconX = thumbX + (thumbW - 16) / 2;
+                        int iconY = thumbY + (thumbH - 16) / 2;
+                        context.batcher.icon(icon, iconColor, iconX, iconY);
+                    }
+
+                    /* Small Type Badge in top-left corner of thumbnail */
+                    int badgeW = font.getWidth(extBadge) + 4;
+                    context.batcher.box(thumbX + 2, thumbY + 2, thumbX + 2 + badgeW, thumbY + 12, 0x88000000 | (iconColor & 0x00FFFFFF));
+                    context.batcher.text(extBadge, thumbX + 4, thumbY + 3, iconColor, false);
+
+                    /* File Name under thumbnail */
+                    String displayName = asset.name;
+                    int maxNameW = cardW - 4;
+                    if (font.getWidth(displayName) > maxNameW)
+                    {
+                        while (displayName.length() > 3 && font.getWidth(displayName + "...") > maxNameW)
+                        {
+                            displayName = displayName.substring(0, displayName.length() - 1);
+                        }
+                        displayName += "...";
+                    }
+                    int nameX = cardX + (cardW - font.getWidth(displayName)) / 2;
+                    context.batcher.text(displayName, nameX, cardY + thumbH + 4, Colors.WHITE, false);
+                }
+            }
         }
 
         if (list.isEmpty())
@@ -343,6 +576,11 @@ public class UIMediaPoolPanel extends UIElement
                 CatalystProject project = this.projectSupplier != null ? this.projectSupplier.get() : null;
                 if (project != null)
                 {
+                    Texture oldTex = this.thumbnailTextures.remove(asset.path);
+                    if (oldTex != null && oldTex.isValid())
+                    {
+                        oldTex.delete();
+                    }
                     this.probeAsset(asset, project.fps);
                     if (this.panel != null)
                     {
@@ -365,6 +603,11 @@ public class UIMediaPoolPanel extends UIElement
                 CatalystProject project = this.projectSupplier != null ? this.projectSupplier.get() : null;
                 if (project != null)
                 {
+                    Texture tex = this.thumbnailTextures.remove(asset.path);
+                    if (tex != null && tex.isValid())
+                    {
+                        tex.delete();
+                    }
                     project.removeAsset(asset);
                     if (this.selectedAsset == asset)
                     {
@@ -547,6 +790,18 @@ public class UIMediaPoolPanel extends UIElement
             {
                 this.selectedAsset = null;
             }
+            this.thumbnailTextures.entrySet().removeIf(entry ->
+            {
+                if (project.getAssetByPath(entry.getKey()) == null)
+                {
+                    if (entry.getValue() != null && entry.getValue().isValid())
+                    {
+                        entry.getValue().delete();
+                    }
+                    return true;
+                }
+                return false;
+            });
             if (this.panel != null)
             {
                 this.panel.saveAndRefresh();

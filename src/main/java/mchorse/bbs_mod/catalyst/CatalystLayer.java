@@ -145,6 +145,8 @@ public class CatalystLayer
     public boolean animOpacity  = false;
     public boolean animAnchorX  = false;
     public boolean animAnchorY  = false;
+    public boolean animVolume   = false;
+    public boolean animPan      = false;
 
     public final KeyframeChannel<Float> channelPosX     = new KeyframeChannel<>("posX", KeyframeFactories.FLOAT);
     public final KeyframeChannel<Float> channelPosY     = new KeyframeChannel<>("posY", KeyframeFactories.FLOAT);
@@ -154,6 +156,8 @@ public class CatalystLayer
     public final KeyframeChannel<Float> channelOpacity  = new KeyframeChannel<>("opacity", KeyframeFactories.FLOAT);
     public final KeyframeChannel<Float> channelAnchorX  = new KeyframeChannel<>("anchorX", KeyframeFactories.FLOAT);
     public final KeyframeChannel<Float> channelAnchorY  = new KeyframeChannel<>("anchorY", KeyframeFactories.FLOAT);
+    public final KeyframeChannel<Float> channelVolume   = new KeyframeChannel<>("volume", KeyframeFactories.FLOAT);
+    public final KeyframeChannel<Float> channelPan      = new KeyframeChannel<>("pan", KeyframeFactories.FLOAT);
 
     public boolean hasAnyKeyframes(int propBit)
     {
@@ -164,6 +168,8 @@ public class CatalystLayer
             case 4:  return !this.channelRotation.isEmpty();
             case 8:  return !this.channelOpacity.isEmpty();
             case 16: return !this.channelAnchorX.isEmpty() || !this.channelAnchorY.isEmpty();
+            case 32: return !this.channelVolume.isEmpty();
+            case 64: return !this.channelPan.isEmpty();
             default: return false;
         }
     }
@@ -173,7 +179,8 @@ public class CatalystLayer
         return !this.channelPosX.isEmpty() || !this.channelPosY.isEmpty()
             || !this.channelScaleX.isEmpty() || !this.channelScaleY.isEmpty()
             || !this.channelRotation.isEmpty() || !this.channelOpacity.isEmpty()
-            || !this.channelAnchorX.isEmpty() || !this.channelAnchorY.isEmpty();
+            || !this.channelAnchorX.isEmpty() || !this.channelAnchorY.isEmpty()
+            || !this.channelVolume.isEmpty() || !this.channelPan.isEmpty();
     }
 
     public void addKeyframe(int propBit, int frame)
@@ -206,6 +213,14 @@ public class CatalystLayer
                 this.channelAnchorX.insert(frame, this.anchorX);
                 this.channelAnchorY.insert(frame, this.anchorY);
                 break;
+            case 32:
+                this.animVolume = true;
+                this.channelVolume.insert(frame, this.volume);
+                break;
+            case 64:
+                this.animPan = true;
+                this.channelPan.insert(frame, this.pan);
+                break;
         }
     }
 
@@ -218,6 +233,8 @@ public class CatalystLayer
     public static final int SUB_PROP_OPACITY  = 106;
     public static final int SUB_PROP_ANCHOR_X = 107;
     public static final int SUB_PROP_ANCHOR_Y = 108;
+    public static final int SUB_PROP_VOLUME   = 109;
+    public static final int SUB_PROP_PAN      = 110;
 
     public void addKeyframeSingle(int singlePropBit, int frame)
     {
@@ -257,6 +274,16 @@ public class CatalystLayer
                 this.animAnchorY = true;
                 this.channelAnchorY.insert(frame, this.anchorY);
                 break;
+            case SUB_PROP_VOLUME:
+            case 32:
+                this.animVolume = true;
+                this.channelVolume.insert(frame, this.volume);
+                break;
+            case SUB_PROP_PAN:
+            case 64:
+                this.animPan = true;
+                this.channelPan.insert(frame, this.pan);
+                break;
         }
     }
 
@@ -274,6 +301,10 @@ public class CatalystLayer
             case 8:                 return hasKeyAt(this.channelOpacity, frame);
             case SUB_PROP_ANCHOR_X: return hasKeyAt(this.channelAnchorX, frame);
             case SUB_PROP_ANCHOR_Y: return hasKeyAt(this.channelAnchorY, frame);
+            case SUB_PROP_VOLUME:
+            case 32:                return hasKeyAt(this.channelVolume, frame);
+            case SUB_PROP_PAN:
+            case 64:                return hasKeyAt(this.channelPan, frame);
             default: return false;
         }
     }
@@ -316,6 +347,16 @@ public class CatalystLayer
                 removeKeyAt(this.channelAnchorY, frame);
                 this.animAnchorY = !this.channelAnchorY.isEmpty();
                 break;
+            case SUB_PROP_VOLUME:
+            case 32:
+                removeKeyAt(this.channelVolume, frame);
+                this.animVolume = !this.channelVolume.isEmpty();
+                break;
+            case SUB_PROP_PAN:
+            case 64:
+                removeKeyAt(this.channelPan, frame);
+                this.animPan = !this.channelPan.isEmpty();
+                break;
         }
     }
 
@@ -328,6 +369,8 @@ public class CatalystLayer
             case 4:  return SUB_PROP_ROTATION;
             case 8:  return SUB_PROP_OPACITY;
             case 16: return component == 0 ? SUB_PROP_ANCHOR_X : SUB_PROP_ANCHOR_Y;
+            case 32: return SUB_PROP_VOLUME;
+            case 64: return SUB_PROP_PAN;
             default: return propBit;
         }
     }
@@ -380,14 +423,14 @@ public class CatalystLayer
 
     public float[] computeEffective(int frame)
     {
-        return this.computeEffective(frame, new float[8]);
+        return this.computeEffective(frame, new float[10]);
     }
 
     public float[] computeEffective(int frame, float[] dest)
     {
-        if (dest == null || dest.length < 8)
+        if (dest == null || dest.length < 10)
         {
-            dest = new float[8];
+            dest = new float[10];
         }
 
         dest[0] = (this.animPosX && !this.channelPosX.isEmpty()) ? this.channelPosX.interpolate(frame, this.posX) : this.posX;
@@ -398,8 +441,20 @@ public class CatalystLayer
         dest[5] = (this.animOpacity && !this.channelOpacity.isEmpty()) ? (float) Math.round(this.channelOpacity.interpolate(frame, (float) this.opacity)) : (float) this.opacity;
         dest[6] = (this.animAnchorX && !this.channelAnchorX.isEmpty()) ? this.channelAnchorX.interpolate(frame, this.anchorX) : this.anchorX;
         dest[7] = (this.animAnchorY && !this.channelAnchorY.isEmpty()) ? this.channelAnchorY.interpolate(frame, this.anchorY) : this.anchorY;
+        dest[8] = (this.animVolume && !this.channelVolume.isEmpty()) ? this.channelVolume.interpolate(frame, this.volume) : this.volume;
+        dest[9] = (this.animPan && !this.channelPan.isEmpty()) ? this.channelPan.interpolate(frame, this.pan) : this.pan;
 
         return dest;
+    }
+
+    public float computeEffectiveVolume(int frame)
+    {
+        return (this.animVolume && !this.channelVolume.isEmpty()) ? this.channelVolume.interpolate(frame, this.volume) : this.volume;
+    }
+
+    public float computeEffectivePan(int frame)
+    {
+        return (this.animPan && !this.channelPan.isEmpty()) ? this.channelPan.interpolate(frame, this.pan) : this.pan;
     }
 
     @Deprecated
@@ -416,6 +471,8 @@ public class CatalystLayer
         this.opacity = Math.round(eff[5]);
         this.anchorX = eff[6];
         this.anchorY = eff[7];
+        this.volume = eff[8];
+        this.pan = eff[9];
     }
 
     public void splitChannelsAt(int splitFrame, CatalystLayer target)
@@ -425,7 +482,7 @@ public class CatalystLayer
             return;
         }
 
-        /* Split all 8 animation channels */
+        /* Split all 10 animation channels */
         this.splitChannel(this.channelPosX, target.channelPosX, splitFrame, this.posX);
         this.splitChannel(this.channelPosY, target.channelPosY, splitFrame, this.posY);
         this.splitChannel(this.channelScaleX, target.channelScaleX, splitFrame, this.scaleX);
@@ -434,6 +491,8 @@ public class CatalystLayer
         this.splitChannel(this.channelOpacity, target.channelOpacity, splitFrame, (float) this.opacity);
         this.splitChannel(this.channelAnchorX, target.channelAnchorX, splitFrame, this.anchorX);
         this.splitChannel(this.channelAnchorY, target.channelAnchorY, splitFrame, this.anchorY);
+        this.splitChannel(this.channelVolume, target.channelVolume, splitFrame, this.volume);
+        this.splitChannel(this.channelPan, target.channelPan, splitFrame, this.pan);
 
         /* Update stopwatch animation flags for target and source */
         target.animPosX = this.animPosX && !target.channelPosX.isEmpty();
@@ -444,6 +503,8 @@ public class CatalystLayer
         target.animOpacity = this.animOpacity && !target.channelOpacity.isEmpty();
         target.animAnchorX = this.animAnchorX && !target.channelAnchorX.isEmpty();
         target.animAnchorY = this.animAnchorY && !target.channelAnchorY.isEmpty();
+        target.animVolume = this.animVolume && !target.channelVolume.isEmpty();
+        target.animPan = this.animPan && !target.channelPan.isEmpty();
 
         this.animPosX = this.animPosX && !this.channelPosX.isEmpty();
         this.animPosY = this.animPosY && !this.channelPosY.isEmpty();
@@ -453,6 +514,8 @@ public class CatalystLayer
         this.animOpacity = this.animOpacity && !this.channelOpacity.isEmpty();
         this.animAnchorX = this.animAnchorX && !this.channelAnchorX.isEmpty();
         this.animAnchorY = this.animAnchorY && !this.channelAnchorY.isEmpty();
+        this.animVolume = this.animVolume && !this.channelVolume.isEmpty();
+        this.animPan = this.animPan && !this.channelPan.isEmpty();
     }
 
     private void splitChannel(KeyframeChannel<Float> source, KeyframeChannel<Float> target, int splitFrame, float defaultValue)
@@ -542,6 +605,8 @@ public class CatalystLayer
         target.channelOpacity.copy(this.channelOpacity);
         target.channelAnchorX.copy(this.channelAnchorX);
         target.channelAnchorY.copy(this.channelAnchorY);
+        target.channelVolume.copy(this.channelVolume);
+        target.channelPan.copy(this.channelPan);
     }
 
     public boolean hasKeyframeAt(int propBit, int frame)
@@ -553,6 +618,8 @@ public class CatalystLayer
             case 4:  return hasKeyAt(this.channelRotation, frame);
             case 8:  return hasKeyAt(this.channelOpacity, frame);
             case 16: return hasKeyAt(this.channelAnchorX, frame) || hasKeyAt(this.channelAnchorY, frame);
+            case 32: return hasKeyAt(this.channelVolume, frame);
+            case 64: return hasKeyAt(this.channelPan, frame);
             default: return false;
         }
     }
@@ -595,6 +662,14 @@ public class CatalystLayer
                 this.anchorY = val2;
                 if (this.animAnchorX || !this.channelAnchorX.isEmpty()) this.channelAnchorX.insert(frame, val1);
                 if (this.animAnchorY || !this.channelAnchorY.isEmpty()) this.channelAnchorY.insert(frame, val2);
+                break;
+            case 32:
+                this.volume = Math.max(0.0F, Math.min(2.0F, val1));
+                if (this.animVolume || !this.channelVolume.isEmpty()) this.channelVolume.insert(frame, this.volume);
+                break;
+            case 64:
+                this.pan = Math.max(-1.0F, Math.min(1.0F, val1));
+                if (this.animPan || !this.channelPan.isEmpty()) this.channelPan.insert(frame, this.pan);
                 break;
         }
     }
@@ -651,6 +726,8 @@ public class CatalystLayer
         if (!this.channelOpacity.isEmpty()) data.put("channelOpacity", this.channelOpacity.toData());
         if (!this.channelAnchorX.isEmpty()) data.put("channelAnchorX", this.channelAnchorX.toData());
         if (!this.channelAnchorY.isEmpty()) data.put("channelAnchorY", this.channelAnchorY.toData());
+        if (!this.channelVolume.isEmpty()) data.put("channelVolume", this.channelVolume.toData());
+        if (!this.channelPan.isEmpty()) data.put("channelPan", this.channelPan.toData());
 
         data.putBool("animPosX", this.animPosX);
         data.putBool("animPosY", this.animPosY);
@@ -660,6 +737,8 @@ public class CatalystLayer
         data.putBool("animOpacity", this.animOpacity);
         data.putBool("animAnchorX", this.animAnchorX);
         data.putBool("animAnchorY", this.animAnchorY);
+        data.putBool("animVolume", this.animVolume);
+        data.putBool("animPan", this.animPan);
 
         return data;
     }
@@ -714,6 +793,8 @@ public class CatalystLayer
         if (data.has("channelOpacity")) this.channelOpacity.fromData(data.get("channelOpacity"));
         if (data.has("channelAnchorX")) this.channelAnchorX.fromData(data.get("channelAnchorX"));
         if (data.has("channelAnchorY")) this.channelAnchorY.fromData(data.get("channelAnchorY"));
+        if (data.has("channelVolume")) this.channelVolume.fromData(data.get("channelVolume"));
+        if (data.has("channelPan")) this.channelPan.fromData(data.get("channelPan"));
 
         if (data.has("animPosX")) this.animPosX = data.getBool("animPosX");
         if (data.has("animPosY")) this.animPosY = data.getBool("animPosY");
@@ -723,5 +804,7 @@ public class CatalystLayer
         if (data.has("animOpacity")) this.animOpacity = data.getBool("animOpacity");
         if (data.has("animAnchorX")) this.animAnchorX = data.getBool("animAnchorX");
         if (data.has("animAnchorY")) this.animAnchorY = data.getBool("animAnchorY");
+        if (data.has("animVolume")) this.animVolume = data.getBool("animVolume");
+        if (data.has("animPan")) this.animPan = data.getBool("animPan");
     }
 }

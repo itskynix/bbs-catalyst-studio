@@ -364,6 +364,7 @@
     "bbs.ui.catalyst.preview": "Önizleme Alanı",
     "bbs.ui.catalyst.timeline": "Zaman Çizelgesi",
     "bbs.ui.catalyst.layers": "Katmanlar",
+    "bbs.ui.catalyst.inspector": "Denetçi",
     "bbs.ui.catalyst.tabs.projects": "Projeler",
     "bbs.ui.catalyst.tabs.editor": "Editör",
     "bbs.ui.catalyst.projects.title": "Catalyst Projeleri",
