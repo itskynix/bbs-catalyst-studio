@@ -11,6 +11,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -184,7 +185,19 @@ public class AudioReader
         return 48000;
     }
 
-    private static byte[] executeFFmpegAudioExtraction(File file, int sampleRate, boolean useSoxr)
+    private static class ExtractionResult
+    {
+        final byte[] data;
+        final boolean noAudioStream;
+
+        ExtractionResult(byte[] data, boolean noAudioStream)
+        {
+            this.data = data;
+            this.noAudioStream = noAudioStream;
+        }
+    }
+
+    private static ExtractionResult executeFFmpegAudioExtraction(File file, int sampleRate, boolean useSoxr)
     {
         List<String> cmd = new ArrayList<>();
         cmd.add(FFMpegUtils.getFFMPEG());
@@ -221,10 +234,10 @@ public class AudioReader
         try
         {
             ProcessBuilder builder = new ProcessBuilder(cmd);
-            builder.redirectError(ProcessBuilder.Redirect.DISCARD);
 
             Process process = builder.start();
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ByteArrayOutputStream errBaos = new ByteArrayOutputStream();
             byte[] buffer = new byte[16384];
             int read;
 
@@ -240,6 +253,21 @@ public class AudioReader
                     }
                 }
             }
+
+            try (InputStream errStream = process.getErrorStream())
+            {
+                if (errStream != null)
+                {
+                    byte[] errBuf = new byte[4096];
+                    int r;
+                    while ((r = errStream.read(errBuf)) != -1)
+                    {
+                        errBaos.write(errBuf, 0, r);
+                    }
+                }
+            }
+            catch (Exception ignored)
+            {}
             finally
             {
                 boolean finished = false;
@@ -260,13 +288,17 @@ public class AudioReader
 
             if (process.exitValue() == 0 && baos.size() > 0)
             {
-                return baos.toByteArray();
+                return new ExtractionResult(baos.toByteArray(), false);
             }
+
+            String err = errBaos.toString(StandardCharsets.UTF_8).toLowerCase(Locale.ROOT);
+            boolean noAudio = err.contains("does not contain any stream") || err.contains("matches no streams") || err.contains("no streams");
+            return new ExtractionResult(null, noAudio);
         }
         catch (Exception ignored)
         {}
 
-        return null;
+        return new ExtractionResult(null, false);
     }
 
     public static Wave readVideoAudio(File file) throws Exception
@@ -279,19 +311,19 @@ public class AudioReader
         int targetRate = getTargetAudioRate();
 
         /* Try with high-fidelity soxr resampler first */
-        byte[] data = executeFFmpegAudioExtraction(file, targetRate, true);
+        ExtractionResult result = executeFFmpegAudioExtraction(file, targetRate, true);
 
-        if (data == null || data.length == 0)
+        if ((result.data == null || result.data.length == 0) && !result.noAudioStream)
         {
             /* Fallback to standard swresample if soxr is not compiled into ffmpeg build */
-            data = executeFFmpegAudioExtraction(file, targetRate, false);
+            result = executeFFmpegAudioExtraction(file, targetRate, false);
         }
 
-        if (data == null || data.length == 0)
+        if (result.data == null || result.data.length == 0)
         {
             return null;
         }
 
-        return new Wave(1, 2, targetRate, 16, data);
+        return new Wave(1, 2, targetRate, 16, result.data);
     }
 }

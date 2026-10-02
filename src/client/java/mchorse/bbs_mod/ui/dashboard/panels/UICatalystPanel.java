@@ -550,6 +550,15 @@ public class UICatalystPanel extends UIDashboardPanel
                 && layer.resourcePath != null && !layer.resourcePath.trim().isEmpty()
                 && layer.volume > 0)
             {
+                if (layer.layerType == CatalystLayer.LayerType.VIDEO)
+                {
+                    Link link = Link.create(layer.resourcePath.trim());
+                    VideoPlayer player = BBSModClient.getVideos().get(link);
+                    if (player != null && player.isValid() && !player.hasAudio())
+                    {
+                        continue;
+                    }
+                }
                 list.add(layer);
             }
         }
@@ -799,12 +808,12 @@ public class UICatalystPanel extends UIDashboardPanel
                     {
                         int relativeFrame = (this.currentFrame - layer.startFrame) + layer.mediaOffset;
                         float relSec = (float) (relativeFrame + layer.audioOffset) / fps;
-                        Texture tex = player.seekFrame(relSec);
+                        Texture tex = player.getFrame(relSec);
                         if (tex != null && tex.isValid())
                         {
                             layer.cachedVideoTexture = tex;
                             float playerFps = player.getFps() > 0 ? player.getFps() : 30F;
-                            layer.lastVideoFrameIndex = (int) Math.round(relSec * playerFps);
+                            layer.lastVideoFrameIndex = Math.max(0, (int) (relSec * playerFps));
                         }
                     }
                 }
@@ -2106,7 +2115,7 @@ public class UICatalystPanel extends UIDashboardPanel
                             int relativeFrame = (playhead - layer.startFrame) + layer.mediaOffset;
                             float relSec = (float) (relativeFrame + layer.audioOffset) / Math.max(1, targetFps);
                             float playerFps = player.getFps() > 0 ? player.getFps() : 30F;
-                            int videoFrameIdx = (int) Math.round(relSec * playerFps);
+                            int videoFrameIdx = Math.max(0, (int) (relSec * playerFps));
 
                             Texture frameTex = null;
                             if (layer.cachedVideoTexture instanceof Texture && layer.lastVideoFrameIndex == videoFrameIdx && ((Texture) layer.cachedVideoTexture).isValid())

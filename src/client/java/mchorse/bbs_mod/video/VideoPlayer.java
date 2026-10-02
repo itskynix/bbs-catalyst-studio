@@ -59,6 +59,7 @@ public class VideoPlayer
     private int height;
     private float fps;
     private float duration;
+    private boolean hasAudio;
 
     /**
      * Optional render cap set by {@link #setMaxSize}.  When non-zero, frames are decoded at
@@ -210,6 +211,11 @@ public class VideoPlayer
         return this.fps;
     }
 
+    public boolean hasAudio()
+    {
+        return this.hasAudio;
+    }
+
     /**
      * Probe synchronously if it hasn't happened yet - for UI code that needs the
      * metadata (duration) right now and can afford the wait.
@@ -241,7 +247,7 @@ public class VideoPlayer
 
         try
         {
-            ProcessBuilder builder = new ProcessBuilder(FFMpegUtils.getFFMPEG(), "-i", this.file.getAbsolutePath());
+            ProcessBuilder builder = new ProcessBuilder(FFMpegUtils.getFFMPEG(), "-nostdin", "-i", this.file.getAbsolutePath());
 
             builder.redirectErrorStream(true);
 
@@ -254,8 +260,10 @@ public class VideoPlayer
             }
             finally
             {
-                probe.destroy();
+                probe.destroyForcibly();
             }
+
+            this.hasAudio = output.contains("Audio:");
 
             Matcher size = SIZE_PATTERN.matcher(output);
             Matcher fps = FPS_PATTERN.matcher(output);
@@ -354,18 +362,23 @@ public class VideoPlayer
         {
             this.pendingReady = false;
 
-            if (this.pendingFrame == target)
+            if (this.pendingFrame >= 0)
             {
-                this.upload(target);
+                this.upload(this.pendingFrame);
 
-                return this.texture;
+                if (this.pendingFrame == target)
+                {
+                    return this.texture;
+                }
             }
         }
 
-        boolean sequential = this.process != null && this.process.isAlive()
-            && target >= this.streamFrame && target <= this.streamFrame + (int) (this.fps * SEQUENTIAL_AHEAD_SECONDS);
+        int window = Math.max(2, (int) (this.fps * SEQUENTIAL_AHEAD_SECONDS));
+        boolean jumpBackward = this.currentFrame >= 0 && target < this.currentFrame - window;
+        boolean jumpForward = target > this.streamFrame + window;
+        boolean needsSeek = this.process == null || !this.process.isAlive() || jumpBackward || jumpForward;
 
-        if (!sequential)
+        if (needsSeek)
         {
             if (this.ended && this.texture != null && target >= this.streamFrame)
             {
@@ -381,7 +394,6 @@ public class VideoPlayer
                  * target advances a frame at a time, and that steady drift must not
                  * keep the seek waiting forever. */
                 long now = System.currentTimeMillis();
-                int window = (int) (this.fps * SEQUENTIAL_AHEAD_SECONDS);
 
                 if (this.settlingTarget < 0 || Math.abs(target - this.settlingTarget) > window)
                 {
@@ -406,6 +418,12 @@ public class VideoPlayer
 
             this.settlingTarget = -1;
             this.restart(target / this.fps, target);
+        }
+
+        /* If target is already decoded or behind current stream, return existing texture without blocking */
+        if (target < this.streamFrame && this.texture != null)
+        {
+            return this.texture;
         }
 
         int read = 0;
@@ -547,10 +565,15 @@ public class VideoPlayer
         {
             try
             {
-                thread.join(3000);
+                thread.join(1000);
             }
             catch (InterruptedException e)
             {}
+
+            if (thread.isAlive())
+            {
+                this.stop();
+            }
         }
     }
 
@@ -581,6 +604,8 @@ public class VideoPlayer
              * transferring a full-resolution frame across the CPU→GPU bus. */
             java.util.List<String> cmd = new java.util.ArrayList<>();
             cmd.add(FFMpegUtils.getFFMPEG());
+            cmd.add("-nostdin");
+            cmd.add("-loglevel"); cmd.add("error");
             cmd.add("-ss");  cmd.add(String.valueOf(seconds));
             cmd.add("-i");   cmd.add(this.file.getAbsolutePath());
             cmd.add("-an");  cmd.add("-sn");  cmd.add("-dn");
@@ -670,12 +695,6 @@ public class VideoPlayer
      */
     public void stop()
     {
-        if (this.process != null)
-        {
-            this.process.destroy();
-            this.process = null;
-        }
-
         if (this.channel != null)
         {
             try
@@ -686,6 +705,18 @@ public class VideoPlayer
             {}
 
             this.channel = null;
+        }
+
+        if (this.process != null)
+        {
+            try
+            {
+                this.process.destroyForcibly();
+            }
+            catch (Exception e)
+            {}
+
+            this.process = null;
         }
 
         this.ended = false;

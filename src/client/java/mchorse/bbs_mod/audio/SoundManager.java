@@ -11,6 +11,9 @@ import mchorse.bbs_mod.utils.IOUtils;
 import mchorse.bbs_mod.utils.watchdog.IWatchDogListener;
 import mchorse.bbs_mod.utils.watchdog.WatchDogEvent;
 
+import mchorse.bbs_mod.BBSModClient;
+import mchorse.bbs_mod.video.VideoPlayer;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -18,10 +21,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 public class SoundManager implements IWatchDogListener
 {
@@ -34,6 +41,8 @@ public class SoundManager implements IWatchDogListener
     private AssetProvider provider;
     private Map<Link, SoundBuffer> buffers = new HashMap<>();
     private List<SoundPlayer> sounds = new ArrayList<>();
+    private final Set<Link> loadingBuffers = Collections.synchronizedSet(new HashSet<>());
+    private final Map<Link, Wave> pendingWaves = new HashMap<>();
 
     public SoundManager(AssetProvider provider)
     {
@@ -147,21 +156,91 @@ public class SoundManager implements IWatchDogListener
 
     public SoundBuffer get(Link link, boolean includeWaveform)
     {
-        if (!this.buffers.containsKey(link))
+        /* 1. Pick up any wave loaded asynchronously in background */
+        synchronized (this.pendingWaves)
         {
-            return this.load(link, includeWaveform);
+            if (this.pendingWaves.containsKey(link))
+            {
+                Wave wave = this.pendingWaves.remove(link);
+                this.loadingBuffers.remove(link);
+
+                if (wave != null)
+                {
+                    Waveform waveform = null;
+                    if (includeWaveform)
+                    {
+                        waveform = new Waveform();
+                        waveform.generate(wave, this.readColorCodes(link), BBSSettings.audioWaveformDensity.get(), 40);
+                    }
+                    SoundBuffer buffer = new SoundBuffer(link, wave, waveform);
+                    this.buffers.put(link, buffer);
+                    System.out.println("Sound \"" + link + "\" was loaded asynchronously!");
+                    return buffer;
+                }
+                else
+                {
+                    this.buffers.put(link, null);
+                    return null;
+                }
+            }
         }
 
-        SoundBuffer player = this.buffers.get(link);
-
-        if (player != null && includeWaveform && player.getWaveform() == null)
+        /* 2. Check cached buffers */
+        if (this.buffers.containsKey(link))
         {
-            player.delete();
+            SoundBuffer player = this.buffers.get(link);
 
-            return this.load(link, true);
+            if (player != null && includeWaveform && player.getWaveform() == null)
+            {
+                player.delete();
+
+                return this.load(link, true);
+            }
+
+            return player;
         }
 
-        return player;
+        /* 3. Check if currently loading in background */
+        if (this.loadingBuffers.contains(link))
+        {
+            return null;
+        }
+
+        /* 4. For video files during UI playback, extract audio in background thread to avoid freezing UI */
+        boolean recording = BBSModClient.getVideoRecorder().isRecording() || VideoPlayer.forcedRecording;
+        String pathLower = link != null && link.path != null ? link.path.toLowerCase(Locale.ROOT) : "";
+        if (!recording && !includeWaveform && AudioReader.isVideo(pathLower))
+        {
+            this.loadingBuffers.add(link);
+            Thread loader = new Thread(() ->
+            {
+                try
+                {
+                    Wave wave = AudioReader.read(this.provider, link);
+                    if (wave != null && (wave.bitsPerSample != 16 || wave.numChannels > 2 || wave.sampleRate > 48000 || wave.audioFormat != 1))
+                    {
+                        wave = wave.normalize();
+                    }
+                    synchronized (this.pendingWaves)
+                    {
+                        this.pendingWaves.put(link, wave);
+                    }
+                }
+                catch (Exception e)
+                {
+                    synchronized (this.pendingWaves)
+                    {
+                        this.pendingWaves.put(link, null);
+                    }
+                }
+            }, "BBS-AudioLoader-" + (link != null ? link.path : "video"));
+            loader.setDaemon(true);
+            loader.start();
+
+            return null;
+        }
+
+        return this.load(link, includeWaveform);
     }
 
     public SoundPlayer play(Link link)
@@ -312,6 +391,11 @@ public class SoundManager implements IWatchDogListener
         }
 
         this.buffers.clear();
+        this.loadingBuffers.clear();
+        synchronized (this.pendingWaves)
+        {
+            this.pendingWaves.clear();
+        }
     }
 
     public void deleteSound(Link audio)

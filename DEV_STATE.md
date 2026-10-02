@@ -1136,3 +1136,42 @@ BBS moduna, DaVinci Resolve ve modern prodÃ¼ksiyon araÃ§larÄ±ndan esinlene
 3. **Derleme Durumu:**
    - `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 9s** (0 hata).
 
+
+## AŞAMA 78: Catalyst Editor Video Katmanı Oynatılırken Oyunun Kilitlenmesi (Not Responding) Düzeltmesi (Tamamlandı)
+
+### Kök Nedenler
+1. **Ana Render Thread'inde Senkron Ses Çıkarma Blokajı (`SoundManager.get`):**
+   - Catalyst timeline'ında bir video katmanı (`LayerType.VIDEO`) bulunduğunda, oynatma başladığında `syncAudioPlayback()` metodu video dosyası için `SoundManager.get(audioLink, false)` çağırıyordu.
+   - Bu çağrı ana render thread'i üzerinde `AudioReader.read()` -> `AudioReader.readVideoAudio()` -> `executeFFmpegAudioExtraction()` çalıştırarak harici `ffmpeg.exe` sürecini başlatıyor ve tüm videonun sesini (dakikalarca AAC ses akışı) ana thread üzerinde senkron olarak çözüyordu (`process.waitFor(30s)`).
+   - Bu sırada Minecraft render döngüsü durduğundan ve Windows olayları işlenemediğinden Windows işletim sistemi oyunu doğrudan `(Not Responding)` durumuna sokuyordu.
+   - Video ses içermediğinde dahi `soxr` başarısızlığından sonra ikinci kez `swresample` fallback'i ile FFmpeg tekrar çalıştırılıyor ve blokaj katlanıyordu.
+2. **60 FPS Kompozisyon vs 25 FPS Video Drift & Yanlış Seek Tetiklemesi (`VideoPlayer.java`):**
+   - `VideoPlayer.java` içindeki sıralı oynatma koşulu `target >= this.streamFrame && target <= this.streamFrame + window` şeklindeydi.
+   - 60 FPS kompozisyon ile 25 FPS video çalışırken video kare indeksi her render karesinde artmaz (1 video karesi 2-3 render karesi boyunca geçerlidir). `streamFrame` 1 ileri okuduğunda `target < streamFrame` durumu oluşuyor ve kod bunu "jump" zannedip `!sequential` dalına girerek FFmpeg sürecini öldürüp her 150ms'de bir yeniden başlatıyordu (Process storm).
+   - Ayrıca `UICatalystPanel` video kare indeksini `Math.round(relSec * playerFps)` ile hesaplarken, `VideoPlayer` `(int)(seconds * fps)` (floor) kullanıyordu; bu da yarım kare faz farkı yaratarak seek fırtınasını besliyordu.
+3. **Scrubbing Sırasında Senkron Seek Blokajı (`seekToFrame`):**
+   - `UICatalystPanel.seekToFrame()` scrubbing sırasında her fare hareketinde video katmanları için `player.seekFrame(relSec)` metodunu senkron olarak çağırıyor, bu da saniyede onlarca kez `finishSeek()` (`join(3000)`) ve senkron FFmpeg başlatıp borudan kare okumaya çalışarak arayüzü kilitliyordu.
+4. **FFmpeg Süreç İdaresi:**
+   - `VideoPlayer.restart()` içinde `-nostdin` ve `-loglevel error` eksikti; FFmpeg interaktif stdin borusunda bekleyebiliyordu. `stop()` metodunda boru kapatılmadan önce `destroy()` çağrılıyor, Windows'ta süreç ağacı askıda kalabiliyordu.
+
+### Uygulanan Düzeltmeler
+* **SoundManager.java:**
+   - Video dosyalarının ses çözümlemesi için asenkron arka plan hattı kuruldu (`pendingWaves` ve `loadingBuffers`).
+   - `get(link, false)` çağrısı video dosyası henüz çözülmemişse ana thread'i bloke etmeden `null` döndürür ve arka planda bir daemon thread başlatır.
+   - Ses çözüldüğünde bir sonraki render karesinde OpenAL `SoundBuffer` nesnesi anında (0.1ms) oluşturularak oynatıcıya bağlanır. UI 60 FPS akmaya devam eder, kilitlenme sıfırlanır.
+* **AudioReader.java:**
+   - `executeFFmpegAudioExtraction` metoduna stderr analizi eklendi (`ExtractionResult`). Video dosyasında ses akışı bulunmadığında (`does not contain any stream`) anında tespit edilerek gereksiz ikinci FFmpeg denemesi engellendi.
+* **VideoPlayer.java:**
+   - `probe()` metoduna ses akışı tespiti eklendi (`hasAudio = output.contains("Audio:")` ve `hasAudio()` erişimcisi).
+   - `getFrame()` içindeki atlama / seek mantığı düzeltildi: `jumpBackward = target < currentFrame - window`, `jumpForward = target > streamFrame + window`. `target < streamFrame` durumu geriye doğru büyük bir atlama değilse mevcut kare dokusu korunarak FFmpeg'in yeniden başlatılması önlendi.
+   - `pendingReady` durumunda kare `target`'tan geride olsa dahi önce dokuya yüklenerek bağlantı kopması giderildi.
+   - `restart()` FFmpeg komutuna `-nostdin` ve `-loglevel error` parametreleri eklendi.
+   - `stop()` metodunda önce `channel.close()` yapılarak boru okumaları serbest bırakıldı, ardından `process.destroyForcibly()` ile Windows'ta anında süreç sonlandırma sağlandı. `finishSeek()` bekleme süresi 1000ms'ye indirilip takılan süreçler için forcibly sonlandırma eklendi.
+* **UICatalystPanel.java:**
+   - `getActiveAudioLayers()`: Video katmanlarında `player.hasAudio()` kontrolü yapılarak ses akışı olmayan videoların gereksiz yere ses mikserine dahil edilmesi önlendi.
+   - `seekToFrame()`: Bloklayıcı `player.seekFrame(relSec)` yerine debounced ve asenkron çalışan `player.getFrame(relSec)` kullanımına geçildi.
+   - `render()` video çizim bloğu: `videoFrameIdx` hesaplaması `Math.max(0, (int) (relSec * playerFps))` ile `VideoPlayer` zeminine tam eşitlendi.
+
+### Derleme Durumu
+* `./gradlew.bat --no-daemon compileJava compileClientJava` -> **BUILD SUCCESSFUL in 15s** (0 hata).
+
