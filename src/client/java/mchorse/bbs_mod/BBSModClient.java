@@ -699,6 +699,10 @@ public class BBSModClient implements ClientModInitializer
         BBSMod.events.post(new RegisterPreviewOverlaysEvent());
         BBSMod.events.post(new RegisterFilmToolsEvent());
 
+        mchorse.bbs_mod.camera.pov.bootstrap.PovRegistries.register();
+        mchorse.bbs_mod.camera.pov.bootstrap.PovLocalization.register();
+        mchorse.bbs_mod.camera.pov.render.PovBlockOutlineRenderer.init();
+
         /* Keybinds */
         keyDashboard = this.createKey("dashboard", GLFW.GLFW_KEY_0);
         keyItemEditor = this.createKey("item_editor", GLFW.GLFW_KEY_HOME);

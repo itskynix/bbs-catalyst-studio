@@ -46,7 +46,6 @@ import mchorse.bbs_mod.camera.clips.overwrite.IdleClip;
 import mchorse.bbs_mod.camera.clips.overwrite.KeyframeClip;
 import mchorse.bbs_mod.camera.clips.overwrite.PathClip;
 import mchorse.bbs_mod.camera.clips.overwrite.ProCameraClip;
-import mchorse.bbs_mod.camera.clips.overwrite.POVClip;
 import mchorse.bbs_mod.entity.ActorEntity;
 import mchorse.bbs_mod.entity.GunProjectileEntity;
 import mchorse.bbs_mod.api.BBSAddonMod;
@@ -466,8 +465,6 @@ public class BBSMod implements ModInitializer
             .register(Link.bbs("keyframe"), KeyframeClip.class, new ClipFactoryData(Icons.CURVES, 0xde2e9f)
                 .withConverter(Link.bbs("idle"), IdleConverter.CONVERTER))
             .register(Link.bbs("pro_camera"), ProCameraClip.class, new ClipFactoryData(Icons.CAMERA, 0xe056fd)
-                .withConverter(Link.bbs("idle"), IdleConverter.CONVERTER))
-            .register(Link.bbs("pov"), POVClip.class, new ClipFactoryData(Icons.VISIBLE, 0x331050)
                 .withConverter(Link.bbs("idle"), IdleConverter.CONVERTER))
             .register(Link.bbs("translate"), TranslateClip.class, new ClipFactoryData(Icons.UPLOAD, 0x4ba03e))
             .register(Link.bbs("angle"), AngleClip.class, new ClipFactoryData(Icons.ARC, 0xd77a0a))

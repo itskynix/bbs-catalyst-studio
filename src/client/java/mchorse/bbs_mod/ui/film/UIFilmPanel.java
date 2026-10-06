@@ -10,7 +10,6 @@ import mchorse.bbs_mod.actions.ActionState;
 import mchorse.bbs_mod.camera.Camera;
 import mchorse.bbs_mod.camera.clips.modifiers.TranslateClip;
 import mchorse.bbs_mod.camera.clips.overwrite.IdleClip;
-import mchorse.bbs_mod.camera.clips.overwrite.POVClientState;
 import mchorse.bbs_mod.camera.controller.CameraController;
 import mchorse.bbs_mod.camera.controller.RunnerCameraController;
 import mchorse.bbs_mod.camera.data.Position;
@@ -1359,7 +1358,6 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.replayEditor.close();
 
         this.freezeFrame();
-        POVClientState.reset();
     }
 
     /**
@@ -1405,7 +1403,6 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.secretPlay.removeFromParent();
 
         this.notifyServer(ActionState.STOP);
-        POVClientState.reset();
     }
 
     private void disableContext()

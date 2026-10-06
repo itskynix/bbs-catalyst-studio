@@ -10,11 +10,9 @@ import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.settings.values.base.BaseValue;
 import mchorse.bbs_mod.settings.values.numeric.ValueInt;
 import mchorse.bbs_mod.camera.clips.overwrite.ProCameraClip;
-import mchorse.bbs_mod.camera.clips.overwrite.POVClip;
 import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.film.clips.UIClip;
 import mchorse.bbs_mod.ui.film.clips.UIProCameraClip;
-import mchorse.bbs_mod.ui.film.clips.UIPovClip;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.utils.UITimelinePanel;
@@ -206,10 +204,6 @@ public class UIClipsPanel extends UITimelinePanel implements IUIClipsDelegate
             if (clip instanceof ProCameraClip proCameraClip)
             {
                 this.panel = new UIProCameraClip(proCameraClip, this);
-            }
-            else if (clip instanceof POVClip povClip)
-            {
-                this.panel = new UIPovClip(povClip, this);
             }
             else
             {

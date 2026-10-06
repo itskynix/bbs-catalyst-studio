@@ -10,11 +10,9 @@ import mchorse.bbs_mod.camera.controller.PlayCameraController;
 import mchorse.bbs_mod.client.BBSRendering;
 import mchorse.bbs_mod.client.PixelArt;
 import mchorse.bbs_mod.items.GunZoom;
-import mchorse.bbs_mod.camera.pov.POVHandRenderer;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gl.ShaderProgram;
 import net.minecraft.client.render.GameRenderer;
-import net.minecraft.client.render.item.HeldItemRenderer;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.util.math.RotationAxis;
 import org.objectweb.asm.Opcodes;
@@ -30,10 +28,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(GameRenderer.class)
 public abstract class GameRendererMixin
 {
-    @Shadow
-    @Final
-    private HeldItemRenderer firstPersonRenderer;
-
     /**
      * This injection cancels bobbing when camera controller takes over
      */
@@ -88,12 +82,6 @@ public abstract class GameRendererMixin
     @Inject(method = "renderHand", at = @At("HEAD"), cancellable = true)
     public void onRenderHand(MatrixStack matrices, net.minecraft.client.render.Camera camera, float tickDelta, CallbackInfo info)
     {
-        if (POVHandRenderer.render(matrices, camera, tickDelta, this.firstPersonRenderer))
-        {
-            info.cancel();
-            return;
-        }
-
         ICameraController current = BBSModClient.getCameraController().getCurrent();
 
         if (current instanceof PlayCameraController)

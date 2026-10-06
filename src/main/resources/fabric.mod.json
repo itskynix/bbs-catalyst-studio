@@ -1,7 +1,7 @@
 {
     "schemaVersion": 1,
     "id": "bbs",
-    "version": "${version}",
+    "version": "C1.2-1.20.4",
     "name": "BBS CS (Catalyst Studio)",
     "description": "Built for machinima creators, animators, and filmmakers. BBS CS upgrades the core studio with the Catalyst NLE timeline, lossless studio-grade audio engine, smart replay LOD culling, and major render stability fixes.",
     "authors": [
@@ -47,6 +47,10 @@
         "bbs.mixins.json",
         {
             "config": "bbs.client.mixins.json",
+            "environment": "client"
+        },
+        {
+            "config": "bbs.pov.mixins.json",
             "environment": "client"
         }
     ],

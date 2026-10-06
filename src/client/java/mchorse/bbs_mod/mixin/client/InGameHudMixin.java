@@ -17,16 +17,16 @@ public class InGameHudMixin
     public void render(DrawContext drawContext, float tickDelta, CallbackInfo info)
     {
         ICameraController current = BBSModClient.getCameraController().getCurrent();
-
         if (current instanceof PlayCameraController)
         {
             mchorse.bbs_mod.client.BBSRendering.onRenderBeforeScreen();
+            mchorse.bbs_mod.client.BBSRendering.renderHud(drawContext, tickDelta);
             info.cancel();
         }
     }
 
     @Inject(method = "render", at = @At("TAIL"))
-    public void onRenderEnd(CallbackInfo info)
+    public void onRenderEnd(DrawContext drawContext, float tickDelta, CallbackInfo info)
     {
         mchorse.bbs_mod.client.BBSRendering.onRenderBeforeScreen();
     }

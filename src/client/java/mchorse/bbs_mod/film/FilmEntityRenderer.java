@@ -4,7 +4,6 @@ import mchorse.bbs_mod.api.client.events.FilmGizmoEvents;
 import mchorse.bbs_mod.api.client.events.FormPoseEvents;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import mchorse.bbs_mod.camera.clips.overwrite.POVClientState;
 import mchorse.bbs_mod.camera.data.Point;
 import mchorse.bbs_mod.client.BBSRendering;
 import mchorse.bbs_mod.client.renderer.DeathPose;
@@ -55,11 +54,6 @@ public class FilmEntityRenderer
 {
     public static void renderEntity(FilmControllerContext context)
     {
-        if (POVClientState.isActorCulled(context.entity, context.replay))
-        {
-            return;
-        }
-
         FormPoseEvents.ACTOR_BEFORE.invoker().prepare(context);
 
         Map<String, IEntity> entities = context.entities;

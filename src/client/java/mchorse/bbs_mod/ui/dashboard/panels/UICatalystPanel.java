@@ -13,7 +13,6 @@ import mchorse.bbs_mod.audio.AudioRenderer;
 import mchorse.bbs_mod.audio.SoundBuffer;
 import mchorse.bbs_mod.audio.SoundPlayer;
 import mchorse.bbs_mod.camera.clips.misc.AudioClip;
-import mchorse.bbs_mod.camera.clips.overwrite.POVClientState;
 import mchorse.bbs_mod.film.Film;
 import mchorse.bbs_mod.graphics.texture.Texture;
 import mchorse.bbs_mod.graphics.texture.TextureFormat;
@@ -409,7 +408,6 @@ public class UICatalystPanel extends UIDashboardPanel
                 this.previewFboTexture.delete();
                 this.previewFboTexture = null;
             }
-            POVClientState.reset();
         });
 
         this.onClose(() ->
@@ -448,7 +446,6 @@ public class UICatalystPanel extends UIDashboardPanel
                 this.previewFboTexture.delete();
                 this.previewFboTexture = null;
             }
-            POVClientState.reset();
         });
     }
 
