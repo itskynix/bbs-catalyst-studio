@@ -379,7 +379,11 @@ public class PlayerSkins
     {
         for (Property property : profile.getProperties().get("textures"))
         {
+            //? if >=1.20.4 {
             String url = skinUrlFromTextures(property.value());
+            //?} else {
+            /*String url = skinUrlFromTextures(property.getValue());
+            *///?}
 
             if (url != null)
             {

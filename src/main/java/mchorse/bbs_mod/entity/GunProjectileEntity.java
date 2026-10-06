@@ -214,7 +214,11 @@ public class GunProjectileEntity extends ProjectileEntity implements IEntityForm
 
             pos = oldPos.add(v);
 
+            //? if >=1.20.4 {
             HitResult hitResult = ProjectileUtil.getCollision(this, this::canHit, RaycastContext.ShapeType.COLLIDER);
+            //?} else {
+            /*HitResult hitResult = ProjectileUtil.getCollision(this, this::canHit);
+            *///?}
 
             if (hitResult.getType() != HitResult.Type.MISS)
             {
@@ -325,7 +329,11 @@ public class GunProjectileEntity extends ProjectileEntity implements IEntityForm
         DamageSource source = this.getDamageSources().magic();
 
         int fireTicks = entity.getFireTicks();
+        //? if >=1.20.4 {
         boolean deflectsArrows = entity.getType().isIn(EntityTypeTags.DEFLECTS_ARROWS);
+        //?} else {
+        /*boolean deflectsArrows = false;
+        *///?}
 
         if (this.isOnFire() && !deflectsArrows)
         {

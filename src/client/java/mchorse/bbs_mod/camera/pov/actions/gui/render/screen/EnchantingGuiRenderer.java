@@ -150,7 +150,7 @@ GuiScreenChrome {
             int rowX = 60;
             int rowY = 14 + 19 * i;
             if (power <= 0) {
-                batcher.getContext().drawGuiTexture(ENCHANTMENT_SLOT_DISABLED, rowX, rowY, 108, 19);
+                batcher.drawGuiTexture(ENCHANTMENT_SLOT_DISABLED, rowX, rowY, 108, 19);
                 continue;
             }
             String cost = Integer.toString(power);
@@ -160,16 +160,16 @@ GuiScreenChrome {
             boolean affordable = creative || lapis >= i + 1 && playerLevel >= power;
             boolean bl = hovered = cursorX >= (float)rowX && cursorY >= (float)rowY && cursorX < (float)(rowX + 108) && cursorY < (float)(rowY + 19);
             if (!affordable) {
-                batcher.getContext().drawGuiTexture(ENCHANTMENT_SLOT_DISABLED, rowX, rowY, 108, 19);
-                batcher.getContext().drawGuiTexture(ENCHANTMENT_LEVELS_DISABLED[i], rowX + 1, rowY + 1, 16, 16);
+                batcher.drawGuiTexture(ENCHANTMENT_SLOT_DISABLED, rowX, rowY, 108, 19);
+                batcher.drawGuiTexture(ENCHANTMENT_LEVELS_DISABLED[i], rowX + 1, rowY + 1, 16, 16);
                 batcher.getContext().drawTextWrapped(font, phrase, rowX + 20, rowY + 2, phraseWidth, (color & 0xFEFEFE) >> 1);
                 color = 4226832;
             } else {
-                batcher.getContext().drawGuiTexture(hovered ? ENCHANTMENT_SLOT_HIGHLIGHTED : ENCHANTMENT_SLOT, rowX, rowY, 108, 19);
+                batcher.drawGuiTexture(hovered ? ENCHANTMENT_SLOT_HIGHLIGHTED : ENCHANTMENT_SLOT, rowX, rowY, 108, 19);
                 if (hovered) {
                     color = 0xFFFF80;
                 }
-                batcher.getContext().drawGuiTexture(ENCHANTMENT_LEVELS[i], rowX + 1, rowY + 1, 16, 16);
+                batcher.drawGuiTexture(ENCHANTMENT_LEVELS[i], rowX + 1, rowY + 1, 16, 16);
                 batcher.getContext().drawTextWrapped(font, phrase, rowX + 20, rowY + 2, phraseWidth, color);
                 color = hovered ? 0xFFFF80 : 8453920;
             }

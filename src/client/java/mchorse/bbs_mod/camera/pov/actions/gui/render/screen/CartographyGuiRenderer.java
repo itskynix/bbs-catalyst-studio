@@ -60,13 +60,13 @@ GuiScreenChrome {
         boolean isClone = additionStack != null && !additionStack.isEmpty() && (additionStack.isOf(Items.MAP) || additionStack.isOf(Items.FILLED_MAP) || additionStack.isOf(Items.PAPER));
         boolean bl = isGlassPane = additionStack != null && !additionStack.isEmpty() && (additionStack.isOf(Items.GLASS_PANE) || (item = additionStack.getItem()) instanceof BlockItem && (bi = (BlockItem)item).getBlock() instanceof PaneBlock);
         if (isClone) {
-            batcher.getContext().drawGuiTexture(DUPLICATED_MAP_TEXTURE, 83, 13, 50, 66);
-            batcher.getContext().drawGuiTexture(DUPLICATED_MAP_TEXTURE, 67, 29, 50, 66);
+            batcher.drawGuiTexture(DUPLICATED_MAP_TEXTURE, 83, 13, 50, 66);
+            batcher.drawGuiTexture(DUPLICATED_MAP_TEXTURE, 67, 29, 50, 66);
         } else if (isGlassPane) {
-            batcher.getContext().drawGuiTexture(MAP_TEXTURE, 67, 13, 66, 66);
-            batcher.getContext().drawGuiTexture(LOCKED_TEXTURE, 66, 12, 66, 66);
+            batcher.drawGuiTexture(MAP_TEXTURE, 67, 13, 66, 66);
+            batcher.drawGuiTexture(LOCKED_TEXTURE, 66, 12, 66, 66);
         } else {
-            batcher.getContext().drawGuiTexture(MAP_TEXTURE, 67, 13, 66, 66);
+            batcher.drawGuiTexture(MAP_TEXTURE, 67, 13, 66, 66);
         }
     }
 

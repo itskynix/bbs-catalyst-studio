@@ -49,13 +49,13 @@ GuiScreenChrome {
         boolean bubbles = GuiTextRenderer.sampleBool(clip.getBrewBubbles(guiId), tick, false);
         int fuelW = MathHelper.clamp((int)Math.round(fuel * 18.0f), (int)0, (int)18);
         if (fuelW > 0) {
-            batcher.getContext().drawGuiTexture(BREWING_FUEL, 18, 4, 0, 0, 60, 44, fuelW, 4);
+            batcher.drawGuiTexture(BREWING_FUEL, 18, 4, 0, 0, 60, 44, fuelW, 4);
         }
         if ((arrowH = MathHelper.clamp((int)Math.round(brew * 28.0f), (int)0, (int)28)) > 0) {
-            batcher.getContext().drawGuiTexture(BREWING_ARROW, 9, 28, 0, 0, 97, 16, 9, arrowH);
+            batcher.drawGuiTexture(BREWING_ARROW, 9, 28, 0, 0, 97, 16, 9, arrowH);
         }
         if (bubbles && (bubbleH = BREWING_BUBBLE_FRAMES[frame = Math.floorMod((int)tick / 2, BREWING_BUBBLE_FRAMES.length)]) > 0) {
-            batcher.getContext().drawGuiTexture(BREWING_BUBBLES, 12, 29, 0, 29 - bubbleH, 63, 43 - bubbleH, 12, bubbleH);
+            batcher.drawGuiTexture(BREWING_BUBBLES, 12, 29, 0, 29 - bubbleH, 63, 43 - bubbleH, 12, bubbleH);
         }
     }
 }

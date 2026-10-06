@@ -118,7 +118,11 @@ public class ArmorRenderer
 
                 if (world != null)
                 {
+                    //? if >=1.20.4 {
                     ArmorTrim.getTrim(world.getRegistryManager(), itemStack, true).ifPresent((trim) ->
+                    //?} else {
+                    /*ArmorTrim.getTrim(world.getRegistryManager(), itemStack).ifPresent((trim) ->
+                    *///?}
                     {
                         this.renderTrim(part, armorItem.getMaterial(), matrices, vertexConsumers, light, trim, innerModel);
                     });
@@ -225,7 +229,11 @@ public class ArmorRenderer
     private void renderTrim(ModelPart part, ArmorMaterial material, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light, ArmorTrim trim, boolean leggings)
     {
         Sprite sprite = this.armorTrimsAtlas.getSprite(leggings ? trim.getLeggingsModelId(material) : trim.getGenericModelId(material));
+        //? if >=1.20.4 {
         VertexConsumer vertexConsumer = sprite.getTextureSpecificVertexConsumer(vertexConsumers.getBuffer(TexturedRenderLayers.getArmorTrims(trim.getPattern().value().decal())));
+        //?} else {
+        /*VertexConsumer vertexConsumer = sprite.getTextureSpecificVertexConsumer(vertexConsumers.getBuffer(TexturedRenderLayers.getArmorTrims()));
+        *///?}
 
         part.render(matrices, vertexConsumer, light, OverlayTexture.DEFAULT_UV, 1F, 1F, 1F, 1F);
     }

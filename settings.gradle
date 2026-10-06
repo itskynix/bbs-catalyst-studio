@@ -4,9 +4,24 @@ pluginManagement {
 			name = 'Fabric'
 			url = 'https://maven.fabricmc.net/'
 		}
+		maven {
+			name = 'KikuGie Releases'
+			url = 'https://maven.kikugie.dev/releases'
+		}
 		mavenCentral()
 		gradlePluginPortal()
 	}
+}
+
+plugins {
+	id 'dev.kikugie.stonecutter' version '0.4.5'
+}
+
+stonecutter {
+    shared {
+        versions("1.20.1", "1.20.4")
+    }
+    create(rootProject)
 }
 
 rootProject.name = "BBS mod"

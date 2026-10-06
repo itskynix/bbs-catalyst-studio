@@ -26,6 +26,7 @@ import net.minecraft.world.chunk.ChunkManager;
 import net.minecraft.world.entity.EntityLookup;
 import net.minecraft.world.event.GameEvent;
 import net.minecraft.world.tick.QueryableTickScheduler;
+//? if >=1.20.4
 import net.minecraft.world.tick.TickManager;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
@@ -150,11 +151,13 @@ public class StructureWorld extends World
         return this.delegate.getFluidTickScheduler();
     }
 
+    //? if >=1.20.4 {
     @Override
     public TickManager getTickManager()
     {
         return this.delegate.getTickManager();
     }
+    //?}
 
     @Override
     public RecipeManager getRecipeManager()

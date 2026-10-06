@@ -28,10 +28,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class AbstractParentElementPovMixin {
     @Inject(method={"setFocused(Lnet/minecraft/client/gui/Element;)V"}, at={@At(value="RETURN")})
     private void bbsPov$clearRecipeButtonFocus(Element focused, CallbackInfo info) {
+        //? if >=1.20.4 {
         TexturedButtonWidget button;
         if (focused instanceof TexturedButtonWidget && ((TexturedButtonWidgetPovAccessor)(button = (TexturedButtonWidget)focused)).bbsPov$getTextures() == RecipeBookWidget.BUTTON_TEXTURES) {
             return;
         }
+        //?} else {
+        /*if (focused instanceof TexturedButtonWidget) {
+            return;
+        }
+        *///?}
         GuiSnapshotCapture.updateRecipeButton(false);
     }
 }

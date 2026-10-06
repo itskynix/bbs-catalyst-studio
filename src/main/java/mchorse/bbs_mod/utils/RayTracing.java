@@ -3,6 +3,7 @@ package mchorse.bbs_mod.utils;
 import mchorse.bbs_mod.BBSMod;
 import mchorse.bbs_mod.camera.Camera;
 import mchorse.bbs_mod.entity.ActorEntity;
+//? if >=1.20.4
 import net.minecraft.block.ShapeContext;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.projectile.ProjectileUtil;
@@ -40,7 +41,11 @@ public class RayTracing
             pos.add(direction.normalize().multiply(d)),
             RaycastContext.ShapeType.COLLIDER,
             RaycastContext.FluidHandling.NONE,
+            //? if >=1.20.4 {
             ShapeContext.absent()
+            //?} else {
+            /*null
+            *///?}
         ));
     }
 

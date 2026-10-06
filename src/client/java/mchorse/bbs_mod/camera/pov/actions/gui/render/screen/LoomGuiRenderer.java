@@ -116,7 +116,7 @@ GuiScreenChrome {
         int topRow = MathHelper.clamp((int)((Integer)clip.loomRow.interpolate(tick, fallbackRow)), (int)0, (int)maxTopRow);
         int scrollY = maxTopRow == 0 ? 0 : Math.round((float)topRow * 41.0f / (float)maxTopRow);
         float screenScale = Math.min(scaleX, scaleY);
-        batcher.getContext().drawGuiTexture(new Identifier(canApply ? "container/loom/scroller" : "container/loom/scroller_disabled"), 119, 13 + scrollY, 12, 15);
+        batcher.drawGuiTexture(new Identifier(canApply ? "container/loom/scroller" : "container/loom/scroller_disabled"), 119, 13 + scrollY, 12, 15);
         int firstPattern = topRow * 4;
         int shown = Math.min(16, patterns.size() - firstPattern);
         for (i = 0; i < shown; ++i) {
@@ -126,7 +126,7 @@ GuiScreenChrome {
             int y = 13 + i / 4 * 14;
             boolean bl = hover = cursorX >= (float)x && cursorX < (float)(x + 14) && cursorY >= (float)y && cursorY < (float)(y + 14);
             String background = patternIndex == selected ? "container/loom/pattern_selected" : (hover ? "container/loom/pattern_highlighted" : "container/loom/pattern");
-            batcher.getContext().drawGuiTexture(new Identifier(background), x, y, 14, 14);
+            batcher.drawGuiTexture(new Identifier(background), x, y, 14, 14);
         }
         batcher.getContext().draw();
         RenderSystem.enableDepthTest();

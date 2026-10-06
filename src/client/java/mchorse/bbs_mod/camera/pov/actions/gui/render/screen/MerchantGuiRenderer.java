@@ -94,7 +94,7 @@ GuiScreenChrome {
         batcher.text(displayTitleText.getString(), (float)titleX, 6.0f, 0x404040, false);
         if (canLevel && level < 5) {
             batcher.flush();
-            batcher.getContext().drawGuiTexture(EXP_BAR_BG, 136, 16, 102, 5);
+            batcher.drawGuiTexture(EXP_BAR_BG, 136, 16, 102, 5);
             KeyframeChannel<Integer> xpChan = clip.getMerchantExperience(guiId);
             int xp = xpChan != null && !xpChan.isEmpty() ? (Integer)xpChan.interpolate(tick, 0) : 0;
             int minXp = 0;
@@ -112,7 +112,7 @@ GuiScreenChrome {
             float progress = MathHelper.clamp((float)((float)(xp - minXp) / (float)(maxXp - minXp)), (float)0.0f, (float)1.0f);
             int fillWidth = Math.round(102.0f * progress);
             if (fillWidth > 0) {
-                batcher.getContext().drawGuiTexture(EXP_BAR_CURRENT, 102, 5, 0, 0, 136, 16, fillWidth, 5);
+                batcher.drawGuiTexture(EXP_BAR_CURRENT, 102, 5, 0, 0, 136, 16, fillWidth, 5);
             }
         }
         if ((offers = MerchantSnapshot.parse(offersStr = (offersChan = clip.getMerchantOffers(guiId)) != null && !offersChan.isEmpty() ? (String)offersChan.interpolate(tick, "") : "")).isEmpty()) {
@@ -132,7 +132,7 @@ GuiScreenChrome {
             int rowY = 16 + i * 20;
             boolean isRowHover = cursorX >= (float)rowX && cursorX <= (float)(rowX + 88) && cursorY >= (float)rowY && cursorY <= (float)(rowY + 20);
             boolean isSelected = offerIdx == selectedIndex;
-            batcher.getContext().drawGuiTexture(isRowHover ? BUTTON_HIGHLIGHTED : BUTTON, rowX, rowY, 88, 20);
+            batcher.drawGuiTexture(isRowHover ? BUTTON_HIGHLIGHTED : BUTTON, rowX, rowY, 88, 20);
             if (isSelected) {
                 batcher.box((float)rowX, (float)rowY, (float)(rowX + 88), (float)(rowY + 1), -1);
                 batcher.box((float)rowX, (float)(rowY + 19), (float)(rowX + 88), (float)(rowY + 20), -1);
@@ -140,9 +140,9 @@ GuiScreenChrome {
                 batcher.box((float)(rowX + 87), (float)rowY, (float)(rowX + 88), (float)(rowY + 20), -1);
             }
             if (offer.disabled()) {
-                batcher.getContext().drawGuiTexture(TRADE_ARROW_OUT_OF_STOCK, rowX + 50, rowY + 3, 10, 9);
+                batcher.drawGuiTexture(TRADE_ARROW_OUT_OF_STOCK, rowX + 50, rowY + 3, 10, 9);
             } else {
-                batcher.getContext().drawGuiTexture(TRADE_ARROW, rowX + 50, rowY + 3, 10, 9);
+                batcher.drawGuiTexture(TRADE_ARROW, rowX + 50, rowY + 3, 10, 9);
             }
             ItemStack buy1 = offer.buy1();
             if (buy1 != null && !buy1.isEmpty()) {
@@ -159,7 +159,7 @@ GuiScreenChrome {
                     int baseWidth = textRenderer.getWidth(baseText);
                     int countX = rowX + 5 + 16 - baseWidth;
                     int countY = rowY + 1 + 9;
-                    batcher.getContext().drawGuiTexture(DISCOUNT_STRIKETHROUGH, countX - 1, countY + 4, baseWidth + 2, 2);
+                    batcher.drawGuiTexture(DISCOUNT_STRIKETHROUGH, countX - 1, countY + 4, baseWidth + 2, 2);
                 }
             }
             if ((buy2 = offer.buy2()) != null && !buy2.isEmpty()) {
@@ -179,10 +179,10 @@ GuiScreenChrome {
             pointerHover.itemGroup = false;
         }
         if (offers.size() <= 7) {
-            batcher.getContext().drawGuiTexture(SCROLLER_DISABLED, 94, 18, 6, 27);
+            batcher.drawGuiTexture(SCROLLER_DISABLED, 94, 18, 6, 27);
         } else {
             int thumbY = 18 + Math.round(112.0f * ((float)scrollOffset / (float)maxScroll));
-            batcher.getContext().drawGuiTexture(SCROLLER, 94, thumbY, 6, 27);
+            batcher.drawGuiTexture(SCROLLER, 94, thumbY, 6, 27);
         }
     }
 

@@ -33,12 +33,12 @@ GuiScreenChrome {
     @Override
     public void drawEarlyChrome(GuiRenderContext ctx) {
         boolean hasInput = !GuiSlotRenderer.isSlotEmpty(ctx.clip, ctx.guiId, "input_0", ctx.localTick);
-        ctx.batcher.getContext().drawGuiTexture(hasInput ? TEXT_FIELD : TEXT_FIELD_DISABLED, 59, 20, 110, 16);
+        ctx.batcher.drawGuiTexture(hasInput ? TEXT_FIELD : TEXT_FIELD_DISABLED, 59, 20, 110, 16);
         String name = GuiTextRenderer.sampleString(ctx.clip.anvilName, ctx.localTick, "");
         boolean focused = !hasInput || GuiTextRenderer.sampleBool(ctx.clip.anvilNameFocus, ctx.localTick, false);
         GuiTextRenderer.drawSearchField(ctx.batcher, name, 62, 24, 103, 12, focused, false, ctx.opacity, GuiTextRenderer.sampleInt(ctx.clip.anvilNameSelStart, ctx.localTick, name.length()), GuiTextRenderer.sampleInt(ctx.clip.anvilNameSelEnd, ctx.localTick, name.length()));
         if (GuiTextRenderer.sampleBool(ctx.clip.anvilError, ctx.localTick, false)) {
-            ctx.batcher.getContext().drawGuiTexture(ERROR, 99, 45, 28, 21);
+            ctx.batcher.drawGuiTexture(ERROR, 99, 45, 28, 21);
         }
     }
 }

@@ -424,6 +424,7 @@ public class HudRenderer {
     }
 
     public static void drawGuiSprite(DrawContext context, Identifier texture, int x, int y, int width, int height) {
+        //? if >=1.20.4 {
         Sprite sprite = MinecraftClient.getInstance().getGuiAtlasManager().getSprite(texture);
         if (sprite == null) {
             return;
@@ -452,6 +453,9 @@ public class HudRenderer {
         bufferBuilder.vertex(matrix, (float)(x + width), (float)(y + height), 0.0f).texture(u2, v2).next();
         bufferBuilder.vertex(matrix, (float)(x + width), (float)y, 0.0f).texture(u2, v1).next();
         BufferRenderer.drawWithGlobalProgram((BufferBuilder.BuiltBuffer)bufferBuilder.end());
+        //?} else {
+        /*mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, texture, x, y, width, height);
+        *///?}
     }
 }
 

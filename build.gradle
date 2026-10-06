@@ -60,33 +60,10 @@ tasks.named('runClient', JavaExec) {
 	}
 }
 
+// Apply version-specific build script (1.20.1 / 1.20.4)
+apply from: rootProject.file("versions/${project.name}/build.gradle")
+
 dependencies {
-	// To change the versions see the gradle.properties file
-	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
-	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
-
-	// Fabric API. This is technically optional, but you probably want it anyway.
-	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
-	
-	// Uncomment the following line to enable the deprecated Fabric API modules. 
-	// These are included in the Fabric API production distribution and allow you to update your mod to the latest modules at a later more convenient time.
-
-	// modImplementation "net.fabricmc.fabric-api:fabric-api-deprecated:${project.fabric_version}"
-	/* Sodium and Iris are compile-time only: Loom's dev client loads every mod dependency from the
-	 * Gradle cache and ignores run/mods, so "modImplementation" made them load in runClient even
-	 * with their jars renamed to .disabled. Opt in with: gradlew runClient -PdevMods=true */
-	modCompileOnly "maven.modrinth:sodium:mc1.20.4-0.5.8"
-	modCompileOnly "maven.modrinth:iris:1.7.2+1.20.4"
-
-	if (project.hasProperty('devMods'))
-	{
-		modLocalRuntime "maven.modrinth:sodium:mc1.20.4-0.5.8"
-		modLocalRuntime "maven.modrinth:iris:1.7.2+1.20.4"
-	}
-	modCompileOnly "maven.modrinth:distanthorizons:2.1.0-a-1.20.4"
-	modCompileOnly "maven.modrinth:indium:1.0.31+mc1.20.4"
-
 	modImplementation "org.anarres:jcpp:1.4.14"
 	modImplementation "io.github.douira:glsl-transformer:2.0.0-pre13"
 

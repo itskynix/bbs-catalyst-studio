@@ -5,7 +5,9 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.sound.Sound;
 import net.minecraft.client.sound.SoundInstance;
 import net.minecraft.client.sound.SoundInstanceListener;
+//? if >=1.20.4 {
 import net.minecraft.client.sound.SoundListenerTransform;
+//?}
 import net.minecraft.client.sound.TickableSoundInstance;
 import net.minecraft.client.sound.WeightedSoundSet;
 import net.minecraft.sound.SoundCategory;
@@ -143,9 +145,16 @@ public class MinecraftSoundCapture implements SoundInstanceListener
             it.remove();
         }
 
+        //? if >=1.20.4 {
         SoundListenerTransform transform = soundManager.getListenerTransform();
         Vec3d position = transform.position();
         Vec3d right = transform.right();
+        //?} else {
+        /*net.minecraft.client.render.Camera camera = MinecraftClient.getInstance().gameRenderer.getCamera();
+        Vec3d position = camera.getPos();
+        org.joml.Vector3f horizontal = camera.getHorizontalPlane();
+        Vec3d right = new Vec3d(horizontal.x, horizontal.y, horizontal.z);
+        *///?}
 
         this.frames.add(new ListenerFrame(position.x, position.y, position.z, right.x, right.y, right.z));
     }
@@ -174,6 +183,7 @@ public class MinecraftSoundCapture implements SoundInstanceListener
         return loop.seenPlaying;
     }
 
+    //? if >=1.20.4 {
     @Override
     public void onSoundPlayed(SoundInstance instance, WeightedSoundSet soundSet, float range)
     {
@@ -192,6 +202,26 @@ public class MinecraftSoundCapture implements SoundInstanceListener
             e.printStackTrace();
         }
     }
+    //?} else {
+    /*@Override
+    public void onSoundPlayed(SoundInstance instance, WeightedSoundSet soundSet)
+    {
+        if (!this.active)
+        {
+            return;
+        }
+
+        try
+        {
+            float range = Math.max(instance.getVolume(), 1.0f) * 16.0f;
+            this.capture(instance, range);
+        }
+        catch (Exception e)
+        {
+            e.printStackTrace();
+        }
+    }
+    *///?}
 
     private void capture(SoundInstance instance, float range)
     {

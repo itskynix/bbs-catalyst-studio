@@ -208,7 +208,11 @@ public abstract class BaseFilmController
                             double y = replay.keyframes.y.interpolate(replayTicks);
                             double z = replay.keyframes.z.interpolate(replayTicks);
 
+                            //? if >=1.20.4 {
                             actor.updateTrackedPositionAndAngles(x, y, z, yaw, pitch, 0);
+                            //?} else {
+                            /*actor.updateTrackedPositionAndAngles(x, y, z, yaw, pitch, 0, false);
+                            *///?}
                             actor.setPosition(x, y, z);
 
                             /* The blow itself lands on the entity, but the body that shows it is the

@@ -55,7 +55,7 @@ public final class GuiSlotRenderer {
 
     public static void drawGuiSlotPlaceholder(Batcher2D batcher, GuiPovActionClip clip, String guiId, String slotId, float tick, String spriteId, int x, int y, int size) {
         if (GuiSlotRenderer.isSlotEmpty(clip, guiId, slotId, tick)) {
-            batcher.getContext().drawGuiTexture(new Identifier(spriteId), x, y, size, size);
+            batcher.drawGuiTexture(new Identifier(spriteId), x, y, size, size);
         }
     }
 

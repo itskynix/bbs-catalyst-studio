@@ -125,7 +125,7 @@ public final class ToastActionRenderer {
         String frameType = clip.getEffectiveFrameType();
         Identifier texture = ToastActionRenderer.getTextureForFrameType(frameType);
         RenderSystem.enableBlend();
-        context.drawGuiTexture(texture, x, y, 160, 32);
+        mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, texture, x, y, 160, 32);
         Link customTex = clip.getCustomTexture();
         if (customTex != null) {
             Texture tex = BBSModClient.getTextures().getTexture(customTex);

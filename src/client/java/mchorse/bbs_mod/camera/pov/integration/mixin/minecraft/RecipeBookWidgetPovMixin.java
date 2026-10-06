@@ -33,7 +33,9 @@ import net.minecraft.client.gui.screen.recipebook.RecipeBookWidget;
 import net.minecraft.client.gui.screen.recipebook.RecipeGroupButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.client.recipebook.ClientRecipeBook;
+//? if >=1.20.4 {
 import net.minecraft.recipe.RecipeEntry;
+//?}
 import net.minecraft.screen.AbstractRecipeScreenHandler;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -80,7 +82,13 @@ public abstract class RecipeBookWidgetPovMixin {
                 ++visible;
             }
         }
+        //? if >=1.20.4 {
         RecipeEntry ghost = this.field_3092 == null ? null : this.field_3092.getRecipe();
+        String ghostId = ghost == null ? "" : ghost.id().toString();
+        //?} else {
+        /*net.minecraft.recipe.Recipe<?> ghost = this.field_3092 == null ? null : this.field_3092.getRecipe();
+        String ghostId = ghost == null ? "" : ghost.getId().toString();
+        *///?}
         boolean filtering = this.field_3096 != null && this.field_3095 != null && this.field_3096.isFilteringCraftable(this.field_3095);
         int selStart = 0;
         int selEnd = 0;
@@ -89,7 +97,7 @@ public abstract class RecipeBookWidgetPovMixin {
             selStart = access.bbsPov$getSelectionStart();
             selEnd = access.bbsPov$getSelectionEnd();
         }
-        GuiSnapshotCapture.updateRecipeBook(this.field_33679, this.field_3089 == null ? "" : this.field_3089.getText(), filtering, tab, ghost == null ? "" : ghost.id().toString(), this.field_3089 != null && this.field_3089.isFocused(), selStart, selEnd);
+        GuiSnapshotCapture.updateRecipeBook(this.field_33679, this.field_3089 == null ? "" : this.field_3089.getText(), filtering, tab, ghostId, this.field_3089 != null && this.field_3089.isFocused(), selStart, selEnd);
     }
 
     @Inject(method={"render"}, at={@At(value="RETURN")})

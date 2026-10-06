@@ -107,7 +107,11 @@ GuiScreenChrome {
             RenderSystem.enableDepthTest();
             RenderSystem.depthMask((boolean)true);
             RenderSystem.clear((int)256, (boolean)MinecraftClient.IS_SYSTEM_MAC);
+            //? if >=1.20.4 {
             InventoryScreen.drawEntity((DrawContext)ctx.batcher.getContext(), (float)141.0f, (float)75.0f, (int)25, (Vector3f)new Vector3f(), (Quaternionf)SMITHING_ARMOR_STAND_ROTATION, null, (LivingEntity)stand);
+            //?} else {
+            /*InventoryScreen.drawEntity((DrawContext)ctx.batcher.getContext(), 141, 75, 25, (Quaternionf)SMITHING_ARMOR_STAND_ROTATION, (Quaternionf)new Quaternionf(), (LivingEntity)stand);
+            *///?}
             ctx.batcher.getContext().draw();
             ctx.batcher.flush();
         }

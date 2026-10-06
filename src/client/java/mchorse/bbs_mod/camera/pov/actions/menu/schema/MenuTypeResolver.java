@@ -21,10 +21,15 @@ public final class MenuTypeResolver {
     }
 
     public static String resolve(Screen screen) {
-        GameMenuScreen menu;
-        if (screen instanceof GameMenuScreen && (menu = (GameMenuScreen)screen).shouldShowMenu()) {
+        //? if >=1.20.4 {
+        if (screen instanceof GameMenuScreen menu && menu.shouldShowMenu()) {
             return "game_menu";
         }
+        //?} else {
+        /*if (screen instanceof GameMenuScreen) {
+            return "game_menu";
+        }
+        *///?}
         if (screen instanceof DeathScreen) {
             return "death";
         }

@@ -34,7 +34,9 @@ import net.minecraft.client.render.DiffuseLighting;
 import net.minecraft.inventory.Inventory;
 import net.minecraft.inventory.SimpleInventory;
 import net.minecraft.item.ItemStack;
+//? if >=1.20.4 {
 import net.minecraft.recipe.RecipeEntry;
+//?}
 import net.minecraft.recipe.RecipeType;
 import net.minecraft.recipe.StonecuttingRecipe;
 import net.minecraft.registry.DynamicRegistryManager;
@@ -80,7 +82,7 @@ GuiScreenChrome {
         int maxTopRow = Math.max(0, MathHelper.ceilDiv((int)recipes.size(), (int)4) - 3);
         boolean canScroll = recipes.size() > 12;
         int scrollY = maxTopRow == 0 ? 0 : Math.round((float)topRow * 41.0f / (float)maxTopRow);
-        batcher.getContext().drawGuiTexture(canScroll ? STONECUTTER_SCROLLER : STONECUTTER_SCROLLER_DISABLED, 119, 15 + scrollY, 12, 15);
+        batcher.drawGuiTexture(canScroll ? STONECUTTER_SCROLLER : STONECUTTER_SCROLLER_DISABLED, 119, 15 + scrollY, 12, 15);
         int first = topRow * 4;
         int shown = Math.min(12, recipes.size() - first);
         for (int i = 0; i < shown; ++i) {
@@ -89,7 +91,7 @@ GuiScreenChrome {
             int y = 14 + i / 4 * 18 + 2;
             boolean hovered = GuiTextRenderer.inBounds(cursorX, cursorY, x, y - 1, 16, 18);
             Identifier texture = index == selected ? STONECUTTER_RECIPE_SELECTED : (hovered ? STONECUTTER_RECIPE_HOVER : STONECUTTER_RECIPE);
-            batcher.getContext().drawGuiTexture(texture, x, y - 1, 16, 18);
+            batcher.drawGuiTexture(texture, x, y - 1, 16, 18);
             if (!hovered) continue;
             hover.item = recipes.get(index);
         }
@@ -121,11 +123,19 @@ GuiScreenChrome {
         }
         DynamicRegistryManager registries = client.world.getRegistryManager();
         SimpleInventory inventory = new SimpleInventory(new ItemStack[]{input.copy()});
+        //? if >=1.20.4 {
         for (RecipeEntry entry : client.world.getRecipeManager().getAllMatches(RecipeType.STONECUTTING, (Inventory)inventory, (World)client.world)) {
             ItemStack result = ((StonecuttingRecipe)entry.value()).getResult(registries);
             if (result == null || result.isEmpty()) continue;
             recipes.add(result.copy());
         }
+        //?} else {
+        /*for (StonecuttingRecipe recipe : client.world.getRecipeManager().getAllMatches(RecipeType.STONECUTTING, (Inventory)inventory, (World)client.world)) {
+            ItemStack result = recipe.getOutput(registries);
+            if (result == null || result.isEmpty()) continue;
+            recipes.add(result.copy());
+        }
+        *///?}
         return recipes;
     }
 

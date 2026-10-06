@@ -172,7 +172,11 @@ public class ModelBlockEntityRenderer implements BlockEntityRenderer<ModelBlockE
 
         RenderSystem.disableDepthTest();
 
+        //? if >=1.20.4 {
         if (mc.getDebugHud().shouldShowDebugHud())
+        //?} else {
+        /*if (mc.options.debugEnabled)
+        *///?}
         {
             Draw.renderBox(matrices, -0.5D, 0, -0.5D, 1, 1, 1, 0, 0.5F, 1F, 0.5F);
         }

@@ -58,7 +58,11 @@ public final class GuiEntityPreviewRenderer {
       Vector3f vector3f = new Vector3f(0.0F, entity.getHeight() / 2.0F + yOffset, 0.0F);
 
       try {
+         //? if >=1.20.4 {
          InventoryScreen.drawEntity(context, (float)((int)centerX), (float)((int)centerY), size, vector3f, quaternionf, quaternionf2, entity);
+         //?} else {
+         /*InventoryScreen.drawEntity(context, (int)centerX, (int)centerY, size, quaternionf, quaternionf2, entity);
+         *///?}
          context.draw();
       } finally {
          entity.bodyYaw = bodyYaw;

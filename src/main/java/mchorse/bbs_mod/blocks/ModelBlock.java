@@ -212,8 +212,13 @@ public class ModelBlock extends Block implements BlockEntityProvider, Waterlogga
             .with(Properties.WATERLOGGED, ctx.getWorld().getFluidState(ctx.getBlockPos()).isOf(Fluids.WATER));
     }
 
+    //? if >=1.20.4 {
     @Override
     public ItemStack getPickStack(WorldView world, BlockPos pos, BlockState state)
+    //?} else {
+    /*@Override
+    public ItemStack getPickStack(BlockView world, BlockPos pos, BlockState state)
+    *///?}
     {
         BlockEntity entity = world.getBlockEntity(pos);
 

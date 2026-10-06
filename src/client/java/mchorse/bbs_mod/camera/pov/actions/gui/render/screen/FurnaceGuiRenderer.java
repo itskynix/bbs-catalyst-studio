@@ -61,11 +61,11 @@ GuiScreenChrome {
         };
         if (lit > 0.0f) {
             int fireH = MathHelper.ceil((float)(lit * 13.0f)) + 1;
-            batcher.getContext().drawGuiTexture(litTexture, 14, 14, 0, 14 - fireH, 56, 50 - fireH, 14, fireH);
+            batcher.drawGuiTexture(litTexture, 14, 14, 0, 14 - fireH, 56, 50 - fireH, 14, fireH);
         }
         if (cook > 0.0f) {
             int arrowW = MathHelper.ceil((float)(cook * 24.0f));
-            batcher.getContext().drawGuiTexture(cookTexture, 24, 16, 0, 0, 79, 34, arrowW, 16);
+            batcher.drawGuiTexture(cookTexture, 24, 16, 0, 0, 79, 34, arrowW, 16);
         }
     }
 }

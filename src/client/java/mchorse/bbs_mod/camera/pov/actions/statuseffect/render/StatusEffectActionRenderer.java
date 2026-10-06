@@ -90,7 +90,7 @@ public final class StatusEffectActionRenderer {
             RenderSystem.enableBlend();
             RenderSystem.setShaderColor((float)1.0f, (float)1.0f, (float)1.0f, (float)1.0f);
             try {
-                context.drawGuiTexture(EFFECT_BACKGROUND_TEXTURE, x, y, 24, 24);
+                mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, EFFECT_BACKGROUND_TEXTURE, x, y, 24, 24);
             }
             catch (Exception ignored) {
                 context.fill(x, y, x + 24, y + 24, -2009910477);
@@ -129,7 +129,7 @@ public final class StatusEffectActionRenderer {
             StatusEffect effect;
             if (entry.isExpired(localTick) || (effect = entry.getStatusEffect()) == null) continue;
             try {
-                context.drawGuiTexture(EFFECT_BACKGROUND_LARGE_TEXTURE, startX, startY, cardWidth, cardHeight);
+                mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, EFFECT_BACKGROUND_LARGE_TEXTURE, startX, startY, cardWidth, cardHeight);
             }
             catch (Exception ignored) {
                 context.fill(startX, startY, startX + cardWidth, startY + cardHeight, -534897122);

@@ -56,7 +56,9 @@ import net.minecraft.client.search.SearchProvider;
 import net.minecraft.item.ItemStack;
 import net.minecraft.recipe.Ingredient;
 import net.minecraft.recipe.Recipe;
+//? if >=1.20.4 {
 import net.minecraft.recipe.RecipeEntry;
+//?}
 import net.minecraft.recipe.RecipeGridAligner;
 import net.minecraft.recipe.RecipeMatcher;
 import net.minecraft.recipe.book.RecipeBook;
@@ -101,7 +103,7 @@ public final class GuiRecipeBookRenderer {
         int buttons = mouseButtons == null || mouseButtons.isEmpty() ? 0 : (Integer)mouseButtons.interpolate(tick, 0);
         boolean bl = clickOffButton = buttons != 0 && !hover;
         boolean highlighted = recipeButton == null || recipeButton.isEmpty() ? hover : hover || recorded && !clickOffButton;
-        batcher.getContext().drawGuiTexture(highlighted ? RECIPE_BUTTON_HIGHLIGHTED : RECIPE_BUTTON, x, y, 20, 18);
+        batcher.drawGuiTexture(highlighted ? RECIPE_BUTTON_HIGHLIGHTED : RECIPE_BUTTON, x, y, 20, 18);
     }
 
     public static void render(Batcher2D batcher, GuiPovActionClip clip, ReplayKeyframes replayKeyframes, String guiId, float tick, float globalTick, float originX, float originY, float scaleX, float scaleY, int screenWidth, int screenHeight, float opacity, float cursorGuiX, float cursorGuiY, GuiPointerHover hover) {
@@ -120,12 +122,12 @@ public final class GuiRecipeBookRenderer {
             for (int i = 0; i < groups.size(); ++i) {
                 int tabX = bookX - 30;
                 int tabY = bookY + 3 + i * 27;
-                batcher.getContext().drawGuiTexture(i == selected ? RECIPE_TAB_SELECTED : RECIPE_TAB, tabX, tabY, 35, 27);
+                batcher.drawGuiTexture(i == selected ? RECIPE_TAB_SELECTED : RECIPE_TAB, tabX, tabY, 35, 27);
             }
         }
         boolean filterHover = GuiTextRenderer.inBounds(cursorGuiX, cursorGuiY, bookX + 110, bookY + 12, 26, 16);
         Identifier filterTexture = showing ? (filterHover ? RECIPE_FILTER_ON_HOVER : RECIPE_FILTER_ON) : (filterHover ? RECIPE_FILTER_OFF_HOVER : RECIPE_FILTER_OFF);
-        batcher.getContext().drawGuiTexture(filterTexture, bookX + 110, bookY + 12, 26, 16);
+        batcher.drawGuiTexture(filterTexture, bookX + 110, bookY + 12, 26, 16);
         if (filterHover) {
             hover.widget = GuiRecipeBookRenderer.recipeFilterTooltip(guiId, showing);
         }
@@ -141,7 +143,7 @@ public final class GuiRecipeBookRenderer {
             int slotX = bookX + 11 + col * 25;
             int slotY = bookY + 31 + row * 25;
             RecipeIcon icon = icons.get(start + i);
-            batcher.getContext().drawGuiTexture(icon.craftable ? RECIPE_SLOT_CRAFTABLE : RECIPE_SLOT_UNCRAFTABLE, slotX, slotY, 25, 25);
+            batcher.drawGuiTexture(icon.craftable ? RECIPE_SLOT_CRAFTABLE : RECIPE_SLOT_UNCRAFTABLE, slotX, slotY, 25, 25);
         }
         if (pageCount > 1) {
             String label = page + 1 + "/" + pageCount;
@@ -149,10 +151,10 @@ public final class GuiRecipeBookRenderer {
             int pageColor = (int)(255.0f * opacity) << 24 | 0xFFFFFF;
             batcher.text(label, (float)(bookX + 73 - labelWidth / 2), (float)(bookY + 141), pageColor, false);
             if (page > 0) {
-                batcher.getContext().drawGuiTexture(RECIPE_PAGE_BACKWARD, bookX + 38, bookY + 137, 12, 17);
+                batcher.drawGuiTexture(RECIPE_PAGE_BACKWARD, bookX + 38, bookY + 137, 12, 17);
             }
             if (page < pageCount - 1) {
-                batcher.getContext().drawGuiTexture(RECIPE_PAGE_FORWARD, bookX + 93, bookY + 137, 12, 17);
+                batcher.drawGuiTexture(RECIPE_PAGE_FORWARD, bookX + 93, bookY + 137, 12, 17);
             }
         }
     }
@@ -216,7 +218,6 @@ public final class GuiRecipeBookRenderer {
 
     public static ItemStack renderGhosts(Batcher2D batcher, GuiPovActionClip clip, ReplayKeyframes replayKeyframes, String guiId, float tick, float globalTick, float opacity, float cursorGuiX, float cursorGuiY) {
         GuiSlotSchema.Slot resultSlot;
-        RecipeEntry entry;
         String selectedId = GuiTextRenderer.sampleString(clip.getRecipeSelected(guiId), tick, "");
         if (selectedId == null || selectedId.isBlank()) {
             return null;
@@ -225,6 +226,8 @@ public final class GuiRecipeBookRenderer {
         if (client.world == null) {
             return null;
         }
+        //? if >=1.20.4 {
+        RecipeEntry entry;
         Identifier recipeId = Identifier.tryParse((String)selectedId);
         RecipeEntry recipeEntry = entry = recipeId == null ? null : (RecipeEntry)client.world.getRecipeManager().get(recipeId).orElse(null);
         if (entry == null) {
@@ -233,6 +236,15 @@ public final class GuiRecipeBookRenderer {
         Recipe recipe = entry.value();
         DynamicRegistryManager registries = client.world.getRegistryManager();
         ItemStack result = recipe.getResult(registries);
+        //?} else {
+        /*Identifier recipeId = Identifier.tryParse((String)selectedId);
+        Recipe<?> recipe = recipeId == null ? null : (Recipe<?>)client.world.getRecipeManager().get(recipeId).orElse(null);
+        if (recipe == null) {
+            return null;
+        }
+        DynamicRegistryManager registries = client.world.getRegistryManager();
+        ItemStack result = recipe.getOutput(registries);
+        *///?}
         GuiSlotSchema schema = GuiSlotSchema.get(guiId);
         ItemStack[] hovered = new ItemStack[]{null};
         if (result != null && !result.isEmpty() && (resultSlot = (GuiSlotSchema.Slot)schema.slots.stream().filter(slot -> "craft_result".equals(slot.id()) || "result".equals(slot.id())).findFirst().orElse(null)) != null && GuiSlotRenderer.isSlotEmpty(clip, guiId, resultSlot.id(), tick)) {
@@ -259,7 +271,11 @@ public final class GuiRecipeBookRenderer {
                 hovered[0] = stacks[0];
             }
         };
+        //? if >=1.20.4 {
         aligner.alignRecipeToGrid(GuiRecipeBook.gridWidth(guiId), GuiRecipeBook.gridHeight(guiId), GuiRecipeBook.resultSlotIndex(guiId), entry, recipe.getIngredients().iterator(), 0);
+        //?} else {
+        /*aligner.alignRecipeToGrid(GuiRecipeBook.gridWidth(guiId), GuiRecipeBook.gridHeight(guiId), GuiRecipeBook.resultSlotIndex(guiId), recipe, recipe.getIngredients().iterator(), 0);
+        *///?}
         return hovered[0];
     }
 
@@ -338,12 +354,17 @@ public final class GuiRecipeBookRenderer {
         int gridW = GuiRecipeBook.gridWidth(guiId);
         int gridH = GuiRecipeBook.gridHeight(guiId);
         for (RecipeResultCollection collection : collections) {
-            RecipeEntry recipe;
             ItemStack output;
             List recipes;
             collection.initialize((RecipeBook)book);
             collection.computeCraftables(matcher, gridW, gridH, (RecipeBook)book);
+            //? if >=1.20.4 {
+            RecipeEntry recipe;
             if (!collection.isInitialized() || !collection.hasFittingRecipes() || showing && !collection.hasCraftableRecipes() || searchHits != null && !searchHits.contains(collection) || (recipes = collection.getResults(false)) == null || recipes.isEmpty() || (output = (recipe = (RecipeEntry)recipes.get(0)).value().getResult(registries)) == null || output.isEmpty()) continue;
+            //?} else {
+            /*Recipe recipe;
+            if (!collection.isInitialized() || !collection.hasFittingRecipes() || showing && !collection.hasCraftableRecipes() || searchHits != null && !searchHits.contains(collection) || (recipes = collection.getResults(false)) == null || recipes.isEmpty() || (output = (recipe = (Recipe)recipes.get(0)).getOutput(registries)) == null || output.isEmpty()) continue;
+            *///?}
             icons.add(new RecipeIcon(output, collection.hasCraftableRecipes()));
         }
         cachedRecipeKey = cacheKey;

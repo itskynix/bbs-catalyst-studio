@@ -131,6 +131,16 @@ public class Batcher2D
         return this.context;
     }
 
+    public void drawGuiTexture(net.minecraft.util.Identifier texture, int x, int y, int width, int height)
+    {
+        mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(this.context, texture, x, y, width, height);
+    }
+
+    public void drawGuiTexture(net.minecraft.util.Identifier texture, int i, int j, int k, int l, int x, int y, int width, int height)
+    {
+        mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(this.context, texture, i, j, k, l, x, y, width, height);
+    }
+
     public FontRenderer getFont()
     {
         return this.font;

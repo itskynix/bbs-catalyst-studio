@@ -89,12 +89,12 @@ public final class GuiEquipmentRenderer {
         } else if ("enchanting_table".equals(guiId) && GuiSlotRenderer.isSlotEmpty(clip, guiId, "lapis", tick)) {
             GuiSlotRenderer.drawBlockAtlasPlaceholder(batcher, new Identifier("item/empty_slot_lapis_lazuli"), 35, 47, opacity);
         } else if ("horse".equals(guiId)) {
-            batcher.getContext().drawGuiTexture(HORSE_SADDLE_SLOT, 7, 17, 18, 18);
-            batcher.getContext().drawGuiTexture(HORSE_ARMOR_SLOT, 7, 35, 18, 18);
+            batcher.drawGuiTexture(HORSE_SADDLE_SLOT, 7, 17, 18, 18);
+            batcher.drawGuiTexture(HORSE_ARMOR_SLOT, 7, 35, 18, 18);
         } else if ("donkey".equals(guiId)) {
-            batcher.getContext().drawGuiTexture(HORSE_SADDLE_SLOT, 7, 17, 18, 18);
+            batcher.drawGuiTexture(HORSE_SADDLE_SLOT, 7, 17, 18, 18);
             if (clip.isMountChestOpen(guiId, tick)) {
-                batcher.getContext().drawGuiTexture(HORSE_CHEST_SLOTS, 79, 17, 90, 54);
+                batcher.drawGuiTexture(HORSE_CHEST_SLOTS, 79, 17, 90, 54);
             }
         }
     }

@@ -21,7 +21,11 @@ public class ActionHandler
     {
         ServerMessageEvents.CHAT_MESSAGE.register((SignedMessage message, ServerPlayerEntity sender, MessageType.Parameters params) ->
         {
+            //? if >=1.20.4 {
             String literalString = message.getContent().getLiteralString();
+            //?} else {
+            /*String literalString = message.getContent().getString();
+            *///?}
 
             if (literalString != null)
             {

@@ -320,7 +320,11 @@ public final class GuiSnapshotCapture {
                 StringVisitable visitable = contents.getPage(i);
                 if (visitable instanceof Text) {
                     Text text = (Text)visitable;
+                    //? if >=1.20.4 {
                     pages.add(Text.Serialization.toJsonString((Text)text));
+                    //?} else {
+                    /*pages.add(Text.Serializer.toJson((Text)text));
+                    *///?}
                     continue;
                 }
                 pages.add(visitable == null ? "" : visitable.getString());

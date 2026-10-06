@@ -47,7 +47,9 @@ import net.minecraft.client.gui.screen.ingame.BookEditScreen;
 import net.minecraft.client.gui.screen.ingame.BookScreen;
 import net.minecraft.client.gui.screen.ingame.BrewingStandScreen;
 import net.minecraft.client.gui.screen.ingame.CartographyTableScreen;
+//? if >=1.20.4 {
 import net.minecraft.client.gui.screen.ingame.CrafterScreen;
+//?}
 import net.minecraft.client.gui.screen.ingame.CraftingScreen;
 import net.minecraft.client.gui.screen.ingame.CreativeInventoryScreen;
 import net.minecraft.client.gui.screen.ingame.EnchantmentScreen;
@@ -113,9 +115,11 @@ public final class GuiTypeResolver {
             String title = handled.getTitle().getString().toLowerCase(Locale.ROOT);
             return title.contains("dropper") ? "dropper" : "dispenser";
         }
+        //? if >=1.20.4 {
         if (handled instanceof CrafterScreen) {
             return "crafter";
         }
+        //?}
         if (handled instanceof GenericContainerScreen) {
             GenericContainerScreenHandler handler;
             GenericContainerScreen containerScreen = (GenericContainerScreen)handled;

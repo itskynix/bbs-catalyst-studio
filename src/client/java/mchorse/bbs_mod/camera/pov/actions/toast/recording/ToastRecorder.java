@@ -30,7 +30,13 @@ import java.lang.reflect.Field;
 import java.util.List;
 import mchorse.bbs_mod.utils.clips.Clip;
 import net.minecraft.advancement.AdvancementDisplay;
+//? if >=1.20.4 {
 import net.minecraft.advancement.AdvancementEntry;
+import net.minecraft.recipe.RecipeEntry;
+//?} else {
+/*import net.minecraft.advancement.Advancement;
+import net.minecraft.recipe.Recipe;
+*///?}
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.toast.AdvancementToast;
 import net.minecraft.client.toast.RecipeToast;
@@ -39,7 +45,6 @@ import net.minecraft.client.toast.Toast;
 import net.minecraft.client.toast.TutorialToast;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.item.ItemStack;
-import net.minecraft.recipe.RecipeEntry;
 import net.minecraft.registry.Registries;
 
 public final class ToastRecorder {
@@ -83,6 +88,7 @@ public final class ToastRecorder {
             clip.layer.set(targetLayer);
             if (toast instanceof AdvancementToast) {
                 AdvancementToast advancementToast = (AdvancementToast)toast;
+                //? if >=1.20.4 {
                 try {
                     AdvancementEntry entry = null;
                     if (advancementToast instanceof AdvancementToastPovAccessor) {
@@ -91,11 +97,10 @@ public final class ToastRecorder {
                     }
                     if (entry == null) {
                         for (Field f : AdvancementToast.class.getDeclaredFields()) {
-                            AdvancementEntry advEntry;
                             f.setAccessible(true);
                             Object obj = f.get(advancementToast);
                             if (!(obj instanceof AdvancementEntry)) continue;
-                            entry = advEntry = (AdvancementEntry)obj;
+                            entry = (AdvancementEntry)obj;
                             break;
                         }
                     }
@@ -117,6 +122,41 @@ public final class ToastRecorder {
                     }
                 }
                 catch (Exception exception) {}
+                //?} else {
+                /*try {
+                    Advancement entry = null;
+                    if (advancementToast instanceof AdvancementToastPovAccessor) {
+                        AdvancementToastPovAccessor accessor = (AdvancementToastPovAccessor)advancementToast;
+                        entry = accessor.bbsPov$getAdvancement();
+                    }
+                    if (entry == null) {
+                        for (Field f : AdvancementToast.class.getDeclaredFields()) {
+                            f.setAccessible(true);
+                            Object obj = f.get(advancementToast);
+                            if (!(obj instanceof Advancement)) continue;
+                            entry = (Advancement)obj;
+                            break;
+                        }
+                    }
+                    if (entry == null || entry.getDisplay() == null) break block22;
+                    AdvancementDisplay d = entry.getDisplay();
+                    String titleText = d.getFrame().getToastText().getString();
+                    String descText = d.getTitle().getString();
+                    clip.setCustomTitle(titleText);
+                    clip.setCustomDescription(descText);
+                    clip.title.set(descText);
+                    ItemStack iconStack = d.getIcon();
+                    if (iconStack != null && !iconStack.isEmpty()) {
+                        clip.setCustomIcon(Registries.ITEM.getId(iconStack.getItem()).toString());
+                    }
+                    clip.setFrameType(d.getFrame().getId());
+                    ToastTypeEntry match = ToastPresets.findByTitleOrDesc(descText);
+                    if (match != null) {
+                        clip.setPresetId(match.id);
+                    }
+                }
+                catch (Exception exception) {}
+                *///?}
             } else if (toast instanceof RecipeToast) {
                 RecipeToast recipeToast = (RecipeToast)toast;
                 clip.setPresetId("rec_crafting_table");
@@ -137,11 +177,19 @@ public final class ToastRecorder {
                             if (first instanceof ItemStack && !(is3 = (ItemStack)first).isEmpty()) {
                                 clip.setCustomIcon(Registries.ITEM.getId(is3.getItem()).toString());
                             }
+                            //? if >=1.20.4 {
                             if (!(first instanceof RecipeEntry)) continue;
                             RecipeEntry re = (RecipeEntry)first;
                             ClientWorld world = MinecraftClient.getInstance().world;
                             if (world == null || (is2 = re.value().getResult(world.getRegistryManager())) == null || is2.isEmpty()) continue;
                             clip.setCustomIcon(Registries.ITEM.getId(is2.getItem()).toString());
+                            //?} else {
+                            /*if (!(first instanceof Recipe)) continue;
+                            Recipe r = (Recipe)first;
+                            ClientWorld world = MinecraftClient.getInstance().world;
+                            if (world == null || (is2 = r.getOutput(world.getRegistryManager())) == null || is2.isEmpty()) continue;
+                            clip.setCustomIcon(Registries.ITEM.getId(is2.getItem()).toString());
+                            *///?}
                         }
                         if (!(val instanceof ItemStack) || (is = (ItemStack)val).isEmpty()) continue;
                         clip.setCustomIcon(Registries.ITEM.getId(is.getItem()).toString());

@@ -101,11 +101,11 @@ GuiScreenChrome {
             batcher.getContext().drawText(font, (Text)indicator, 148 - font.getWidth((StringVisitable)indicator), 18, ink, false);
             if (page > 0) {
                 hover = GuiTextRenderer.inBounds(cursorX, cursorY, 43, 159, 23, 13);
-                batcher.getContext().drawGuiTexture(hover ? PAGE_BACKWARD_HIGHLIGHTED : PAGE_BACKWARD, 43, 159, 23, 13);
+                batcher.drawGuiTexture(hover ? PAGE_BACKWARD_HIGHLIGHTED : PAGE_BACKWARD, 43, 159, 23, 13);
             }
             if (writable || page < pageCount - 1) {
                 hover = GuiTextRenderer.inBounds(cursorX, cursorY, 116, 159, 23, 13);
-                batcher.getContext().drawGuiTexture(hover ? PAGE_FORWARD_HIGHLIGHTED : PAGE_FORWARD, 116, 159, 23, 13);
+                batcher.drawGuiTexture(hover ? PAGE_FORWARD_HIGHLIGHTED : PAGE_FORWARD, 116, 159, 23, 13);
             }
             if (writable) {
                 BookGuiRenderer.drawBookPageCaret(batcher, pageText, selStart, selEnd, opacity);
@@ -127,7 +127,11 @@ GuiScreenChrome {
             return StringVisitable.EMPTY;
         }
         try {
+            //? if >=1.20.4 {
             MutableText parsed = Text.Serialization.fromJson((String)page);
+            //?} else {
+            /*MutableText parsed = Text.Serializer.fromJson((String)page);
+            *///?}
             return parsed != null ? parsed : Text.literal((String)page);
         }
         catch (Exception ignored) {
@@ -137,7 +141,7 @@ GuiScreenChrome {
 
     private static void drawBookButton(Batcher2D batcher, int x, int y, int width, int height, Text label, float cursorX, float cursorY, float opacity) {
         boolean hover = GuiTextRenderer.inBounds(cursorX, cursorY, x, y, width, height);
-        batcher.getContext().drawGuiTexture(hover ? WIDGET_BUTTON_HIGHLIGHTED : WIDGET_BUTTON, x, y, width, height);
+        batcher.drawGuiTexture(hover ? WIDGET_BUTTON_HIGHLIGHTED : WIDGET_BUTTON, x, y, width, height);
         TextRenderer font = MinecraftClient.getInstance().textRenderer;
         int color = (int)(255.0f * opacity) << 24 | 0xFFFFFF;
         batcher.getContext().drawCenteredTextWithShadow(font, label, x + width / 2, y + (height - 8) / 2, color);

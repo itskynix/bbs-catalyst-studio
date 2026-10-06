@@ -170,11 +170,19 @@ public class UIScreen extends Screen implements IFileDropListener
         throw (Error) e;
     }
 
+    //? if >=1.20.4 {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount)
     {
         return this.menu.mouseScrolled((int) mouseX, (int) mouseY, horizontalAmount, verticalAmount);
     }
+    //?} else {
+    /*@Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double amount)
+    {
+        return this.menu.mouseScrolled((int) mouseX, (int) mouseY, 0, amount);
+    }
+    *///?}
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button)
@@ -216,9 +224,15 @@ public class UIScreen extends Screen implements IFileDropListener
         return true;
     }
 
+    //? if >=1.20.4 {
     @Override
     public void renderBackground(DrawContext context, int mouseX, int mouseY, float delta)
     {}
+    //?} else {
+    /*@Override
+    public void renderBackground(DrawContext context)
+    {}
+    *///?}
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta)

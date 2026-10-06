@@ -102,12 +102,12 @@ GuiScreenChrome {
         boolean confirmHover = GuiTextRenderer.inBounds(cursorX, cursorY, 164, 107, 22, 22);
         boolean cancelHover = GuiTextRenderer.inBounds(cursorX, cursorY, 190, 107, 22, 22);
         String confirmSprite = !hasPayment || primary == 0 ? "container/beacon/button_disabled" : (confirmHover ? "container/beacon/button_highlighted" : "container/beacon/button");
-        context.drawGuiTexture(new Identifier(confirmSprite), 164, 107, 22, 22);
-        context.drawGuiTexture(new Identifier(cancelHover ? "container/beacon/button_highlighted" : "container/beacon/button"), 190, 107, 22, 22);
+        mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, new Identifier(confirmSprite), 164, 107, 22, 22);
+        mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, new Identifier(cancelHover ? "container/beacon/button_highlighted" : "container/beacon/button"), 190, 107, 22, 22);
         context.setShaderColor(!hasPayment || primary == 0 ? 0.45f : 1.0f, !hasPayment || primary == 0 ? 0.45f : 1.0f, !hasPayment || primary == 0 ? 0.45f : 1.0f, 1.0f);
-        context.drawGuiTexture(new Identifier("container/beacon/confirm"), 166, 109, 18, 18);
+        mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, new Identifier("container/beacon/confirm"), 166, 109, 18, 18);
         context.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
-        context.drawGuiTexture(new Identifier("container/beacon/cancel"), 192, 109, 18, 18);
+        mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, new Identifier("container/beacon/cancel"), 192, 109, 18, 18);
         context.getMatrices().pop();
         context.draw();
         batcher.flush();
@@ -116,7 +116,7 @@ GuiScreenChrome {
     private static void drawBeaconButton(DrawContext context, int x, int y, StatusEffect effect, boolean enabled, boolean selected, float cursorX, float cursorY, GuiPointerHover hover) {
         boolean isHovered = GuiTextRenderer.inBounds(cursorX, cursorY, x, y, 22, 22);
         String buttonSprite = selected ? "container/beacon/button_selected" : (!enabled ? "container/beacon/button_disabled" : (isHovered ? "container/beacon/button_highlighted" : "container/beacon/button"));
-        context.drawGuiTexture(new Identifier(buttonSprite), x, y, 22, 22);
+        mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, new Identifier(buttonSprite), x, y, 22, 22);
         if (effect != null) {
             Sprite sprite = MinecraftClient.getInstance().getStatusEffectSpriteManager().getSprite(effect);
             if (sprite != null) {

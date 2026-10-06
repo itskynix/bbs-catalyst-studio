@@ -80,7 +80,7 @@ public final class GuiTextRenderer {
         int start;
         boolean selected;
         if (drawBackground) {
-            batcher.getContext().drawGuiTexture(SEARCH_FIELD, x, y, width, height);
+            batcher.drawGuiTexture(SEARCH_FIELD, x, y, width, height);
         }
         String text = value == null ? "" : value;
         int textX = x + (drawBackground ? 4 : 0);

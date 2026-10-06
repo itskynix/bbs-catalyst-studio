@@ -38,13 +38,13 @@ public final class PovCrosshairRenderer {
         RenderSystem.enableBlend();
         RenderSystem.setShaderColor((float)1.0f, (float)1.0f, (float)1.0f, (float)1.0f);
         RenderSystem.blendFuncSeparate((GlStateManager.SrcFactor)GlStateManager.SrcFactor.ONE_MINUS_DST_COLOR, (GlStateManager.DstFactor)GlStateManager.DstFactor.ONE_MINUS_SRC_COLOR, (GlStateManager.SrcFactor)GlStateManager.SrcFactor.ZERO, (GlStateManager.DstFactor)GlStateManager.DstFactor.ONE);
-        context.drawGuiTexture(CROSSHAIR_TEXTURE, (width - 15) / 2, (height - 15) / 2, 15, 15);
+        mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, CROSSHAIR_TEXTURE, (width - 15) / 2, (height - 15) / 2, 15, 15);
         if (AttackIndicatorRenderer.shouldDraw() && attackCooldown >= 0.0f && attackCooldown < 1.0f) {
             int x = width / 2 - 8;
             int y = height / 2 - 7 + 16;
             int fill = (int)(attackCooldown * 17.0f);
-            context.drawGuiTexture(ATTACK_BACKGROUND, x, y, 16, 4);
-            context.drawGuiTexture(ATTACK_PROGRESS, 16, 4, 0, 0, x, y, fill, 4);
+            mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, ATTACK_BACKGROUND, x, y, 16, 4);
+            mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, ATTACK_PROGRESS, 16, 4, 0, 0, x, y, fill, 4);
         }
         context.draw();
         RenderSystem.blendFuncSeparate((GlStateManager.SrcFactor)GlStateManager.SrcFactor.SRC_ALPHA, (GlStateManager.DstFactor)GlStateManager.DstFactor.ONE_MINUS_SRC_ALPHA, (GlStateManager.SrcFactor)GlStateManager.SrcFactor.ZERO, (GlStateManager.DstFactor)GlStateManager.DstFactor.ONE);

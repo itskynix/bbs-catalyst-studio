@@ -87,9 +87,9 @@ GuiScreenChrome {
             int slotX = 3 + i * 31;
             int slotY = 27;
             boolean highlighted = i == highlightedSlotIndex;
-            context.drawGuiTexture(GAMEMODE_SLOT_TEXTURE, slotX, slotY, 26, 26);
+            mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, GAMEMODE_SLOT_TEXTURE, slotX, slotY, 26, 26);
             if (highlighted) {
-                context.drawGuiTexture(GAMEMODE_SELECTION_TEXTURE, slotX, slotY, 26, 26);
+                mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, GAMEMODE_SELECTION_TEXTURE, slotX, slotY, 26, 26);
             }
             DiffuseLighting.enableGuiDepthLighting();
             RenderSystem.enableDepthTest();

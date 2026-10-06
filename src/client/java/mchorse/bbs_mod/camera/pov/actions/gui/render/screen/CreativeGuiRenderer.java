@@ -147,12 +147,12 @@ GuiScreenChrome {
             Element focused;
             boolean prevHover = GuiTextRenderer.inBounds(cursorX, cursorY, 0, -50, 20, 20);
             int prevTextColor = prevHover ? -96 : -1;
-            batcher.getContext().drawGuiTexture(prevHover ? new Identifier("widget/button_highlighted") : new Identifier("widget/button"), 0, -50, 20, 20);
+            batcher.drawGuiTexture(prevHover ? new Identifier("widget/button_highlighted") : new Identifier("widget/button"), 0, -50, 20, 20);
             int prevW = MinecraftClient.getInstance().textRenderer.getWidth("<");
             batcher.getContext().drawTextWithShadow(MinecraftClient.getInstance().textRenderer, (Text)Text.literal((String)"<"), 0 + (20 - prevW) / 2, -44, prevTextColor);
             boolean nextHover = GuiTextRenderer.inBounds(cursorX, cursorY, 175, -50, 20, 20);
             int nextTextColor = nextHover ? -96 : -1;
-            batcher.getContext().drawGuiTexture(nextHover ? new Identifier("widget/button_highlighted") : new Identifier("widget/button"), 175, -50, 20, 20);
+            batcher.drawGuiTexture(nextHover ? new Identifier("widget/button_highlighted") : new Identifier("widget/button"), 175, -50, 20, 20);
             int nextW = MinecraftClient.getInstance().textRenderer.getWidth(">");
             batcher.getContext().drawTextWithShadow(MinecraftClient.getInstance().textRenderer, (Text)Text.literal((String)">"), 175 + (20 - nextW) / 2, -44, nextTextColor);
             String pageStr = page + 1 + " / " + (maxPage + 1);
@@ -267,7 +267,7 @@ GuiScreenChrome {
             if (selected.hasScrollbar()) {
                 float scroll = maxFirstRow == 0 ? 0.0f : (float)firstRow / (float)maxFirstRow;
                 int scrollY = 18 + Math.round(scroll * 95.0f);
-                batcher.getContext().drawGuiTexture(new Identifier("container/creative_inventory/scroller"), 175, scrollY, 12, 15);
+                batcher.drawGuiTexture(new Identifier("container/creative_inventory/scroller"), 175, scrollY, 12, 15);
             }
         } else {
             GuiEquipmentRenderer.renderEmptyEquipmentSlots(batcher, clip, "creative_inventory", localTick);
@@ -340,7 +340,7 @@ GuiScreenChrome {
             int tabX = CreativeInventoryTabs.isSpecial(group, page) ? 195 - 27 * (7 - column) + 1 : 27 * column;
             int tabY = top ? -28 : 132;
             String sprite = "container/creative_inventory/tab_" + (top ? "top_" : "bottom_") + (active ? "selected_" : "unselected_") + (column + 1);
-            batcher.getContext().drawGuiTexture(new Identifier(sprite), tabX, tabY, 26, 32);
+            batcher.drawGuiTexture(new Identifier(sprite), tabX, tabY, 26, 32);
         }
     }
 

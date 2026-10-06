@@ -5,7 +5,11 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.DownloadingTerrainScreen;
 import net.minecraft.client.gui.screen.ProgressScreen;
 import net.minecraft.client.gui.screen.Screen;
+//? if >=1.20.4 {
 import net.minecraft.client.gui.screen.world.LevelLoadingScreen;
+//?} else {
+/*import net.minecraft.client.gui.screen.LevelLoadingScreen;
+*///?}
 
 /**
  * Builds the dashboard ahead of the user asking for it.

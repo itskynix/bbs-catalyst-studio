@@ -66,7 +66,11 @@ public class StructureSaver
             NbtHelper.putDataVersion(nbt);
 
             file.getParentFile().mkdirs();
+            //? if >=1.20.4 {
             NbtIo.writeCompressed(nbt, file.toPath());
+            //?} else {
+            /*NbtIo.writeCompressed(nbt, file);
+            *///?}
 
             return true;
         }

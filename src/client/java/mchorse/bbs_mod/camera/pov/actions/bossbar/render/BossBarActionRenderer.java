@@ -92,7 +92,7 @@ public final class BossBarActionRenderer {
 
     private static void renderBar(Batcher2D batcher, String name, float percent, String color, String style, int screenWidth, int y) {
         int x = screenWidth / 2 - 91;
-        int fill = MathHelper.lerpPositive((float)MathHelper.clamp((float)percent, (float)0.0f, (float)1.0f), (int)0, (int)182);
+        int fill = (int)(MathHelper.clamp((float)percent, (float)0.0f, (float)1.0f) * 182.0f);
         DrawContext context = batcher.getContext();
         batcher.flush();
         RenderSystem.disableDepthTest();
@@ -126,7 +126,7 @@ public final class BossBarActionRenderer {
     }
 
     private static void drawSprite(DrawContext context, Identifier texture, int x, int y, int width) {
-        context.drawGuiTexture(texture, 182, 5, 0, 0, x, y, width, 5);
+        mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, texture, 182, 5, 0, 0, x, y, width, 5);
     }
 }
 
