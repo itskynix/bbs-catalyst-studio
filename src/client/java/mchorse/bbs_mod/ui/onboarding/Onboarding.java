@@ -61,13 +61,6 @@ public class Onboarding
     /** The dashboard screen came up. */
     public static void dashboardOpened(UIDashboard dashboard)
     {
-        if (!BBSSettings.onboardingWelcomeSeen.get())
-        {
-            showWelcome(dashboard.context);
-
-            return;
-        }
-
         start(dashboard.context, Tours.DASHBOARD);
     }
 

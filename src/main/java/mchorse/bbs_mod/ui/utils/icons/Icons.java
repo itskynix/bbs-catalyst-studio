@@ -185,6 +185,7 @@ public class Icons
     public static final Icon CIRCLE = register(new Icon(ATLAS, "circle", 128, 144));
     public static final Icon TRI_STAR = register(new Icon(ATLAS, "tri_star", 144, 144));
     public static final Icon FOUR_STAR = register(new Icon(ATLAS, "four_star", 160, 144));
+    public static final Icon SPARKLES = register(new Icon(ATLAS, "sparkles", 160, 144));
     public static final Icon FIVE_STAR = register(new Icon(ATLAS, "five_star", 176, 144));
     public static final Icon SIX_STAR = register(new Icon(ATLAS, "six_star", 192, 144));
     public static final Icon LIKE = register(new Icon(ATLAS, "like", 208, 144));

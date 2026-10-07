@@ -68,13 +68,19 @@ import org.lwjgl.glfw.GLFW;
 
 import mchorse.bbs_mod.resources.AssetProvider;
 import mchorse.bbs_mod.utils.resources.Pixels;
+import mchorse.bbs_mod.utils.UnsafeUtils;
+import sun.misc.Unsafe;
+import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FilterOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -312,6 +318,9 @@ public class UICatalystPanel extends UIDashboardPanel
     private ByteBuffer exportBuffer = null;
     private File exportTargetFile = null;
     private File exportTempAudioMixFile = null;
+    private File exportTempVideoFile = null;
+    private File exportAudioSourceFile = null;
+    private File exportLogFile = null;
     private String exportStatusMessage = "";
     private long exportStartTime = 0;
 
@@ -637,9 +646,13 @@ public class UICatalystPanel extends UIDashboardPanel
                 {
                     Link link = Link.create(layer.resourcePath.trim());
                     VideoPlayer player = BBSModClient.getVideos().get(link);
-                    if (player != null && player.isValid() && !player.hasAudio())
+                    if (player != null)
                     {
-                        continue;
+                        player.ensureProbed();
+                        if (player.isValid() && !player.hasAudio())
+                        {
+                            continue;
+                        }
                     }
                 }
                 list.add(layer);
@@ -764,7 +777,10 @@ public class UICatalystPanel extends UIDashboardPanel
                     this.layerAudioLinks.put(layer, audioLink);
                 }
             }
-            catch (Exception ignored) {}
+            catch (Exception e)
+            {
+                BBSMod.LOGGER.warn("Error synchronizing audio player for layer " + layer.name, e);
+            }
         }
     }
 
@@ -893,7 +909,7 @@ public class UICatalystPanel extends UIDashboardPanel
                     {
                         int relativeFrame = (this.currentFrame - layer.startFrame) + layer.mediaOffset;
                         float relSec = (float) (relativeFrame + layer.audioOffset) / fps;
-                        Texture tex = player.getFrame(relSec);
+                        Texture tex = player.seekFrame(relSec);
                         if (tex != null && tex.isValid())
                         {
                             layer.cachedVideoTexture = tex;
@@ -902,7 +918,10 @@ public class UICatalystPanel extends UIDashboardPanel
                         }
                     }
                 }
-                catch (Exception ignored) {}
+                catch (Exception e)
+                {
+                    BBSMod.LOGGER.warn("Error seeking video layer during timeline scrub", e);
+                }
             }
         }
 
@@ -1566,14 +1585,20 @@ public class UICatalystPanel extends UIDashboardPanel
         if (asset.type == CatalystMediaAsset.MediaType.VIDEO)
         {
             layer.layerType = CatalystLayer.LayerType.VIDEO;
-            layer.duration = asset.durationFrames > 0 ? asset.durationFrames : 150;
+            int frames = asset.durationSeconds > 0
+                ? Math.max(1, (int) Math.round(asset.durationSeconds * (comp.fps > 0 ? comp.fps : 60)))
+                : (asset.durationFrames > 0 ? asset.durationFrames : 150);
+            layer.duration = frames;
             layer.mediaDuration = layer.duration;
             layer.color = 0x3366BB;
         }
         else if (asset.type == CatalystMediaAsset.MediaType.AUDIO)
         {
             layer.layerType = CatalystLayer.LayerType.AUDIO;
-            layer.duration = asset.durationFrames > 0 ? asset.durationFrames : 150;
+            int frames = asset.durationSeconds > 0
+                ? Math.max(1, (int) Math.round(asset.durationSeconds * (comp.fps > 0 ? comp.fps : 60)))
+                : (asset.durationFrames > 0 ? asset.durationFrames : 150);
+            layer.duration = frames;
             layer.mediaDuration = layer.duration;
             layer.color = 0x228855;
             UICatalystTimeline.ensureWaveformLoaded(layer);
@@ -2521,7 +2546,17 @@ public class UICatalystPanel extends UIDashboardPanel
                             }
                             else
                             {
-                                frameTex = player.getFrame(relSec);
+                                if (this.isExporting || this.isPlaying)
+                                {
+                                    /* Playing or Exporting: use sequential stream decode without process restarts */
+                                    frameTex = player.getFrame(relSec);
+                                }
+                                else
+                                {
+                                    /* Paused: decode synchronously so frame appears immediately without waiting or returning null */
+                                    frameTex = player.seekFrame(relSec);
+                                }
+
                                 if (frameTex != null && frameTex.isValid())
                                 {
                                     layer.cachedVideoTexture = frameTex;
@@ -2542,7 +2577,10 @@ public class UICatalystPanel extends UIDashboardPanel
                             }
                         }
                     }
-                    catch (Exception ignored) {}
+                    catch (Exception e)
+                    {
+                        BBSMod.LOGGER.error("Error rendering video layer: " + layer.resourcePath, e);
+                    }
                 }
                 if (!rendered)
                 {
@@ -4180,6 +4218,30 @@ public class UICatalystPanel extends UIDashboardPanel
                 this.layerResourceLabel.label = IKey.raw("Source: " + sourceName);
             }
 
+            CatalystComposition comp = this.activeProject != null ? this.activeProject.getActiveComposition() : null;
+            int compFps = comp != null && comp.fps > 0 ? comp.fps : 60;
+            if (sel.layerType == CatalystLayer.LayerType.VIDEO && sel.resourcePath != null && !sel.resourcePath.trim().isEmpty())
+            {
+                try
+                {
+                    Link link = Link.create(sel.resourcePath.trim());
+                    VideoPlayer player = BBSModClient.getVideos().get(link);
+                    if (player != null)
+                    {
+                        player.ensureProbed();
+                        if (player.isValid() && player.getDuration() > 0)
+                        {
+                            int realMediaDur = Math.max(1, (int) Math.round(player.getDuration() * compFps));
+                            if (sel.mediaDuration <= 150 || (sel.mediaDuration == 300 && realMediaDur != 300))
+                            {
+                                sel.mediaDuration = realMediaDur;
+                            }
+                        }
+                    }
+                }
+                catch (Exception ignored) {}
+            }
+
             boolean hasAudioSettings = sel.layerType == CatalystLayer.LayerType.AUDIO || sel.layerType == CatalystLayer.LayerType.VIDEO;
             boolean isScene = sel.layerType == CatalystLayer.LayerType.SCENE;
             boolean hasMediaDuration = sel.mediaDuration > 0;
@@ -4744,6 +4806,41 @@ public class UICatalystPanel extends UIDashboardPanel
         this.startExportFromProfile(profile, outputFile, comp != null ? comp.duration : 100, null, null);
     }
 
+    private void dumpFFmpegLog(File logFile, int exitCode)
+    {
+        String errDetail = "";
+        System.err.println("[Catalyst-FFmpeg] FFmpeg process terminated unexpectedly (exit code: " + exitCode + ")!");
+        if (logFile != null && logFile.exists())
+        {
+            try
+            {
+                List<String> logLines = Files.readAllLines(logFile.toPath());
+                System.err.println("[FFmpeg-Export-Stderr] --- FFmpeg Log Dump (" + logLines.size() + " lines) ---");
+                for (String line : logLines)
+                {
+                    System.err.println("  [FFmpeg-Export-Stderr] " + line);
+                    String lower = line.toLowerCase();
+                    if (lower.contains("error") || lower.contains("unknown") || lower.contains("failed") || lower.contains("invalid") || lower.contains("cannot") || lower.contains("unable to"))
+                    {
+                        errDetail = line.trim();
+                    }
+                }
+                System.err.println("[FFmpeg-Export-Stderr] --- End FFmpeg Log Dump ---");
+                if (errDetail.isEmpty() && !logLines.isEmpty())
+                {
+                    errDetail = logLines.get(logLines.size() - 1).trim();
+                }
+            }
+            catch (Exception ex)
+            {
+                ex.printStackTrace();
+            }
+        }
+        String failReason = exitCode + (errDetail.isEmpty() ? "" : " / " + errDetail);
+        mchorse.bbs_mod.utils.VideoRecorder.sendChatMessage("§c[Catalyst] FFmpeg Hatası: " + failReason);
+        mchorse.bbs_mod.utils.VideoRecorder.sendChatMessage("§c[Catalyst] Render durduruldu: FFmpeg süreci kapandı (kod " + exitCode + ")");
+    }
+
     public void startExportFromProfile(VideoExportProfile profile, File outputFile, int duration, RenderJob job, Runnable onFinished)
     {
         if (this.isExporting || this.activeProject == null) return;
@@ -4781,6 +4878,33 @@ public class UICatalystPanel extends UIDashboardPanel
 
         /* 1. Synchronous Video Decoding Flag for VideoPlayer */
         VideoPlayer.forcedRecording = true;
+
+        /* Pre-warm video layers for frame 0 so the first frame is guaranteed ready */
+        for (CatalystLayer layer : comp.layers)
+        {
+            if (layer.layerType == CatalystLayer.LayerType.VIDEO && layer.resourcePath != null && !layer.resourcePath.trim().isEmpty())
+            {
+                try
+                {
+                    Link link = Link.create(layer.resourcePath.trim());
+                    VideoPlayer player = BBSModClient.getVideos().getPlayer(layer, link);
+                    if (player != null)
+                    {
+                        player.setMaxSize(width, height);
+                        int relativeFrame = (0 - layer.startFrame) + layer.mediaOffset;
+                        float relSec = (float) (relativeFrame + layer.audioOffset) / Math.max(1, this.exportFps);
+                        Texture frameTex = player.seekFrame(Math.max(0F, relSec));
+                        if (frameTex != null && frameTex.isValid())
+                        {
+                            layer.cachedVideoTexture = frameTex;
+                            float playerFps = player.getFps() > 0 ? player.getFps() : 30F;
+                            layer.lastVideoFrameIndex = Math.max(0, (int) (Math.max(0F, relSec) * playerFps));
+                        }
+                    }
+                }
+                catch (Exception ignored) {}
+            }
+        }
 
         /* 2. Audio Processing */
         File audioSourceFile = null;
@@ -4952,16 +5076,23 @@ public class UICatalystPanel extends UIDashboardPanel
             }
         }
 
+        this.exportAudioSourceFile = null;
+        this.exportTempVideoFile = null;
+        boolean needsAudioMux = profile.isExportAudio() && audioSourceFile != null && profile.getFormat().isAudioSupported() && !profile.getAudioCodec().isNone();
+        if (needsAudioMux)
+        {
+            this.exportAudioSourceFile = audioSourceFile;
+            String tempPattern = profile.getFormat().getOutputPattern(baseName + ".tmp_video");
+            this.exportTempVideoFile = new File(outputFile.getParentFile(), tempPattern);
+        }
+
+        String captureMovieName = needsAudioMux ? (baseName + ".tmp_video") : baseName;
         FFmpegCommandBuilder cmdBuilder = new FFmpegCommandBuilder(profile)
-            .movieName(baseName)
+            .movieName(captureMovieName)
             .inputResolution(width, height)
             .inputFramerate(fps)
-            .outputFolder(outputFile.getParentFile());
-
-        if (profile.isExportAudio() && audioSourceFile != null && profile.getFormat().isAudioSupported() && !profile.getAudioCodec().isNone())
-        {
-            cmdBuilder.audio(audioSourceFile);
-        }
+            .outputFolder(outputFile.getParentFile())
+            .audio(null); // Pure video during capture stage (two-stage mux parity)
 
         List<String> rawArgs = cmdBuilder.buildRecordingArgs();
         List<String> cmd = new ArrayList<>();
@@ -4977,11 +5108,43 @@ public class UICatalystPanel extends UIDashboardPanel
             pb.directory(workDir);
             pb.redirectErrorStream(true);
 
-            File logFile = new File(workDir, outputFile.getName() + ".export.log");
-            pb.redirectOutput(logFile);
+            this.exportLogFile = new File(workDir, outputFile.getName() + ".export.log");
+            pb.redirectOutput(this.exportLogFile);
 
             this.exportProcess = pb.start();
+
+            // Give FFmpeg a brief moment to validate parameters and codec initialization
+            try
+            {
+                Thread.sleep(120);
+            }
+            catch (InterruptedException ignored) {}
+
+            if (!this.exportProcess.isAlive())
+            {
+                int exitCode = this.exportProcess.exitValue();
+                this.dumpFFmpegLog(this.exportLogFile, exitCode);
+                this.cancelExport();
+                return;
+            }
+
             OutputStream os = this.exportProcess.getOutputStream();
+            Unsafe unsafe = UnsafeUtils.getUnsafe();
+
+            if (os instanceof FilterOutputStream)
+            {
+                try
+                {
+                    Field outField = FilterOutputStream.class.getDeclaredField("out");
+                    os = (OutputStream) unsafe.getObject(os, unsafe.objectFieldOffset(outField));
+                }
+                catch (Exception e)
+                {
+                    e.printStackTrace();
+                }
+            }
+
+            os = new BufferedOutputStream(os, 256 * 1024);
             this.exportChannel = Channels.newChannel(os);
 
             /* Allocate RGBA pixel byte buffer (width * height * 4) */
@@ -5005,6 +5168,7 @@ public class UICatalystPanel extends UIDashboardPanel
         catch (Exception e)
         {
             e.printStackTrace();
+            this.dumpFFmpegLog(this.exportLogFile, -1);
             if (job != null)
             {
                 job.setStatus(RenderJob.Status.CANCELLED);
@@ -5019,6 +5183,11 @@ public class UICatalystPanel extends UIDashboardPanel
         CatalystComposition comp = this.activeProject.getActiveComposition();
         if (comp == null || this.exportProcess == null || !this.exportProcess.isAlive())
         {
+            if (this.exportProcess != null && !this.exportProcess.isAlive())
+            {
+                int exitCode = this.exportProcess.exitValue();
+                this.dumpFFmpegLog(this.exportLogFile, exitCode);
+            }
             this.cancelExport();
             return;
         }
@@ -5115,7 +5284,6 @@ public class UICatalystPanel extends UIDashboardPanel
 
         this.renderCompositionLayers(context, comp, this.exportCurrentFrame, this.exportWidth, this.exportHeight, this.exportFps);
         context.batcher.flush();
-        GL11.glFinish();
         stack.pop();
 
         /* Restore identity after pop so the surrounding UI isn't shifted */
@@ -5232,19 +5400,31 @@ public class UICatalystPanel extends UIDashboardPanel
         int fullFrameBytes = this.exportWidth * this.exportHeight * 4;
         try
         {
+            if (this.exportBuffer == null || this.exportBuffer.capacity() < fullFrameBytes)
+            {
+                System.err.println("[Catalyst] Invalid exportBuffer state! Cancelling export.");
+                this.cancelExport();
+                return;
+            }
+
             if (this.exportChannel != null && this.exportChannel.isOpen())
             {
                 this.exportBuffer.position(0);
                 this.exportBuffer.limit(fullFrameBytes);
                 while (this.exportBuffer.hasRemaining())
                 {
-                    this.exportChannel.write(this.exportBuffer);
+                    int written = this.exportChannel.write(this.exportBuffer);
+                    if (written == 0 && !this.exportProcess.isAlive())
+                    {
+                        throw new java.io.IOException("FFmpeg process died unexpectedly during write");
+                    }
                 }
             }
         }
         catch (Exception e)
         {
             e.printStackTrace();
+            this.dumpFFmpegLog(this.exportLogFile, this.exportProcess != null && !this.exportProcess.isAlive() ? this.exportProcess.exitValue() : -1);
             this.cancelExport();
             return;
         }
@@ -5270,6 +5450,12 @@ public class UICatalystPanel extends UIDashboardPanel
             this.exportTempAudioMixFile.delete();
             this.exportTempAudioMixFile = null;
         }
+        if (this.exportTempVideoFile != null && this.exportTempVideoFile.exists())
+        {
+            this.exportTempVideoFile.delete();
+            this.exportTempVideoFile = null;
+        }
+        this.exportAudioSourceFile = null;
 
         if (this.exportChannel != null)
         {
@@ -5321,11 +5507,6 @@ public class UICatalystPanel extends UIDashboardPanel
         VideoPlayer.forcedRecording = false;
         BBSRendering.setCustomSize(false);
         BBSModClient.getVideoRecorder().setExportFboId(-1);
-        if (this.exportTempAudioMixFile != null && this.exportTempAudioMixFile.exists())
-        {
-            this.exportTempAudioMixFile.delete();
-            this.exportTempAudioMixFile = null;
-        }
 
         /* Close stdin channel so FFmpeg knows video input is finished */
         if (this.exportChannel != null)
@@ -5335,7 +5516,7 @@ public class UICatalystPanel extends UIDashboardPanel
             this.exportChannel = null;
         }
 
-        /* Wait for FFmpeg to finish encoding container */
+        /* Wait for FFmpeg to finish encoding video container */
         if (this.exportProcess != null)
         {
             try
@@ -5345,6 +5526,75 @@ public class UICatalystPanel extends UIDashboardPanel
             }
             catch (Exception ignored) {}
             this.exportProcess = null;
+        }
+
+        /* Stage 2: Fast Audio MUX pass (parity with Film Editor / VideoMuxer) */
+        if (this.exportTempVideoFile != null && this.exportTempVideoFile.exists() && this.exportAudioSourceFile != null && this.exportAudioSourceFile.exists() && this.activeExportProfile != null && this.exportTargetFile != null)
+        {
+            String baseName = this.exportTargetFile.getName();
+            String ext = this.activeExportProfile.getFormat().getExtension();
+            if (baseName.toLowerCase().endsWith(ext.toLowerCase()))
+            {
+                baseName = baseName.substring(0, baseName.length() - ext.length());
+            }
+
+            FFmpegCommandBuilder muxCmdBuilder = new FFmpegCommandBuilder(this.activeExportProfile)
+                .movieName(baseName)
+                .outputFolder(this.exportTargetFile.getParentFile());
+
+            List<String> rawMuxArgs = muxCmdBuilder.buildMuxArgs(this.exportTempVideoFile, this.exportAudioSourceFile, baseName);
+            List<String> cleanMuxArgs = new ArrayList<>();
+            for (String a : rawMuxArgs)
+            {
+                cleanMuxArgs.add(a.replace("\"", "").trim());
+            }
+
+            try
+            {
+                File workDir = this.exportTargetFile.getParentFile() != null && this.exportTargetFile.getParentFile().exists() ? this.exportTargetFile.getParentFile() : BBSMod.getGameFolder();
+                ProcessBuilder muxPb = new ProcessBuilder(cleanMuxArgs);
+                muxPb.directory(workDir);
+                muxPb.redirectErrorStream(true);
+                File muxLog = new File(workDir, this.exportTargetFile.getName() + ".mux.log");
+                muxPb.redirectOutput(muxLog);
+
+                Process muxProcess = muxPb.start();
+                muxProcess.getOutputStream().close();
+                boolean completed = muxProcess.waitFor(2, TimeUnit.MINUTES);
+
+                if (completed && muxProcess.exitValue() == 0 && this.exportTargetFile.exists())
+                {
+                    this.exportTempVideoFile.delete();
+                }
+                else
+                {
+                    this.dumpFFmpegLog(muxLog, muxProcess.isAlive() ? -1 : muxProcess.exitValue());
+                    /* Fallback: if mux failed, rename temp video so rendered footage is not lost */
+                    if (this.exportTempVideoFile.exists() && !this.exportTargetFile.exists())
+                    {
+                        this.exportTempVideoFile.renameTo(this.exportTargetFile);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ex.printStackTrace();
+                if (this.exportTempVideoFile.exists() && !this.exportTargetFile.exists())
+                {
+                    this.exportTempVideoFile.renameTo(this.exportTargetFile);
+                }
+            }
+            finally
+            {
+                this.exportTempVideoFile = null;
+                this.exportAudioSourceFile = null;
+            }
+        }
+
+        if (this.exportTempAudioMixFile != null && this.exportTempAudioMixFile.exists())
+        {
+            this.exportTempAudioMixFile.delete();
+            this.exportTempAudioMixFile = null;
         }
 
         /* Cleanup buffers & FBO */
@@ -5375,7 +5625,17 @@ public class UICatalystPanel extends UIDashboardPanel
         this.exitExportMode();
 
         /* Play completion audio feedback & open destination folder */
-        UIUtils.playClick(0.5F);
+        if (BBSSettings.videoPlaySoundAfterExport.get())
+        {
+            if (BBSModClient.getSounds().play(Link.assets("sounds/render_complete.ogg")) == null)
+            {
+                UIUtils.playClick(0.5F);
+            }
+        }
+        else
+        {
+            UIUtils.playClick(0.5F);
+        }
         if (this.exportTargetFile != null)
         {
             File folder = this.exportTargetFile.getParentFile();

@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.video;
 
+import mchorse.bbs_mod.BBSMod;
 import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.graphics.texture.Texture;
 import mchorse.bbs_mod.utils.FFMpegUtils;
@@ -247,7 +248,8 @@ public class VideoPlayer
 
         try
         {
-            ProcessBuilder builder = new ProcessBuilder(FFMpegUtils.getFFMPEG(), "-nostdin", "-i", this.file.getAbsolutePath());
+            String ffmpeg = FFMpegUtils.getFFMPEG();
+            ProcessBuilder builder = new ProcessBuilder(ffmpeg, "-nostdin", "-i", this.file.getAbsolutePath());
 
             builder.redirectErrorStream(true);
 
@@ -271,6 +273,7 @@ public class VideoPlayer
 
             if (!size.find() || !duration.find())
             {
+                BBSMod.LOGGER.warn("Failed to probe video " + this.file.getName() + " with " + ffmpeg + ". Output:\n" + output);
                 this.state = STATE_INVALID;
 
                 return;
@@ -285,6 +288,7 @@ public class VideoPlayer
 
             if (this.width <= 0 || this.height <= 0 || this.fps <= 0 || this.duration <= 0)
             {
+                BBSMod.LOGGER.warn("Invalid video properties for " + this.file.getName() + ": " + this.width + "x" + this.height + " @ " + this.fps + " FPS, dur: " + this.duration);
                 this.state = STATE_INVALID;
 
                 return;
@@ -292,10 +296,11 @@ public class VideoPlayer
 
             this.updateRenderSize();
             this.state = STATE_VALID;
+            BBSMod.LOGGER.info("Probed video " + this.file.getName() + ": " + this.width + "x" + this.height + " @ " + this.fps + " FPS, " + this.duration + "s, hasAudio=" + this.hasAudio);
         }
         catch (Exception e)
         {
-            e.printStackTrace();
+            BBSMod.LOGGER.error("Exception while probing video " + this.file.getAbsolutePath(), e);
 
             this.state = STATE_INVALID;
         }
@@ -487,7 +492,7 @@ public class VideoPlayer
         seconds = MathUtils.clamp(seconds, 0F, this.duration);
         int target = Math.min((int) (seconds * this.fps), (int) (this.duration * this.fps));
 
-        if (this.texture != null && target == this.currentFrame)
+        if (this.texture != null && this.texture.isValid() && target == this.currentFrame)
         {
             return this.texture;
         }
@@ -631,7 +636,7 @@ public class VideoPlayer
         }
         catch (Exception e)
         {
-            e.printStackTrace();
+            BBSMod.LOGGER.error("Failed to start FFmpeg decode stream for " + this.file.getAbsolutePath(), e);
 
             this.stop();
             this.state = STATE_INVALID;

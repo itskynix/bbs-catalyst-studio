@@ -166,16 +166,25 @@ public class SoundManager implements IWatchDogListener
 
                 if (wave != null)
                 {
-                    Waveform waveform = null;
-                    if (includeWaveform)
+                    try
                     {
-                        waveform = new Waveform();
-                        waveform.generate(wave, this.readColorCodes(link), BBSSettings.audioWaveformDensity.get(), 40);
+                        Waveform waveform = null;
+                        if (includeWaveform)
+                        {
+                            waveform = new Waveform();
+                            waveform.generate(wave, this.readColorCodes(link), BBSSettings.audioWaveformDensity.get(), 40);
+                        }
+                        SoundBuffer buffer = new SoundBuffer(link, wave, waveform);
+                        this.buffers.put(link, buffer);
+                        System.out.println("Sound \"" + link + "\" was loaded asynchronously!");
+                        return buffer;
                     }
-                    SoundBuffer buffer = new SoundBuffer(link, wave, waveform);
-                    this.buffers.put(link, buffer);
-                    System.out.println("Sound \"" + link + "\" was loaded asynchronously!");
-                    return buffer;
+                    catch (Throwable t)
+                    {
+                        BBSMod.LOGGER.error("Failed to initialize SoundBuffer for " + link, t);
+                        this.buffers.put(link, null);
+                        return null;
+                    }
                 }
                 else
                 {
@@ -228,6 +237,7 @@ public class SoundManager implements IWatchDogListener
                 }
                 catch (Exception e)
                 {
+                    BBSMod.LOGGER.error("Failed to load video audio for " + link, e);
                     synchronized (this.pendingWaves)
                     {
                         this.pendingWaves.put(link, null);

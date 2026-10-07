@@ -125,6 +125,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
     public UIIcon openFilmMenu;
     public UIIcon openCameraEditor;
     public UIIcon openReplayEditor;
+    public UIIcon openCopilot;
     public UIIcon layoutLock;
 
     private UICopyPasteController layoutPresetsController;
@@ -222,6 +223,9 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.openCameraEditor.tooltip(UIKeys.FILM_OPEN_CAMERA_EDITOR);
         this.openReplayEditor.tooltip(UIKeys.FILM_OPEN_REPLAY_EDITOR);
 
+        this.openCopilot = new UIIcon(Icons.SPARKLES, (b) -> this.openCopilotDialog());
+        this.openCopilot.tooltip(L10n.lang("bbs.copilot.title"));
+
         /* What the tour of this editor points at. The two editor buttons are one place: they
          * only mean something as a pair. */
         TourAnchors.register("film.preview", () -> this.preview);
@@ -233,6 +237,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.actions()
             .editor(this.openCameraEditor, this.cameraEditor::isVisible)
             .editor(this.openReplayEditor, this.replayEditor::isVisible)
+            .action(this.openCopilot)
             .layout(this.layoutLock, () -> this.dock.isLocked())
             .menu(this.openFilmMenu);
 
@@ -718,6 +723,11 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         {
             UIOverlay.addOverlay(this.getContext(), new UIFilmDetailsOverlayPanel(this.getData()), 320, 310);
         });
+    }
+
+    public void openCopilotDialog()
+    {
+        UIOverlay.addOverlay(this.getContext(), new mchorse.bbs_mod.copilot.ui.UICopilotDialog(this), 620, 380);
     }
 
     /**

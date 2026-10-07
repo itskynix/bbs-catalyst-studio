@@ -702,6 +702,7 @@ public class BBSModClient implements ClientModInitializer
         mchorse.bbs_mod.camera.pov.bootstrap.PovRegistries.register();
         mchorse.bbs_mod.camera.pov.bootstrap.PovLocalization.register();
         mchorse.bbs_mod.camera.pov.render.PovBlockOutlineRenderer.init();
+        mchorse.bbs_mod.copilot.ui.UICopilotSetting.register();
 
         /* Keybinds */
         keyDashboard = this.createKey("dashboard", GLFW.GLFW_KEY_0);

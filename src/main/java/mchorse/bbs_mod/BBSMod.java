@@ -41,6 +41,7 @@ import mchorse.bbs_mod.camera.clips.modifiers.RemapperClip;
 import mchorse.bbs_mod.camera.clips.modifiers.ShakeClip;
 import mchorse.bbs_mod.camera.clips.modifiers.TrackerClip;
 import mchorse.bbs_mod.camera.clips.modifiers.TranslateClip;
+import mchorse.bbs_mod.camera.clips.overwrite.AICameraClip;
 import mchorse.bbs_mod.camera.clips.overwrite.DollyClip;
 import mchorse.bbs_mod.camera.clips.overwrite.IdleClip;
 import mchorse.bbs_mod.camera.clips.overwrite.KeyframeClip;
@@ -465,6 +466,8 @@ public class BBSMod implements ModInitializer
             .register(Link.bbs("keyframe"), KeyframeClip.class, new ClipFactoryData(Icons.CURVES, 0xde2e9f)
                 .withConverter(Link.bbs("idle"), IdleConverter.CONVERTER))
             .register(Link.bbs("pro_camera"), ProCameraClip.class, new ClipFactoryData(Icons.CAMERA, 0xe056fd)
+                .withConverter(Link.bbs("idle"), IdleConverter.CONVERTER))
+            .register(Link.bbs("ai_camera"), AICameraClip.class, new ClipFactoryData(Icons.SPARKLES, 0x9c27b0)
                 .withConverter(Link.bbs("idle"), IdleConverter.CONVERTER))
             .register(Link.bbs("translate"), TranslateClip.class, new ClipFactoryData(Icons.UPLOAD, 0x4ba03e))
             .register(Link.bbs("angle"), AngleClip.class, new ClipFactoryData(Icons.ARC, 0xd77a0a))

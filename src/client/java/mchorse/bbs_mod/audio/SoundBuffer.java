@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.audio;
 
+import mchorse.bbs_mod.BBSMod;
 import mchorse.bbs_mod.resources.Link;
 import org.lwjgl.openal.AL10;
 import org.lwjgl.system.MemoryUtil;
@@ -31,6 +32,12 @@ public class SoundBuffer
         buffer.flip();
 
         AL10.alBufferData(this.buffer, wave.getALFormat(), buffer, wave.sampleRate);
+
+        int alErr = AL10.alGetError();
+        if (alErr != AL10.AL_NO_ERROR)
+        {
+            BBSMod.LOGGER.error("OpenAL error 0x" + Integer.toHexString(alErr) + " buffering sound for " + id + " (size: " + wave.data.length + " bytes)");
+        }
 
         MemoryUtil.memFree(buffer);
 

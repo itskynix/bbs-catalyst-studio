@@ -57,8 +57,11 @@ public class CatalystMediaAsset
     public MediaType type = MediaType.IMAGE;
     public long size = 0L;
     public int durationFrames = 150;
+    public double durationSeconds = 0.0;
     public int width = 0;
     public int height = 0;
+    public float videoFps = 30F;
+    public boolean hasAudio = false;
 
     public CatalystMediaAsset()
     {
@@ -98,8 +101,11 @@ public class CatalystMediaAsset
         data.putString("type", this.type.name());
         data.putLong("size", this.size);
         data.putInt("durationFrames", this.durationFrames);
+        data.putDouble("durationSeconds", this.durationSeconds);
         data.putInt("width", this.width);
         data.putInt("height", this.height);
+        data.putFloat("videoFps", this.videoFps);
+        data.putBool("hasAudio", this.hasAudio);
 
         return data;
     }
@@ -127,8 +133,11 @@ public class CatalystMediaAsset
         }
         if (data.has("size")) this.size = data.getLong("size");
         if (data.has("durationFrames")) this.durationFrames = data.getInt("durationFrames");
+        if (data.has("durationSeconds")) this.durationSeconds = data.getDouble("durationSeconds");
         if (data.has("width")) this.width = data.getInt("width");
         if (data.has("height")) this.height = data.getInt("height");
+        if (data.has("videoFps")) this.videoFps = data.getFloat("videoFps");
+        if (data.has("hasAudio")) this.hasAudio = data.getBool("hasAudio");
     }
 
     public String formatSize()
@@ -156,7 +165,13 @@ public class CatalystMediaAsset
         }
 
         int curFps = fps > 0 ? fps : 60;
-        double sec = (double) this.durationFrames / curFps;
-        return String.format(Locale.ROOT, "%d fr (%.1fs)", this.durationFrames, sec);
+        double sec = this.durationSeconds > 0 ? this.durationSeconds : (double) this.durationFrames / curFps;
+        int frames = this.durationSeconds > 0 ? Math.max(1, (int) Math.round(this.durationSeconds * curFps)) : this.durationFrames;
+
+        if (this.type == MediaType.VIDEO && this.videoFps > 0)
+        {
+            return String.format(Locale.ROOT, "%.1fs, %d fr (%d FPS)", sec, frames, Math.round(this.videoFps));
+        }
+        return String.format(Locale.ROOT, "%.1fs, %d fr", sec, frames);
     }
 }

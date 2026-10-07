@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.audio;
 
+import mchorse.bbs_mod.BBSMod;
 import mchorse.bbs_mod.audio.mp3.Mp3Reader;
 import mchorse.bbs_mod.audio.ogg.VorbisReader;
 import mchorse.bbs_mod.audio.wav.WaveReader;
@@ -238,6 +239,27 @@ public class AudioReader
             Process process = builder.start();
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             ByteArrayOutputStream errBaos = new ByteArrayOutputStream();
+
+            Thread errThread = new Thread(() ->
+            {
+                try (InputStream errStream = process.getErrorStream())
+                {
+                    if (errStream != null)
+                    {
+                        byte[] errBuf = new byte[4096];
+                        int r;
+                        while ((r = errStream.read(errBuf)) != -1)
+                        {
+                            errBaos.write(errBuf, 0, r);
+                        }
+                    }
+                }
+                catch (Exception ignored)
+                {}
+            }, "FFmpeg-Audio-Stderr");
+            errThread.setDaemon(true);
+            errThread.start();
+
             byte[] buffer = new byte[16384];
             int read;
 
@@ -253,27 +275,12 @@ public class AudioReader
                     }
                 }
             }
-
-            try (InputStream errStream = process.getErrorStream())
-            {
-                if (errStream != null)
-                {
-                    byte[] errBuf = new byte[4096];
-                    int r;
-                    while ((r = errStream.read(errBuf)) != -1)
-                    {
-                        errBaos.write(errBuf, 0, r);
-                    }
-                }
-            }
-            catch (Exception ignored)
-            {}
             finally
             {
                 boolean finished = false;
                 try
                 {
-                    finished = process.waitFor(30L, TimeUnit.SECONDS);
+                    finished = process.waitFor(60L, TimeUnit.SECONDS);
                 }
                 catch (InterruptedException ignored)
                 {
@@ -284,6 +291,13 @@ public class AudioReader
                 {
                     process.destroyForcibly();
                 }
+
+                try
+                {
+                    errThread.join(500);
+                }
+                catch (InterruptedException ignored)
+                {}
             }
 
             if (process.exitValue() == 0 && baos.size() > 0)
@@ -295,8 +309,10 @@ public class AudioReader
             boolean noAudio = err.contains("does not contain any stream") || err.contains("matches no streams") || err.contains("no streams");
             return new ExtractionResult(null, noAudio);
         }
-        catch (Exception ignored)
-        {}
+        catch (Exception e)
+        {
+            BBSMod.LOGGER.error("Failed to extract audio from video: " + file.getAbsolutePath(), e);
+        }
 
         return new ExtractionResult(null, false);
     }

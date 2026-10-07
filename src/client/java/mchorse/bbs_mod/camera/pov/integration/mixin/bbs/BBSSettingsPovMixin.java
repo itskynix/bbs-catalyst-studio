@@ -26,6 +26,7 @@ public class BBSSettingsPovMixin {
     @Inject(method={"register"}, at={@At(value="FIELD", target="Lmchorse/bbs_mod/BBSSettings;recordingTeleport:Lmchorse/bbs_mod/settings/values/numeric/ValueBoolean;", shift=At.Shift.AFTER)})
     private static void bbsPov$registerPovCategory(SettingsBuilder builder, CallbackInfo info) {
         PovSettings.register(builder);
+        mchorse.bbs_mod.copilot.CopilotSettings.register(builder);
     }
 
     @Inject(method={"register"}, at={@At(value="RETURN")})

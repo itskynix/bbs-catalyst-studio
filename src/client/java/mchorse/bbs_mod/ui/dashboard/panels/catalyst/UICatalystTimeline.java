@@ -2169,12 +2169,6 @@ public class UICatalystTimeline extends UITimelineCanvas
                 if (wave == null)
                 {
                     Link link = Link.create(path);
-                    SoundBuffer buffer = BBSModClient.getSounds().get(link, true);
-                    if (buffer != null && buffer.getWaveform() != null && buffer.getWaveform().isCreated())
-                    {
-                        layer.cachedWaveform = buffer.getWaveform();
-                        return;
-                    }
                     wave = AudioReader.read(BBSMod.getProvider(), link);
                 }
                 if (wave != null)

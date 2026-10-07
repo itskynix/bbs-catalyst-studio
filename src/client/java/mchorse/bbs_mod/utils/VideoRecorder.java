@@ -13,6 +13,7 @@ import org.lwjgl.opengl.GL30;
 import org.lwjgl.system.MemoryUtil;
 import sun.misc.Unsafe;
 
+import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FilterOutputStream;
 import java.io.IOException;
@@ -356,6 +357,7 @@ public class VideoRecorder
                 }
             }
 
+            os = new BufferedOutputStream(os, 256 * 1024);
             this.channel = Channels.newChannel(os);
             this.recording = true;
 

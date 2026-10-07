@@ -170,10 +170,10 @@ public class UISettingsLayout
         @Override
         public List<UIElement> create(UIElement ui)
         {
-            UIButton welcome = new UIButton(UIKeys.ONBOARDING_SETTINGS_SHOW_WELCOME, (b) -> this.leaveFor(ui, Onboarding::showWelcome));
             UIButton tours = new UIButton(UIKeys.ONBOARDING_SETTINGS_RESET_TOURS, (b) -> this.leaveFor(ui, Onboarding::resetTours));
+            tours.w(130);
 
-            return List.of(UI.label(UIKeys.ONBOARDING_SETTINGS_TITLE, 0).labelAnchor(0, 0.5F), UI.row(4, 0, 20, welcome, tours));
+            return List.of(UI.label(UIKeys.ONBOARDING_SETTINGS_TITLE, 0).labelAnchor(0, 0.5F), tours);
         }
 
         private void leaveFor(UIElement ui, Consumer<UIContext> action)

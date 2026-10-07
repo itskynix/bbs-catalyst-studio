@@ -33,6 +33,7 @@ import mchorse.bbs_mod.camera.clips.modifiers.OrbitClip;
 import mchorse.bbs_mod.camera.clips.modifiers.RemapperClip;
 import mchorse.bbs_mod.camera.clips.modifiers.ShakeClip;
 import mchorse.bbs_mod.camera.clips.modifiers.TranslateClip;
+import mchorse.bbs_mod.camera.clips.overwrite.AICameraClip;
 import mchorse.bbs_mod.camera.clips.overwrite.DollyClip;
 import mchorse.bbs_mod.camera.clips.overwrite.IdleClip;
 import mchorse.bbs_mod.camera.clips.overwrite.KeyframeClip;
@@ -120,6 +121,7 @@ public abstract class UIClip <T extends Clip> extends UIElement
         register(DollyClip.class, UIDollyClip::new);
         register(PathClip.class, UIPathClip::new);
         register(KeyframeClip.class, UIKeyframeClip::new);
+        register(AICameraClip.class, UIAICameraClip::new);
         register(ProCameraClip.class, UIProCameraClip::new);
         register(TranslateClip.class, UITranslateClip::new);
         register(AngleClip.class, UIAngleClip::new);

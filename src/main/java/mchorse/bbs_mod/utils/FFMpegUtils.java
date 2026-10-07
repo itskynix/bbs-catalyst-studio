@@ -74,22 +74,184 @@ public class FFMpegUtils
         return file;
     }
 
+    private static String cachedResolvedFFmpeg = null;
+
+    public static void resetCache()
+    {
+        cachedResolvedFFmpeg = null;
+    }
+
     public static String getFFMPEG()
     {
-        String raw = BBSSettings.videoEncoderPath.get();
-        if (raw == null)
+        String raw = BBSSettings.videoEncoderPath != null ? BBSSettings.videoEncoderPath.get() : null;
+        if (raw != null && !raw.trim().isEmpty() && !raw.trim().equalsIgnoreCase("ffmpeg"))
         {
-            return "ffmpeg";
-        }
-        String clean = raw.replace("\"", "").trim();
-        File encoderPath = findFFMPEG(clean);
+            String clean = raw.replace("\"", "").trim();
+            File encoderPath = findFFMPEG(clean);
 
-        if (encoderPath.isFile())
+            if (encoderPath.isFile())
+            {
+                return encoderPath.getAbsolutePath().replace("\"", "").trim();
+            }
+        }
+
+        if (cachedResolvedFFmpeg != null && new File(cachedResolvedFFmpeg).isFile())
         {
-            return encoderPath.getAbsolutePath().replace("\"", "").trim();
+            return cachedResolvedFFmpeg;
         }
 
-        return clean.isEmpty() ? "ffmpeg" : clean;
+        String detected = detectFFmpeg();
+        if (detected != null && !detected.isEmpty())
+        {
+            cachedResolvedFFmpeg = detected.replace("\"", "").trim();
+            if (BBSSettings.videoEncoderPath != null)
+            {
+                String cur = BBSSettings.videoEncoderPath.get();
+                if (cur == null || cur.trim().isEmpty() || cur.trim().equalsIgnoreCase("ffmpeg"))
+                {
+                    BBSSettings.videoEncoderPath.set(cachedResolvedFFmpeg);
+                }
+            }
+            BBSMod.LOGGER.info("Resolved FFmpeg binary at: " + cachedResolvedFFmpeg);
+            return cachedResolvedFFmpeg;
+        }
+
+        String fallback = (raw != null && !raw.trim().isEmpty()) ? raw.replace("\"", "").trim() : "ffmpeg";
+        return fallback;
+    }
+
+    private static String detectFFmpeg()
+    {
+        boolean isWin = OS.CURRENT == OS.WINDOWS;
+
+        if (isWin)
+        {
+            String[] commonPaths = new String[] {
+                "C:\\ffmpeg\\bin\\ffmpeg.exe",
+                "C:\\ffmpeg\\ffmpeg.exe",
+                "D:\\ffmpeg\\bin\\ffmpeg.exe",
+                "D:\\ffmpeg\\ffmpeg.exe",
+                "E:\\ffmpeg\\bin\\ffmpeg.exe",
+                "E:\\ffmpeg\\ffmpeg.exe"
+            };
+
+            for (String p : commonPaths)
+            {
+                File f = new File(p);
+                if (f.isFile())
+                {
+                    return f.getAbsolutePath();
+                }
+            }
+
+            String userHome = System.getProperty("user.home");
+            if (userHome != null)
+            {
+                String[] homePaths = new String[] {
+                    userHome + "\\ffmpeg\\bin\\ffmpeg.exe",
+                    userHome + "\\ffmpeg\\ffmpeg.exe",
+                    userHome + "\\scoop\\shims\\ffmpeg.exe",
+                    userHome + "\\scoop\\apps\\ffmpeg\\current\\bin\\ffmpeg.exe"
+                };
+
+                for (String p : homePaths)
+                {
+                    File f = new File(p);
+                    if (f.isFile())
+                    {
+                        return f.getAbsolutePath();
+                    }
+                }
+            }
+
+            String localAppData = System.getenv("LOCALAPPDATA");
+            if (localAppData != null)
+            {
+                File winget = new File(localAppData, "Microsoft\\WinGet\\Links\\ffmpeg.exe");
+                if (winget.isFile())
+                {
+                    return winget.getAbsolutePath();
+                }
+            }
+
+            String programFiles = System.getenv("ProgramFiles");
+            if (programFiles != null)
+            {
+                File pf = new File(programFiles, "ffmpeg\\bin\\ffmpeg.exe");
+                if (pf.isFile())
+                {
+                    return pf.getAbsolutePath();
+                }
+            }
+
+            String programData = System.getenv("ProgramData");
+            if (programData != null)
+            {
+                File choco = new File(programData, "chocolatey\\bin\\ffmpeg.exe");
+                if (choco.isFile())
+                {
+                    return choco.getAbsolutePath();
+                }
+            }
+
+            try
+            {
+                Process p = new ProcessBuilder("where.exe", "ffmpeg").start();
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream())))
+                {
+                    String line = reader.readLine();
+                    if (line != null && !line.trim().isEmpty())
+                    {
+                        File f = new File(line.replace("\"", "").trim());
+                        if (f.isFile())
+                        {
+                            return f.getAbsolutePath();
+                        }
+                    }
+                }
+            }
+            catch (Exception ignored)
+            {}
+        }
+        else
+        {
+            String[] unixPaths = new String[] {
+                "/usr/bin/ffmpeg",
+                "/usr/local/bin/ffmpeg",
+                "/opt/homebrew/bin/ffmpeg",
+                "/usr/pkg/bin/ffmpeg"
+            };
+
+            for (String p : unixPaths)
+            {
+                File f = new File(p);
+                if (f.isFile())
+                {
+                    return f.getAbsolutePath();
+                }
+            }
+
+            try
+            {
+                Process p = new ProcessBuilder("which", "ffmpeg").start();
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream())))
+                {
+                    String line = reader.readLine();
+                    if (line != null && !line.trim().isEmpty())
+                    {
+                        File f = new File(line.replace("\"", "").trim());
+                        if (f.isFile())
+                        {
+                            return f.getAbsolutePath();
+                        }
+                    }
+                }
+            }
+            catch (Exception ignored)
+            {}
+        }
+
+        return null;
     }
 
     public static boolean checkFFMPEG()

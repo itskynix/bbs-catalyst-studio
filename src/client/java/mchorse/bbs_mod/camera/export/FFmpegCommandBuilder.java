@@ -166,9 +166,9 @@ public class FFmpegCommandBuilder
         args.add(FFMpegUtils.getFFMPEG().replace("\"", "").trim());
         args.add("-y");
         args.add("-i");
-        args.add(videoFile.getName());
+        args.add(videoFile.getAbsolutePath().replace("\"", "").trim());
         args.add("-i");
-        args.add(audioFile.getName());
+        args.add(audioFile.getAbsolutePath().replace("\"", "").trim());
         args.add("-map");
         args.add("0:v:0");
         args.add("-map");
@@ -216,7 +216,8 @@ public class FFmpegCommandBuilder
         args.add("-shortest");
 
         String outputPattern = this.profile.getFormat().getOutputPattern(outputMovieName);
-        args.add(outputPattern);
+        File destFile = this.outputFolder != null ? new File(this.outputFolder, outputPattern) : new File(videoFile.getParentFile(), outputPattern);
+        args.add(destFile.getAbsolutePath().replace("\"", "").trim());
 
         return args;
     }
@@ -440,20 +441,17 @@ public class FFmpegCommandBuilder
                 }
                 else
                 {
-                    // CRF / Default
+                    // CRF / Default: High-performance low-latency NVENC VBR with Constant Quality
                     args.add("-tune");
-                    args.add("hq");
-                    if (bitrate > 0)
-                    {
-                        args.add("-b:v");
-                        args.add(bitrate + "k");
-                        args.add("-maxrate");
-                        args.add(bitrate + "k");
-                        args.add("-bufsize");
-                        args.add((bitrate * 2) + "k");
-                    }
-                    args.add("-cq");
+                    args.add("ll");
+                    args.add("-zerolatency");
+                    args.add("1");
+                    args.add("-rc:v");
+                    args.add("vbr");
+                    args.add("-cq:v");
                     args.add(String.valueOf(quality));
+                    args.add("-b:v");
+                    args.add("0");
                 }
                 break;
 

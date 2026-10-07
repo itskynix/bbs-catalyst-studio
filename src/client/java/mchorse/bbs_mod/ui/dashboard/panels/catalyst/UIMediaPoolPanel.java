@@ -40,9 +40,11 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -81,6 +83,7 @@ public class UIMediaPoolPanel extends UIElement
     private CatalystMediaAsset lastClickedAsset = null;
 
     private final Map<String, Texture> thumbnailTextures = new HashMap<>();
+    private final Set<String> probedOrAttempted = new HashSet<>();
 
     public UIMediaPoolPanel(UICatalystPanel panel,
                             Supplier<CatalystProject> projectSupplier,
@@ -287,6 +290,16 @@ public class UIMediaPoolPanel extends UIElement
 
         for (CatalystMediaAsset asset : project.mediaPool)
         {
+            if (asset.path != null && !this.probedOrAttempted.contains(asset.path))
+            {
+                if ((asset.type == CatalystMediaAsset.MediaType.VIDEO && (asset.width <= 0 || asset.durationSeconds <= 0))
+                    || (asset.type == CatalystMediaAsset.MediaType.AUDIO && asset.durationSeconds <= 0))
+                {
+                    this.probedOrAttempted.add(asset.path);
+                    this.probeAsset(asset, project.fps);
+                }
+            }
+
             if (filter.isEmpty() || asset.name.toLowerCase(Locale.ROOT).contains(filter))
             {
                 list.add(asset);
@@ -581,6 +594,7 @@ public class UIMediaPoolPanel extends UIElement
                     {
                         oldTex.delete();
                     }
+                    this.probedOrAttempted.remove(asset.path);
                     this.probeAsset(asset, project.fps);
                     if (this.panel != null)
                     {
@@ -724,11 +738,15 @@ public class UIMediaPoolPanel extends UIElement
                 }
                 if (wave != null && wave.getDuration() > 0)
                 {
+                    asset.durationSeconds = wave.getDuration();
                     asset.durationFrames = Math.max(1, (int) Math.round(wave.getDuration() * (fps > 0 ? fps : 60)));
+                    BBSMod.LOGGER.info("Probed audio asset '{}': duration {}s ({} frames @ {} FPS)",
+                        asset.name, asset.durationSeconds, asset.durationFrames, fps);
                 }
             }
-            catch (Throwable ignored)
+            catch (Throwable t)
             {
+                BBSMod.LOGGER.error("Failed to probe audio asset: " + asset.path, t);
             }
         }
         else if (asset.type == CatalystMediaAsset.MediaType.VIDEO)
@@ -736,23 +754,44 @@ public class UIMediaPoolPanel extends UIElement
             try
             {
                 File vf = new File(asset.path);
-                if (vf.exists())
+                if (vf.exists() && vf.isFile())
                 {
                     VideoPlayer vp = new VideoPlayer(vf);
                     vp.ensureProbed();
-                    if (vp.getDuration() > 0)
+                    if (vp.isValid())
                     {
-                        asset.durationFrames = Math.max(1, (int) Math.round(vp.getDuration() * (fps > 0 ? fps : 60)));
+                        if (vp.getDuration() > 0)
+                        {
+                            asset.durationSeconds = vp.getDuration();
+                            asset.durationFrames = Math.max(1, (int) Math.round(vp.getDuration() * (fps > 0 ? fps : 60)));
+                        }
+                        if (vp.getWidth() > 0 && vp.getHeight() > 0)
+                        {
+                            asset.width = vp.getWidth();
+                            asset.height = vp.getHeight();
+                        }
+                        if (vp.getFps() > 0)
+                        {
+                            asset.videoFps = vp.getFps();
+                        }
+                        asset.hasAudio = vp.hasAudio();
+                        BBSMod.LOGGER.info("Probed video asset '{}': {}x{} @ {} FPS, {}s ({} frames @ comp {} FPS), hasAudio={}",
+                            asset.name, asset.width, asset.height, asset.videoFps, asset.durationSeconds, asset.durationFrames, fps, asset.hasAudio);
                     }
-                    if (vp.getWidth() > 0 && vp.getHeight() > 0)
+                    else
                     {
-                        asset.width = vp.getWidth();
-                        asset.height = vp.getHeight();
+                        BBSMod.LOGGER.warn("VideoPlayer probe failed for asset: " + asset.path);
                     }
+                    vp.delete();
+                }
+                else
+                {
+                    BBSMod.LOGGER.warn("Video asset file not found on disk: " + asset.path);
                 }
             }
-            catch (Throwable ignored)
+            catch (Throwable t)
             {
+                BBSMod.LOGGER.error("Failed to probe video asset: " + asset.path, t);
             }
         }
         else if (asset.type == CatalystMediaAsset.MediaType.IMAGE)
@@ -774,8 +813,9 @@ public class UIMediaPoolPanel extends UIElement
                     }
                 }
             }
-            catch (Throwable ignored)
+            catch (Throwable t)
             {
+                BBSMod.LOGGER.error("Failed to probe image asset: " + asset.path, t);
             }
         }
     }

@@ -252,6 +252,8 @@ public class Texture
 
         GL11.glTexImage2D(target, level, this.format.internal, w, h, 0, this.format.format, this.format.type, buffer);
 
+        GL11.glPixelStorei(GL11.GL_UNPACK_ROW_LENGTH, 0);
+
         if (level == 0)
         {
             this.width = w;

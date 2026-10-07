@@ -8,7 +8,7 @@ import mchorse.bbs_mod.l10n.keys.IKey;
 public enum EncoderPreset
 {
     ULTRAFAST("ultrafast", IKey.raw("Ultra Fast (Fastest Render)"), "ultrafast", "p1", "speed", "veryfast"),
-    FAST("fast", IKey.raw("Fast"), "fast", "p3", "speed", "fast"),
+    FAST("fast", IKey.raw("Fast"), "fast", "p2", "speed", "fast"),
     MEDIUM("medium", IKey.raw("Medium / Balanced"), "medium", "p4", "balanced", "medium"),
     SLOW("slow", IKey.raw("Slow / High Quality"), "slow", "p6", "quality", "slow"),
     VERYSLOW("veryslow", IKey.raw("Very Slow / Archival Master"), "veryslow", "p7", "quality", "veryslow");
