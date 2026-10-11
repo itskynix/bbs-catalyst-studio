@@ -90,8 +90,12 @@ public class ScreenshotRecorder
                 float a = pixelData.get() * 255;
                 int i = ((height - 1) - y) * width + x;
 
-                pixels[i] = ((int) a << 24) + ((int) r << 16) + ((int) g << 8) + (int) b;
             }
+        }
+
+        if (output != null && output.getParentFile() != null && !output.getParentFile().exists())
+        {
+            output.getParentFile().mkdirs();
         }
 
         ScreenshotRunner runner = new ScreenshotRunner(width, height, pixels, output);
@@ -104,6 +108,11 @@ public class ScreenshotRecorder
      */
     public File getScreenshotFile()
     {
+        if (this.screenshots != null && !this.screenshots.exists())
+        {
+            this.screenshots.mkdirs();
+        }
+
         return new File(this.screenshots, StringUtils.createTimestampFilename() + ".png");
     }
 

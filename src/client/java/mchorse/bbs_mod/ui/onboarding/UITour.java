@@ -110,7 +110,11 @@ public class UITour extends UIElement
     {
         this.finished = true;
         this.removeFromParent();
-        this.onFinished.run();
+
+        if (this.onFinished != null)
+        {
+            this.onFinished.run();
+        }
     }
 
     private void advance()

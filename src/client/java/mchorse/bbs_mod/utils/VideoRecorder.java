@@ -152,7 +152,14 @@ public class VideoRecorder
         {
             File movies = BBSRendering.getVideoFolder();
 
-            movies.mkdirs();
+            if (movies != null && !movies.exists())
+            {
+                if (!movies.mkdirs() && !movies.exists())
+                {
+                    System.err.println("[VideoRecorder] Critical: Failed to create video output folder: " + movies.getAbsolutePath());
+                    sendChatMessage("§c[VideoRecorder] Video klasörü oluşturulamadı: " + movies.getAbsolutePath());
+                }
+            }
 
             Path path = Paths.get(movies.toString());
 
@@ -273,6 +280,16 @@ public class VideoRecorder
             if (!BBSSettings.videoEncoderLog.get())
             {
                 log = BBSMod.getSettingsPath("video.log");
+            }
+
+            File logParent = log.getParentFile();
+
+            if (logParent != null && !logParent.exists())
+            {
+                if (!logParent.mkdirs() && !logParent.exists())
+                {
+                    System.err.println("[VideoRecorder] Warning: Failed to create log directory: " + logParent.getAbsolutePath());
+                }
             }
 
             System.out.println("[VideoRecorder] Launching FFmpeg with command: " + String.join(" ", cleanArgs));

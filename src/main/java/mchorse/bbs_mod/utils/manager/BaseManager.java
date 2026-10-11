@@ -229,6 +229,16 @@ public abstract class BaseManager <T extends ValueGroup> extends FolderManager<T
 
         try
         {
+            File parent = file.getParentFile();
+
+            if (parent != null && !parent.exists())
+            {
+                if (!parent.mkdirs() && !parent.exists())
+                {
+                    LOGGER.warn("Failed to create parent directories for \"" + id + "\" at " + parent.getAbsolutePath());
+                }
+            }
+
             this.storage.save(file, data);
 
             return true;

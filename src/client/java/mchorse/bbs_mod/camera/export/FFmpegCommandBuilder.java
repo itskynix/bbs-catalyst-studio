@@ -146,7 +146,23 @@ public class FFmpegCommandBuilder
         String outputPattern = this.profile.getFormat().getOutputPattern(this.movieName != null ? this.movieName : "video");
         if (this.outputFolder != null)
         {
-            args.add(new File(this.outputFolder, outputPattern).getAbsolutePath().replace("\"", "").trim());
+            if (!this.outputFolder.exists())
+            {
+                if (!this.outputFolder.mkdirs() && !this.outputFolder.exists())
+                {
+                    System.err.println("[FFmpegCommandBuilder] Warning: Failed to create output directory: " + this.outputFolder.getAbsolutePath());
+                }
+            }
+            File targetFile = new File(this.outputFolder, outputPattern);
+            File parent = targetFile.getParentFile();
+            if (parent != null && !parent.exists())
+            {
+                if (!parent.mkdirs() && !parent.exists())
+                {
+                    System.err.println("[FFmpegCommandBuilder] Warning: Failed to create target parent directory: " + parent.getAbsolutePath());
+                }
+            }
+            args.add(targetFile.getAbsolutePath().replace("\"", "").trim());
         }
         else
         {
@@ -217,6 +233,14 @@ public class FFmpegCommandBuilder
 
         String outputPattern = this.profile.getFormat().getOutputPattern(outputMovieName);
         File destFile = this.outputFolder != null ? new File(this.outputFolder, outputPattern) : new File(videoFile.getParentFile(), outputPattern);
+        File destParent = destFile.getParentFile();
+        if (destParent != null && !destParent.exists())
+        {
+            if (!destParent.mkdirs() && !destParent.exists())
+            {
+                System.err.println("[FFmpegCommandBuilder] Warning: Failed to create mux output directory: " + destParent.getAbsolutePath());
+            }
+        }
         args.add(destFile.getAbsolutePath().replace("\"", "").trim());
 
         return args;
@@ -282,7 +306,18 @@ public class FFmpegCommandBuilder
             }
         }
 
-        args.add(outputFile.getAbsolutePath().replace("\"", "").trim());
+        if (outputFile != null)
+        {
+            File audioParent = outputFile.getParentFile();
+            if (audioParent != null && !audioParent.exists())
+            {
+                if (!audioParent.mkdirs() && !audioParent.exists())
+                {
+                    System.err.println("[FFmpegCommandBuilder] Warning: Failed to create audio output directory: " + audioParent.getAbsolutePath());
+                }
+            }
+            args.add(outputFile.getAbsolutePath().replace("\"", "").trim());
+        }
 
         return args;
     }

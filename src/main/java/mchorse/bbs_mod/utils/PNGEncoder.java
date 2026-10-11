@@ -82,13 +82,28 @@ public class PNGEncoder
 
     public static void writeToFile(Pixels pixels, File file) throws IOException
     {
+        if (file == null)
+        {
+            throw new IOException("Cannot write PNG to null file!");
+        }
+
+        File parent = file.getParentFile();
+
+        if (parent != null && !parent.exists())
+        {
+            if (!parent.mkdirs() && !parent.exists())
+            {
+                throw new IOException("Failed to create parent directories for: " + file.getAbsolutePath());
+            }
+        }
+
         PNGEncoder encoder = new PNGEncoder();
         byte[] bytes = encoder.encode(pixels);
 
-        FileOutputStream stream = new FileOutputStream(file);
-
-        stream.write(bytes);
-        stream.close();
+        try (FileOutputStream stream = new FileOutputStream(file))
+        {
+            stream.write(bytes);
+        }
     }
 
     public byte[] encode(Pixels pixels) throws IOException

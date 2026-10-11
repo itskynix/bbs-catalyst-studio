@@ -550,4 +550,14 @@ public class UIParticleSchemePanel extends UIDataDashboardPanel<ParticleScheme>
             context.batcher.textCard(this.molangId, this.textEditor.area.ex() - 6 - w, this.textEditor.area.ey() - 6 - font.getHeight());
         }
     }
+
+    @Override
+    protected void mountLanding()
+    {
+        this.landing = new UIParticlesHubScreen(this);
+
+        this.add(this.layoutUnderTopBar(this.landing));
+
+        this.syncLanding();
+    }
 }

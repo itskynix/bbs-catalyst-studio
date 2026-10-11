@@ -12,6 +12,7 @@ import mchorse.bbs_mod.catalyst.CatalystLayer;
 import mchorse.bbs_mod.graphics.window.Window;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.resources.Link;
+import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.utils.FontRenderer;
 import mchorse.bbs_mod.ui.framework.elements.utils.UITimelineCanvas;
@@ -176,8 +177,8 @@ public class UICatalystTimeline extends UITimelineCanvas
 
         context.replaceContextMenu((add) ->
         {
-            add.action(Icons.CURSOR, IKey.raw("Add layer at cursor..."), () -> this.showAddTypes(context, Math.max(0, this.fromGraphTick(mouseX))));
-            add.action(Icons.SHIFT_TO, IKey.raw("Add layer at current tick..."), () ->
+            add.action(Icons.CURSOR, UIKeys.CATALYST_TIMELINE_ADD_CURSOR, () -> this.showAddTypes(context, Math.max(0, this.fromGraphTick(mouseX))));
+            add.action(Icons.SHIFT_TO, UIKeys.CATALYST_TIMELINE_ADD_CURRENT, () ->
             {
                 int playhead = this.playheadSupplier != null ? this.playheadSupplier.getAsInt() : 0;
                 this.showAddTypes(context, playhead);
@@ -193,7 +194,7 @@ public class UICatalystTimeline extends UITimelineCanvas
                 .icon((type) -> Icons.ADD)
                 .label((type) -> IKey.raw(type == CatalystLayer.LayerType.SCENE ? "Film Layer" : (type.name().substring(0, 1) + type.name().substring(1).toLowerCase() + " Layer")))
                 .color((type) -> type.defaultColor())
-                .build(add, IKey.raw("Layer Types"), (type) -> this.addLayer(type, tick));
+                .build(add, UIKeys.CATALYST_TIMELINE_LAYER_TYPES, (type) -> this.addLayer(type, tick));
         });
     }
 

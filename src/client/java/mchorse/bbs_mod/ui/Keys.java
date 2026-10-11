@@ -34,12 +34,12 @@ public class Keys
     public static final KeyCombo ADD_AT_TICK = new KeyCombo("add_at_tick", UIKeys.CAMERA_TIMELINE_CONTEXT_ADD_AT_TICK, GLFW.GLFW_KEY_A, GLFW.GLFW_KEY_LEFT_ALT).categoryKey("camera");
     public static final KeyCombo ADD_ON_TOP = new KeyCombo("add_on_top", UIKeys.CAMERA_TIMELINE_CONTEXT_ADD_ON_TOP, GLFW.GLFW_KEY_A, GLFW.GLFW_KEY_LEFT_SHIFT, GLFW.GLFW_KEY_LEFT_ALT).categoryKey("camera");
     public static final KeyCombo CLIP_CUT = new KeyCombo("clip_cut", UIKeys.CAMERA_TIMELINE_CONTEXT_CUT, GLFW.GLFW_KEY_C).categoryKey("camera");
-    public static final KeyCombo CLIP_RIPPLE_HEAD = new KeyCombo("clip_ripple_head", mchorse.bbs_mod.l10n.keys.IKey.raw("Ripple Trim Head (Start to Playhead)"), GLFW.GLFW_KEY_Q).categoryKey("camera");
-    public static final KeyCombo CLIP_RIPPLE_TAIL = new KeyCombo("clip_ripple_tail", mchorse.bbs_mod.l10n.keys.IKey.raw("Ripple Trim Tail (Playhead to End)"), GLFW.GLFW_KEY_E).categoryKey("camera");
+    public static final KeyCombo CLIP_RIPPLE_HEAD = new KeyCombo("clip_ripple_head", mchorse.bbs_mod.l10n.keys.IKey.raw("Ripple Trim Head"), GLFW.GLFW_KEY_Q).categoryKey("camera");
+    public static final KeyCombo CLIP_RIPPLE_TAIL = new KeyCombo("clip_ripple_tail", mchorse.bbs_mod.l10n.keys.IKey.raw("Ripple Trim Tail"), GLFW.GLFW_KEY_E).categoryKey("camera");
     public static final KeyCombo TIMELINE_MARK_IN = new KeyCombo("timeline_mark_in", mchorse.bbs_mod.l10n.keys.IKey.raw("Mark In"), GLFW.GLFW_KEY_I).categoryKey("camera");
     public static final KeyCombo TIMELINE_MARK_OUT = new KeyCombo("timeline_mark_out", mchorse.bbs_mod.l10n.keys.IKey.raw("Mark Out"), GLFW.GLFW_KEY_O).categoryKey("camera");
-    public static final KeyCombo TIMELINE_MARK_CLIP = new KeyCombo("timeline_mark_clip", mchorse.bbs_mod.l10n.keys.IKey.raw("Mark Clip (Auto In/Out)"), GLFW.GLFW_KEY_X).categoryKey("camera");
-    public static final KeyCombo TIMELINE_CLEAR_IN_OUT = new KeyCombo("timeline_clear_in_out", mchorse.bbs_mod.l10n.keys.IKey.raw("Clear In/Out"), GLFW.GLFW_KEY_X, GLFW.GLFW_KEY_LEFT_ALT).categoryKey("camera");
+    public static final KeyCombo TIMELINE_MARK_CLIP = new KeyCombo("timeline_mark_clip", mchorse.bbs_mod.l10n.keys.IKey.raw("Mark Clip"), GLFW.GLFW_KEY_X).categoryKey("camera");
+    public static final KeyCombo TIMELINE_CLEAR_IN_OUT = new KeyCombo("timeline_clear_in_out", mchorse.bbs_mod.l10n.keys.IKey.raw("Clear In Out"), GLFW.GLFW_KEY_X, GLFW.GLFW_KEY_LEFT_ALT).categoryKey("camera");
     public static final KeyCombo CLIP_DURATION = new KeyCombo("clip_duration", UIKeys.CAMERA_TIMELINE_CONTEXT_SHIFT_DURATION, GLFW.GLFW_KEY_M).categoryKey("camera");
     public static final KeyCombo CLIP_ENABLE = new KeyCombo("clip_enable", UIKeys.CAMERA_TIMELINE_KEYS_ENABLED, GLFW.GLFW_KEY_D).categoryKey("camera");
     public static final KeyCombo CLIP_SELECT_ALL = new KeyCombo("clip_select_all", UIKeys.CAMERA_EDITOR_KEYS_CLIPS_SELECT_ALL, GLFW.GLFW_KEY_A, GLFW.GLFW_KEY_LEFT_CONTROL).categoryKey("camera");

@@ -90,6 +90,11 @@ public class UIViewportStack implements IViewportStack
     @Override
     public void popViewport()
     {
+        if (this.viewportStack.isEmpty())
+        {
+            return;
+        }
+
         this.viewportStack.pop();
     }
 

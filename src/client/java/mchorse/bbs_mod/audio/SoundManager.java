@@ -54,6 +54,71 @@ public class SoundManager implements IWatchDogListener
         return this.sounds;
     }
 
+    public boolean isBufferLoaded(Link link)
+    {
+        if (link == null)
+        {
+            return true;
+        }
+
+        synchronized (this.pendingWaves)
+        {
+            if (this.pendingWaves.containsKey(link))
+            {
+                return true;
+            }
+        }
+
+        return this.buffers.containsKey(link);
+    }
+
+    public void preload(Link link)
+    {
+        if (link == null || this.buffers.containsKey(link) || this.loadingBuffers.contains(link))
+        {
+            return;
+        }
+
+        synchronized (this.pendingWaves)
+        {
+            if (this.pendingWaves.containsKey(link))
+            {
+                return;
+            }
+        }
+
+        this.loadingBuffers.add(link);
+        Thread loader = new Thread(() ->
+        {
+            try
+            {
+                Wave wave = AudioReader.read(this.provider, link);
+                if (wave != null && (wave.bitsPerSample != 16 || wave.numChannels > 2 || wave.sampleRate > 48000 || wave.audioFormat != 1))
+                {
+                    wave = wave.normalize();
+                }
+                synchronized (this.pendingWaves)
+                {
+                    this.pendingWaves.put(link, wave);
+                }
+            }
+            catch (Exception e)
+            {
+                BBSMod.LOGGER.error("Failed to preload audio for " + link, e);
+                synchronized (this.pendingWaves)
+                {
+                    this.pendingWaves.put(link, null);
+                }
+            }
+            finally
+            {
+                this.loadingBuffers.remove(link);
+            }
+        }, "BBS-AudioPreloader-" + (link.path != null ? link.path : "audio"));
+        loader.setDaemon(true);
+        loader.start();
+    }
+
     /**
      * Load a sound buffer (optionally include a waveform).
      */
@@ -376,6 +441,10 @@ public class SoundManager implements IWatchDogListener
                 player.stop();
                 player.delete();
                 it.remove();
+            }
+            else
+            {
+                player.updateRamp();
             }
         }
     }

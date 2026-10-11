@@ -501,6 +501,25 @@ public class UIContext implements IViewportStack
         this.replaceContextMenu(manager.create());
     }
 
+    public void replaceContextMenu(Consumer<ContextMenuManager> consumer, int x, int y)
+    {
+        int prevX = this.mouseX;
+        int prevY = this.mouseY;
+
+        this.mouseX = x;
+        this.mouseY = y;
+
+        try
+        {
+            this.replaceContextMenu(consumer);
+        }
+        finally
+        {
+            this.mouseX = prevX;
+            this.mouseY = prevY;
+        }
+    }
+
     /**
      * Open a menu in place of the one currently shown. The old one is parked rather than thrown
      * away — invisible, and so out of the way of the mouse and the keyboard too — so that a step

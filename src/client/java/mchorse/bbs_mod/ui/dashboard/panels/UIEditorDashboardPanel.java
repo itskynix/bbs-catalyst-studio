@@ -147,7 +147,7 @@ public abstract class UIEditorDashboardPanel extends UIDashboardPanel implements
     @Override
     public IKey getNewTabLabel()
     {
-        return UIKeys.PANELS_TABS_NEW_TAB;
+        return UIKeys.NEW_TAB;
     }
 
     /** Icon of a tab; the id is null for a tab with nothing open in it. */

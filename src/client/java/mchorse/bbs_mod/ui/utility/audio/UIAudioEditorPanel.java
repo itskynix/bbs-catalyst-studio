@@ -176,4 +176,14 @@ public class UIAudioEditorPanel extends UIEditorDashboardPanel
     {
         this.fillNames(UISoundOverlayPanel.getSoundEvents());
     }
+
+    @Override
+    protected void mountLanding()
+    {
+        this.landing = new UIAudioHubScreen(this);
+
+        this.add(this.layoutUnderTopBar(this.landing));
+
+        this.syncLanding();
+    }
 }

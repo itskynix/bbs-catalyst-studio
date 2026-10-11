@@ -25,6 +25,13 @@ public class VideoMuxer
     public static File mux(File video, File audio, String movieName)
     {
         File folder = video.getParentFile();
+        if (folder != null && !folder.exists())
+        {
+            if (!folder.mkdirs() && !folder.exists())
+            {
+                System.err.println("[VideoMuxer] Warning: Failed to create folder: " + folder.getAbsolutePath());
+            }
+        }
         String tempName = movieName + ".tmp";
 
         try
@@ -60,6 +67,15 @@ public class VideoMuxer
             if (!BBSSettings.videoEncoderLog.get())
             {
                 log = BBSMod.getSettingsPath("video.log");
+            }
+
+            File logParent = log.getParentFile();
+            if (logParent != null && !logParent.exists())
+            {
+                if (!logParent.mkdirs() && !logParent.exists())
+                {
+                    System.err.println("[VideoMuxer] Warning: Failed to create log directory: " + logParent.getAbsolutePath());
+                }
             }
 
             builder.directory(workDir);

@@ -28,6 +28,11 @@ public class SoundPlayer
     /** When the owner last asked for this source, for pruning the ones whose owner is gone. */
     private long lastUsed = System.currentTimeMillis();
 
+    private float targetVolume = 1.0F;
+    private long rampStartTime = 0L;
+    private static final long RAMP_DURATION_MS = 150L;
+    private boolean ramping = false;
+
     public SoundPlayer(SoundBuffer buffer)
     {
         this.buffer = buffer;
@@ -115,7 +120,60 @@ public class SoundPlayer
         return gainLimit;
     }
 
+    public void triggerSoftGainRamp()
+    {
+        if (mchorse.bbs_mod.BBSModClient.getVideoRecorder().isRecording())
+        {
+            this.ramping = false;
+            return;
+        }
+
+        this.rampStartTime = System.currentTimeMillis();
+        this.ramping = true;
+        this.applyRampedVolume(0.0F);
+    }
+
+    public void updateRamp()
+    {
+        if (this.ramping)
+        {
+            if (mchorse.bbs_mod.BBSModClient.getVideoRecorder().isRecording())
+            {
+                this.ramping = false;
+                this.applyRampedVolume(this.targetVolume);
+                return;
+            }
+
+            long elapsed = System.currentTimeMillis() - this.rampStartTime;
+            if (elapsed >= RAMP_DURATION_MS)
+            {
+                this.ramping = false;
+                this.applyRampedVolume(this.targetVolume);
+            }
+            else
+            {
+                float progress = MathUtils.clamp((float) elapsed / (float) RAMP_DURATION_MS, 0.0F, 1.0F);
+                float smooth = progress * progress * (3.0F - 2.0F * progress);
+                this.applyRampedVolume(this.targetVolume * smooth);
+            }
+        }
+    }
+
     public void setVolume(float volume)
+    {
+        this.targetVolume = volume;
+
+        if (this.ramping)
+        {
+            this.updateRamp();
+        }
+        else
+        {
+            this.applyRampedVolume(volume);
+        }
+    }
+
+    private void applyRampedVolume(float volume)
     {
         float gain = MathUtils.clamp(volume, 0F, getGainLimit());
 
@@ -226,6 +284,11 @@ public class SoundPlayer
 
     public void play()
     {
+        if (!mchorse.bbs_mod.BBSModClient.getVideoRecorder().isRecording())
+        {
+            this.triggerSoftGainRamp();
+        }
+
         AL10.alSourcePlay(this.source);
         if (this.pendingOffset >= 0F)
         {
@@ -244,6 +307,7 @@ public class SoundPlayer
     {
         AL10.alSourceStop(this.source);
         this.pendingOffset = -1F;
+        this.ramping = false;
     }
 
     public int getSourceState()
@@ -292,6 +356,10 @@ public class SoundPlayer
                 AL10.alSourcef(this.source, AL11.AL_SEC_OFFSET, seconds);
             }
             this.pendingOffset = -1F;
+            if (!mchorse.bbs_mod.BBSModClient.getVideoRecorder().isRecording())
+            {
+                this.triggerSoftGainRamp();
+            }
         }
         else
         {

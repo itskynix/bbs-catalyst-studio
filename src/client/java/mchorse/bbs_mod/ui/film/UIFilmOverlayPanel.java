@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.film;
 
+import mchorse.bbs_mod.data.types.MapType;
 import mchorse.bbs_mod.film.Film;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.UIKeys;
@@ -125,6 +126,30 @@ public class UIFilmOverlayPanel extends UIDataOverlayPanel<Film>
             });
             UIOverlay.addOverlay(context, list);
         });
+    }
+
+    @Override
+    protected void addNewData(UIContext context, MapType data)
+    {
+        UIAdvancedFilmDialog dialog = new UIAdvancedFilmDialog(
+            this.panel,
+            data,
+            (targetId) ->
+            {
+                this.addNewData(context, targetId, data);
+
+                Film film = this.panel.getData();
+
+                if (film != null)
+                {
+                    film.stampCreationTimeNow();
+                    this.panel.save();
+                    this.panel.requestNames();
+                }
+            }
+        );
+
+        UIOverlay.addOverlay(context, dialog, 620, 380);
     }
 
     @Override

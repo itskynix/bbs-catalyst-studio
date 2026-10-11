@@ -135,7 +135,7 @@ public class UIMediaPoolPanel extends UIElement
 
         /* ── Search bar & view toggle buttons ── */
         this.search = new UITextbox(120, (text) -> this.rebuildList());
-        this.search.placeholder(IKey.raw("Filter media..."));
+        this.search.placeholder(IKey.raw("Filter Media..."));
         this.search.relative(this).y(26).x(4).w(1F, -46).h(18);
 
         this.listViewBtn = new UIIcon(Icons.LIST, (b) -> this.setViewMode(ViewMode.LIST));

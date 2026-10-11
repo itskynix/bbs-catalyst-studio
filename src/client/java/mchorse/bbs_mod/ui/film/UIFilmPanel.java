@@ -1,6 +1,8 @@
 package mchorse.bbs_mod.ui.film;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.util.math.RotationAxis;
 import org.lwjgl.glfw.GLFW;
 import mchorse.bbs_mod.film.replays.tracks.TrackId;
 import mchorse.bbs_mod.BBSMod;
@@ -8,6 +10,8 @@ import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.actions.ActionState;
 import mchorse.bbs_mod.camera.Camera;
+import mchorse.bbs_mod.camera.clips.misc.AudioClip;
+import mchorse.bbs_mod.resources.Link;
 import mchorse.bbs_mod.camera.clips.modifiers.TranslateClip;
 import mchorse.bbs_mod.camera.clips.overwrite.IdleClip;
 import mchorse.bbs_mod.camera.controller.CameraController;
@@ -48,12 +52,19 @@ import mchorse.bbs_mod.ui.film.utils.UIFilmUndoHandler;
 import mchorse.bbs_mod.ui.film.utils.undo.UIUndoHistoryOverlay;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.onboarding.TourAnchors;
+import mchorse.bbs_mod.ui.onboarding.Tours;
+import mchorse.bbs_mod.ui.onboarding.UITour;
 import mchorse.bbs_mod.ui.framework.elements.utils.ScrollMemory;
 import mchorse.bbs_mod.ui.framework.elements.utils.UIUndoKeys;
+import mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D;
+import mchorse.bbs_mod.ui.framework.elements.utils.FontRenderer;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
+import mchorse.bbs_mod.ui.framework.elements.IUIElement;
+import mchorse.bbs_mod.ui.framework.elements.buttons.UIClickable;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIIcon;
 import mchorse.bbs_mod.ui.framework.elements.layout.ILayoutSource;
 import mchorse.bbs_mod.ui.framework.elements.layout.UIDockLayout;
+import mchorse.bbs_mod.ui.framework.elements.layout.UIDockLayout.UIDockSlot;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UIMessageOverlayPanel;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UINumberOverlayPanel;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UIOverlay;
@@ -85,14 +96,23 @@ import net.minecraft.util.math.Vec3d;
 import org.joml.Matrix4f;
 import org.joml.Vector2i;
 import org.joml.Vector3d;
+import com.mojang.blaze3d.platform.GlStateManager;
+import mchorse.bbs_mod.utils.PNGEncoder;
+import mchorse.bbs_mod.utils.resources.Pixels;
+import org.lwjgl.BufferUtils;
+import org.lwjgl.opengl.GL11;
 
+import java.io.File;
+import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
+import mchorse.bbs_mod.ui.framework.elements.IUIElement;
 
 public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSupported, IUIOrbitKeysHandler, ICursor
 {
@@ -107,12 +127,32 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
     private final Position position = new Position(0, 0, 0, 0, 0);
     private final Position lastPosition = new Position(0, 0, 0, 0, 0);
 
+    private boolean sceneWarmingUp = false;
+    private long sceneWarmUpStartTime = 0L;
+    private static final long SCENE_WARMUP_TIMEOUT_MS = 2000L;
+
 
     public UIElement main;
     public UIElement editArea;
     public UIDockLayout dock;
     public UIFilmRecorder recorder;
     public UIFilmPreview preview;
+    public UIElement menuBar;
+    public UIMenuBarItem menuWindow;
+    public UIMenuBarItem menuTools;
+    public UIMenuBarItem menuHelp;
+
+    public boolean leftDrawerActive;
+    public boolean leftDrawerOpen;
+    public boolean leftDrawerPinned;
+    public boolean rightDrawerActive;
+    public boolean rightDrawerOpen;
+    public boolean rightDrawerPinned;
+
+    public UIElement leftDrawerTabBtn;
+    public UIElement rightDrawerTabBtn;
+    public UIFilmDrawerContainer leftDrawerOverlay;
+    public UIFilmDrawerContainer rightDrawerOverlay;
 
     public UIIcon duplicateFilm;
 
@@ -321,23 +361,30 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
             }
         }).active(active).category(editor);
 
+        this.setupMenuBar();
+
         /* Dockable layout, shared with the particle editor. */
         this.dock = new UIDockLayout();
-        this.dock.relative(this.editor).w(1F).h(1F);
+        this.dock.relative(this.editor).x(0).y(16).w(1F).h(1F, -16);
         this.dock.source(this.createLayoutSource())
             .locked(!BBSSettings.editorLayoutSettings.isDockUnlocked(ValueEditorLayout.FILM))
             .frameless(PANEL_PREVIEW_ID)
+            .core(PANEL_PREVIEW_ID, PANEL_MAIN_ID)
             .gate(this::hasFilmInCurrentTab)
             .ensure(this::ensureFilmLayoutPanels)
             .onChanged(this::onDockLayoutChanged)
-            .onLayoutSettled(this::applyPreviewSizeToBBS);
-        this.dock.addPanel(PANEL_EDIT_AREA_ID, this.editArea, Icons.EDITOR, UIKeys.FILM_PANELS_EDIT_AREA);
+            .onLayoutSettled(this::applyPreviewSizeToBBS)
+            .closeHandler(this::handleDockPanelClose)
+            .drawerHandler(this::handleDockPanelDrawer);
+        this.dock.addPanel(PANEL_EDIT_AREA_ID, this.editArea, Icons.EDITOR, UIKeys.FILM_MENU_RIGHT_PANEL);
         this.dock.addPanel(PANEL_MAIN_ID, this.main, Icons.FILM, UIKeys.FILM_PANELS_MAIN);
         this.dock.addPanel(PANEL_PREVIEW_ID, this.preview, Icons.VIDEO_CAMERA, UIKeys.FILM_PANELS_PREVIEW);
-        this.dock.addPanel(PANEL_REPLAYS_LIST_ID, this.replayEditor.replaysList, Icons.LIST, UIKeys.FILM_PANELS_REPLAYS_LIST);
+        this.dock.addPanel(PANEL_REPLAYS_LIST_ID, this.replayEditor.replaysList, Icons.LIST, UIKeys.FILM_MENU_LEFT_PANEL);
         this.dock.addPanel(PANEL_REPLAY_PROPS_ID, this.replayEditor.replayProperties, Icons.PROPERTIES, UIKeys.FILM_PANELS_REPLAY_PROPS);
         this.dock.mount();
-        this.editor.add(this.dock);
+
+        this.setupDrawers();
+        this.editor.add(this.menuBar, this.dock, this.leftDrawerTabBtn, this.rightDrawerTabBtn, this.leftDrawerOverlay, this.rightDrawerOverlay);
 
         this.fill(null);
 
@@ -422,9 +469,19 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
     }
 
     @Override
+    protected void mountLanding()
+    {
+        this.landing = new UIFilmHubScreen(this);
+
+        this.add(this.layoutUnderTopBar(this.landing));
+
+        this.syncLanding();
+    }
+
+    @Override
     public IKey getNewTabLabel()
     {
-        return UIKeys.FILM_TABS_NEW_TAB;
+        return UIKeys.NEW_TAB;
     }
 
     @Override
@@ -454,7 +511,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
     {
         UIElement selected = this.selectedMainEditorPanel == null ? this.cameraEditor : this.selectedMainEditorPanel;
         boolean mainActive = this.dock.isPanelActive(PANEL_MAIN_ID);
-        boolean editAreaActive = this.dock.isPanelActive(PANEL_EDIT_AREA_ID);
+        boolean editAreaActive = this.dock.isPanelActive(PANEL_EDIT_AREA_ID) || (this.rightDrawerActive && this.rightDrawerOpen);
         boolean visible = hasFilm && (mainActive || editAreaActive);
         boolean cameraVisible = visible && selected == this.cameraEditor;
         boolean replayVisible = visible && selected == this.replayEditor;
@@ -596,11 +653,27 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         {
             return;
         }
+        if (this.leftDrawerActive)
+        {
+            this.restoreLeftDrawerToLayout();
+        }
+        if (this.rightDrawerActive)
+        {
+            this.restoreRightDrawerToLayout();
+        }
         this.dock.applyLayoutRoot(EditorLayoutNode.fromData(layoutData));
     }
 
     private void resetFilmLayout()
     {
+        if (this.leftDrawerActive)
+        {
+            this.restoreLeftDrawerToLayout();
+        }
+        if (this.rightDrawerActive)
+        {
+            this.restoreRightDrawerToLayout();
+        }
         this.dock.resetLayout();
     }
 
@@ -616,24 +689,862 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         boolean hasList = ids.contains(PANEL_REPLAYS_LIST_ID);
         boolean hasProps = ids.contains(PANEL_REPLAY_PROPS_ID);
 
-        if (hasList && hasProps)
+        boolean listHidden = this.dock != null && this.dock.isPanelHidden(PANEL_REPLAYS_LIST_ID);
+        boolean propsHidden = this.dock != null && this.dock.isPanelHidden(PANEL_REPLAY_PROPS_ID);
+
+        /* If hidden or already present in tree, do not force/re-dock */
+        if ((hasList || listHidden) && (hasProps || propsHidden))
         {
             return root;
         }
 
         EditorLayoutNode out = root;
 
-        if (!hasList)
+        /* If neither is present and neither is hidden, re-dock the entire left column on the LEFT */
+        if (!hasList && !listHidden && !hasProps && !propsHidden)
         {
-            out = EditorLayoutNode.copyWithInsertSplitAt(out, PANEL_EDIT_AREA_ID, PANEL_REPLAYS_LIST_ID, EditorLayoutNode.EDGE_BOTTOM);
+            EditorLayoutNode leftCol = new EditorLayoutNode.SplitterNode(
+                true,
+                0.28479657F,
+                new EditorLayoutNode.PanelNode(PANEL_REPLAY_PROPS_ID),
+                new EditorLayoutNode.PanelNode(PANEL_REPLAYS_LIST_ID)
+            );
+
+            return new EditorLayoutNode.SplitterNode(false, 0.25F, leftCol, out);
         }
 
-        if (!hasProps)
+        if (!hasList && !listHidden)
         {
-            out = EditorLayoutNode.copyWithInsertSplitAt(out, PANEL_REPLAYS_LIST_ID, PANEL_REPLAY_PROPS_ID, EditorLayoutNode.EDGE_RIGHT);
+            if (hasProps)
+            {
+                out = EditorLayoutNode.copyWithInsertSplitAt(out, PANEL_REPLAY_PROPS_ID, PANEL_REPLAYS_LIST_ID, EditorLayoutNode.EDGE_BOTTOM);
+            }
+            else
+            {
+                out = EditorLayoutNode.copyWithInsertSplitAtRoot(out, PANEL_REPLAYS_LIST_ID, EditorLayoutNode.EDGE_LEFT, 0.25F);
+            }
+        }
+
+        if (!hasProps && !propsHidden)
+        {
+            if (hasList)
+            {
+                out = EditorLayoutNode.copyWithInsertSplitAt(out, PANEL_REPLAYS_LIST_ID, PANEL_REPLAY_PROPS_ID, EditorLayoutNode.EDGE_TOP);
+            }
+            else
+            {
+                out = EditorLayoutNode.copyWithInsertSplitAtRoot(out, PANEL_REPLAY_PROPS_ID, EditorLayoutNode.EDGE_LEFT, 0.25F);
+            }
         }
 
         return out;
+    }
+
+    /* UE5-style top menu bar */
+
+    public static final List<String> LEFT_PANEL_IDS = List.of(PANEL_REPLAYS_LIST_ID, PANEL_REPLAY_PROPS_ID);
+
+    public boolean isLeftPanelVisible()
+    {
+        return !this.dock.isPanelHidden(PANEL_REPLAYS_LIST_ID) || !this.dock.isPanelHidden(PANEL_REPLAY_PROPS_ID) || this.leftDrawerActive;
+    }
+
+    public void toggleLeftPanel()
+    {
+        if (this.leftDrawerActive)
+        {
+            this.restoreLeftDrawerToLayout();
+        }
+        else if (this.isLeftPanelVisible())
+        {
+            this.dock.hidePanels(LEFT_PANEL_IDS);
+        }
+        else
+        {
+            this.dock.showPanels(LEFT_PANEL_IDS);
+        }
+    }
+
+    public boolean isRightPanelVisible()
+    {
+        return !this.dock.isPanelHidden(PANEL_EDIT_AREA_ID) || this.rightDrawerActive;
+    }
+
+    public void toggleRightPanel()
+    {
+        if (this.rightDrawerActive)
+        {
+            this.restoreRightDrawerToLayout();
+        }
+        else if (this.isRightPanelVisible())
+        {
+            this.dock.hidePanel(PANEL_EDIT_AREA_ID);
+        }
+        else
+        {
+            this.dock.showPanel(PANEL_EDIT_AREA_ID);
+        }
+    }
+
+    private void fillWindowMenu(ContextMenuManager menu)
+    {
+        menu.action(this.isLeftPanelVisible() ? Icons.CHECKMARK : Icons.NONE, UIKeys.FILM_MENU_LEFT_PANEL, this::toggleLeftPanel);
+        menu.action(this.isRightPanelVisible() ? Icons.CHECKMARK : Icons.NONE, UIKeys.FILM_MENU_RIGHT_PANEL, this::toggleRightPanel);
+        menu.action(Icons.REFRESH, UIKeys.FILM_MENU_RESET_LAYOUT, this::resetFilmLayout);
+        this.dock.fillHiddenPanelsMenu(menu);
+    }
+
+    private void fillToolsMenu(ContextMenuManager menu)
+    {
+        menu.action(Icons.CAMERA, UIKeys.FILM_SCREENSHOT, () -> this.preview.takeScreenshot());
+        menu.action(Icons.REFRESH, UIKeys.FILM_RESET_REPLAYS, this.recorder.resetReplays, () -> this.recorder.resetReplays = !this.recorder.resetReplays);
+        menu.action(Icons.FILM, UIKeys.CAMERA_TOOLTIPS_OPEN_VIDEOS, () -> this.recorder.openMovies());
+    }
+
+    private void fillHelpMenu(ContextMenuManager menu)
+    {
+        menu.action(Icons.HELP, UIKeys.FILM_MENU_TOUR, () ->
+        {
+            UIElement overlay = this.getContext().menu.overlay;
+            UITour tour = new UITour(Tours.FILM, () -> {});
+            tour.full(overlay);
+            overlay.prepend(tour);
+            overlay.resize();
+        });
+        menu.action(Icons.PROPERTIES, UIKeys.FILM_MENU_DETAILS, () ->
+        {
+            UIOverlay.addOverlay(this.getContext(), new UIFilmDetailsOverlayPanel(this.getData()), 320, 310);
+        });
+        menu.action(Icons.SAVED, UIKeys.ONBOARDING_SETTINGS_SHOW_WELCOME, () ->
+        {
+            mchorse.bbs_mod.ui.onboarding.Onboarding.showWelcome(this.getContext());
+        });
+    }
+
+    private void setupMenuBar()
+    {
+        this.menuBar = new UIElement()
+        {
+            @Override
+            public void resize()
+            {
+                super.resize();
+                int currentX = 4;
+                for (IUIElement child : this.getChildren())
+                {
+                    if (child instanceof UIElement elem && elem.isVisible())
+                    {
+                        elem.area.x = this.area.x + currentX;
+                        elem.area.y = this.area.y;
+                        currentX += elem.area.w;
+                    }
+                }
+            }
+
+            @Override
+            public void render(UIContext context)
+            {
+                context.batcher.box(this.area.x, this.area.y, this.area.ex(), this.area.ey(), 0xEE121212);
+                context.batcher.box(this.area.x, this.area.ey() - 1, this.area.ex(), this.area.ey(), 0x22FFFFFF);
+                super.render(context);
+            }
+        };
+
+        this.menuBar.relative(this.editor).x(0).y(0).w(1F).h(16);
+
+        this.menuWindow = new UIMenuBarItem(UIKeys.FILM_MENU_WINDOW, (b) ->
+        {
+            this.getContext().replaceContextMenu(this::fillWindowMenu, b.area.x, b.area.ey() + 1);
+        });
+
+        this.menuTools = new UIMenuBarItem(UIKeys.FILM_MENU_TOOLS, (b) ->
+        {
+            this.getContext().replaceContextMenu(this::fillToolsMenu, b.area.x, b.area.ey() + 1);
+        });
+
+        this.menuHelp = new UIMenuBarItem(UIKeys.FILM_MENU_HELP, (b) ->
+        {
+            this.getContext().replaceContextMenu(this::fillHelpMenu, b.area.x, b.area.ey() + 1);
+        });
+
+        this.menuBar.add(this.menuWindow, this.menuTools, this.menuHelp);
+    }
+
+    public static class UIMenuBarItem extends UIClickable<UIMenuBarItem>
+    {
+        public IKey label;
+
+        public UIMenuBarItem(IKey label, Consumer<UIMenuBarItem> callback)
+        {
+            super(callback);
+            this.label = label;
+            this.h(16);
+        }
+
+        @Override
+        public void resize()
+        {
+            super.resize();
+            if (this.label != null)
+            {
+                int textW = Batcher2D.getDefaultTextRenderer().getWidth(this.label.get());
+                this.area.w = textW + 14;
+                this.area.h = 16;
+            }
+        }
+
+        @Override
+        protected UIMenuBarItem get()
+        {
+            return this;
+        }
+
+        @Override
+        protected void renderSkin(UIContext context)
+        {
+            if (this.hover)
+            {
+                context.batcher.box(this.area.x, this.area.y, this.area.ex(), this.area.ey(), 0x22FFFFFF);
+            }
+
+            if (this.label != null)
+            {
+                FontRenderer font = context.batcher.getFont();
+                String str = this.label.get();
+                int x = this.area.mx(font.getWidth(str));
+                int y = this.area.my(font.getHeight());
+                int color = this.hover ? Colors.WHITE : 0xFFCCCCCC;
+
+                context.batcher.text(str, x, y, color, false);
+            }
+        }
+    }
+
+    public void handleDockPanelClose(String panelId)
+    {
+        if (LEFT_PANEL_IDS.contains(panelId))
+        {
+            if (this.leftDrawerActive)
+            {
+                this.closeLeftDrawerCompletely();
+            }
+            else
+            {
+                this.dock.hidePanels(LEFT_PANEL_IDS);
+            }
+        }
+        else if (PANEL_EDIT_AREA_ID.equals(panelId))
+        {
+            if (this.rightDrawerActive)
+            {
+                this.closeRightDrawerCompletely();
+            }
+            else
+            {
+                this.dock.hidePanel(PANEL_EDIT_AREA_ID);
+            }
+        }
+        else
+        {
+            this.dock.hidePanel(panelId);
+        }
+    }
+
+    public void handleDockPanelDrawer(String panelId)
+    {
+        if (LEFT_PANEL_IDS.contains(panelId))
+        {
+            this.activateLeftDrawer();
+        }
+        else if (PANEL_EDIT_AREA_ID.equals(panelId))
+        {
+            this.activateRightDrawer();
+        }
+    }
+
+    private void setupDrawers()
+    {
+        this.leftDrawerTabBtn = new UIDrawerTabButton(Icons.LIST, UIKeys.FILM_MENU_LEFT_PANEL, true, (b) -> this.toggleLeftDrawer());
+        this.leftDrawerTabBtn.relative(this.editor).x(0).y(0.35F).anchorY(0.5F).w(20);
+        this.leftDrawerTabBtn.setVisible(false);
+
+        this.rightDrawerTabBtn = new UIDrawerTabButton(Icons.EDITOR, UIKeys.FILM_MENU_RIGHT_PANEL, false, (b) -> this.toggleRightDrawer());
+        this.rightDrawerTabBtn.relative(this.editor).x(1F).anchorX(1F).y(0.35F).anchorY(0.5F).w(20);
+        this.rightDrawerTabBtn.setVisible(false);
+
+        this.leftDrawerOverlay = new UIFilmDrawerContainer(this, "left", Icons.LIST, UIKeys.FILM_MENU_LEFT_PANEL);
+        this.leftDrawerOverlay.relative(this.editor).x(0).y(16).w(260).h(1F, -16);
+        this.leftDrawerOverlay.setVisible(false);
+
+        this.rightDrawerOverlay = new UIFilmDrawerContainer(this, "right", Icons.EDITOR, UIKeys.FILM_MENU_RIGHT_PANEL);
+        this.rightDrawerOverlay.relative(this.editor).x(1F).anchorX(1F).y(16).w(260).h(1F, -16);
+        this.rightDrawerOverlay.setVisible(false);
+    }
+
+    /* Left Drawer Methods */
+
+    public void toggleLeftDrawer()
+    {
+        if (this.leftDrawerOpen)
+        {
+            this.closeLeftDrawer();
+        }
+        else
+        {
+            this.openLeftDrawer();
+        }
+    }
+
+    public void openLeftDrawer()
+    {
+        this.leftDrawerOpen = true;
+        this.moveLeftPanelsToDrawer();
+        if (this.leftDrawerOverlay != null)
+        {
+            this.leftDrawerOverlay.setVisible(true);
+            this.leftDrawerOverlay.resize();
+        }
+    }
+
+    public void closeLeftDrawer()
+    {
+        this.leftDrawerOpen = false;
+        if (this.leftDrawerOverlay != null)
+        {
+            this.leftDrawerOverlay.setVisible(false);
+        }
+    }
+
+    public void activateLeftDrawer()
+    {
+        this.leftDrawerActive = true;
+        this.dock.hidePanels(LEFT_PANEL_IDS);
+        if (this.leftDrawerTabBtn != null)
+        {
+            this.leftDrawerTabBtn.setVisible(true);
+        }
+        this.closeLeftDrawer();
+    }
+
+    private void moveLeftPanelsToDrawer()
+    {
+        if (this.leftDrawerOverlay == null)
+        {
+            return;
+        }
+
+        UIElement content = this.leftDrawerOverlay.content;
+        if (content.getChildren().isEmpty())
+        {
+            UIDockSlot propsSlot = this.dock.getSlot(PANEL_REPLAY_PROPS_ID);
+            UIDockSlot listSlot = this.dock.getSlot(PANEL_REPLAYS_LIST_ID);
+
+            if (propsSlot != null)
+            {
+                propsSlot.remove(this.replayEditor.replayProperties);
+            }
+            if (listSlot != null)
+            {
+                listSlot.remove(this.replayEditor.replaysList);
+            }
+
+            this.replayEditor.replayProperties.relative(content).x(0).y(0).w(1F).h(140);
+            this.replayEditor.replaysList.relative(content).x(0).y(140).w(1F).h(1F, -140);
+
+            this.replayEditor.replayProperties.setVisible(true);
+            this.replayEditor.replaysList.setVisible(true);
+
+            content.add(this.replayEditor.replayProperties, this.replayEditor.replaysList);
+            content.resize();
+        }
+    }
+
+    public void restoreLeftDrawerToLayout()
+    {
+        this.leftDrawerActive = false;
+        this.leftDrawerOpen = false;
+        this.leftDrawerPinned = false;
+        if (this.leftDrawerTabBtn != null)
+        {
+            this.leftDrawerTabBtn.setVisible(false);
+        }
+        if (this.leftDrawerOverlay != null)
+        {
+            this.leftDrawerOverlay.setVisible(false);
+            UIElement content = this.leftDrawerOverlay.content;
+            content.remove(this.replayEditor.replayProperties);
+            content.remove(this.replayEditor.replaysList);
+        }
+
+        UIDockSlot propsSlot = this.dock.getSlot(PANEL_REPLAY_PROPS_ID);
+        UIDockSlot listSlot = this.dock.getSlot(PANEL_REPLAYS_LIST_ID);
+
+        if (propsSlot != null)
+        {
+            int inset = propsSlot.dragHandle.isVisible() ? UIDockLayout.TAB_HEADER_HEIGHT_PX : 0;
+            propsSlot.add(this.replayEditor.replayProperties);
+            this.replayEditor.replayProperties.relative(propsSlot).x(0F).y(0F, inset).w(1F).h(1F, -inset);
+        }
+        if (listSlot != null)
+        {
+            int inset = listSlot.dragHandle.isVisible() ? UIDockLayout.TAB_HEADER_HEIGHT_PX : 0;
+            listSlot.add(this.replayEditor.replaysList);
+            this.replayEditor.replaysList.relative(listSlot).x(0F).y(0F, inset).w(1F).h(1F, -inset);
+        }
+
+        this.dock.showPanels(LEFT_PANEL_IDS);
+    }
+
+    public void closeLeftDrawerCompletely()
+    {
+        this.closeLeftDrawer();
+        this.leftDrawerActive = false;
+        if (this.leftDrawerTabBtn != null)
+        {
+            this.leftDrawerTabBtn.setVisible(false);
+        }
+
+        if (this.leftDrawerOverlay != null)
+        {
+            UIElement content = this.leftDrawerOverlay.content;
+            content.remove(this.replayEditor.replayProperties);
+            content.remove(this.replayEditor.replaysList);
+        }
+
+        UIDockSlot propsSlot = this.dock.getSlot(PANEL_REPLAY_PROPS_ID);
+        UIDockSlot listSlot = this.dock.getSlot(PANEL_REPLAYS_LIST_ID);
+
+        if (propsSlot != null)
+        {
+            int inset = propsSlot.dragHandle.isVisible() ? UIDockLayout.TAB_HEADER_HEIGHT_PX : 0;
+            propsSlot.add(this.replayEditor.replayProperties);
+            this.replayEditor.replayProperties.relative(propsSlot).x(0F).y(0F, inset).w(1F).h(1F, -inset);
+        }
+        if (listSlot != null)
+        {
+            int inset = listSlot.dragHandle.isVisible() ? UIDockLayout.TAB_HEADER_HEIGHT_PX : 0;
+            listSlot.add(this.replayEditor.replaysList);
+            this.replayEditor.replaysList.relative(listSlot).x(0F).y(0F, inset).w(1F).h(1F, -inset);
+        }
+
+        this.dock.hidePanels(LEFT_PANEL_IDS);
+    }
+
+    /* Right Drawer Methods */
+
+    public void toggleRightDrawer()
+    {
+        if (this.rightDrawerOpen)
+        {
+            this.closeRightDrawer();
+        }
+        else
+        {
+            this.openRightDrawer();
+        }
+    }
+
+    public void openRightDrawer()
+    {
+        this.rightDrawerOpen = true;
+        this.moveRightPanelToDrawer();
+        if (this.rightDrawerOverlay != null)
+        {
+            this.rightDrawerOverlay.setVisible(true);
+            this.rightDrawerOverlay.resize();
+        }
+        this.updateMainEditorVisibility(this.hasFilmInCurrentTab());
+    }
+
+    public void closeRightDrawer()
+    {
+        this.rightDrawerOpen = false;
+        if (this.rightDrawerOverlay != null)
+        {
+            this.rightDrawerOverlay.setVisible(false);
+        }
+        this.updateMainEditorVisibility(this.hasFilmInCurrentTab());
+    }
+
+    public void activateRightDrawer()
+    {
+        this.rightDrawerActive = true;
+        this.dock.hidePanel(PANEL_EDIT_AREA_ID);
+        if (this.rightDrawerTabBtn != null)
+        {
+            this.rightDrawerTabBtn.setVisible(true);
+        }
+        this.closeRightDrawer();
+    }
+
+    private void moveRightPanelToDrawer()
+    {
+        if (this.rightDrawerOverlay == null)
+        {
+            return;
+        }
+
+        UIElement content = this.rightDrawerOverlay.content;
+        if (content.getChildren().isEmpty())
+        {
+            UIDockSlot slot = this.dock.getSlot(PANEL_EDIT_AREA_ID);
+            if (slot != null)
+            {
+                slot.remove(this.editArea);
+            }
+
+            this.editArea.relative(content).x(0).y(0).w(1F).h(1F);
+            this.editArea.setVisible(true);
+            content.add(this.editArea);
+            content.resize();
+        }
+    }
+
+    public void restoreRightDrawerToLayout()
+    {
+        this.rightDrawerActive = false;
+        this.rightDrawerOpen = false;
+        this.rightDrawerPinned = false;
+        if (this.rightDrawerTabBtn != null)
+        {
+            this.rightDrawerTabBtn.setVisible(false);
+        }
+        if (this.rightDrawerOverlay != null)
+        {
+            this.rightDrawerOverlay.setVisible(false);
+            UIElement content = this.rightDrawerOverlay.content;
+            content.remove(this.editArea);
+        }
+
+        UIDockSlot slot = this.dock.getSlot(PANEL_EDIT_AREA_ID);
+        if (slot != null)
+        {
+            int inset = slot.dragHandle.isVisible() ? UIDockLayout.TAB_HEADER_HEIGHT_PX : 0;
+            slot.add(this.editArea);
+            this.editArea.relative(slot).x(0F).y(0F, inset).w(1F).h(1F, -inset);
+        }
+
+        this.dock.showPanel(PANEL_EDIT_AREA_ID);
+        this.updateMainEditorVisibility(this.hasFilmInCurrentTab());
+    }
+
+    public void closeRightDrawerCompletely()
+    {
+        this.closeRightDrawer();
+        this.rightDrawerActive = false;
+        if (this.rightDrawerTabBtn != null)
+        {
+            this.rightDrawerTabBtn.setVisible(false);
+        }
+
+        if (this.rightDrawerOverlay != null)
+        {
+            UIElement content = this.rightDrawerOverlay.content;
+            content.remove(this.editArea);
+        }
+
+        UIDockSlot slot = this.dock.getSlot(PANEL_EDIT_AREA_ID);
+        if (slot != null)
+        {
+            int inset = slot.dragHandle.isVisible() ? UIDockLayout.TAB_HEADER_HEIGHT_PX : 0;
+            slot.add(this.editArea);
+            this.editArea.relative(slot).x(0F).y(0F, inset).w(1F).h(1F, -inset);
+        }
+
+        this.dock.hidePanel(PANEL_EDIT_AREA_ID);
+        this.updateMainEditorVisibility(this.hasFilmInCurrentTab());
+    }
+
+    public static class UIDrawerTabButton extends UIClickable<UIDrawerTabButton>
+    {
+        public final Icon icon;
+        public final IKey label;
+        public final boolean isLeft;
+
+        public UIDrawerTabButton(Icon icon, IKey label, boolean isLeft, Consumer<UIDrawerTabButton> callback)
+        {
+            super(callback);
+            this.icon = icon;
+            this.label = label;
+            this.isLeft = isLeft;
+            int textW = label != null ? Batcher2D.getDefaultTextRenderer().getWidth(label.get()) : 0;
+            this.w(20).h(textW + 32);
+        }
+
+        @Override
+        public void resize()
+        {
+            if (this.label != null)
+            {
+                int textW = Batcher2D.getDefaultTextRenderer().getWidth(this.label.get());
+                this.h(textW + 32);
+            }
+            super.resize();
+            this.area.w = 20;
+        }
+
+        @Override
+        protected UIDrawerTabButton get()
+        {
+            return this;
+        }
+
+        @Override
+        protected void renderSkin(UIContext context)
+        {
+            Area a = this.area;
+            int bg = this.hover ? 0xEE2A2A2A : 0xDD1E1E1E;
+            context.batcher.box(a.x, a.y, a.ex(), a.ey(), bg);
+            context.batcher.outline(a.x, a.y, a.ex(), a.ey(), 0x33FFFFFF);
+
+            if (this.isLeft)
+            {
+                context.batcher.box(a.ex() - 1, a.y, a.ex(), a.ey(), this.hover ? 0x88FFFFFF : 0x44FFFFFF);
+            }
+            else
+            {
+                context.batcher.box(a.x, a.y, a.x + 1, a.ey(), this.hover ? 0x88FFFFFF : 0x44FFFFFF);
+            }
+
+            if (this.hover)
+            {
+                context.requestCursor(GLFW.GLFW_HAND_CURSOR);
+            }
+
+            context.batcher.flush();
+            context.batcher.getContext().draw();
+            MatrixStack matrices = context.batcher.getContext().getMatrices();
+            matrices.push();
+
+            try
+            {
+                if (this.isLeft)
+                {
+                    matrices.translate(a.x, a.ey(), 0);
+                    matrices.multiply(RotationAxis.POSITIVE_Z.rotationDegrees(-90F));
+                }
+                else
+                {
+                    matrices.translate(a.ex(), a.y, 0);
+                    matrices.multiply(RotationAxis.POSITIVE_Z.rotationDegrees(90F));
+                }
+
+                FontRenderer font = context.batcher.getFont();
+                int textW = this.label != null ? font.getWidth(this.label.get()) : 0;
+                int contentW = (this.icon != null ? 18 : 0) + textW;
+                int curX = Math.max(4, (a.h - contentW) / 2);
+
+                if (this.icon != null)
+                {
+                    context.batcher.icon(this.icon, Colors.WHITE, curX, (a.w - 16) / 2);
+                    curX += 18;
+                }
+
+                if (this.label != null)
+                {
+                    context.batcher.text(this.label.get(), curX, (a.w - font.getHeight()) / 2 + 1, this.hover ? Colors.WHITE : 0xFFCCCCCC, false);
+                }
+
+                context.batcher.flush();
+                context.batcher.getContext().draw();
+            }
+            finally
+            {
+                matrices.pop();
+            }
+        }
+    }
+
+    public static class UIFilmDrawerContainer extends UIElement
+    {
+        public final UIFilmPanel filmPanel;
+        public final String side;
+        public final Icon icon;
+        public final IKey title;
+        public final UIElement content;
+        public final UIElement header;
+        public final UIIcon pinBtn;
+        public final UIIcon restoreBtn;
+        public final UIIcon closeBtn;
+
+        public UIFilmDrawerContainer(UIFilmPanel filmPanel, String side, Icon icon, IKey title)
+        {
+            this.filmPanel = filmPanel;
+            this.side = side;
+            this.icon = icon;
+            this.title = title;
+
+            this.header = new UIElement()
+            {
+                @Override
+                public void render(UIContext context)
+                {
+                    context.batcher.box(this.area.x, this.area.y, this.area.ex(), this.area.ey(), 0xDD1E1E1E);
+                    context.batcher.box(this.area.x, this.area.ey() - 1, this.area.ex(), this.area.ey(), 0x22FFFFFF);
+
+                    if (UIFilmDrawerContainer.this.icon != null)
+                    {
+                        context.batcher.icon(UIFilmDrawerContainer.this.icon, Colors.WHITE, this.area.x + 4, this.area.y + 2, 16, 16);
+                    }
+
+                    if (UIFilmDrawerContainer.this.title != null)
+                    {
+                        FontRenderer font = context.batcher.getFont();
+                        int y = this.area.my(font.getHeight());
+                        context.batcher.text(UIFilmDrawerContainer.this.title.get(), this.area.x + 22, y, 0xFFD0D0D0, false);
+                    }
+
+                    super.render(context);
+                }
+
+                @Override
+                protected boolean subMouseClicked(UIContext context)
+                {
+                    if (context.mouseButton == 1 && this.area.isInside(context))
+                    {
+                        context.replaceContextMenu((menu) ->
+                        {
+                            menu.action(Icons.MAXIMIZE, UIKeys.DOCK_RESTORE_TO_LAYOUT, () ->
+                            {
+                                if ("left".equals(UIFilmDrawerContainer.this.side))
+                                {
+                                    UIFilmDrawerContainer.this.filmPanel.restoreLeftDrawerToLayout();
+                                }
+                                else
+                                {
+                                    UIFilmDrawerContainer.this.filmPanel.restoreRightDrawerToLayout();
+                                }
+                            });
+                            menu.action(Icons.CLOSE, UIKeys.DOCK_CLOSE_PANEL, () ->
+                            {
+                                if ("left".equals(UIFilmDrawerContainer.this.side))
+                                {
+                                    UIFilmDrawerContainer.this.filmPanel.closeLeftDrawerCompletely();
+                                }
+                                else
+                                {
+                                    UIFilmDrawerContainer.this.filmPanel.closeRightDrawerCompletely();
+                                }
+                            });
+                        }, context.mouseX, context.mouseY);
+                        return true;
+                    }
+                    return super.subMouseClicked(context);
+                }
+            };
+            this.header.relative(this).x(0).y(0).w(1F).h(20);
+
+            boolean isLeft = "left".equals(side);
+            this.pinBtn = new UIIcon(Icons.FAVORITE, (b) ->
+            {
+                if (isLeft)
+                {
+                    this.filmPanel.leftDrawerPinned = !this.filmPanel.leftDrawerPinned;
+                }
+                else
+                {
+                    this.filmPanel.rightDrawerPinned = !this.filmPanel.rightDrawerPinned;
+                }
+            });
+            this.pinBtn.tooltip(UIKeys.DOCK_PIN_PANEL);
+
+            this.restoreBtn = new UIIcon(Icons.MAXIMIZE, (b) ->
+            {
+                if (isLeft)
+                {
+                    this.filmPanel.restoreLeftDrawerToLayout();
+                }
+                else
+                {
+                    this.filmPanel.restoreRightDrawerToLayout();
+                }
+            });
+            this.restoreBtn.tooltip(UIKeys.DOCK_RESTORE_TO_LAYOUT);
+
+            this.closeBtn = new UIIcon(Icons.CLOSE, (b) ->
+            {
+                if (isLeft)
+                {
+                    this.filmPanel.closeLeftDrawer();
+                }
+                else
+                {
+                    this.filmPanel.closeRightDrawer();
+                }
+            })
+            {
+                @Override
+                protected void renderSkin(UIContext context)
+                {
+                    if (this.hover)
+                    {
+                        context.batcher.box(this.area.x, this.area.y, this.area.ex(), this.area.ey(), 0x66E81123);
+                    }
+                    super.renderSkin(context);
+                }
+            };
+            this.closeBtn.tooltip(UIKeys.DOCK_CLOSE_PANEL);
+
+            this.header.add(
+                this.pinBtn.relative(this.header).x(1F, -54).y(2).w(16).h(16),
+                this.restoreBtn.relative(this.header).x(1F, -36).y(2).w(16).h(16),
+                this.closeBtn.relative(this.header).x(1F, -18).y(2).w(16).h(16)
+            );
+
+            this.content = new UIElement();
+            this.content.relative(this).x(0).y(20).w(1F).h(1F, -20);
+
+            this.add(this.header, this.content);
+        }
+
+        @Override
+        public void resize()
+        {
+            super.resize();
+            if (this.getParent() != null && this.getParent().area.w > 0)
+            {
+                int maxAllowed = Math.max(160, (int) (this.getParent().area.w * 0.45F));
+                int targetW = Math.min(260, maxAllowed);
+                this.area.w = targetW;
+                if ("right".equals(this.side))
+                {
+                    this.area.x = this.getParent().area.ex() - targetW;
+                }
+            }
+        }
+
+        @Override
+        protected boolean subMouseClicked(UIContext context)
+        {
+            return this.area.isInside(context);
+        }
+
+        @Override
+        protected boolean subMouseScrolled(UIContext context)
+        {
+            return this.area.isInside(context);
+        }
+
+        @Override
+        public void render(UIContext context)
+        {
+            if (!this.isVisible())
+            {
+                return;
+            }
+
+            context.batcher.box(this.area.x, this.area.y, this.area.ex(), this.area.ey(), 0xF5181818);
+            context.batcher.outline(this.area.x, this.area.y, this.area.ex(), this.area.ey(), 0x33FFFFFF);
+
+            boolean pinned = "left".equals(this.side) ? this.filmPanel.leftDrawerPinned : this.filmPanel.rightDrawerPinned;
+            if (pinned)
+            {
+                Area pa = this.pinBtn.area;
+                context.batcher.box(pa.x, pa.y, pa.ex(), pa.ey(), 0x55FFFFFF);
+            }
+
+            super.render(context);
+        }
     }
 
     private void fillFilmContextMenu(ContextMenuManager menu)
@@ -1352,6 +2263,158 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.notifyServer(ActionState.RESTART);
     }
 
+    private long lastThumbnailCaptureTime;
+
+    /**
+     * Automatically capture current viewport/FBO frame and save as a compact PNG thumbnail
+     * for the film hub project selector cards.
+     */
+    public void captureFilmThumbnail()
+    {
+        if (this.data == null || this.data.getId() == null || this.data.getId().trim().isEmpty() || MinecraftClient.getInstance().world == null)
+        {
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        if (now - this.lastThumbnailCaptureTime < 1000L)
+        {
+            return;
+        }
+        this.lastThumbnailCaptureTime = now;
+
+        Framebuffer fb = BBSRendering.getFramebuffer();
+        Texture texture = BBSRendering.getTexture();
+
+        int textureId = 0;
+        int width = 0;
+        int height = 0;
+
+        if (fb != null && fb.getColorAttachment() > 0 && fb.textureWidth > 0 && fb.textureHeight > 0)
+        {
+            textureId = fb.getColorAttachment();
+            width = fb.textureWidth;
+            height = fb.textureHeight;
+        }
+        else if (texture != null && texture.id > 0 && texture.width > 0 && texture.height > 0)
+        {
+            textureId = texture.id;
+            width = texture.width;
+            height = texture.height;
+        }
+
+        if (textureId <= 0 || width <= 0 || height <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            FloatBuffer pixelData = BufferUtils.createFloatBuffer(width * height * 4);
+            GlStateManager._bindTexture(textureId);
+            GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, GL11.GL_FLOAT, pixelData);
+            pixelData.rewind();
+
+            int targetW = 320;
+            int targetH = Math.max(1, (int) Math.round((double) height * targetW / width));
+
+            if (width <= targetW)
+            {
+                targetW = width;
+                targetH = height;
+            }
+
+            int[] targetPixels = new int[targetW * targetH];
+
+            for (int ty = 0; ty < targetH; ty++)
+            {
+                int sy = (height - 1) - (ty * height / targetH);
+
+                for (int tx = 0; tx < targetW; tx++)
+                {
+                    int sx = tx * width / targetW;
+                    int offset = (sy * width + sx) * 4;
+
+                    float r = pixelData.get(offset) * 255.0F;
+                    float g = pixelData.get(offset + 1) * 255.0F;
+                    float b = pixelData.get(offset + 2) * 255.0F;
+
+                    int ir = Math.min(255, Math.max(0, (int) r));
+                    int ig = Math.min(255, Math.max(0, (int) g));
+                    int ib = Math.min(255, Math.max(0, (int) b));
+
+                    targetPixels[ty * targetW + tx] = 0xFF000000 | (ir << 16) | (ig << 8) | ib;
+                }
+            }
+
+            final String filmId = this.data.getId();
+            final int fw = targetW;
+            final int fh = targetH;
+
+            Thread thread = new Thread(() ->
+            {
+                try
+                {
+                    File folder = BBSMod.getFilms() != null ? BBSMod.getFilms().getFolder() : null;
+
+                    if (folder != null)
+                    {
+                        if (!folder.exists())
+                        {
+                            folder.mkdirs();
+                        }
+                        File thumbFolder = new File(folder, "thumbnails");
+                        if (!thumbFolder.exists())
+                        {
+                            thumbFolder.mkdirs();
+                        }
+                        File thumbFile = new File(thumbFolder, filmId + ".png");
+
+                        Pixels pixels = Pixels.fromIntArray(fw, fh, targetPixels);
+
+                        try
+                        {
+                            PNGEncoder.writeToFile(pixels, thumbFile);
+                        }
+                        finally
+                        {
+                            pixels.delete();
+                        }
+
+                        MinecraftClient mc = MinecraftClient.getInstance();
+
+                        if (mc != null)
+                        {
+                            mc.execute(() -> UIFilmHubScreen.invalidateThumbnail(filmId));
+                        }
+                        else
+                        {
+                            UIFilmHubScreen.invalidateThumbnail(filmId);
+                        }
+                    }
+                }
+                catch (Throwable t)
+                {
+                    /* Silent ignore thumbnail write exceptions */
+                }
+            }, "BBS-Film-Thumbnail-Saver");
+
+            thread.setDaemon(true);
+            thread.start();
+        }
+        catch (Throwable t)
+        {
+            /* Silent ignore GL read errors */
+        }
+    }
+
+    @Override
+    public void forceSave()
+    {
+        super.forceSave();
+        this.captureFilmThumbnail();
+    }
+
     /**
      * Leaving the screen. The world effects are not undone here: an editor that was on screen has
      * already been through {@link #leaveEditing()} by the time this runs (see
@@ -1359,6 +2422,8 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
      */
     private void leaveScreen()
     {
+        this.captureFilmThumbnail();
+
         if (this.queueExporter != null)
         {
             this.queueExporter.cancel();
@@ -1403,6 +2468,8 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
 
     private void leaveEditing()
     {
+        this.captureFilmThumbnail();
+
         BBSRendering.setCustomSize(false);
         MorphRenderer.hidePlayer = false;
 
@@ -1556,13 +2623,92 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         if (data != null)
         {
             this.filmUserActivity.onFilmOpened();
+            this.startSceneWarmUp();
         }
         else
         {
             this.filmUserActivity.reset();
+            this.sceneWarmingUp = false;
         }
 
         this.updateTabVisibility();
+    }
+
+    public void startSceneWarmUp()
+    {
+        if (BBSModClient.getVideoRecorder().isRecording())
+        {
+            this.sceneWarmingUp = false;
+            return;
+        }
+
+        this.sceneWarmingUp = true;
+        this.sceneWarmUpStartTime = System.currentTimeMillis();
+
+        if (this.data != null && this.data.camera != null)
+        {
+            for (Clip clip : this.data.camera.get())
+            {
+                if (clip instanceof AudioClip audioClip)
+                {
+                    Link link = audioClip.audio.get();
+                    if (link != null)
+                    {
+                        BBSModClient.getSounds().preload(link);
+                    }
+                }
+            }
+        }
+    }
+
+    public boolean isSceneWarmingUp()
+    {
+        if (BBSModClient.getVideoRecorder().isRecording())
+        {
+            return false;
+        }
+
+        if (!this.sceneWarmingUp)
+        {
+            return false;
+        }
+
+        long elapsed = System.currentTimeMillis() - this.sceneWarmUpStartTime;
+        if (elapsed > SCENE_WARMUP_TIMEOUT_MS)
+        {
+            this.sceneWarmingUp = false;
+            return false;
+        }
+
+        if (this.data != null && this.data.camera != null)
+        {
+            boolean allLoaded = true;
+            for (Clip clip : this.data.camera.get())
+            {
+                if (clip instanceof AudioClip audioClip)
+                {
+                    Link link = audioClip.audio.get();
+                    if (link != null && !BBSModClient.getSounds().isBufferLoaded(link))
+                    {
+                        allLoaded = false;
+                        break;
+                    }
+                }
+            }
+
+            if (allLoaded && elapsed >= 150L)
+            {
+                this.sceneWarmingUp = false;
+                return false;
+            }
+        }
+        else
+        {
+            this.sceneWarmingUp = false;
+            return false;
+        }
+
+        return true;
     }
 
     public void undo()
@@ -2081,6 +3227,11 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
 
     public void togglePlayback()
     {
+        if (this.isSceneWarmingUp())
+        {
+            return;
+        }
+
         this.setFlight(false);
 
         this.runner.toggle(this.getCursor());
@@ -2179,6 +3330,31 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         {
             this.controller.updateActors(actors);
         }
+    }
+
+    @Override
+    protected IUIElement childrenMouseClicked(UIContext context)
+    {
+        if (context.mouseButton == 0)
+        {
+            if (this.leftDrawerOpen && !this.leftDrawerPinned && this.leftDrawerOverlay != null && this.leftDrawerTabBtn != null)
+            {
+                if (!this.leftDrawerOverlay.area.isInside(context) && !this.leftDrawerTabBtn.area.isInside(context))
+                {
+                    this.closeLeftDrawer();
+                }
+            }
+
+            if (this.rightDrawerOpen && !this.rightDrawerPinned && this.rightDrawerOverlay != null && this.rightDrawerTabBtn != null)
+            {
+                if (!this.rightDrawerOverlay.area.isInside(context) && !this.rightDrawerTabBtn.area.isInside(context))
+                {
+                    this.closeRightDrawer();
+                }
+            }
+        }
+
+        return super.childrenMouseClicked(context);
     }
 
     @Override

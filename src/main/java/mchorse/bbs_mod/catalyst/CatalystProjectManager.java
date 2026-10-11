@@ -39,6 +39,18 @@ public class CatalystProjectManager
         return folder;
     }
 
+    public static File getThumbnailsFolder()
+    {
+        File folder = new File(getProjectsFolder(), "thumbnails");
+
+        if (!folder.exists())
+        {
+            folder.mkdirs();
+        }
+
+        return folder;
+    }
+
     private static String hashString(String input)
     {
         try
@@ -138,11 +150,23 @@ public class CatalystProjectManager
         }
 
         File file = getProjectFile(project.name);
+        File parent = file.getParentFile();
+
+        if (parent != null && !parent.exists())
+        {
+            parent.mkdirs();
+        }
 
         /* If the target file previously failed to load as damaged, ensure it was backed up before overwrite */
         if (file.exists() && isProjectDamaged(file.getName()))
         {
             File backup = new File(file.getParentFile(), file.getName() + ".corrupt-" + System.currentTimeMillis());
+            File backupParent = backup.getParentFile();
+
+            if (backupParent != null && !backupParent.exists())
+            {
+                backupParent.mkdirs();
+            }
 
             try
             {

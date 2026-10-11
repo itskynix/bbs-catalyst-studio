@@ -23,6 +23,7 @@ import mchorse.bbs_mod.ui.ContentType;
 import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.dashboard.UIDashboard;
 import mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystCompTab;
+import mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystHubScreen;
 import mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystProjectList;
 import mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTab;
 import mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline;
@@ -68,6 +69,9 @@ import org.lwjgl.glfw.GLFW;
 
 import mchorse.bbs_mod.resources.AssetProvider;
 import mchorse.bbs_mod.utils.resources.Pixels;
+import mchorse.bbs_mod.utils.PNGEncoder;
+import org.lwjgl.BufferUtils;
+import java.nio.FloatBuffer;
 import mchorse.bbs_mod.utils.UnsafeUtils;
 import sun.misc.Unsafe;
 import java.io.BufferedOutputStream;
@@ -139,6 +143,7 @@ public class UICatalystPanel extends UIDashboardPanel
     private org.lwjgl.glfw.GLFWDropCallback prevDropCallback = null;
 
     /* ── View 1: Projects ── */
+    public UICatalystHubScreen    hub;
     public UIElement              projectsView;
     public UIElement              projectListColumn;
     public UIElement              projectListHeader;
@@ -383,6 +388,10 @@ public class UICatalystPanel extends UIDashboardPanel
         {
             this.isPlaying = false;
             this.stopAllAudio();
+            if (this.activeProject != null && this.currentTab == CatalystTab.EDITOR)
+            {
+                this.captureProjectThumbnail(this.activeProject);
+            }
             cleanupProjectResources(this.activeProject);
             if (this.isExporting)
             {
@@ -486,6 +495,11 @@ public class UICatalystPanel extends UIDashboardPanel
             }
         }
 
+        if (this.currentTab == CatalystTab.EDITOR && tab == CatalystTab.PROJECTS && this.activeProject != null)
+        {
+            this.captureProjectThumbnail(this.activeProject);
+        }
+
         this.currentTab = tab;
         this.updateVisibility();
 
@@ -569,15 +583,15 @@ public class UICatalystPanel extends UIDashboardPanel
             }
             this.currentFrame = 0;
 
-            this.nameInput.setText(project.name);
-            this.fpsInput.setValue(project.fps);
-            this.durationSecondsInput.setValue(project.durationSeconds);
-            this.widthInput.setValue(project.width);
-            this.heightInput.setValue(project.height);
+            if (this.nameInput != null) this.nameInput.setText(project.name);
+            if (this.fpsInput != null) this.fpsInput.setValue(project.fps);
+            if (this.durationSecondsInput != null) this.durationSecondsInput.setValue(project.durationSeconds);
+            if (this.widthInput != null) this.widthInput.setValue(project.width);
+            if (this.heightInput != null) this.heightInput.setValue(project.height);
             this.updateDurationCalcLabel();
 
-            this.openProjectButton.label = UIKeys.CATALYST_PROJECTS_OPEN;
-            this.deleteProjectButton.setVisible(true);
+            if (this.openProjectButton != null) this.openProjectButton.label = UIKeys.CATALYST_PROJECTS_OPEN;
+            if (this.deleteProjectButton != null) this.deleteProjectButton.setVisible(true);
 
             this.rebuildCompTabs();
         }
@@ -587,12 +601,20 @@ public class UICatalystPanel extends UIDashboardPanel
 
     public void refreshProjects()
     {
-        List<CatalystProject> projects = CatalystProjectManager.loadAllProjects();
-        this.projectList.setList(projects);
-
-        if (this.activeProject != null)
+        if (this.hub != null)
         {
-            this.projectList.setCurrent(this.activeProject);
+            this.hub.refresh();
+        }
+
+        if (this.projectList != null)
+        {
+            List<CatalystProject> projects = CatalystProjectManager.loadAllProjects();
+            this.projectList.setList(projects);
+
+            if (this.activeProject != null)
+            {
+                this.projectList.setCurrent(this.activeProject);
+            }
         }
     }
 
@@ -1358,129 +1380,158 @@ public class UICatalystPanel extends UIDashboardPanel
 
     private void setupProjectsView()
     {
-        this.projectsView = new UIElement();
+        this.hub = new UICatalystHubScreen(this);
+        this.projectsView = this.hub;
         this.projectsView.relative(this).y(24).w(1F).h(1F, -24);
 
-        /* Solid opaque background — completely covers editor views below */
-        this.projectsView.add(new UIRenderable((context) ->
-        {
-            Area a = this.projectsView.area;
-            context.batcher.box(a.x, a.y, a.ex(), a.ey(), BBSSettings.deepSurface());
-        }));
-
-        /* Left Column */
-        this.projectListColumn = new UIElement();
-        this.projectListColumn.relative(this.projectsView).w(320).h(1F);
-
-        this.projectListHeader = new UIElement();
-        this.projectListHeader.relative(this.projectListColumn).w(1F).h(24);
-        this.projectListHeader.add(new UIRenderable((context) ->
-        {
-            Area a = this.projectListHeader.area;
-            context.batcher.box(a.x, a.y, a.ex(), a.ey(), BBSSettings.chromeSurface());
-            context.batcher.box(a.x, a.ey() - 1, a.ex(), a.ey(), BBSSettings.dividerColor());
-
-            FontRenderer font = context.batcher.getFont();
-            String lbl = UIKeys.CATALYST_PROJECTS_TITLE.get() + " (" + this.projectList.getList().size() + ")";
-            context.batcher.text(lbl, a.x + 8, a.y + (a.h - font.getHeight()) / 2, Colors.WHITE, false);
-        }));
-
-        this.newProjectHeaderBtn = new UIIcon(Icons.ADD, (b) -> this.clearForm());
-        this.newProjectHeaderBtn.tooltip(UIKeys.CATALYST_PROJECTS_NEW);
-
-        this.openFolderBtn = new UIIcon(Icons.FOLDER, (b) -> UIUtils.openFolder(CatalystProjectManager.getProjectsFolder()));
-        this.openFolderBtn.tooltip(IKey.raw("Open Projects Folder"));
-
-        this.refreshBtn = new UIIcon(Icons.REFRESH, (b) -> this.refreshProjects());
-        this.refreshBtn.tooltip(IKey.raw("Refresh List"));
-
-        this.refreshBtn.relative(this.projectListHeader).x(1F, -22).y(2).w(20).h(20);
-        this.openFolderBtn.relative(this.projectListHeader).x(1F, -44).y(2).w(20).h(20);
-        this.newProjectHeaderBtn.relative(this.projectListHeader).x(1F, -66).y(2).w(20).h(20);
-        this.projectListHeader.add(this.refreshBtn, this.openFolderBtn, this.newProjectHeaderBtn);
-
+        /* Initialize legacy form fields in background to ensure non-null references */
         this.projectList = new UICatalystProjectList((selected) ->
         {
             if (!selected.isEmpty()) this.setActiveProject(selected.get(0));
         });
-        this.projectList.onOpen((project) ->
-        {
-            this.setActiveProject(project);
-            this.setTab(CatalystTab.EDITOR);
-        });
-        this.projectList.relative(this.projectListColumn).y(24).w(1F).h(1F, -24);
-
-        this.projectListColumn.add(new UIRenderable((context) ->
-        {
-            Area a = this.projectListColumn.area;
-            context.batcher.box(a.ex() - 1, a.y, a.ex(), a.ey(), BBSSettings.dividerColor());
-        }));
-        this.projectListColumn.add(this.projectListHeader, this.projectList);
-
-        /* Right Column */
-        this.projectDetailsColumn = new UIElement();
-        this.projectDetailsColumn.relative(this.projectsView).x(320).w(1F, -320).h(1F);
-
-        this.projectDetailsColumn.add(new UIRenderable((context) ->
-        {
-            Area a = this.projectDetailsColumn.area;
-            context.batcher.box(a.x, a.y, a.ex(), a.ey(), BBSSettings.deepSurface());
-        }));
-
-        /* Form controls */
         this.nameInput = new UITextbox(120, (text) -> {});
         this.nameInput.setText("New Project");
-
         this.fpsInput = new UITrackpad((v) -> this.updateDurationCalcLabel());
         this.fpsInput.limit(1, 240, true).setValue(60);
-
         this.durationSecondsInput = new UITrackpad((v) -> this.updateDurationCalcLabel());
         this.durationSecondsInput.limit(0.1, 3600.0).setValue(5.0);
-
         this.durationCalcLabel = new UILabel(IKey.raw("5.0 sn (300 Frame @ 60 FPS)"), Colors.GRAY);
-
         this.widthInput = new UITrackpad((v) -> {});
         this.widthInput.limit(128, 7680, true).setValue(1920);
-
         this.heightInput = new UITrackpad((v) -> {});
         this.heightInput.limit(128, 4320, true).setValue(1080);
+        this.openProjectButton = new UIButton(UIKeys.CATALYST_PROJECTS_CREATE_OPEN, (b) -> this.openOrCreateProject());
+        this.clearFormButton = new UIButton(UIKeys.CATALYST_PROJECTS_NEW, (b) -> this.clearForm());
+        this.deleteProjectButton = new UIButton(UIKeys.CATALYST_PROJECTS_DELETE, (b) -> this.deleteSelectedProject());
+    }
 
-        this.openProjectButton  = new UIButton(UIKeys.CATALYST_PROJECTS_CREATE_OPEN, (b) -> this.openOrCreateProject());
-        this.clearFormButton    = new UIButton(UIKeys.CATALYST_PROJECTS_NEW, (b) -> this.clearForm());
-        this.deleteProjectButton= new UIButton(UIKeys.CATALYST_PROJECTS_DELETE, (b) -> this.deleteSelectedProject());
-        this.deleteProjectButton.color(0xAA882222, 0xCCAA3333);
-        this.deleteProjectButton.setVisible(false);
+    private long lastThumbnailCaptureTime = 0L;
 
-        this.nameInput.h(20);
-        this.fpsInput.h(20);
-        this.durationSecondsInput.h(20);
-        this.durationCalcLabel.h(16);
-        this.widthInput.h(20);
-        this.heightInput.h(20);
-        this.openProjectButton.h(20);
-        this.clearFormButton.h(20);
-        this.deleteProjectButton.h(20);
+    public void captureProjectThumbnail(CatalystProject project)
+    {
+        if (project == null)
+        {
+            return;
+        }
 
-        UIElement formContainer = UI.column(
-            6,
-            UI.label(UIKeys.CATALYST_PROJECTS_NAME).h(16),
-            this.nameInput,
-            UI.label(UIKeys.CATALYST_PROJECTS_FPS).h(16),
-            this.fpsInput,
-            UI.label(UIKeys.CATALYST_PROJECTS_DURATION).h(16),
-            this.durationSecondsInput,
-            this.durationCalcLabel,
-            UI.label(UIKeys.CATALYST_PROJECTS_RESOLUTION).h(16),
-            UI.row(this.widthInput, this.heightInput),
-            UI.row(this.openProjectButton, this.clearFormButton),
-            this.deleteProjectButton
-        );
+        long now = System.currentTimeMillis();
+        if (now - this.lastThumbnailCaptureTime < 1000L)
+        {
+            return;
+        }
+        this.lastThumbnailCaptureTime = now;
 
-        this.projectDetailsScroll = UI.scrollView(UIConstants.MARGIN, UIConstants.SCROLL_PADDING, formContainer);
-        this.projectDetailsScroll.relative(this.projectDetailsColumn).w(1F).h(1F);
-        this.projectDetailsColumn.add(this.projectDetailsScroll);
+        int textureId = 0;
+        int width = 0;
+        int height = 0;
 
-        this.projectsView.add(this.projectListColumn, this.projectDetailsColumn);
+        if (this.previewFboTexture != null && this.previewFboTexture.id > 0 && this.previewFboTexture.width > 0 && this.previewFboTexture.height > 0)
+        {
+            textureId = this.previewFboTexture.id;
+            width = this.previewFboTexture.width;
+            height = this.previewFboTexture.height;
+        }
+
+        if (textureId <= 0 || width <= 0 || height <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            FloatBuffer pixelData = BufferUtils.createFloatBuffer(width * height * 4);
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, textureId);
+            GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, GL11.GL_FLOAT, pixelData);
+            pixelData.rewind();
+
+            int targetW = 320;
+            int targetH = Math.max(1, (int) Math.round((double) height * targetW / width));
+
+            if (width <= targetW)
+            {
+                targetW = width;
+                targetH = height;
+            }
+
+            int[] targetPixels = new int[targetW * targetH];
+
+            for (int ty = 0; ty < targetH; ty++)
+            {
+                int sy = (height - 1) - (ty * height / targetH);
+
+                for (int tx = 0; tx < targetW; tx++)
+                {
+                    int sx = tx * width / targetW;
+                    int offset = (sy * width + sx) * 4;
+
+                    float r = pixelData.get(offset) * 255.0F;
+                    float g = pixelData.get(offset + 1) * 255.0F;
+                    float b = pixelData.get(offset + 2) * 255.0F;
+
+                    int ir = Math.min(255, Math.max(0, (int) r));
+                    int ig = Math.min(255, Math.max(0, (int) g));
+                    int ib = Math.min(255, Math.max(0, (int) b));
+
+                    targetPixels[ty * targetW + tx] = 0xFF000000 | (ir << 16) | (ig << 8) | ib;
+                }
+            }
+
+            final String projectName = project.name;
+            final int fw = targetW;
+            final int fh = targetH;
+
+            Thread thread = new Thread(() ->
+            {
+                try
+                {
+                    File folder = CatalystProjectManager.getProjectsFolder();
+                    if (folder != null)
+                    {
+                        if (!folder.exists())
+                        {
+                            folder.mkdirs();
+                        }
+                        File thumbFolder = CatalystProjectManager.getThumbnailsFolder();
+                        if (!thumbFolder.exists())
+                        {
+                            thumbFolder.mkdirs();
+                        }
+                        File thumbFile = new File(thumbFolder, projectName + ".png");
+
+                        Pixels pixels = Pixels.fromIntArray(fw, fh, targetPixels);
+                        try
+                        {
+                            PNGEncoder.writeToFile(pixels, thumbFile);
+                        }
+                        finally
+                        {
+                            pixels.delete();
+                        }
+
+                        MinecraftClient mc = MinecraftClient.getInstance();
+                        if (mc != null)
+                        {
+                            mc.execute(() -> UICatalystHubScreen.invalidateThumbnail(projectName));
+                        }
+                        else
+                        {
+                            UICatalystHubScreen.invalidateThumbnail(projectName);
+                        }
+                    }
+                }
+                catch (Throwable t)
+                {
+                    /* Silent ignore */
+                }
+            }, "BBS-Catalyst-Thumbnail-Saver");
+
+            thread.setDaemon(true);
+            thread.start();
+        }
+        catch (Throwable t)
+        {
+            /* Silent ignore */
+        }
     }
 
     private void openOrCreateProject()
@@ -1526,14 +1577,14 @@ public class UICatalystPanel extends UIDashboardPanel
             cleanupProjectResources(this.activeProject);
             this.activeProject = null;
         }
-        this.nameInput.setText("New Project");
-        this.fpsInput.setValue(60);
-        this.durationSecondsInput.setValue(5.0);
-        this.widthInput.setValue(1920);
-        this.heightInput.setValue(1080);
+        if (this.nameInput != null) this.nameInput.setText("New Project");
+        if (this.fpsInput != null) this.fpsInput.setValue(60);
+        if (this.durationSecondsInput != null) this.durationSecondsInput.setValue(5.0);
+        if (this.widthInput != null) this.widthInput.setValue(1920);
+        if (this.heightInput != null) this.heightInput.setValue(1080);
         this.updateDurationCalcLabel();
-        this.openProjectButton.label = UIKeys.CATALYST_PROJECTS_CREATE_OPEN;
-        this.deleteProjectButton.setVisible(false);
+        if (this.openProjectButton != null) this.openProjectButton.label = UIKeys.CATALYST_PROJECTS_CREATE_OPEN;
+        if (this.deleteProjectButton != null) this.deleteProjectButton.setVisible(false);
         this.updateTitleLabel();
     }
 
@@ -3655,7 +3706,7 @@ public class UICatalystPanel extends UIDashboardPanel
             context.batcher.text(UIKeys.CATALYST_INSPECTOR.get(), a.x + 22, a.y + 5, Colors.WHITE, false);
         }));
 
-        this.inspectorEmptyLabel = new UILabel(IKey.raw("No layer selected"), Colors.GRAY);
+        this.inspectorEmptyLabel = new UILabel(IKey.raw("No Layer Selected"), Colors.GRAY);
 
         this.layerTypeLabel = new UILabel(IKey.raw("Type: SOLID"), Colors.LIGHTEST_GRAY);
         this.layerTypeLabel.h(16);
@@ -4671,6 +4722,7 @@ public class UICatalystPanel extends UIDashboardPanel
         if (this.activeProject != null)
         {
             CatalystProjectManager.saveProject(this.activeProject);
+            this.captureProjectThumbnail(this.activeProject);
         }
     }
 
@@ -4869,11 +4921,18 @@ public class UICatalystPanel extends UIDashboardPanel
         this.onExportFinishedCallback = onFinished;
         this.activeExportProfile = profile;
 
-        /* Ensure parent directory exists */
+        /* Ensure parent directory exists with fail-fast check */
         File parentDir = outputFile.getParentFile();
         if (parentDir != null && !parentDir.exists())
         {
-            parentDir.mkdirs();
+            if (!parentDir.mkdirs() && !parentDir.exists())
+            {
+                System.err.println("[Catalyst] Failed to create output directory: " + parentDir.getAbsolutePath());
+                mchorse.bbs_mod.utils.VideoRecorder.sendChatMessage("§c[Catalyst] Dışa aktarma klasörü oluşturulamadı: " + parentDir.getAbsolutePath());
+                VideoPlayer.forcedRecording = false;
+                if (job != null) job.setStatus(RenderJob.Status.CANCELLED);
+                return;
+            }
         }
 
         /* 1. Synchronous Video Decoding Flag for VideoPlayer */
@@ -5031,6 +5090,11 @@ public class UICatalystPanel extends UIDashboardPanel
                 pb.redirectErrorStream(true);
 
                 File logFile = new File(workDir, outputFile.getName() + ".audio_export.log");
+                File logParent = logFile.getParentFile();
+                if (logParent != null && !logParent.exists())
+                {
+                    logParent.mkdirs();
+                }
                 pb.redirectOutput(logFile);
 
                 Process p = pb.start();
@@ -5084,6 +5148,11 @@ public class UICatalystPanel extends UIDashboardPanel
             this.exportAudioSourceFile = audioSourceFile;
             String tempPattern = profile.getFormat().getOutputPattern(baseName + ".tmp_video");
             this.exportTempVideoFile = new File(outputFile.getParentFile(), tempPattern);
+            File tempParent = this.exportTempVideoFile.getParentFile();
+            if (tempParent != null && !tempParent.exists())
+            {
+                tempParent.mkdirs();
+            }
         }
 
         String captureMovieName = needsAudioMux ? (baseName + ".tmp_video") : baseName;
@@ -5109,6 +5178,11 @@ public class UICatalystPanel extends UIDashboardPanel
             pb.redirectErrorStream(true);
 
             this.exportLogFile = new File(workDir, outputFile.getName() + ".export.log");
+            File logParent = this.exportLogFile.getParentFile();
+            if (logParent != null && !logParent.exists())
+            {
+                logParent.mkdirs();
+            }
             pb.redirectOutput(this.exportLogFile);
 
             this.exportProcess = pb.start();
@@ -5556,6 +5630,11 @@ public class UICatalystPanel extends UIDashboardPanel
                 muxPb.directory(workDir);
                 muxPb.redirectErrorStream(true);
                 File muxLog = new File(workDir, this.exportTargetFile.getName() + ".mux.log");
+                File muxLogParent = muxLog.getParentFile();
+                if (muxLogParent != null && !muxLogParent.exists())
+                {
+                    muxLogParent.mkdirs();
+                }
                 muxPb.redirectOutput(muxLog);
 
                 Process muxProcess = muxPb.start();

@@ -29,6 +29,13 @@ public class UICommunityHubPanel extends UIDashboardPanel
     private final List<HubAssetEntry> allAssets = new ArrayList<>();
     private final List<HubAssetEntry> displayedAssets = new ArrayList<>();
 
+    /* Modern Hub & Classic Containers */
+    public UICommunityHubScreen hubScreen;
+    public UIElement classicContainer;
+    public UIIcon backToHubBtn;
+    private boolean showingHub = true;
+
+    /* Classic View Elements */
     public UIElement topBar;
     public UITextbox search;
     public UICirculate categoryCirculate;
@@ -52,12 +59,20 @@ public class UICommunityHubPanel extends UIDashboardPanel
     {
         super(dashboard);
 
+        /* Classic Container */
+        this.classicContainer = new UIElement();
+        this.classicContainer.full(this);
+
         this.topBar = new UIElement();
-        this.topBar.relative(this).x(6).y(6).w(1F, -12).h(24);
+        this.topBar.relative(this.classicContainer).x(6).y(6).w(1F, -12).h(24);
+
+        this.backToHubBtn = new UIIcon(Icons.ARROW_LEFT, (b) -> this.showHub());
+        this.backToHubBtn.tooltip(UIKeys.COMMUNITY_HUB_RETURN);
+        this.backToHubBtn.wh(20, 20);
 
         this.search = new UITextbox((text) -> this.filterAndSort());
         this.search.textbox.setPlaceholder(UIKeys.HUB_SEARCH_PLACEHOLDER);
-        this.search.w(190).h(20);
+        this.search.w(180).h(20);
 
         this.categoryCirculate = new UICirculate((c) -> this.filterAndSort());
 
@@ -86,7 +101,7 @@ public class UICommunityHubPanel extends UIDashboardPanel
         this.folderBtn.wh(20, 20);
 
         this.topBar.row(6).height(20);
-        this.topBar.add(this.search, this.categoryCirculate, this.sortCirculate, this.refreshBtn, this.folderBtn);
+        this.topBar.add(this.backToHubBtn, this.search, this.categoryCirculate, this.sortCirculate, this.refreshBtn, this.folderBtn);
 
         /* Left asset card list */
         this.assetList = new UIHubAssetList((selected) ->
@@ -94,7 +109,7 @@ public class UICommunityHubPanel extends UIDashboardPanel
             this.selectedEntry = this.assetList.getCurrentFirst();
             this.rebuildDetails();
         });
-        this.assetList.relative(this).x(6).y(34).w(0.55F, -9).hTo(this.flex, 1F, -58);
+        this.assetList.relative(this.classicContainer).x(6).y(34).w(0.55F, -9).hTo(this.classicContainer.getFlex(), 1F, -58);
 
         /* Right inspection pane container */
         this.detailContainer = new UIElement()
@@ -108,7 +123,7 @@ public class UICommunityHubPanel extends UIDashboardPanel
                 super.render(context);
             }
         };
-        this.detailContainer.relative(this).x(0.55F, 3).y(34).w(0.45F, -9).hTo(this.flex, 1F, -58);
+        this.detailContainer.relative(this.classicContainer).x(0.55F, 3).y(34).w(0.45F, -9).hTo(this.classicContainer.getFlex(), 1F, -58);
 
         this.detailScroll = UI.scrollView(10);
         this.detailScroll.full(this.detailContainer);
@@ -116,12 +131,64 @@ public class UICommunityHubPanel extends UIDashboardPanel
 
         /* Bottom status bar */
         this.statusLabel = UI.label(UIKeys.HUB_NO_ASSETS, 16);
-        this.statusLabel.relative(this).x(8).y(1F, -20).w(1F, -16).h(16);
+        this.statusLabel.relative(this.classicContainer).x(8).y(1F, -20).w(1F, -16).h(16);
 
-        this.add(this.topBar, this.assetList, this.detailContainer, this.statusLabel);
+        this.classicContainer.add(this.topBar, this.assetList, this.detailContainer, this.statusLabel);
+
+        /* Modern Creative Store Hub Screen */
+        this.hubScreen = new UICommunityHubScreen(this);
+        this.hubScreen.full(this);
+
+        this.add(this.classicContainer, this.hubScreen);
+
+        this.syncViews();
 
         this.onOpen(this::loadCatalog);
-        this.onAppear(this::filterAndSort);
+        this.onAppear(() ->
+        {
+            if (this.showingHub)
+            {
+                this.hubScreen.refresh();
+            }
+            else
+            {
+                this.filterAndSort();
+            }
+        });
+    }
+
+    public void showHub()
+    {
+        this.showingHub = true;
+        this.syncViews();
+        this.hubScreen.refresh();
+    }
+
+    public void showClassicView()
+    {
+        this.showingHub = false;
+        this.syncViews();
+        this.filterAndSort();
+    }
+
+    public void showClassicViewWithEntry(HubAssetEntry entry)
+    {
+        this.showingHub = false;
+        this.syncViews();
+        this.filterAndSort();
+
+        if (entry != null)
+        {
+            this.selectedEntry = entry;
+            this.assetList.setCurrent(entry);
+            this.rebuildDetails();
+        }
+    }
+
+    private void syncViews()
+    {
+        this.hubScreen.setVisible(this.showingHub);
+        this.classicContainer.setVisible(!this.showingHub);
     }
 
     public void loadCatalog()
@@ -132,6 +199,7 @@ public class UICommunityHubPanel extends UIDashboardPanel
         {
             this.allAssets.clear();
             this.allAssets.addAll(assets);
+            this.hubScreen.setAssets(assets);
             this.filterAndSort();
         });
     }
@@ -399,7 +467,7 @@ public class UICommunityHubPanel extends UIDashboardPanel
         this.detailScroll.resize();
     }
 
-    private void startInstall(HubAssetEntry entry)
+    public void startInstall(HubAssetEntry entry)
     {
         if (entry == null)
         {
@@ -425,11 +493,12 @@ public class UICommunityHubPanel extends UIDashboardPanel
             if (status.done)
             {
                 this.filterAndSort();
+                this.hubScreen.refresh();
             }
         });
     }
 
-    private void startUninstall(HubAssetEntry entry)
+    public void startUninstall(HubAssetEntry entry)
     {
         if (entry == null)
         {
@@ -455,6 +524,7 @@ public class UICommunityHubPanel extends UIDashboardPanel
             if (status.done)
             {
                 this.filterAndSort();
+                this.hubScreen.refresh();
             }
         });
     }
@@ -468,7 +538,7 @@ public class UICommunityHubPanel extends UIDashboardPanel
         if (this.downloadProgress >= 0F && this.downloadProgress <= 1F)
         {
             int bx = this.area.x + 8;
-            int by = this.area.ey() - 24;
+            int by = this.area.ey() - (this.showingHub ? 8 : 24);
             int bw = this.area.w - 16;
 
             context.batcher.box(bx, by, bx + bw, by + 3, Colors.A50);

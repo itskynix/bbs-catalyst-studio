@@ -138,7 +138,7 @@ public class CopilotVisionHelper {
                 String base64 = Base64.getEncoder().encodeToString(bytes);
                 return new CapturedImage(base64, targetW, targetH);
             } catch (Throwable t) {
-                System.err.println("[Blockbuster AI] Image load & downscale failed: " + t.getMessage());
+                System.err.println("[BBS Copilot] Image load & downscale failed: " + t.getMessage());
                 return null;
             }
         });

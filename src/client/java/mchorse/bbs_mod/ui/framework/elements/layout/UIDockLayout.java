@@ -24,6 +24,7 @@ import org.joml.Vector2i;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -31,6 +32,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
+import mchorse.bbs_mod.ui.utils.UIUtils;
+import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 
 /**
@@ -46,6 +49,7 @@ import java.util.function.UnaryOperator;
  */
 public class UIDockLayout extends UIElement
 {
+    public static final int TAB_HEADER_HEIGHT_PX = 18;
     /** Space a panel's content leaves at the top while unlocked; the drag strip fills all of it. */
     private static final int DRAG_STRIP_HEIGHT_PX = 20;
     private static final int SPLITTER_HANDLE_PX = 14;
@@ -128,9 +132,73 @@ public class UIDockLayout extends UIElement
     private Supplier<Boolean> gate = () -> true;
     private Runnable onChanged = () -> {};
     private Runnable onLayoutSettled = () -> {};
+    private final Set<String> corePanels = new HashSet<>();
+    private Consumer<String> closeHandler;
+    private Consumer<String> drawerHandler;
     private UnaryOperator<EditorLayoutNode> ensureFn = UnaryOperator.identity();
 
     /* Configuration setters */
+
+    public UIDockLayout core(String... panelIds)
+    {
+        for (String id : panelIds)
+        {
+            this.corePanels.add(id);
+        }
+
+        return this;
+    }
+
+    public UIDockLayout core(Collection<String> panelIds)
+    {
+        this.corePanels.addAll(panelIds);
+
+        return this;
+    }
+
+    public boolean isCorePanel(String panelId)
+    {
+        return this.corePanels.contains(panelId);
+    }
+
+    public UIDockLayout closeHandler(Consumer<String> closeHandler)
+    {
+        this.closeHandler = closeHandler;
+
+        return this;
+    }
+
+    public UIDockLayout drawerHandler(Consumer<String> drawerHandler)
+    {
+        this.drawerHandler = drawerHandler;
+
+        return this;
+    }
+
+    public void closePanel(String panelId)
+    {
+        if (this.closeHandler != null)
+        {
+            this.closeHandler.accept(panelId);
+        }
+        else
+        {
+            this.hidePanel(panelId);
+        }
+    }
+
+    public void dockAsDrawer(String panelId)
+    {
+        if (this.drawerHandler != null)
+        {
+            this.drawerHandler.accept(panelId);
+        }
+    }
+
+    public UIDockSlot getSlot(String panelId)
+    {
+        return this.slotById.get(panelId);
+    }
 
     public UIDockLayout source(ILayoutSource source)
     {
@@ -736,8 +804,12 @@ public class UIDockLayout extends UIElement
             UIDockSlot slot = entry.getValue();
             boolean active = this.isPanelActive(panelId);
 
+            DockStackInfo stackInfo = this.dockStackByPanelId.get(panelId);
+            boolean isStacked = stackInfo != null && stackInfo.isStacked();
+            boolean showHeader = slot.isFramed() && !this.isCorePanel(panelId) && !isStacked;
+
             slot.setVisible(show && active);
-            slot.dragHandle.setVisible(show && !this.layoutLocked && active);
+            slot.dragHandle.setVisible(show && active && showHeader);
         }
 
         for (UIDockStackTabs tabs : this.dockStackTabs)
@@ -1103,8 +1175,6 @@ public class UIDockLayout extends UIElement
     {
         this.dockStackByPanelId.clear();
 
-        int inset = this.layoutLocked ? 0 : dragStripHeightPx();
-
         for (DockStackInfo info : stackInfos)
         {
             int topOffset = info.isStacked() ? DOCK_STACK_TABS_HEIGHT_PX : 0;
@@ -1125,7 +1195,11 @@ public class UIDockLayout extends UIElement
                     .y(info.y, topOffset + g[1])
                     .w(info.w, -g[0] - g[2])
                     .h(info.h, -topOffset - g[1] - g[3]);
-                slot.setContentInset(inset);
+
+                boolean showHeader = slot.isFramed() && !this.isCorePanel(panelId) && !info.isStacked();
+                slot.dragHandle.setVisible(showHeader);
+                slot.setContentInset(showHeader ? TAB_HEADER_HEIGHT_PX : 0);
+
                 this.dockStackByPanelId.put(panelId, info);
             }
         }
@@ -1254,27 +1328,9 @@ public class UIDockLayout extends UIElement
         }
     }
 
-    private UIDraggable createPanelDragHandle(String panelId)
+    private UIDockHeader createPanelDragHandle(String panelId)
     {
-        UIDraggable handle = new UIDraggable((context) ->
-        {
-            if (this.panelDragCancelled)
-            {
-                return;
-            }
-
-            if (this.draggingPanelId == null)
-            {
-                this.draggingPanelId = panelId;
-            }
-
-            this.updateDropTarget(context.mouseX, context.mouseY);
-        });
-
-        handle.dragEnd(this::finishPanelDrag);
-        handle.hoverOnly().cursors(GLFW.GLFW_HAND_CURSOR, GLFW.GLFW_HAND_CURSOR).rendering((context) -> this.renderPanelDragHandle(context, handle));
-
-        return handle;
+        return new UIDockHeader(this, panelId);
     }
 
     /** Recomputes what the dragged panel would land on. Runs every frame while a drag is live. */
@@ -1337,6 +1393,11 @@ public class UIDockLayout extends UIElement
             if (slot.isVisible() && slot.area.isInside(mouseX, mouseY))
             {
                 int zone = this.computeDropZone(slot.area, mouseX, mouseY);
+
+                if (this.isCorePanel(e.getKey()) && zone == DROP_ZONE_CENTER)
+                {
+                    break;
+                }
 
                 this.dropTargetPanelId = this.resolveEdgeDropTarget(e.getKey(), zone);
                 this.dropTargetZone = zone;
@@ -1440,6 +1501,11 @@ public class UIDockLayout extends UIElement
 
     private void onTabPressed(String panelId, int mouseX, int mouseY)
     {
+        if (this.isCorePanel(panelId))
+        {
+            return;
+        }
+
         this.tabPressPanelId = panelId;
         this.tabPressX = mouseX;
         this.tabPressY = mouseY;
@@ -1526,8 +1592,13 @@ public class UIDockLayout extends UIElement
 
     /* Hiding and showing panels */
 
-    private boolean canHidePanel(String panelId)
+    public boolean canHidePanel(String panelId)
     {
+        if (this.isCorePanel(panelId))
+        {
+            return false;
+        }
+
         HashSet<String> present = new HashSet<>();
 
         EditorLayoutNode.collectPanelIds(this.layoutRoot(), present);
@@ -1535,7 +1606,12 @@ public class UIDockLayout extends UIElement
         return present.contains(panelId) && present.size() > 1;
     }
 
-    private void hidePanel(String panelId)
+    public boolean isPanelHidden(String panelId)
+    {
+        return this.source != null && this.source.getHiddenPanels().contains(panelId);
+    }
+
+    public void hidePanel(String panelId)
     {
         if (!this.canHidePanel(panelId))
         {
@@ -1560,11 +1636,71 @@ public class UIDockLayout extends UIElement
         this.setupFlex(true);
     }
 
-    private void showPanel(String panelId)
+    public void showPanel(String panelId)
     {
         Set<String> hidden = this.source.getHiddenPanels();
 
         if (!hidden.remove(panelId))
+        {
+            return;
+        }
+
+        this.pushLayoutUndo(this.layoutRoot());
+        this.source.setHiddenPanels(hidden);
+        this.setupFlex(true);
+    }
+
+    public void togglePanel(String panelId)
+    {
+        if (this.isPanelHidden(panelId))
+        {
+            this.showPanel(panelId);
+        }
+        else
+        {
+            this.hidePanel(panelId);
+        }
+    }
+
+    public void hidePanels(Collection<String> panelIds)
+    {
+        EditorLayoutNode root = this.layoutRoot();
+        this.pushLayoutUndo(root);
+
+        Set<String> hidden = this.source.getHiddenPanels();
+        EditorLayoutNode newRoot = root;
+
+        for (String panelId : panelIds)
+        {
+            hidden.add(panelId);
+
+            if (panelId.equals(this.maximizedPanelId))
+            {
+                this.maximizedPanelId = null;
+            }
+
+            newRoot = EditorLayoutNode.copyWithRemovedPanel(newRoot, panelId);
+        }
+
+        this.source.setHiddenPanels(hidden);
+        this.setLayoutRoot(newRoot);
+        this.setupFlex(true);
+    }
+
+    public void showPanels(Collection<String> panelIds)
+    {
+        Set<String> hidden = this.source.getHiddenPanels();
+        boolean changed = false;
+
+        for (String panelId : panelIds)
+        {
+            if (hidden.remove(panelId))
+            {
+                changed = true;
+            }
+        }
+
+        if (!changed)
         {
             return;
         }
@@ -1592,23 +1728,30 @@ public class UIDockLayout extends UIElement
     }
 
     /** Right-click menu of a panel's drag strip: maximize, hide, bring hidden panels back. */
-    private void fillSlotContextMenu(ContextMenuManager menu, String panelId)
+    public void fillSlotContextMenu(ContextMenuManager menu, String panelId)
     {
-        if (this.layoutLocked || !this.gate.get())
+        if (!this.gate.get())
         {
             return;
         }
 
-        boolean maximized = panelId.equals(this.maximizedPanelId);
-
-        menu.action(maximized ? Icons.MINIMIZE : Icons.MAXIMIZE, maximized ? UIKeys.DOCK_RESTORE : UIKeys.DOCK_MAXIMIZE, () -> this.toggleMaximizePanel(panelId));
-
         if (this.canHidePanel(panelId))
         {
-            menu.action(Icons.INVISIBLE, UIKeys.DOCK_HIDE.format(this.getPanelLabel(panelId).get()), () -> this.hidePanel(panelId));
+            menu.action(Icons.CLOSE, UIKeys.DOCK_CLOSE_PANEL, () -> this.closePanel(panelId));
         }
 
-        this.fillHiddenPanelsMenu(menu);
+        if (!this.isCorePanel(panelId))
+        {
+            menu.action(Icons.COLLAPSE_ALL, UIKeys.DOCK_DOCK_AS_DRAWER, () -> this.dockAsDrawer(panelId));
+        }
+
+        if (!this.layoutLocked)
+        {
+            boolean maximized = panelId.equals(this.maximizedPanelId);
+
+            menu.action(maximized ? Icons.MINIMIZE : Icons.MAXIMIZE, maximized ? UIKeys.DOCK_RESTORE : UIKeys.DOCK_MAXIMIZE, () -> this.toggleMaximizePanel(panelId));
+            this.fillHiddenPanelsMenu(menu);
+        }
     }
 
     /** The tree the layout pass actually renders: the stored one, or a single maximized panel. */
@@ -1738,7 +1881,18 @@ public class UIDockLayout extends UIElement
         return super.subKeyPressed(context);
     }
 
-    /** Insertion caret between tabs plus the ghost of the dragged panel, on top of everything. */
+    @Override
+    protected boolean subMouseReleased(UIContext context)
+    {
+        if (context.mouseButton == 0 && (this.tabPressPanelId != null || this.draggingPanelId != null))
+        {
+            this.onTabsReleased();
+        }
+
+        return super.subMouseReleased(context);
+    }
+
+    /** Insertion caret between tabs plus the ghost badge of the dragged panel, on top of everything. */
     private void renderDragOverlay(UIContext context)
     {
         if (this.draggingPanelId == null || this.panelDragCancelled || this.maximizedPanelId != null)
@@ -1752,12 +1906,30 @@ public class UIDockLayout extends UIElement
         }
 
         String label = this.getPanelLabel(this.draggingPanelId).get();
+        Icon icon = this.getDockPanelIcon(this.draggingPanelId);
+        int textW = label.isEmpty() ? 0 : context.batcher.getFont().getWidth(label);
+        int cardW = (icon != null ? 18 : 0) + textW + 16;
+        int cardH = 20;
+        int cardX = context.mouseX + 12;
+        int cardY = context.mouseY + 12;
 
-        context.batcher.icon(this.getDockPanelIcon(this.draggingPanelId), Colors.WHITE, context.mouseX + 16, context.mouseY + 16, 0.5F, 0.5F);
+        /* Drop shadow */
+        context.batcher.box(cardX + 2, cardY + 2, cardX + cardW + 2, cardY + cardH + 2, 0x55000000);
+        /* Ghost badge background */
+        context.batcher.box(cardX, cardY, cardX + cardW, cardY + cardH, 0xD01E1E1E);
+        /* 1px subtle outline */
+        context.batcher.outline(cardX, cardY, cardX + cardW, cardY + cardH, 0x55FFFFFF);
+
+        int curX = cardX + 6;
+        if (icon != null)
+        {
+            context.batcher.icon(icon, Colors.WHITE, curX, cardY + 2, 16, 16);
+            curX += 18;
+        }
 
         if (!label.isEmpty())
         {
-            context.batcher.textCard(label, context.mouseX + 26, context.mouseY + 12);
+            context.batcher.text(label, curX, cardY + 6, Colors.WHITE);
         }
     }
 
@@ -1866,19 +2038,149 @@ public class UIDockLayout extends UIElement
         context.batcher.box(a.ex() - DROP_OUTLINE_PX, a.y, a.ex(), a.ey(), rim);
     }
 
-    /* Helper types */
+    public static class UIDockHeader extends UIElement
+    {
+        private final UIDockLayout layout;
+        private final String panelId;
+
+        public UIDockHeader(UIDockLayout layout, String panelId)
+        {
+            this.layout = layout;
+            this.panelId = panelId;
+            this.h(TAB_HEADER_HEIGHT_PX);
+        }
+
+        public boolean isCloseHovered(UIContext context)
+        {
+            if (this.layout.isCorePanel(this.panelId))
+            {
+                return false;
+            }
+
+            int btnW = 16;
+            int btnH = 16;
+            int btnX = this.area.ex() - btnW - 1;
+            int btnY = this.area.y + 1;
+
+            return context.mouseX >= btnX && context.mouseX < btnX + btnW &&
+                   context.mouseY >= btnY && context.mouseY < btnY + btnH;
+        }
+
+        @Override
+        protected boolean subMouseClicked(UIContext context)
+        {
+            if (!this.area.isInside(context))
+            {
+                return false;
+            }
+
+            if (context.mouseButton == 0)
+            {
+                if (this.isCloseHovered(context))
+                {
+                    UIUtils.playClick();
+                    this.layout.closePanel(this.panelId);
+                    return true;
+                }
+
+                if (!this.layout.isLocked() && !this.layout.isCorePanel(this.panelId))
+                {
+                    this.layout.onTabPressed(this.panelId, context.mouseX, context.mouseY);
+                    return true;
+                }
+
+                return true;
+            }
+            else if (context.mouseButton == 1)
+            {
+                context.replaceContextMenu((menu) -> this.layout.fillSlotContextMenu(menu, this.panelId), context.mouseX, context.mouseY);
+                return true;
+            }
+
+            return false;
+        }
+
+        @Override
+        protected boolean subMouseReleased(UIContext context)
+        {
+            if (context.mouseButton == 0 && (this.layout.tabPressPanelId != null || this.layout.draggingPanelId != null))
+            {
+                this.layout.onTabsReleased();
+            }
+
+            return super.subMouseReleased(context);
+        }
+
+        @Override
+        public void render(UIContext context)
+        {
+            if (!this.isVisible())
+            {
+                return;
+            }
+
+            Area a = this.area;
+
+            context.batcher.box(a.x, a.y, a.ex(), a.ey(), 0xDD1E1E1E);
+            context.batcher.box(a.x, a.ey() - 1, a.ex(), a.ey(), 0x22FFFFFF);
+
+            Icon icon = this.layout.getDockPanelIcon(this.panelId);
+            if (icon != null)
+            {
+                context.batcher.icon(icon, Colors.WHITE, a.x + 3, a.y + 1, 16, 16);
+            }
+
+            IKey label = this.layout.getPanelLabel(this.panelId);
+            if (label != null)
+            {
+                String title = label.get();
+                if (!title.isEmpty())
+                {
+                    context.batcher.text(title, a.x + 22, a.y + (a.h - 9) / 2 + 1, 0xFFD0D0D0);
+                }
+            }
+
+            if (!this.layout.isCorePanel(this.panelId))
+            {
+                int btnW = 16;
+                int btnH = 16;
+                int btnX = a.ex() - btnW - 1;
+                int btnY = a.y + 1;
+                boolean hovered = this.isCloseHovered(context);
+
+                if (hovered)
+                {
+                    context.batcher.box(btnX, btnY, btnX + btnW, btnY + btnH, 0x66E81123);
+                    context.batcher.icon(Icons.CLOSE, Colors.WHITE, btnX + 8, btnY + 8, 0.5F, 0.5F);
+                    context.requestCursor(GLFW.GLFW_HAND_CURSOR);
+                }
+                else
+                {
+                    context.batcher.icon(Icons.CLOSE, 0x88FFFFFF, btnX + 8, btnY + 8, 0.5F, 0.5F);
+                }
+            }
+
+            if (!this.layout.isLocked() && !this.layout.isCorePanel(this.panelId))
+            {
+                if (a.isInside(context) && !this.isCloseHovered(context))
+                {
+                    context.requestCursor(GLFW.GLFW_HAND_CURSOR);
+                }
+            }
+        }
+    }
 
     /**
      * The frame a panel sits in. Owns everything the dock draws around a panel &mdash; its surface,
      * its border and its drag handle &mdash; and insets the panel itself so the handle never covers
      * content. That inset is why hosts don't need to know the dock is unlocked.
      */
-    private static class UIDockSlot extends UIElement
+    public static class UIDockSlot extends UIElement
     {
         private final UIDockLayout layout;
         private final String panelId;
         private final UIElement panel;
-        private final UIDraggable dragHandle;
+        public final UIDockHeader dragHandle;
 
         public UIDockSlot(UIDockLayout layout, String panelId, UIElement panel)
         {
@@ -1888,10 +2190,19 @@ public class UIDockLayout extends UIElement
             this.dragHandle = layout.createPanelDragHandle(panelId);
 
             panel.relative(this).x(0F).y(0F).w(1F).h(1F);
-            this.dragHandle.relative(this).x(0F).y(0).w(1F).h(DRAG_STRIP_HEIGHT_PX);
-            this.dragHandle.context((menu) -> layout.fillSlotContextMenu(menu, panelId));
+            this.dragHandle.relative(this).x(0F).y(0).w(1F).h(TAB_HEADER_HEIGHT_PX);
 
             this.add(panel, this.dragHandle);
+        }
+
+        public String getPanelId()
+        {
+            return this.panelId;
+        }
+
+        public UIElement getPanel()
+        {
+            return this.panel;
         }
 
         /** Push the panel down by the drag strip while the layout is unlocked. */

@@ -286,7 +286,23 @@ public class UIKeys
     public static final IKey CATALYST_PROJECTS_DURATION = L10n.lang("bbs.ui.catalyst.projects.duration");
     public static final IKey CATALYST_PROJECTS_RESOLUTION = L10n.lang("bbs.ui.catalyst.projects.resolution");
     public static final IKey CATALYST_PROJECTS_EMPTY = L10n.lang("bbs.ui.catalyst.projects.empty");
+    public static final IKey CATALYST_PROJECTS_DELETE_CONFIRM = L10n.lang("bbs.ui.catalyst.projects.delete_confirm");
+    public static final IKey CATALYST_HUB_SEARCH = L10n.lang("bbs.ui.catalyst.hub.search");
+    public static final IKey CATALYST_HUB_BADGE = L10n.lang("bbs.ui.catalyst.hub.badge");
+    public static final IKey CATALYST_HUB_ADD_PROJECT = L10n.lang("bbs.ui.catalyst.hub.add_project");
+    public static final IKey CATALYST_HUB_RECENT_PROJECTS = L10n.lang("bbs.ui.catalyst.hub.recent_projects");
+    public static final IKey CATALYST_HUB_ALL = L10n.lang("bbs.ui.catalyst.hub.all");
+    public static final IKey CATALYST_HUB_EMPTY_RECENT = L10n.lang("bbs.ui.catalyst.hub.empty_recent");
+    public static final IKey CATALYST_HUB_NO_SEARCH_RESULTS = L10n.lang("bbs.ui.catalyst.hub.no_search_results");
+    public static final IKey CATALYST_HUB_OPEN_FOLDER = L10n.lang("bbs.ui.catalyst.hub.open_folder");
+    public static final IKey CATALYST_HUB_REFRESH = L10n.lang("bbs.ui.catalyst.hub.refresh");
+    public static final IKey CATALYST_HUB_SHOW_IN_EXPLORER = L10n.lang("bbs.ui.catalyst.hub.show_in_explorer");
+    public static final IKey CATALYST_DIALOG_NEW_TITLE = L10n.lang("bbs.ui.catalyst.dialog.title");
+    public static final IKey CATALYST_DIALOG_CREATE = L10n.lang("bbs.ui.catalyst.dialog.create");
     public static final IKey CATALYST_COMP_NEW = L10n.lang("bbs.ui.catalyst.comp.new");
+    public static final IKey CATALYST_TIMELINE_ADD_CURSOR = L10n.lang("bbs.ui.catalyst.timeline.add_cursor");
+    public static final IKey CATALYST_TIMELINE_ADD_CURRENT = L10n.lang("bbs.ui.catalyst.timeline.add_current");
+    public static final IKey CATALYST_TIMELINE_LAYER_TYPES = L10n.lang("bbs.ui.catalyst.timeline.layer_types");
     public static final IKey CDN_DOWNLOADING_TITLE = L10n.lang("bbs.ui.cdn.downloading-title");
     public static final IKey CDN_STATUS_DELETED = L10n.lang("bbs.ui.cdn.status.deleted");
     public static final IKey CDN_STATUS_DOWNLOADED = L10n.lang("bbs.ui.cdn.status.downloaded");
@@ -334,6 +350,7 @@ public class UIKeys
     public static final IKey FILM_BACKUPS_RESTORE = L10n.lang("bbs.ui.film.backups.restore");
     public static final IKey FILM_BACKUPS_DESCRIPTION = L10n.lang("bbs.ui.film.backups.description");
     public static final IKey FILM_BACKUPS_EXISTS = L10n.lang("bbs.ui.film.backups.exists");
+    public static final IKey FILM_PREVIEW_LOADING_SCENE = L10n.lang("bbs.ui.film.preview.loading_scene");
 
     public static final IKey FILM_CONTROLLER_CONTROL_MODE_TOOLTIP = L10n.lang("bbs.ui.film.controller.control_mode-tooltip");
     public static final IKey FILM_CONTROLLER_FREE_LOOK_TOOLTIP = L10n.lang("bbs.ui.film.controller.free_look-tooltip");
@@ -416,6 +433,10 @@ public class UIKeys
     public static final IKey DOCK_RESTORE = L10n.lang("bbs.ui.dock.restore");
     public static final IKey DOCK_UNDO_LAYOUT = L10n.lang("bbs.ui.dock.undo_layout");
     public static final IKey DOCK_KEYS_MAXIMIZE = L10n.lang("bbs.ui.dock.keys.maximize");
+    public static final IKey DOCK_CLOSE_PANEL = L10n.lang("bbs.ui.dock.close_panel");
+    public static final IKey DOCK_DOCK_AS_DRAWER = L10n.lang("bbs.ui.dock.dock_as_drawer");
+    public static final IKey DOCK_PIN_PANEL = L10n.lang("bbs.ui.dock.pin_panel");
+    public static final IKey DOCK_RESTORE_TO_LAYOUT = L10n.lang("bbs.ui.dock.restore_to_layout");
     public static final IKey FILM_PANELS_MAIN = L10n.lang("bbs.ui.film.panels.main");
     public static final IKey FILM_PANELS_PREVIEW = L10n.lang("bbs.ui.film.panels.preview");
     public static final IKey FILM_PANELS_EDIT_AREA = L10n.lang("bbs.ui.film.panels.edit_area");
@@ -434,6 +455,23 @@ public class UIKeys
     public static final IKey FILM_AUTO_KEYFRAME = L10n.lang("bbs.ui.film.auto_keyframe");
     public static final IKey FILM_OPTIONS = L10n.lang("bbs.ui.film.options");
     public static final IKey FILM_TABS_NEW_TAB = L10n.lang("bbs.ui.film.tabs.new_tab");
+    public static final IKey NEW_TAB = L10n.lang("bbs.ui.new_tab");
+    public static final IKey FILM_HUB_SEARCH = L10n.lang("bbs.ui.film.hub.search");
+    public static final IKey FILM_HUB_EDITOR_BADGE = L10n.lang("bbs.ui.film.hub.editor_badge");
+    public static final IKey FILM_HUB_ADD_FILM = L10n.lang("bbs.ui.film.hub.add_film");
+    public static final IKey FILM_HUB_RECENT_PROJECTS = L10n.lang("bbs.ui.film.hub.recent_projects");
+    public static final IKey FILM_HUB_ALL = L10n.lang("bbs.ui.film.hub.all");
+    public static final IKey FILM_HUB_EMPTY_RECENT = L10n.lang("bbs.ui.film.hub.empty_recent");
+    public static final IKey FILM_HUB_NO_SEARCH_RESULTS = L10n.lang("bbs.ui.film.hub.no_search_results");
+    public static final IKey FILM_CREATE_DIALOG_TITLE = L10n.lang("bbs.ui.film.dialog.title");
+    public static final IKey FILM_CREATE_DIALOG_FOLDERS = L10n.lang("bbs.ui.film.dialog.folders");
+    public static final IKey FILM_CREATE_DIALOG_OPEN_FOLDER = L10n.lang("bbs.ui.film.dialog.open_folder");
+    public static final IKey FILM_CREATE_DIALOG_ROOT_FOLDER = L10n.lang("bbs.ui.film.dialog.root_folder");
+    public static final IKey FILM_CREATE_DIALOG_LOCATION = L10n.lang("bbs.ui.film.dialog.location");
+    public static final IKey FILM_CREATE_DIALOG_NAME_PLACEHOLDER = L10n.lang("bbs.ui.film.dialog.name_placeholder");
+    public static final IKey FILM_CREATE_DIALOG_CREATE = L10n.lang("bbs.ui.film.dialog.create");
+    public static final IKey FILM_CREATE_DIALOG_EXISTING_FILMS = L10n.lang("bbs.ui.film.dialog.existing_films");
+    public static final IKey FILM_CREATE_DIALOG_EMPTY = L10n.lang("bbs.ui.film.dialog.empty");
     public static final IKey FILM_LANDING_NEW = L10n.lang("bbs.ui.film.landing.new");
     public static final IKey FILM_LANDING_LIST = L10n.lang("bbs.ui.film.landing.list");
     public static final IKey FILM_OPEN_REPLAY_EDITOR = L10n.lang("bbs.ui.film.open_replay_editor");
@@ -530,6 +568,14 @@ public class UIKeys
     public static final IKey FILM_TELEPORT_TITLE = L10n.lang("bbs.ui.film.teleport-title");
     public static final IKey FILM_TITLE = L10n.lang("bbs.ui.film.title");
     public static final IKey FILM_VIDEO_RECORDING = L10n.lang("bbs.ui.film.video_recording");
+    public static final IKey FILM_MENU_WINDOW = L10n.lang("bbs.ui.film.menu.window");
+    public static final IKey FILM_MENU_TOOLS = L10n.lang("bbs.ui.film.menu.tools");
+    public static final IKey FILM_MENU_HELP = L10n.lang("bbs.ui.film.menu.help");
+    public static final IKey FILM_MENU_LEFT_PANEL = L10n.lang("bbs.ui.film.menu.left_panel");
+    public static final IKey FILM_MENU_RIGHT_PANEL = L10n.lang("bbs.ui.film.menu.right_panel");
+    public static final IKey FILM_MENU_RESET_LAYOUT = L10n.lang("bbs.ui.film.menu.reset_layout");
+    public static final IKey FILM_MENU_TOUR = L10n.lang("bbs.ui.film.menu.tour");
+    public static final IKey FILM_MENU_DETAILS = L10n.lang("bbs.ui.film.menu.details");
     public static final IKey FORMS_CATEGORIES_ADD_CATEGORY_DESCRIPTION = L10n.lang("bbs.ui.forms.categories.add_category-description");
     public static final IKey FORMS_CATEGORIES_ADD_CATEGORY_TITLE = L10n.lang("bbs.ui.forms.categories.add_category-title");
     public static final IKey FORMS_CATEGORIES_CONTEXT_ADD_CATEGORY = L10n.lang("bbs.ui.forms.categories.context.add_category");
@@ -1904,6 +1950,85 @@ public class UIKeys
     public static final IKey HUB_SELECT_ASSET = L10n.lang("bbs.ui.hub.select_asset");
     public static final IKey HUB_FILES_INCLUDED = L10n.lang("bbs.ui.hub.files_included");
     public static final IKey HUB_TAGS = L10n.lang("bbs.ui.hub.tags");
+
+    public static final IKey HUB_SEARCHING = L10n.lang("bbs.ui.hub.searching");
+
+    /* Particles Hub */
+    public static final IKey PARTICLES_HUB_SEARCH = L10n.lang("bbs.ui.particles.hub.search");
+    public static final IKey PARTICLES_HUB_BADGE = L10n.lang("bbs.ui.particles.hub.badge");
+    public static final IKey PARTICLES_HUB_ADD = L10n.lang("bbs.ui.particles.hub.add");
+    public static final IKey PARTICLES_HUB_RECENT = L10n.lang("bbs.ui.particles.hub.recent");
+    public static final IKey PARTICLES_HUB_ALL = L10n.lang("bbs.ui.particles.hub.all");
+    public static final IKey PARTICLES_HUB_EMPTY_RECENT = L10n.lang("bbs.ui.particles.hub.empty_recent");
+    public static final IKey PARTICLES_HUB_NO_SEARCH_RESULTS = L10n.lang("bbs.ui.particles.hub.no_search_results");
+
+    /* Model Hub */
+    public static final IKey MODEL_HUB_SEARCH = L10n.lang("bbs.ui.model.hub.search");
+    public static final IKey MODEL_HUB_BADGE = L10n.lang("bbs.ui.model.hub.badge");
+    public static final IKey MODEL_HUB_ADD = L10n.lang("bbs.ui.model.hub.add");
+    public static final IKey MODEL_HUB_RECENT = L10n.lang("bbs.ui.model.hub.recent");
+    public static final IKey MODEL_HUB_ALL = L10n.lang("bbs.ui.model.hub.all");
+    public static final IKey MODEL_HUB_EMPTY_RECENT = L10n.lang("bbs.ui.model.hub.empty_recent");
+    public static final IKey MODEL_HUB_NO_SEARCH_RESULTS = L10n.lang("bbs.ui.model.hub.no_search_results");
+
+    /* Audio Hub */
+    public static final IKey AUDIO_HUB_SEARCH = L10n.lang("bbs.ui.audio.hub.search");
+    public static final IKey AUDIO_HUB_BADGE = L10n.lang("bbs.ui.audio.hub.badge");
+    public static final IKey AUDIO_HUB_RECENT = L10n.lang("bbs.ui.audio.hub.recent");
+    public static final IKey AUDIO_HUB_ALL = L10n.lang("bbs.ui.audio.hub.all");
+    public static final IKey AUDIO_HUB_EMPTY_RECENT = L10n.lang("bbs.ui.audio.hub.empty_recent");
+    public static final IKey AUDIO_HUB_NO_SEARCH_RESULTS = L10n.lang("bbs.ui.audio.hub.no_search_results");
+
+    /* Textures Hub */
+    public static final IKey TEXTURES_HUB_SEARCH = L10n.lang("bbs.ui.textures.hub.search");
+    public static final IKey TEXTURES_HUB_BADGE = L10n.lang("bbs.ui.textures.hub.badge");
+    public static final IKey TEXTURES_HUB_ADD = L10n.lang("bbs.ui.textures.hub.add");
+    public static final IKey TEXTURES_HUB_RECENT = L10n.lang("bbs.ui.textures.hub.recent");
+    public static final IKey TEXTURES_HUB_ALL = L10n.lang("bbs.ui.textures.hub.all");
+    public static final IKey TEXTURES_HUB_EMPTY_RECENT = L10n.lang("bbs.ui.textures.hub.empty_recent");
+    public static final IKey TEXTURES_HUB_NO_SEARCH_RESULTS = L10n.lang("bbs.ui.textures.hub.no_search_results");
+    public static final IKey TEXTURES_HUB_CAT_ALL = L10n.lang("bbs.ui.textures.hub.cat_all");
+    public static final IKey TEXTURES_HUB_CAT_SKINS = L10n.lang("bbs.ui.textures.hub.cat_skins");
+    public static final IKey TEXTURES_HUB_CAT_VFX = L10n.lang("bbs.ui.textures.hub.cat_vfx");
+    public static final IKey TEXTURES_HUB_CAT_UI = L10n.lang("bbs.ui.textures.hub.cat_ui");
+    public static final IKey TEXTURES_HUB_CAT_ANIMATED = L10n.lang("bbs.ui.textures.hub.cat_animated");
+    public static final IKey TEXTURES_HUB_OPEN_IN_EDITOR = L10n.lang("bbs.ui.textures.hub.open_in_editor");
+    public static final IKey TEXTURES_HUB_DUPLICATE = L10n.lang("bbs.ui.textures.hub.duplicate");
+    public static final IKey TEXTURES_HUB_SHOW_IN_EXPLORER = L10n.lang("bbs.ui.textures.hub.show_in_explorer");
+    public static final IKey TEXTURES_HUB_RETURN = L10n.lang("bbs.ui.textures.hub.return");
+
+    /* Community Store Hub */
+    public static final IKey COMMUNITY_HUB_SEARCH = L10n.lang("bbs.ui.community.hub.search");
+    public static final IKey COMMUNITY_HUB_BADGE = L10n.lang("bbs.ui.community.hub.badge");
+    public static final IKey COMMUNITY_HUB_ALL = L10n.lang("bbs.ui.community.hub.all");
+    public static final IKey COMMUNITY_HUB_FEATURED = L10n.lang("bbs.ui.community.hub.featured");
+    public static final IKey COMMUNITY_HUB_CLASSIC_STORE = L10n.lang("bbs.ui.community.hub.classic_store");
+    public static final IKey COMMUNITY_HUB_RETURN = L10n.lang("bbs.ui.community.hub.return");
+    public static final IKey COMMUNITY_HUB_DETAILS = L10n.lang("bbs.ui.community.hub.details");
+    public static final IKey COMMUNITY_HUB_NO_RESULTS = L10n.lang("bbs.ui.community.hub.no_results");
+    public static final IKey COMMUNITY_HUB_EMPTY = L10n.lang("bbs.ui.community.hub.empty");
+    public static final IKey COMMUNITY_HUB_OPEN_FILES = L10n.lang("bbs.ui.community.hub.open_files");
+    public static final IKey COMMUNITY_HUB_UPDATE_AVAILABLE = L10n.lang("bbs.ui.community.hub.update_available");
+
+    public static final IKey MORPH_STUDIO_TITLE = L10n.lang("bbs.ui.morph_studio.title");
+    public static final IKey MORPH_STUDIO_SEARCH = L10n.lang("bbs.ui.morph_studio.search");
+    public static final IKey MORPH_STUDIO_PODIUM_TITLE = L10n.lang("bbs.ui.morph_studio.podium_title");
+    public static final IKey MORPH_STUDIO_NO_FORM = L10n.lang("bbs.ui.morph_studio.no_form");
+    public static final IKey MORPH_STUDIO_MORPH_BUTTON = L10n.lang("bbs.ui.morph_studio.morph_button");
+    public static final IKey MORPH_STUDIO_FAVORITE = L10n.lang("bbs.ui.morph_studio.favorite");
+    public static final IKey MORPH_STUDIO_UNFAVORITE = L10n.lang("bbs.ui.morph_studio.unfavorite");
+    public static final IKey MORPH_STUDIO_EDIT = L10n.lang("bbs.ui.morph_studio.edit");
+    public static final IKey MORPH_STUDIO_RECENT_TITLE = L10n.lang("bbs.ui.morph_studio.recent_title");
+    public static final IKey MORPH_STUDIO_SEARCH_TITLE = L10n.lang("bbs.ui.morph_studio.search_title");
+    public static final IKey MORPH_STUDIO_EMPTY = L10n.lang("bbs.ui.morph_studio.empty");
+    public static final IKey MORPH_STUDIO_CLASSIC_VIEW = L10n.lang("bbs.ui.morph_studio.classic_view");
+    public static final IKey MORPH_STUDIO_RETURN = L10n.lang("bbs.ui.morph_studio.return");
+    public static final IKey MORPH_CATEGORY_ALL = L10n.lang("bbs.ui.morph_studio.categories.all");
+    public static final IKey MORPH_CATEGORY_RIGS = L10n.lang("bbs.ui.morph_studio.categories.rigs");
+    public static final IKey MORPH_CATEGORY_MOBS = L10n.lang("bbs.ui.morph_studio.categories.mobs");
+    public static final IKey MORPH_CATEGORY_VFX = L10n.lang("bbs.ui.morph_studio.categories.vfx");
+    public static final IKey MORPH_CATEGORY_BLOCKS = L10n.lang("bbs.ui.morph_studio.categories.blocks");
+    public static final IKey MORPH_CATEGORY_FAVORITES = L10n.lang("bbs.ui.morph_studio.categories.favorites");
 
     /* Key collections */
     public static final KeyCollection C_CLIP = new KeyCollection("bbs.ui.camera.clips.^")

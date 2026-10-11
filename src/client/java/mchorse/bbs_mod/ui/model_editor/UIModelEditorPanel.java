@@ -904,4 +904,13 @@ public class UIModelEditorPanel extends UIDataDashboardPanel<ModelConfig>
         }
     }
 
+    @Override
+    protected void mountLanding()
+    {
+        this.landing = new UIModelHubScreen(this);
+
+        this.add(this.layoutUnderTopBar(this.landing));
+
+        this.syncLanding();
+    }
 }
