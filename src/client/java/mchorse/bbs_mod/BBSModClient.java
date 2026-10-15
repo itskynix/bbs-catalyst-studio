@@ -60,6 +60,8 @@ import mchorse.bbs_mod.ui.forms.editors.UIFormEditor;
 import mchorse.bbs_mod.ui.framework.elements.input.keyframes.factories.UIKeyframeFactory;
 import mchorse.bbs_mod.api.client.events.RegisterL10nEvent;
 import mchorse.bbs_mod.film.Films;
+import mchorse.bbs_mod.film.replays.MultiTakeSession;
+import mchorse.bbs_mod.film.replays.UIRadialReplayScreen;
 import mchorse.bbs_mod.film.replays.MultiTrackReplaySession;
 import net.minecraft.client.gui.screen.Screen;
 import mchorse.bbs_mod.film.Recorder;
@@ -175,6 +177,7 @@ public class BBSModClient implements ClientModInitializer
     private static KeyBinding keyRecordReplay;
     private static KeyBinding keyReplayNextTrack;
     private static KeyBinding keyReplayPrevTrack;
+    private static KeyBinding keyReplayRadial;
     private static KeyBinding keyRecordVideo;
     private static KeyBinding keyPlayFilmAndRecord;
     private static KeyBinding keyOpenReplays;
@@ -712,6 +715,7 @@ public class BBSModClient implements ClientModInitializer
         keyRecordReplay = this.createKey("record_replay", GLFW.GLFW_KEY_RIGHT_ALT);
         keyReplayNextTrack = this.createKey("replay_next_track", GLFW.GLFW_KEY_RIGHT);
         keyReplayPrevTrack = this.createKey("replay_prev_track", GLFW.GLFW_KEY_LEFT);
+        keyReplayRadial = this.createKey("replay_radial", GLFW.GLFW_KEY_R);
         keyRecordVideo = this.createKey("record_video", GLFW.GLFW_KEY_F4);
         keyPlayFilmAndRecord = this.createKey("play_film_and_record", GLFW.GLFW_KEY_F6);
         keyOpenReplays = this.createKey("open_replays", GLFW.GLFW_KEY_RIGHT_SHIFT);
@@ -887,6 +891,10 @@ public class BBSModClient implements ClientModInitializer
                 {
                     MultiTrackReplaySession.nextTrack();
                 }
+                else
+                {
+                    MultiTakeSession.step(1);
+                }
             }
             while (keyReplayPrevTrack.wasPressed())
             {
@@ -894,7 +902,12 @@ public class BBSModClient implements ClientModInitializer
                 {
                     MultiTrackReplaySession.previousTrack();
                 }
+                else
+                {
+                    MultiTakeSession.step(-1);
+                }
             }
+            while (keyReplayRadial.wasPressed()) this.keyReplayRadial(mc);
             while (keyRecordVideo.wasPressed()) this.keyRecordVideo(mc);
             while (keyPlayFilmAndRecord.wasPressed()) this.keyPlayFilmAndRecord();
             while (keyOpenReplays.wasPressed()) this.keyOpenReplays();
@@ -1176,6 +1189,24 @@ public class BBSModClient implements ClientModInitializer
                 }
             }
         }
+    }
+
+    /** Hold: the radial picker over the film's replays, in the world only (a screen already open owns the keys). */
+    private void keyReplayRadial(MinecraftClient mc)
+    {
+        if (mc.currentScreen != null || getDashboardIfCreated() == null)
+        {
+            return;
+        }
+
+        UIFilmPanel panel = getDashboard().getPanel(UIFilmPanel.class);
+
+        if (panel == null || panel.getData() == null || panel.getData().replays.getList().size() < 2 || MultiTrackReplaySession.isActive())
+        {
+            return;
+        }
+
+        mc.setScreen(new UIRadialReplayScreen(panel.getData(), keyReplayRadial, MultiTakeSession.currentIndex(panel, panel.getData(), getFilms().getRecorder())));
     }
 
     private void keyOpenReplays()

@@ -12,6 +12,7 @@ import mchorse.bbs_mod.camera.controller.ICameraController;
 import mchorse.bbs_mod.camera.controller.PlayCameraController;
 import mchorse.bbs_mod.camera.controller.RunnerCameraController;
 import mchorse.bbs_mod.camera.utils.TimeUtils;
+import mchorse.bbs_mod.film.replays.MultiTakeSession;
 import mchorse.bbs_mod.film.replays.Replay;
 import mchorse.bbs_mod.morphing.Morph;
 import mchorse.bbs_mod.network.ClientNetwork;
@@ -492,6 +493,8 @@ public class Films
 
     public void renderHud(Batcher2D batcher2D, float tickDelta)
     {
+        MultiTakeSession.renderHud(batcher2D);
+
         if (MultiTrackReplaySession.isActive())
         {
             UIMultiTrackHud.render(batcher2D, MultiTrackReplaySession.getRecorder(), tickDelta);

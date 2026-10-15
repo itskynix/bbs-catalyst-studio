@@ -25,5 +25,8 @@
     "category.bbs.main": "BBS Modu",
 
     "gamerule.bbsEditing": "BBS Modu Düzenleme İzni",
-    "bbs.ui.film.preview.loading_scene": "Sahne Hazırlanıyor"
+    "bbs.ui.film.preview.loading_scene": "Sahne Hazırlanıyor",
+    "key.bbs.replay_radial": "Replay Seçici (basılı tut)",
+    "key.bbs.replay_next_track": "Sonraki Aktör / Take",
+    "key.bbs.replay_prev_track": "Önceki Aktör / Take"
 }
