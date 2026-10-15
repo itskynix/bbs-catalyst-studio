@@ -24,8 +24,11 @@ import org.joml.Vector3f;
  * p[i]         = p[anc(i)] + ΔW(anc(i)) · (startPos[i] − startPos[anc(i)])
  * </pre>
  *
- * A joint with no captured ancestor is a ROOT of the forest: its pivot and
- * parent frame are frozen for the solve. Effectors ride their chain's last
+ * A joint with no captured ancestor is a ROOT of the forest: its parent frame
+ * is frozen for the solve, and so is its pivot — unless the root was opened
+ * up by {@link #allowTranslation}, in which case {@code p[root] = startPos +
+ * translation} and the translation joins the angles as a solver variable
+ * (full-body IK: the pelvis slides). Effectors ride their chain's last
  * directed joint the same rigid way. Exact for any ancestor/link scale (scale
  * lives inside the captured segments — see the chain-era derivation, verified
  * against the real renderer to float precision).
@@ -124,6 +127,71 @@ public final class IKTree
         return effector;
     }
 
+    /**
+     * Gives a forest ROOT three translation degrees of freedom: its pivot
+     * becomes {@code startPos + translation}, and everything hanging below it
+     * (other chains' joints and effectors included) rides along rigidly. A
+     * joint with a captured ancestor cannot translate — its pivot is defined by
+     * that ancestor's frame — so the call returns {@code false} and changes
+     * nothing. Call after parentIndex is filled.
+     */
+    public boolean allowTranslation(int joint, float weight)
+    {
+        if (this.parentIndex[joint] >= 0 || weight <= 0F)
+        {
+            return false;
+        }
+
+        IKJoint target = this.joints[joint];
+
+        target.translatable = true;
+        target.translationSolvable = true;
+        target.translationWeight = Math.min(weight, 1F);
+        target.translation.zero();
+
+        return true;
+    }
+
+    /**
+     * Shifts a forest ROOT by a fixed world-space offset (a grounded pelvis drop). On a root that
+     * the solver may translate it only seeds the start value; on any other it becomes a constant
+     * the solver works around. A joint with a captured ancestor cannot be shifted.
+     */
+    public boolean seedRootOffset(int joint, Vector3f offset)
+    {
+        if (this.parentIndex[joint] >= 0)
+        {
+            return false;
+        }
+
+        IKJoint target = this.joints[joint];
+
+        if (!target.translatable)
+        {
+            target.translatable = true;
+            target.translationSolvable = false;
+            target.translationWeight = 1F;
+        }
+
+        target.translation.set(offset);
+
+        return true;
+    }
+
+    /** Whether any joint of the tree may translate under the solver. */
+    public boolean hasTranslation()
+    {
+        for (IKJoint joint : this.joints)
+        {
+            if (joint.translatable && joint.translationSolvable)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /** Whether turning joint {@code joint} moves effector {@code e}. */
     public boolean moves(int e, int joint)
     {
@@ -177,6 +245,11 @@ public final class IKTree
             {
                 joint.position.set(joint.startPosition);
                 joint.parentRotation.set(this.startParentRotation[i]);
+
+                if (joint.translatable)
+                {
+                    joint.position.add(joint.translation);
+                }
             }
             else
             {

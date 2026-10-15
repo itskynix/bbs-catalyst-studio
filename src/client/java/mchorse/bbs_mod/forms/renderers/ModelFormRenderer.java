@@ -19,6 +19,7 @@ import mchorse.bbs_mod.cubic.animation.ItemUsePose;
 import mchorse.bbs_mod.cubic.animation.ProceduralAnimator;
 import mchorse.bbs_mod.cubic.data.model.ModelGroup;
 import mchorse.bbs_mod.cubic.ik.ModelIKDebug;
+import mchorse.bbs_mod.cubic.ik.GroundDetector;
 import mchorse.bbs_mod.cubic.ik.ModelIKRuntime;
 import mchorse.bbs_mod.cubic.jem.CemAnimator;
 import mchorse.bbs_mod.cubic.jem.CemVanillaStage;
@@ -464,7 +465,7 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
          * honest answer, so they run model-local, as they do in the UI. */
         Matrix4f baseTransform = ui || world == null ? null : new Matrix4f(world.peek().getPositionMatrix());
 
-        this.applyIK(model, baseTransform);
+        this.applyIK(model, baseTransform, target, transition);
         this.applyPhysics(target, model, transition, baseTransform);
         this.applyConstraints(model);
 
@@ -613,19 +614,23 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
             base.rotateY(MathUtils.PI);
         }
 
-        this.applyIK(model, base);
+        this.applyIK(model, base, null, 0F);
     }
 
-    private void applyIK(ModelInstance model, Matrix4f baseTransform)
+    private void applyIK(ModelInstance model, Matrix4f baseTransform, IEntity entity, float transition)
     {
         model.form = this.form;
+
+        /* Foot grounding reads the terrain, so it needs the actor's world; without one
+         * (UI, bake, the matrices pass) grounded chains solve as ungrounded. */
+        GroundDetector.Context ground = baseTransform != null && entity != null ? GroundDetector.Context.of(entity.getWorld(), baseTransform, entity, transition) : null;
 
         boolean hasOverrides = baseTransform != null && this.form != null
             && (!this.form.ikTargetOverrides.isEmpty() || !this.form.poleTargetOverrides.isEmpty());
 
         if (!hasOverrides)
         {
-            ModelIKRuntime.apply(model, null, null);
+            ModelIKRuntime.apply(model, null, null, ground);
             return;
         }
 
@@ -635,11 +640,11 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
 
         if (local.isEmpty() && poleLocal.isEmpty())
         {
-            ModelIKRuntime.apply(model, null, null);
+            ModelIKRuntime.apply(model, null, null, ground);
             return;
         }
 
-        ModelIKRuntime.apply(model, local.isEmpty() ? null : local, poleLocal.isEmpty() ? null : poleLocal);
+        ModelIKRuntime.apply(model, local.isEmpty() ? null : local, poleLocal.isEmpty() ? null : poleLocal, ground);
     }
 
     /** World-space target overrides into the model's local space (the space the solver and pivot frames use). */

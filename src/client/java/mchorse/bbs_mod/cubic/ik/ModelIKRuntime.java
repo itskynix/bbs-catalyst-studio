@@ -1,9 +1,13 @@
 package mchorse.bbs_mod.cubic.ik;
 
 import mchorse.bbs_mod.cubic.IModel;
+import mchorse.bbs_mod.cubic.RigBone;
+import mchorse.bbs_mod.cubic.render.CubicRenderer;
+import mchorse.bbs_mod.cubic.render.ModelPivotFrames;
 import mchorse.bbs_mod.cubic.ModelInstance;
 import mchorse.bbs_mod.forms.forms.ModelForm;
 import mchorse.bbs_mod.forms.forms.utils.FormBone;
+import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
 import java.util.ArrayList;
@@ -22,6 +26,15 @@ public final class ModelIKRuntime
     }
 
     public static void apply(ModelInstance instance, Map<String, Vector3f> controllerTargets, Map<String, Vector3f> poleTargets)
+    {
+        apply(instance, controllerTargets, poleTargets, null);
+    }
+
+    /**
+     * @param ground the world frame for foot grounding, or null when the solve has no world
+     * (UI preview, bake without an entity): chains asking for grounding then solve ungrounded.
+     */
+    public static void apply(ModelInstance instance, Map<String, Vector3f> controllerTargets, Map<String, Vector3f> poleTargets, GroundDetector.Context ground)
     {
         if (instance == null || instance.model == null || !(instance.form instanceof ModelForm form))
         {
@@ -55,7 +68,82 @@ public final class ModelIKRuntime
             controls.put(chain.tip(), bone == null ? IKControl.DEFAULT : bone.ik.get());
         }
 
-        ModelIKApplier.apply(model, chains, compiled.bones(), controllerTargets, poleTargets, form.ikTargetWeights, form.poleTargetWeights, controls);
+        /* The head's frame BEFORE the solve: the FK pose it must keep in the world. */
+        String head = BoneIKIO.isFkOnly("head") ? headToIsolate(model, chains) : null;
+        String neck = head == null ? null : model.getParentGroupKey(head);
+        Map<String, CubicRenderer.PivotFrame> before = null;
+
+        if (neck != null)
+        {
+            before = new HashMap<>();
+            ModelPivotFrames.collect(model, Set.of(neck), before, null);
+        }
+
+        ModelIKApplier.apply(model, chains, compiled.bones(), controllerTargets, poleTargets, form.ikTargetWeights, form.poleTargetWeights, controls, ground);
+
+        if (before != null)
+        {
+            isolateHead(model, head, neck, before);
+        }
+    }
+
+    /** The head bone when it exists, has a parent and is no part of any chain; null otherwise. */
+    private static String headToIsolate(IModel model, List<ModelIKCache.CompiledChain> chains)
+    {
+        if (model.getBone("head") == null)
+        {
+            return null;
+        }
+
+        String parent = model.getParentGroupKey("head");
+
+        if (parent == null || parent.isEmpty() || parent.equals("head"))
+        {
+            return null;
+        }
+
+        for (ModelIKCache.CompiledChain chain : chains)
+        {
+            if (chain.chainRootToEffector().contains("head"))
+            {
+                return null;
+            }
+        }
+
+        return "head";
+    }
+
+    /**
+     * Head isolation: whatever the IK did to the bones above the head (the spine a body or arm chain
+     * bends, the pelvis a full-body tree turns) is taken back out of the head's own rotation, so
+     * its WORLD orientation stays the one the animation and the look-at gave it. With the parent's
+     * world rotation {@code P} before and {@code P'} after the solve, the head's local rotation
+     * becomes {@code P'⁻¹ · P · local}: its world rotation {@code P' · P'⁻¹ · P · local} is the
+     * FK one again. Nothing happens when the solve left the parent alone.
+     */
+    private static void isolateHead(IModel model, String head, String neck, Map<String, CubicRenderer.PivotFrame> before)
+    {
+        Map<String, CubicRenderer.PivotFrame> after = new HashMap<>();
+
+        ModelPivotFrames.collect(model, Set.of(neck), after, null);
+
+        CubicRenderer.PivotFrame was = before.get(neck);
+        CubicRenderer.PivotFrame now = after.get(neck);
+        RigBone bone = model.getBone(head);
+
+        if (was == null || now == null || bone == null || was.worldRotation() == null || now.worldRotation() == null)
+        {
+            return;
+        }
+
+        Quaternionf turn = new Quaternionf(now.worldRotation()).conjugate().mul(was.worldRotation());
+
+        if (Math.abs(turn.w) > 1F - 1.0e-7f)
+        {
+            return;
+        }
+
+        bone.setOrient(turn.mul(bone.evaluatedRotation()));
     }
 
     /**

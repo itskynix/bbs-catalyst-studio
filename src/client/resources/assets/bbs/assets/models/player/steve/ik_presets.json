@@ -66,5 +66,85 @@
                 "target": "controller_body"
             }
         }
+    },
+    "ik_fullbody": {
+        "chains": {
+            "left_leg_end": {
+                "target": "controller_left_leg",
+                "pole_target": "pole_left_leg",
+                "chain_length": 4,
+                "enabled": true,
+                "pole": false,
+                "root_translation": true,
+                "fk_follow": true
+            },
+            "right_leg_end": {
+                "target": "controller_right_leg",
+                "pole_target": "pole_right_leg",
+                "chain_length": 4,
+                "enabled": true,
+                "pole": false,
+                "root_translation": true,
+                "fk_follow": true
+            },
+            "left_arm_end": {
+                "target": "controller_left_arm",
+                "pole_target": "pole_left_arm",
+                "chain_length": 6,
+                "enabled": true,
+                "pole": false,
+                "root_translation": true,
+                "fk_follow": true
+            },
+            "right_arm_end": {
+                "target": "controller_right_arm",
+                "pole_target": "pole_right_arm",
+                "chain_length": 6,
+                "enabled": true,
+                "pole": false,
+                "root_translation": true,
+                "fk_follow": true
+            }
+        }
+    },
+    "ik_no_bends_fullbody": {
+        "chains": {
+            "left_leg_end": {
+                "target": "controller_left_leg",
+                "pole_target": "pole_left_leg",
+                "chain_length": 3,
+                "enabled": true,
+                "pole": false,
+                "root_translation": true,
+                "fk_follow": true
+            },
+            "right_leg_end": {
+                "target": "controller_right_leg",
+                "pole_target": "pole_right_leg",
+                "chain_length": 3,
+                "enabled": true,
+                "pole": false,
+                "root_translation": true,
+                "fk_follow": true
+            },
+            "left_arm_end": {
+                "target": "controller_left_arm",
+                "pole_target": "pole_left_arm",
+                "chain_length": 5,
+                "enabled": true,
+                "pole": false,
+                "root_translation": true,
+                "fk_follow": true
+            },
+            "right_arm_end": {
+                "target": "controller_right_arm",
+                "pole_target": "pole_right_arm",
+                "chain_length": 5,
+                "enabled": true,
+                "pole": false,
+                "root_translation": true,
+                "fk_follow": true
+            }
+        }
     }
 }

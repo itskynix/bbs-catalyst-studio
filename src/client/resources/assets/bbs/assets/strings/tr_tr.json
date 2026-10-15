@@ -1688,5 +1688,11 @@
     "bbs.ui.morph_studio.categories.mobs": "Yaratıklar",
     "bbs.ui.morph_studio.categories.vfx": "Parçacıklar / VFX",
     "bbs.ui.morph_studio.categories.blocks": "Eşyalar & Bloklar",
-    "bbs.ui.morph_studio.categories.favorites": "Favoriler"
+    "bbs.ui.morph_studio.categories.favorites": "Favoriler",
+    "bbs.ui.forms.editors.model.ik.root_translation": "Kök öteleme",
+    "bbs.ui.forms.editors.model.ik.fk_follow": "Animasyonu takip et (FK)",
+    "bbs.ui.forms.editors.model.ik.fk_follow_tooltip": "Hedef, animasyonun üzerine bir ofset olur: zincir, FK pozunun (idle, walk, run...) ucu zaten götürdüğü yere, artı kontrolcünün dinlenme konumundan ne kadar kaydırıldığına uzanır. Dokunulmamış kontrolcü hiçbir şeyi değiştirmez; animasyon uzvu sallamaya devam eder.",
+    "bbs.ui.forms.editors.model.ik.ground_clamping": "Zemin uyumu (Foot grounding)",
+    "bbs.ui.forms.editors.model.ik.ground_clamping_tooltip": "Ayağın altındaki blokları dünyadan okur (slab, merdiven, kar katmanı...) ve zincir ucunu gerçek yüzeye basar; en fazla 1 blok yukarı, 1,25 blok aşağı. İki bacak ortak bir kökün altında zeminlenmişse (full-body ön ayarları) pelvis alçaktaki ayağa göre iner, yüksekteki bacak dizden bükülür. Dünya gerekir: önizleme ve bake zeminsiz çözer.",
+    "bbs.ui.forms.editors.model.ik.root_translation_tooltip": "Zincir hedefe yalnızca bükülerek yetişemediğinde, IK ağacının en üstündeki kök kemik (ör. pelvis) hedefe doğru kayar; tüm gövdeyi ve diğer zincirleri de beraberinde götürür."
 }

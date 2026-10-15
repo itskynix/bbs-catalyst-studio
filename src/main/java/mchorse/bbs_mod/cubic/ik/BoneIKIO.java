@@ -69,7 +69,7 @@ public final class BoneIKIO
 
         for (String tip : chainsMap.keys())
         {
-            if (tip.isEmpty() || !chainsMap.has(tip, BaseType.TYPE_MAP))
+            if (tip.isEmpty() || isFkOnly(tip) || !chainsMap.has(tip, BaseType.TYPE_MAP))
             {
                 continue;
             }
@@ -91,6 +91,9 @@ public final class BoneIKIO
             bone.ikStretch.set(entry.getBool("stretch", false));
             bone.ikSquash.set(entry.getBool("squash", false));
             bone.ikClassic.set(entry.getBool("classic", defaultClassic));
+            bone.ikRootTranslation.set(entry.getBool("root_translation", false));
+            bone.ikFkFollow.set(entry.getBool("fk_follow", false));
+            bone.ikGroundClamping.set(entry.getBool("ground_clamping", false));
 
             IKControl control = new IKControl();
 
@@ -198,6 +201,21 @@ public final class BoneIKIO
                     entry.putBool("classic", true);
                 }
 
+                if (bone.ikRootTranslation.get())
+                {
+                    entry.putBool("root_translation", true);
+                }
+
+                if (bone.ikFkFollow.get())
+                {
+                    entry.putBool("fk_follow", true);
+                }
+
+                if (bone.ikGroundClamping.get())
+                {
+                    entry.putBool("ground_clamping", true);
+                }
+
                 chains.put(bone.getId(), entry);
             }
 
@@ -227,6 +245,16 @@ public final class BoneIKIO
         return root;
     }
 
+    /**
+     * Bones that never carry an IK chain: the head stays pure FK (the animation and the look-at own
+     * it). A chain on it — from an old preset, a stored form or a hand edit — is ignored on load and
+     * on compile, so it cannot sway the head while the body walks.
+     */
+    public static boolean isFkOnly(String bone)
+    {
+        return "head".equals(bone);
+    }
+
     /** Neutralizes a bone's chain: the addresses, the modes and the scalars all back to default. */
     public static void clearChain(FormBone bone)
     {
@@ -237,6 +265,9 @@ public final class BoneIKIO
         bone.ikStretch.set(false);
         bone.ikSquash.set(false);
         bone.ikClassic.set(false);
+        bone.ikRootTranslation.set(false);
+        bone.ikFkFollow.set(false);
+        bone.ikGroundClamping.set(false);
         bone.ik.set(new IKControl());
     }
 

@@ -40,6 +40,11 @@ import java.util.List;
  * the locked channels) — its pole acts through weak in-Jacobian rows instead,
  * see {@link #buildBiases}. Everything is radians and world units; the solve
  * is stateless.
+ *
+ * <p>Full-body IK: a tree whose forest root was opened with
+ * {@link IKTree#allowTranslation} gets three identity Jacobian columns for the
+ * root pivot ({@code ∂p/∂t = I}), but only in a LAST phase that runs when the
+ * rotation-only solve fell short — reachable goals keep their old poses.
  */
 public final class IKTreeSolver
 {
@@ -92,6 +97,38 @@ public final class IKTreeSolver
      * it exactly, and grinding the budget against them buys nothing).
      */
     private static final float POLE_BIAS_SETTLE = 0.05F;
+
+    /**
+     * Extra damping per additional effector in a tree with a translatable
+     * root: the translation phase's λ² is multiplied by {@code 1 + this ·
+     * (effectors − 1)}. Opposing goals (hands up, feet planted) pull the pelvis
+     * both ways; the stiffer damping turns that tug-of-war into a slow settle
+     * instead of an oscillation.
+     */
+    private static final float DAMPING_PER_EFFECTOR = 0.5F;
+
+    /**
+     * Singularity guard of trees with a translatable root: when the weakest
+     * direction of the damped normal matrix carries less than this many λ² of
+     * REAL Jacobian strength, λ² is raised on the spot (Nakamura-Hanafusa
+     * style) and the step re-solved, so a near-singular pose takes a short step
+     * instead of a lunge.
+     */
+    private static final float SINGULARITY_THRESHOLD = 4F;
+
+    /** Largest extra λ² (in units of the base λ²) the singularity guard adds, at zero strength. */
+    private static final float SINGULARITY_BOOST = 3F;
+
+    /**
+     * Momentum of the root translation across iterations: the step is blended
+     * as {@code (1 − β)·new + β·previous}, which cancels the sign flips that
+     * make a pelvis ring between two opposing goals. Within one solve only —
+     * the solve itself stays stateless, so scrubbing and export stay exact.
+     */
+    private static final float ROOT_MOMENTUM = 0.3F;
+
+    /** The farthest the root may travel from its captured spot, as a fraction of the tree's largest reach. */
+    private static final float ROOT_TRAVEL = 0.6F;
 
     /**
      * @param maxIterations DLS iteration cap; ~64 covers long chains comfortably.
@@ -179,6 +216,16 @@ public final class IKTreeSolver
 
         float damping = params.dampingRatio() * largestReach(tree);
         float lambdaSq = damping * damping;
+        float shiftLambdaSq = lambdaSq * (1F + DAMPING_PER_EFFECTOR * Math.max(0, tree.effectors.length - 1));
+
+        for (IKJoint joint : tree.joints)
+        {
+            if (joint.translatable)
+            {
+                joint.translationLimit = ROOT_TRAVEL * largestReach(tree);
+                joint.translationMomentum.zero();
+            }
+        }
         int columns = countColumns(tree);
         int iterations = 0;
 
@@ -212,7 +259,7 @@ public final class IKTreeSolver
             {
                 iterations++;
 
-                if (!step(tree, lambdaSq, 1F, biases))
+                if (!step(tree, lambdaSq, 1F, biases, false))
                 {
                     break;
                 }
@@ -225,7 +272,7 @@ public final class IKTreeSolver
         {
             iterations++;
 
-            if (!step(tree, lambdaSq, ORIENT_FINISH, biases))
+            if (!step(tree, lambdaSq, ORIENT_FINISH, biases, false))
             {
                 break;
             }
@@ -238,6 +285,45 @@ public final class IKTreeSolver
             }
 
             previousError = error;
+        }
+
+        /* Root translation phase (full-body IK): only when the rotations alone
+         * fell short and the tree has a translatable root. Running it LAST keeps
+         * every reachable pose byte-identical to the rotation-only solve — the
+         * pelvis moves only for the part of the goal the limbs cannot cover,
+         * and a goal drifting out of reach starts it from a near-zero gap, so
+         * the onset is continuous. Rotations stay in the system: as the pelvis
+         * slides, the other chains' joints re-bend to hold their own goals. */
+        if (tree.hasTranslation() && worstError(tree) > params.tolerance())
+        {
+            int phase = 0;
+
+            previousError = worstError(tree);
+
+            while (phase < params.maxIterations() && worstError(tree) > params.tolerance())
+            {
+                iterations++;
+                phase++;
+
+                float[] before = shiftSnapshot(tree);
+                boolean moved = step(tree, shiftLambdaSq, ORIENT_FINISH, biases, true);
+
+                recordMomentum(tree, before);
+
+                if (!moved)
+                {
+                    break;
+                }
+
+                float error = worstError(tree);
+
+                if (phase >= MIN_ITERATIONS && previousError - error < previousError * MIN_PROGRESS)
+                {
+                    break;
+                }
+
+                previousError = error;
+            }
         }
 
         float poleTwistDeg = 0F;
@@ -1169,8 +1255,16 @@ public final class IKTreeSolver
         return joint.weight(axis);
     }
 
-    /** One damped-least-squares iteration; false when the step stalls. */
-    private static boolean step(IKTree tree, float lambdaSq, float orientScale, PoleBias[] biases)
+    /**
+     * One damped-least-squares iteration; false when the step stalls.
+     *
+     * <p>Variable layout: {@code i·3 + c} is joint i's rotation channel c,
+     * {@code (n + i)·3 + c} its pivot translation along world axis c. The
+     * translation variables enter only with {@code translate} on and only for
+     * {@link IKJoint#translatable} joints — everywhere else they are frozen,
+     * so a tree without a translatable root solves exactly as before.
+     */
+    private static boolean step(IKTree tree, float lambdaSq, float orientScale, PoleBias[] biases, boolean translate)
     {
         IKJoint[] joints = tree.joints;
         int n = joints.length;
@@ -1248,8 +1342,9 @@ public final class IKTreeSolver
          * carry the bare channel axis (a joint turn rotates the whole subtree's
          * orientation by itself), scaled the same way. A channel pinned by its
          * limits (min == max) never enters. */
-        float[] columns = new float[n * 3 * rows];
-        boolean[] frozen = new boolean[n * 3];
+        int vars = n * 6;
+        float[] columns = new float[vars * rows];
+        boolean[] frozen = new boolean[vars];
         Vector3f axis = new Vector3f();
         Vector3f lever = new Vector3f();
 
@@ -1326,13 +1421,56 @@ public final class IKTreeSolver
             }
         }
 
-        float[] saved = new float[n * 3];
+        /* Translation columns: a root pivot sliding along world axis c moves
+         * every point hanging below it by the same amount — the identity, row
+         * c of each effector (and soft-pole pivot) it carries. Orientation rows
+         * stay zero: a translation turns nothing. */
+        for (int i = 0; i < n; i++)
+        {
+            IKJoint joint = joints[i];
+
+            for (int c = 0; c < 3; c++)
+            {
+                int v = (n + i) * 3 + c;
+
+                if (!translate || !joint.translatable || !joint.translationSolvable)
+                {
+                    frozen[v] = true;
+                    continue;
+                }
+
+                float w = joint.translationWeight;
+                int at = v * rows;
+
+                for (int e = 0; e < k; e++)
+                {
+                    if (tree.moves(e, i))
+                    {
+                        columns[at + rowOffset[e] + c] = w * tree.effectors[e].weight;
+                    }
+                }
+
+                if (biases != null)
+                {
+                    for (int p = 0; p < biases.length; p++)
+                    {
+                        if (hangsUnder(tree, biases[p].joint(), i))
+                        {
+                            columns[at + biasOffset[p] + c] = w * biases[p].weight() * orientScale;
+                        }
+                    }
+                }
+            }
+        }
+
+        float[] saved = new float[vars];
 
         for (int i = 0; i < n; i++)
         {
             for (int c = 0; c < 3; c++)
             {
                 saved[i * 3 + c] = IKJoint.get(joints[i].angles, c);
+                saved[(n + i) * 3 + c] = IKJoint.get(joints[i].translation, c);
             }
         }
 
@@ -1372,7 +1510,7 @@ public final class IKTreeSolver
             }
         }
 
-        restoreAngles(tree, saved);
+        restoreVariables(tree, saved);
 
         if (cut)
         {
@@ -1388,7 +1526,7 @@ public final class IKTreeSolver
                     return largest > STALL_STEP;
                 }
 
-                restoreAngles(tree, saved);
+                restoreVariables(tree, saved);
             }
         }
 
@@ -1409,7 +1547,7 @@ public final class IKTreeSolver
                     return largest > STALL_STEP;
                 }
 
-                restoreAngles(tree, saved);
+                restoreVariables(tree, saved);
                 scale *= 0.5F;
             }
         }
@@ -1431,6 +1569,7 @@ public final class IKTreeSolver
         IKJoint[] joints = tree.joints;
         int n = joints.length;
         int rows = b.length;
+        int vars = frozen.length;
 
         /* A = Σ c·cᵀ + λ²I, symmetric 3k×3k. */
         float[] a = new float[rows * rows];
@@ -1440,7 +1579,7 @@ public final class IKTreeSolver
             a[r * rows + r] = lambdaSq;
         }
 
-        for (int at = 0; at < n * 3; at++)
+        for (int at = 0; at < vars; at++)
         {
             if (frozen[at])
             {
@@ -1465,51 +1604,121 @@ public final class IKTreeSolver
             }
         }
 
-        float[] y = solveCholesky(a, b, rows);
+        float[] y;
+
+        if (tree.hasTranslation() && lambdaSq > 0F)
+        {
+            /* Guarded solve: Cholesky consumes its input, so factor a copy, read
+             * the weakest pivot, and re-solve with extra damping if the real
+             * (undamped) strength in that direction is thin. */
+            float[] pivot = new float[1];
+
+            y = solveCholesky(a.clone(), b, rows, pivot);
+
+            float strength = Math.max(0F, pivot[0] * pivot[0] - lambdaSq);
+            float thin = SINGULARITY_THRESHOLD * lambdaSq;
+
+            if (y != null && strength < thin)
+            {
+                float extra = lambdaSq * SINGULARITY_BOOST * (1F - strength / thin);
+
+                for (int r = 0; r < rows; r++)
+                {
+                    a[r * rows + r] += extra;
+                }
+
+                y = solveCholesky(a, b, rows, null);
+            }
+        }
+        else
+        {
+            y = solveCholesky(a, b, rows, null);
+        }
 
         if (y == null)
         {
             return null;
         }
 
-        float[] deltas = new float[n * 3];
+        float[] deltas = new float[vars];
         float largest = 0F;
+        float largestShift = 0F;
+
+        for (int at = 0; at < vars; at++)
+        {
+            if (frozen[at])
+            {
+                continue;
+            }
+
+            boolean shift = at >= n * 3;
+            IKJoint joint = joints[(shift ? at - n * 3 : at) / 3];
+            float w = shift ? joint.translationWeight : movableWeight(joint, at % 3);
+            float delta = 0F;
+            int base = at * rows;
+
+            for (int r = 0; r < rows; r++)
+            {
+                delta += columns[base + r] * y[r];
+            }
+
+            deltas[at] = w * delta;
+
+            if (shift)
+            {
+                largestShift = Math.max(largestShift, Math.abs(deltas[at]));
+            }
+            else
+            {
+                largest = Math.max(largest, Math.abs(deltas[at]));
+            }
+        }
+
+        /* Root momentum: blend the translation step with the previous
+         * iteration's, damping sign flips between opposing goals. */
+        largestShift = 0F;
 
         for (int i = 0; i < n; i++)
         {
-            IKJoint joint = joints[i];
-
             for (int c = 0; c < 3; c++)
             {
-                int at = i * 3 + c;
+                int v = (n + i) * 3 + c;
 
-                if (frozen[at])
+                if (frozen[v])
                 {
                     continue;
                 }
 
-                float w = movableWeight(joint, c);
-                float delta = 0F;
-                int base = at * rows;
-
-                for (int r = 0; r < rows; r++)
-                {
-                    delta += columns[base + r] * y[r];
-                }
-
-                deltas[at] = w * delta;
-                largest = Math.max(largest, Math.abs(deltas[at]));
+                deltas[v] = (1F - ROOT_MOMENTUM) * deltas[v] + ROOT_MOMENTUM * IKJoint.get(joints[i].translationMomentum, c);
+                largestShift = Math.max(largestShift, Math.abs(deltas[v]));
             }
         }
 
         /* Cap by scaling the WHOLE vector, never per channel: a per-channel clamp
          * saturates every delta at a large |y| and the step degenerates into a
-         * vector of signs — no longer a descent direction. */
+         * vector of signs — no longer a descent direction. Translations get the
+         * same cap expressed as the arc it sweeps at the tree's reach, so a
+         * pelvis step never outruns a rotation step of the same size. */
+        float scale = 1F;
+
         if (largest > MAX_STEP)
         {
-            float scale = MAX_STEP / largest;
+            scale = MAX_STEP / largest;
+        }
 
-            for (int at = 0; at < n * 3; at++)
+        if (largestShift > 0F)
+        {
+            float shiftCap = MAX_STEP * Math.max(largestReach(tree), EPS);
+
+            if (largestShift * scale > shiftCap)
+            {
+                scale = shiftCap / largestShift;
+            }
+        }
+
+        if (scale < 1F)
+        {
+            for (int at = 0; at < vars; at++)
             {
                 deltas[at] *= scale;
             }
@@ -1518,14 +1727,65 @@ public final class IKTreeSolver
         return deltas;
     }
 
+    /** Every joint's current translation, joint-major (zeros for joints that do not translate). */
+    private static float[] shiftSnapshot(IKTree tree)
+    {
+        float[] out = new float[tree.joints.length * 3];
+
+        for (int i = 0; i < tree.joints.length; i++)
+        {
+            for (int c = 0; c < 3; c++)
+            {
+                out[i * 3 + c] = IKJoint.get(tree.joints[i].translation, c);
+            }
+        }
+
+        return out;
+    }
+
+    /** Stores what the finished iteration ACTUALLY moved each root by — the next iteration's momentum. */
+    private static void recordMomentum(IKTree tree, float[] before)
+    {
+        for (int i = 0; i < tree.joints.length; i++)
+        {
+            IKJoint joint = tree.joints[i];
+
+            if (!joint.translatable)
+            {
+                continue;
+            }
+
+            for (int c = 0; c < 3; c++)
+            {
+                IKJoint.set(joint.translationMomentum, c, IKJoint.get(joint.translation, c) - before[i * 3 + c]);
+            }
+        }
+    }
+
+    /** Whether joint {@code joint} is {@code ancestor} or hangs somewhere below it in the tree. */
+    private static boolean hangsUnder(IKTree tree, int joint, int ancestor)
+    {
+        for (int j = joint; j >= 0; j = tree.parentIndex[j])
+        {
+            if (j == ancestor)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Solves the symmetric positive-definite system A·y = b (upper triangle of
      * A filled) by Cholesky decomposition; {@code null} when not positive
      * definite (numerically singular). The damping term guarantees positive
      * definiteness in practice.
      */
-    private static float[] solveCholesky(float[] a, float[] b, int size)
+    private static float[] solveCholesky(float[] a, float[] b, int size, float[] minPivot)
     {
+        float weakest = Float.MAX_VALUE;
+
         /* Decompose A = L·Lᵀ in place (L in the lower triangle). */
         for (int i = 0; i < size; i++)
         {
@@ -1546,12 +1806,18 @@ public final class IKTreeSolver
                     }
 
                     a[i * size + i] = (float) Math.sqrt(sum);
+                    weakest = Math.min(weakest, a[i * size + i]);
                 }
                 else
                 {
                     a[i * size + j] = sum / a[j * size + j];
                 }
             }
+        }
+
+        if (minPivot != null)
+        {
+            minPivot[0] = weakest;
         }
 
         /* Forward substitution L·z = b, then back substitution Lᵀ·y = z. */
@@ -1584,12 +1850,16 @@ public final class IKTreeSolver
         return y;
     }
 
-    /** Applies {@code scale}-sized deltas onto the current angles; returns the largest applied delta. */
+    /**
+     * Applies {@code scale}-sized deltas onto the current angles and root
+     * translations; returns the largest applied delta.
+     */
     private static float applyDeltas(IKTree tree, float[] deltas, float scale)
     {
         float largest = 0F;
+        int n = tree.joints.length;
 
-        for (int i = 0; i < tree.joints.length; i++)
+        for (int i = 0; i < n; i++)
         {
             IKJoint joint = tree.joints[i];
 
@@ -1602,6 +1872,14 @@ public final class IKTreeSolver
                     largest = Math.max(largest, Math.abs(delta));
                     IKJoint.set(joint.angles, c, IKJoint.get(joint.angles, c) + delta);
                 }
+
+                float shift = deltas[(n + i) * 3 + c] * scale;
+
+                if (shift != 0F)
+                {
+                    largest = Math.max(largest, Math.abs(shift));
+                    IKJoint.set(joint.translation, c, IKJoint.get(joint.translation, c) + shift);
+                }
             }
 
             joint.clampLimits();
@@ -1610,15 +1888,18 @@ public final class IKTreeSolver
         return largest;
     }
 
-    private static void restoreAngles(IKTree tree, float[] saved)
+    private static void restoreVariables(IKTree tree, float[] saved)
     {
-        for (int i = 0; i < tree.joints.length; i++)
+        int n = tree.joints.length;
+
+        for (int i = 0; i < n; i++)
         {
             IKJoint joint = tree.joints[i];
 
             for (int c = 0; c < 3; c++)
             {
                 IKJoint.set(joint.angles, c, saved[i * 3 + c]);
+                IKJoint.set(joint.translation, c, saved[(n + i) * 3 + c]);
             }
         }
     }

@@ -28,7 +28,7 @@ final class ModelIKCache
     }
 
     /** One chain's structure: its tip, what it reaches for, and the bones it spans root-to-tip. */
-    public record CompiledChain(String tip, String target, String poleTarget, boolean tipRotation, boolean stretch, boolean squash, boolean classic, List<String> chainRootToEffector)
+    public record CompiledChain(String tip, String target, String poleTarget, boolean tipRotation, boolean stretch, boolean squash, boolean classic, boolean rootTranslation, boolean fkFollow, boolean groundClamping, List<String> chainRootToEffector)
     {
     }
 
@@ -98,6 +98,12 @@ final class ModelIKCache
             String tip = bone.getId();
             String target = bone.ikTarget.get();
 
+            /* The head is pure FK, whatever the stored chain says. */
+            if (BoneIKIO.isFkOnly(tip))
+            {
+                continue;
+            }
+
             /* An enabled=false chain still compiles: enabled is an animatable scalar now, so a
              * film track may switch the chain on mid-shot — the solve gates on it per frame. */
             if (!model.getAllGroupKeys().contains(tip) || !model.getAllGroupKeys().contains(target))
@@ -141,7 +147,7 @@ final class ModelIKCache
                 chains = new ArrayList<>();
             }
 
-            chains.add(new CompiledChain(tip, target, poleTarget, bone.ikTipRotation.get(), bone.ikStretch.get(), bone.ikSquash.get(), bone.ikClassic.get(), chainIds));
+            chains.add(new CompiledChain(tip, target, poleTarget, bone.ikTipRotation.get(), bone.ikStretch.get(), bone.ikSquash.get(), bone.ikClassic.get(), bone.ikRootTranslation.get(), bone.ikFkFollow.get(), bone.ikGroundClamping.get(), chainIds));
         }
 
         if (chains == null && joints == null)

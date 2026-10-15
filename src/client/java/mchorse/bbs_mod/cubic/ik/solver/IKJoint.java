@@ -53,6 +53,35 @@ public final class IKJoint
     /** 0 = moves freely, approaching 1 = increasingly reluctant to move. */
     public final float[] stiffness = new float[3];
 
+    /* --- root translation (full-body IK) --- */
+
+    /**
+     * Whether the pivot itself may move — three more solver variables, the
+     * world translation {@link #translation}. Only a ROOT of the forest can
+     * carry it (see {@link IKTree#allowTranslation}): its pivot is the one
+     * the rigid forward model otherwise freezes, so the pelvis of a merged
+     * full-body tree can slide when the limbs alone cannot reach.
+     */
+    public boolean translatable;
+
+    /**
+     * Whether the solver may MOVE the translation. A translatable joint that is not solvable
+     * holds a fixed offset (a seeded pelvis drop): it shifts the pivot but is no variable.
+     */
+    public boolean translationSolvable = true;
+
+    /** Current pivot translation from capture, world units. Zero unless {@link #translatable}. */
+    public final Vector3f translation = new Vector3f();
+
+    /** How willing the pivot is to translate, 0..1 — scales its Jacobian columns like {@link #weight}. */
+    public float translationWeight = 1F;
+
+    /** Farthest the pivot may travel from capture, world units; set per solve. */
+    public float translationLimit = Float.MAX_VALUE;
+
+    /** What the previous iteration moved the pivot by — the translation step's momentum. Per solve. */
+    public final Vector3f translationMomentum = new Vector3f();
+
     /* --- working state, refreshed by IKChain.forward() --- */
 
     /** World pivot position at the current angles. */
@@ -75,6 +104,11 @@ public final class IKJoint
     /** Clamps {@link #angles} into the enabled per-axis limits. */
     public void clampLimits()
     {
+        if (this.translatable && this.translation.lengthSquared() > this.translationLimit * this.translationLimit)
+        {
+            this.translation.mul(this.translationLimit / this.translation.length());
+        }
+
         for (int axis = 0; axis < 3; axis++)
         {
             if (!this.limited[axis])

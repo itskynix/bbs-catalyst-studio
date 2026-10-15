@@ -135,11 +135,11 @@ final class ModelIKApplier
     }
 
     /** A chain's per-frame solve inputs, resolved from config × film overrides × frames. */
-    private record ResolvedChain(ModelIKCache.CompiledChain chain, List<String> workIds, Vector3f target, Quaternionf tipTarget, boolean pole, Vector3f polePoint, float poleAngle, float softness, float weight)
+    private record ResolvedChain(ModelIKCache.CompiledChain chain, List<String> workIds, Vector3f target, Quaternionf tipTarget, boolean pole, Vector3f polePoint, float poleAngle, float softness, float weight, float groundDelta)
     {
     }
 
-    public static void apply(IModel model, List<ModelIKCache.CompiledChain> chains, Map<String, JointDoF> jointDoF, Map<String, Vector3f> controllerTargets, Map<String, Vector3f> poleTargets, Map<String, Float> targetWeights, Map<String, Float> poleWeights, Map<String, IKControl> controls)
+    public static void apply(IModel model, List<ModelIKCache.CompiledChain> chains, Map<String, JointDoF> jointDoF, Map<String, Vector3f> controllerTargets, Map<String, Vector3f> poleTargets, Map<String, Float> targetWeights, Map<String, Float> poleWeights, Map<String, IKControl> controls, GroundDetector.Context ground)
     {
         if (model == null || chains == null || chains.isEmpty())
         {
@@ -179,10 +179,10 @@ final class ModelIKApplier
              * Overlapping another chain it falls back to the core tree (shared
              * bones must negotiate, which the classic path cannot do); the panel
              * marks that fallback statically, so it never surprises silently. */
-            if (group.size() == 1 && group.get(0).classic())
+            if (group.size() == 1 && group.get(0).classic() && !group.get(0).rootTranslation())
             {
                 ModelIKCache.CompiledChain chain = group.get(0);
-                ResolvedChain r = resolveChain(model, chain, frames, controllerTargets, poleTargets, targetWeights, poleWeights, controls);
+                ResolvedChain r = resolveChain(model, chain, frames, controllerTargets, poleTargets, targetWeights, poleWeights, controls, ground);
 
                 if (r == null)
                 {
@@ -195,7 +195,7 @@ final class ModelIKApplier
                 }
             }
 
-            applyGroup(model, group, frames, jointDoF, controllerTargets, poleTargets, targetWeights, poleWeights, controls);
+            applyGroup(model, group, frames, jointDoF, controllerTargets, poleTargets, targetWeights, poleWeights, controls, ground);
         }
 
         if (LOG_IK && logging && LOG.length() > 0)
@@ -332,7 +332,7 @@ final class ModelIKApplier
      * {@code null} when the chain is off this frame (disabled, weightless, or
      * its target frame is missing).
      */
-    private static ResolvedChain resolveChain(IModel model, ModelIKCache.CompiledChain chain, Map<String, PivotFrame> frames, Map<String, Vector3f> controllerTargets, Map<String, Vector3f> poleTargets, Map<String, Float> targetWeights, Map<String, Float> poleWeights, Map<String, IKControl> controls)
+    private static ResolvedChain resolveChain(IModel model, ModelIKCache.CompiledChain chain, Map<String, PivotFrame> frames, Map<String, Vector3f> controllerTargets, Map<String, Vector3f> poleTargets, Map<String, Float> targetWeights, Map<String, Float> poleWeights, Map<String, IKControl> controls, GroundDetector.Context ground)
     {
         /* The chain's animatable scalars, read live from the bone's `ik` property by the runtime:
          * the form's static setting, or the film's `ik` track when one drives the bone. IK weight
@@ -383,10 +383,18 @@ final class ModelIKApplier
             return null;
         }
 
+        /* FK-follow (layered IK): the controller is an OFFSET handle on top of the animation,
+         * not an absolute spot. The goal is where the FK pose already put the chain's reach
+         * point, plus how far the controller's own pose has been moved off its rest — so a
+         * walk or run cycle keeps swinging the limb, and an untouched controller is a no-op.
+         * A film target override (an absolute world anchor) still wins through the lerp below. */
+        PivotFrame fkReach = chain.fkFollow() ? frames.get(chainIds.get(chainIds.size() - 1)) : null;
+        boolean follow = fkReach != null;
+
         /* The film's target/pole overrides ride a 0..1 weight that eases them in/out across
          * a "None" keyframe, so fading a target glides from the bone's own frame, not origin. */
         Vector3f override = controllerTargets == null ? null : controllerTargets.get(chain.target());
-        Vector3f target = new Vector3f(targetFrame.position());
+        Vector3f target = follow ? new Vector3f(fkReach.position()).add(controllerShift(model, chain.target(), targetFrame)) : new Vector3f(targetFrame.position());
 
         if (override != null)
         {
@@ -395,6 +403,16 @@ final class ModelIKApplier
 
         /* "Tip follows target": the effector copies the controller's orientation. Null = keep FK. */
         Quaternionf tipTarget = tipRotation && targetFrame.worldRotation() != null ? new Quaternionf(targetFrame.worldRotation()) : null;
+
+        if (follow && tipRotation && fkReach.worldRotation() != null)
+        {
+            /* The FK tip's own world orientation, turned by however much the controller was rotated. */
+            tipTarget = controllerTurn(model, chain.target(), targetFrame).mul(fkReach.worldRotation());
+        }
+
+        /* Foot grounding: the terrain under the reach point, read from the world. A film
+         * override is an absolute placement and keeps its word. */
+        float groundDelta = chain.groundClamping() && ground != null && override == null ? groundTarget(ground, target, chain.tip()) : Float.NaN;
 
         /* Foot IK: back the reach off so the effector's TAIL (the marker), not its pivot,
          * lands on the target once the effector is turned to the controller's orientation. */
@@ -405,7 +423,258 @@ final class ModelIKApplier
 
         Vector3f polePoint = resolvePolePoint(pole, chain.poleTarget(), frames, poleTargets, poleWeights);
 
-        return new ResolvedChain(chain, workIds, target, tipTarget, pole, polePoint, poleAngle, softness, weight);
+        return new ResolvedChain(chain, workIds, target, tipTarget, pole, polePoint, poleAngle, softness, weight, groundDelta);
+    }
+
+    /**
+     * Plants a reach point on the terrain, in place. The terrain height under the point, relative
+     * to the actor's own floor, is the step the foot has to take: the target rises (or sinks) by
+     * it, so a swinging foot keeps its lift over a stair and a planted one lands on the tread —
+     * and never ends below the surface. Returns that step in world blocks, or NaN when there is
+     * no reachable ground (the target is then left alone).
+     */
+    private static float groundTarget(GroundDetector.Context ground, Vector3f target, String key)
+    {
+        Vector3f world = ground.base().transformPosition(new Vector3f(target));
+        float floorY = ground.base().transformPosition(new Vector3f()).y;
+        float measured = GroundDetector.findSmooth(ground.world(), world.x, world.z, floorY);
+
+        if (Float.isNaN(measured))
+        {
+            return Float.NaN;
+        }
+
+        /* The height glides in time; the sole may not sink more than a hair under the TRUE surface
+         * while it does, so a foot climbing onto a block never plunges into it. */
+        float hit = Math.max(ground.glide(key, measured), measured - GroundDetector.MAX_SINK);
+        float step = hit - floorY;
+        float desired = Math.max(world.y + step, hit + GroundDetector.FOOT_OFFSET);
+
+        /* The influence fades the whole correction out as the actor leaves the ground. */
+        world.y += (desired - world.y) * ground.influence();
+        target.set(ground.inverse().transformPosition(world));
+
+        return step * ground.influence();
+    }
+
+    /**
+     * The pelvis of a grounded tree: when two or more grounded chains hang from ONE shared root (the
+     * pelvis of a full-body tree) that root is
+     *
+     * <ul>
+     * <li>HELD at its FK rotation — a free pelvis answers a raised foot by pitching the whole
+     * torso backwards (the leg, knee and pelvis share the reach equally in the least-squares
+     * step), which is exactly the lean-back a step used to cause. The FK sway of the animation
+     * survives (locked axes sit at their FK value); the step is taken by the legs and the pelvis
+     * HEIGHT instead;</li>
+     * <li>LOWERED to the lowest foot's step, so that foot reaches its tread and the higher leg
+     * folds at the knee instead of the low one hanging in the air. A step upward needs no drop
+     * (the high leg bends by itself), so only negative steps count. The drop is a pure world-up
+     * offset, carried into the model's frame as a DIRECTION (rotation and scale of the base, no
+     * translation).</li>
+     * </ul>
+     *
+     * Returns the model-space drop (null when none), so the upper body's follow-targets can ride
+     * down with the pelvis instead of being stretched up to their old spots.
+     */
+    private static Vector3f dropPelvis(IModel model, List<String> nodes, IKTree tree, Map<String, Integer> nodeIndex, List<ResolvedChain> resolved, GroundDetector.Context ground)
+    {
+        if (ground == null)
+        {
+            return null;
+        }
+
+        float drop = 0F;
+        int grounded = 0;
+        Integer chainRoot = null;
+
+        for (ResolvedChain r : resolved)
+        {
+            if (Float.isNaN(r.groundDelta()))
+            {
+                continue;
+            }
+
+            Integer start = nodeIndex.get(r.workIds().get(0));
+
+            if (start == null || (chainRoot != null && !chainRoot.equals(start)))
+            {
+                return null;
+            }
+
+            chainRoot = start;
+            grounded++;
+            drop = Math.min(drop, r.groundDelta());
+        }
+
+        if (grounded < 2)
+        {
+            return null;
+        }
+
+        IKJoint pelvis = tree.joints[chainRoot];
+
+        for (int c = 0; c < 3; c++)
+        {
+            pelvis.locked[c] = true;
+        }
+
+        if (drop > -1.0e-4f)
+        {
+            return null;
+        }
+
+        int root = chainRoot;
+
+        while (tree.parentIndex[root] >= 0)
+        {
+            root = tree.parentIndex[root];
+        }
+
+        RigBone bone = model.getBone(nodes.get(root));
+
+        if (bone == null || bone.usesWorldStretchOffset())
+        {
+            return null;
+        }
+
+        Vector3f modelDrop = ground.inverse().transformDirection(new Vector3f(0F, drop, 0F));
+
+        return tree.seedRootOffset(root, modelDrop) ? modelDrop : null;
+    }
+
+    /**
+     * Knee direction: a grounded chain's last interior joint (the knee) may only flex towards its
+     * authored side. The side is the rest bulge of the three-joint limb (hip, knee, foot) — the
+     * way the model's own knee points — and the hinge axis is the joint's X channel; the sign of
+     * "positive angle flexes" is read from how that axis swings the foot against the bulge, and
+     * the other half of the range is closed (a hair of slack past straight). Without it a merged
+     * tree has no side owner (the bend-side seeding is single-chain only) and a foot lifted onto a
+     * step can fold the knee backwards. A joint the rig author limited or locked keeps their word,
+     * and a joint whose bulge lies along the hinge axis (a rigid leg, no knee) is left alone.
+     */
+    private static void orientKnees(IModel model, IKTree tree, List<ResolvedChain> resolved, Map<String, Integer> nodeIndex, Map<String, PivotFrame> frames)
+    {
+        for (int e = 0; e < resolved.size(); e++)
+        {
+            ResolvedChain r = resolved.get(e);
+            List<String> ids = r.workIds();
+
+            if (!r.chain().groundClamping() || ids.size() < 3)
+            {
+                continue;
+            }
+
+            Integer kneeIndex = nodeIndex.get(ids.get(ids.size() - 2));
+            PivotFrame upper = frames.get(ids.get(ids.size() - 3));
+
+            if (kneeIndex == null || upper == null || upper.parentRotation() == null)
+            {
+                continue;
+            }
+
+            IKJoint knee = tree.joints[kneeIndex];
+
+            if (knee.locked[0] || knee.limited[0])
+            {
+                continue;
+            }
+
+            Vector3f bulge = restBulge(model, ids.subList(ids.size() - 3, ids.size()), upper.parentRotation());
+
+            if (bulge == null)
+            {
+                continue;
+            }
+
+            Vector3f axis = knee.startWorldRotation.transform(new Vector3f(1F, 0F, 0F));
+            Vector3f lever = new Vector3f(tree.effectors[e].startPosition).sub(knee.startPosition);
+            Vector3f swing = axis.cross(lever, new Vector3f());
+            float length = swing.length();
+
+            if (length < EPS)
+            {
+                continue;
+            }
+
+            /* Flexion swings the foot AWAY from the bulge side. */
+            float along = swing.dot(bulge) / length;
+
+            if (Math.abs(along) < 0.5F)
+            {
+                continue;
+            }
+
+            float slack = 0.02F;
+            float open = 2.7F;
+
+            knee.limited[0] = true;
+            knee.limitMin[0] = along < 0F ? -slack : -open;
+            knee.limitMax[0] = along < 0F ? open : slack;
+        }
+    }
+
+    /**
+     * The unit direction a three-joint limb's middle joint sticks out of its root-to-end line at
+     * rest, lifted into the current pose; null when the limb is authored dead straight.
+     */
+    private static Vector3f restBulge(IModel model, List<String> triple, Quaternionf rootParentRotation)
+    {
+        RestChain rest = restChain(model, triple, rootParentRotation);
+
+        if (rest == null || rest.elbow() == null)
+        {
+            return null;
+        }
+
+        Vector3f axis = new Vector3f(rest.effector()).sub(rest.root());
+
+        if (axis.lengthSquared() < EPS * EPS)
+        {
+            return null;
+        }
+
+        Vector3f side = perpendicularTo(new Vector3f(rest.elbow()).sub(rest.root()), axis.normalize());
+
+        return side == null ? null : rest.lift().transform(side);
+    }
+
+    /**
+     * How far the controller's own pose sits from its rest, as a model-space shift: the
+     * channel translation over the rest pivot, in the renderer's convention (pixels, X
+     * mirrored, 16 to the block), carried by the frame that precedes the bone. Zero for a
+     * controller nobody moved, and for BOBJ controllers (their translation is skinning-space).
+     */
+    private static Vector3f controllerShift(IModel model, String id, PivotFrame frame)
+    {
+        RigBone bone = model.getBone(id);
+
+        if (bone == null || !bone.isRotationInDegrees() || frame.parentRotation() == null)
+        {
+            return new Vector3f();
+        }
+
+        Vector3f pose = bone.getBoneTransform().translate;
+        Vector3f rest = bone.getRestTranslation();
+        Vector3f local = new Vector3f(-(pose.x - rest.x), pose.y - rest.y, pose.z - rest.z).div(16F);
+
+        return frame.parentRotation().transform(local);
+    }
+
+    /** The controller's own rotation channels as a WORLD rotation delta (parent-frame conjugation); identity if unrotated. */
+    private static Quaternionf controllerTurn(IModel model, String id, PivotFrame frame)
+    {
+        RigBone bone = model.getBone(id);
+
+        if (bone == null || frame.parentRotation() == null)
+        {
+            return new Quaternionf();
+        }
+
+        Quaternionf local = bone.orientFromEuler(bone.getBoneTransform().rotate);
+        Quaternionf parent = frame.parentRotation();
+
+        return new Quaternionf(parent).mul(local).mul(new Quaternionf(parent).conjugate());
     }
 
     /* ------------------------------------------------------------------ */
@@ -423,13 +692,13 @@ final class ModelIKApplier
      * contract), and the solved angles START from them, so the twist the
      * animator posed survives into the solve by construction.
      */
-    private static void applyGroup(IModel model, List<ModelIKCache.CompiledChain> group, Map<String, PivotFrame> frames, Map<String, JointDoF> jointDoF, Map<String, Vector3f> controllerTargets, Map<String, Vector3f> poleTargets, Map<String, Float> targetWeights, Map<String, Float> poleWeights, Map<String, IKControl> controls)
+    private static void applyGroup(IModel model, List<ModelIKCache.CompiledChain> group, Map<String, PivotFrame> frames, Map<String, JointDoF> jointDoF, Map<String, Vector3f> controllerTargets, Map<String, Vector3f> poleTargets, Map<String, Float> targetWeights, Map<String, Float> poleWeights, Map<String, IKControl> controls, GroundDetector.Context ground)
     {
         List<ResolvedChain> resolved = new ArrayList<>(group.size());
 
         for (ModelIKCache.CompiledChain chain : group)
         {
-            ResolvedChain r = resolveChain(model, chain, frames, controllerTargets, poleTargets, targetWeights, poleWeights, controls);
+            ResolvedChain r = resolveChain(model, chain, frames, controllerTargets, poleTargets, targetWeights, poleWeights, controls, ground);
 
             if (r != null)
             {
@@ -495,6 +764,36 @@ final class ModelIKApplier
             }
         }
 
+        /* Root translation (full-body IK): a chain with the flag opens up the
+         * forest root its branch hangs from — the pelvis of a merged tree — so
+         * the solver may slide it when the rotations alone cannot reach. */
+        boolean[] chainTranslates = new boolean[resolved.size()];
+
+        for (int e = 0; e < resolved.size(); e++)
+        {
+            ResolvedChain r = resolved.get(e);
+
+            if (r.chain().rootTranslation())
+            {
+                chainTranslates[e] = allowRootTranslation(model, nodes, tree, nodeIndex.get(r.workIds().get(0)));
+            }
+        }
+
+        Vector3f pelvisDrop = dropPelvis(model, nodes, tree, nodeIndex, resolved, ground);
+
+        /* The pelvis carries the upper body down with it: a follow-target (hands, spine) that kept
+         * its old spot would be stretched up to it, and the arms' chains run through the spine. */
+        if (pelvisDrop != null)
+        {
+            for (ResolvedChain r : resolved)
+            {
+                if (Float.isNaN(r.groundDelta()) && r.chain().fkFollow())
+                {
+                    r.target().add(pelvisDrop);
+                }
+            }
+        }
+
         /* Effectors: one per chain, riding its last directed bone; each goal is
          * softened against its OWN chain's reach. Poles are per chain too. */
         IKTreeSolver.Pole[] poles = new IKTreeSolver.Pole[resolved.size()];
@@ -517,10 +816,27 @@ final class ModelIKApplier
             effector.startPosition.set(effectorFrame.position());
             effector.weight = r.weight();
 
-            Vector3f rootPosition = tree.joints[rootJoint].startPosition;
+            /* Where the chain's root ACTUALLY is for this solve: its captured spot plus the shift of the
+             * forest root above it (a seeded pelvis drop). Measuring reach from the undropped spot
+             * clamped a lowered foot back up into the air — the dropped pelvis had already made it
+             * reachable. */
+            Vector3f rootPosition = new Vector3f(tree.joints[rootJoint].startPosition).add(rootShift(tree, rootJoint));
             float reach = chainReach(tree, rootJoint, lastJoint, effector.startPosition);
 
-            effector.goal.set(IKTreeSolver.softGoal(rootPosition, reach, r.target(), r.softness()));
+            /* A chain whose root may slide has no fixed reach to soften against —
+             * clamping the goal to the frozen root's sphere would hide exactly the
+             * shortfall the translation phase exists to close. */
+            Vector3f goalSource = r.target();
+
+            /* Hard cap of a grounded chain: its goal never sits farther from the root than the limb can
+             * physically stretch, whatever the terrain says (a deep pit, a stray hit, the moment of
+             * take-off) — otherwise the chain, or the free root pulling it, tears away from the body. */
+            if (!Float.isNaN(r.groundDelta()))
+            {
+                goalSource = IKTreeSolver.softGoal(rootPosition, reach * GROUND_REACH_CAP, goalSource, 0F);
+            }
+
+            effector.goal.set(chainTranslates[e] && Float.isNaN(r.groundDelta()) ? goalSource : IKTreeSolver.softGoal(rootPosition, reach, goalSource, r.softness()));
 
             /* Tip follows target, in-solver half: ask the chain to orient its LAST
              * directed bone so the tip, keeping its natural FK local pose, would
@@ -552,6 +868,8 @@ final class ModelIKApplier
             poles[e] = polePoint == null || materialUp == null ? null : new IKTreeSolver.Pole(rootJoint, polePoint, r.poleAngle(), materialUp);
         }
 
+        orientKnees(model, tree, resolved, nodeIndex, frames);
+
         IKTreeSolver.Result result = IKTreeSolver.solve(tree, poles, IKTreeSolver.Params.DEFAULT);
 
         if (LOG_IK && logging)
@@ -560,6 +878,92 @@ final class ModelIKApplier
         }
 
         writeTree(model, nodes, tree, resolved, frames);
+    }
+
+    /**
+     * Opens up the forest root above {@code joint} for translation. Only a
+     * hierarchical (cubic) bone qualifies: its offset is a local step the matrix
+     * stack carries down to the whole subtree, while a BOBJ offset is a per-bone
+     * skinning shift that would leave the bones below behind. Returns whether
+     * the root now translates.
+     */
+    private static boolean allowRootTranslation(IModel model, List<String> nodes, IKTree tree, Integer joint)
+    {
+        if (joint == null)
+        {
+            return false;
+        }
+
+        int root = joint;
+
+        while (tree.parentIndex[root] >= 0)
+        {
+            root = tree.parentIndex[root];
+        }
+
+        RigBone bone = model.getBone(nodes.get(root));
+
+        if (bone == null || bone.usesWorldStretchOffset())
+        {
+            return false;
+        }
+
+        return tree.joints[root].translatable || tree.allowTranslation(root, 1F);
+    }
+
+    /**
+     * Writes each translatable root's solved slide onto its {@code offset},
+     * faded by the IK weight like the rotations — the same local, scale-divided
+     * step the stretch writes, so the renderer and the bake read it the same
+     * way. Composed onto whatever offset an earlier writer left this frame.
+     */
+    private static void writeRootTranslation(IModel model, List<String> nodes, IKTree tree, float[] nodeWeight, Map<String, PivotFrame> frames)
+    {
+        for (int i = 0; i < nodes.size(); i++)
+        {
+            IKJoint joint = tree.joints[i];
+
+            if (!joint.translatable || joint.translation.lengthSquared() < EPS * EPS)
+            {
+                continue;
+            }
+
+            RigBone bone = model.getBone(nodes.get(i));
+
+            if (bone == null)
+            {
+                continue;
+            }
+
+            Vector3f local = new Quaternionf(tree.startParentRotation[i]).conjugate().transform(new Vector3f(joint.translation).mul(nodeWeight[i]));
+            PivotFrame frame = frames.get(nodes.get(i));
+            Vector3f scale = frame == null ? null : frame.scale();
+
+            if (scale != null)
+            {
+                local.set(divide(local.x, scale.x), divide(local.y, scale.y), divide(local.z, scale.z));
+            }
+
+            Vector3f existing = bone.getOffset();
+
+            bone.setOffset(existing == null ? local : local.add(existing));
+        }
+    }
+
+    /** A grounded chain's goal stays inside this fraction of the limb's full stretch — a dead-straight leg is a singularity. */
+    private static final float GROUND_REACH_CAP = 0.995F;
+
+    /** The shift the forest root above {@code joint} carries (zero unless it was translated or dropped). */
+    private static Vector3f rootShift(IKTree tree, int joint)
+    {
+        int j = joint;
+
+        while (tree.parentIndex[j] >= 0)
+        {
+            j = tree.parentIndex[j];
+        }
+
+        return tree.joints[j].translatable ? tree.joints[j].translation : new Vector3f();
     }
 
     /** The captured arc length root joint → last joint → effector point, along the tree. */
@@ -1049,6 +1453,8 @@ final class ModelIKApplier
                 stretchToTarget(model, nodes, tree, r, frames, blendedParentOf, blendedWorld);
             }
         }
+
+        writeRootTranslation(model, nodes, tree, nodeWeight, frames);
     }
 
     /**

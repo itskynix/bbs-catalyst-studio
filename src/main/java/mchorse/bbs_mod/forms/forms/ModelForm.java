@@ -5,6 +5,7 @@ import mchorse.bbs_mod.ui.utils.icons.Icon;
 import mchorse.bbs_mod.cubic.animation.ActionsConfig;
 import mchorse.bbs_mod.cubic.constraints.BoneConstraintsIO;
 import mchorse.bbs_mod.cubic.ik.BoneIKIO;
+import mchorse.bbs_mod.forms.forms.utils.FormBone;
 import mchorse.bbs_mod.cubic.physics.BonePhysicsIO;
 import mchorse.bbs_mod.cubic.physics.WindControl;
 import mchorse.bbs_mod.data.types.BaseType;
@@ -182,6 +183,14 @@ public class ModelForm extends Form implements IPosedForm
             {
                 BonePhysicsIO.read(map.getMap("physics"), this.bones, this.wind, false);
             }
+        }
+
+        /* The head is pure FK: drop any IK chain a stored form carries on it. */
+        FormBone head = this.bones.getBone("head");
+
+        if (head != null && BoneIKIO.isFkOnly(head.getId()) && head.hasChain())
+        {
+            BoneIKIO.clearChain(head);
         }
     }
 

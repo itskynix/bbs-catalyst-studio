@@ -80,6 +80,9 @@ public class UIModelIKFormPanel extends UIBoneListFormPanel
     public UISliderTrackpad stiffnessZ;
     public UIToggle stretch;
     public UIToggle squash;
+    public UIToggle rootTranslation;
+    public UIToggle fkFollow;
+    public UIToggle groundClamping;
 
     /* The chain's own parameters, hidden until the chain is switched on: with IK
      * off they describe nothing, and an empty panel says "tick this" far better
@@ -222,6 +225,15 @@ public class UIModelIKFormPanel extends UIBoneListFormPanel
         this.squash = new UIToggle(UIKeys.FORMS_EDITORS_MODEL_IK_SQUASH, (b) -> this.editBone((bone) -> bone.ikSquash.set(b.getValue())));
         this.squash.tooltip(UIKeys.FORMS_EDITORS_MODEL_IK_SQUASH_TOOLTIP);
 
+        this.rootTranslation = new UIToggle(UIKeys.FORMS_EDITORS_MODEL_IK_ROOT_TRANSLATION, (b) -> this.editBone((bone) -> bone.ikRootTranslation.set(b.getValue())));
+        this.rootTranslation.tooltip(UIKeys.FORMS_EDITORS_MODEL_IK_ROOT_TRANSLATION_TOOLTIP);
+
+        this.fkFollow = new UIToggle(UIKeys.FORMS_EDITORS_MODEL_IK_FK_FOLLOW, (b) -> this.editBone((bone) -> bone.ikFkFollow.set(b.getValue())));
+        this.fkFollow.tooltip(UIKeys.FORMS_EDITORS_MODEL_IK_FK_FOLLOW_TOOLTIP);
+
+        this.groundClamping = new UIToggle(UIKeys.FORMS_EDITORS_MODEL_IK_GROUND_CLAMPING, (b) -> this.editBone((bone) -> bone.ikGroundClamping.set(b.getValue())));
+        this.groundClamping.tooltip(UIKeys.FORMS_EDITORS_MODEL_IK_GROUND_CLAMPING_TOOLTIP);
+
         this.classic = new UIToggle(UIKeys.FORMS_EDITORS_MODEL_IK_CLASSIC, (b) ->
         {
             this.editBone((bone) -> bone.ikClassic.set(b.getValue()));
@@ -232,6 +244,9 @@ public class UIModelIKFormPanel extends UIBoneListFormPanel
         this.resetBone(this.tipRotation, (bone) -> bone.ikTipRotation);
         this.resetBone(this.stretch, (bone) -> bone.ikStretch);
         this.resetBone(this.squash, (bone) -> bone.ikSquash);
+        this.resetBone(this.rootTranslation, (bone) -> bone.ikRootTranslation);
+        this.resetBone(this.fkFollow, (bone) -> bone.ikFkFollow);
+        this.resetBone(this.groundClamping, (bone) -> bone.ikGroundClamping);
         this.resetBone(this.classic, (bone) -> bone.ikClassic);
 
         UISection settings = this.section(UIKeys.FORMS_EDITORS_MODEL_IK_SETTINGS, "ik.chain", true);
@@ -262,6 +277,9 @@ public class UIModelIKFormPanel extends UIBoneListFormPanel
             this.tipRotation,
             this.stretch,
             this.squash,
+            this.rootTranslation,
+            this.fkFollow,
+            this.groundClamping,
             this.classic
         );
 
@@ -432,6 +450,9 @@ public class UIModelIKFormPanel extends UIBoneListFormPanel
         this.tipRotation.setEnabled(enabled);
         this.stretch.setEnabled(enabled);
         this.squash.setEnabled(enabled);
+        this.rootTranslation.setEnabled(enabled);
+        this.fkFollow.setEnabled(enabled);
+        this.groundClamping.setEnabled(enabled);
         this.classic.setEnabled(enabled);
         this.setJointEnabled(enabled);
     }
@@ -664,6 +685,9 @@ public class UIModelIKFormPanel extends UIBoneListFormPanel
         this.tipRotation.setValue(formBone != null && formBone.ikTipRotation.get());
         this.stretch.setValue(formBone != null && formBone.ikStretch.get());
         this.squash.setValue(formBone != null && formBone.ikSquash.get());
+        this.rootTranslation.setValue(formBone != null && formBone.ikRootTranslation.get());
+        this.fkFollow.setValue(formBone != null && formBone.ikFkFollow.get());
+        this.groundClamping.setValue(formBone != null && formBone.ikGroundClamping.get());
         this.classic.setValue(formBone != null && formBone.ikClassic.get());
 
         /* The classic toggle is loud about its fallback: a classic chain that
@@ -726,6 +750,9 @@ public class UIModelIKFormPanel extends UIBoneListFormPanel
         this.tipRotation.setEnabled(canEdit);
         this.stretch.setEnabled(canEdit);
         this.squash.setEnabled(canEdit);
+        this.rootTranslation.setEnabled(canEdit);
+        this.fkFollow.setEnabled(canEdit);
+        this.groundClamping.setEnabled(canEdit);
         this.classic.setEnabled(canEdit);
     }
 
