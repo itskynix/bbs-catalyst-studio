@@ -981,6 +981,12 @@ public class UIKeyframes extends UITimelineCanvas
         return this.marquee.isPressed();
     }
 
+    /** The motion shift handles, for timelines that route their own clicks before the default ones. */
+    protected UIKeyframeMotionShift getMotionShift()
+    {
+        return this.motionShift;
+    }
+
     /** Whether the user is in the middle of any mouse interaction (dragging, selecting, navigating, scaling or stacking). */
     public boolean isInteracting()
     {

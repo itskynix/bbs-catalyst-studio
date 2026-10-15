@@ -156,7 +156,7 @@ public class UITabList implements IUITabs, Iterable<DataTab>
     {
         String id = this.tabs.get(index).dataId;
 
-        return id == null ? this.host.getNewTabLabel() : IKey.raw(id);
+        return id == null ? this.host.getNewTabLabel() : this.host.getTabLabel(id);
     }
 
     @Override

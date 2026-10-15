@@ -71,13 +71,7 @@ public class CatalystComposition
 
     public void setupDefaultLayers()
     {
-        if (this.layers.isEmpty())
-        {
-            this.layers.add(new CatalystLayer("V1: Video / Scene Plate", CatalystLayer.LayerType.SCENE,  0xFF2B5B84));
-            this.layers.add(new CatalystLayer("A1: 3D Replay Actor",     CatalystLayer.LayerType.SCENE,  0xFF4A7C38));
-            this.layers.add(new CatalystLayer("A2: Audio Ambience",      CatalystLayer.LayerType.AUDIO,  0xFF88602A));
-            this.layers.add(new CatalystLayer("FX1: Post FX / Color",    CatalystLayer.LayerType.SOLID,  0xFF7A3482));
-        }
+        /* Sıfır varsayılan dayatma: Yeni proje/sahne açıldığında timeline tertemiz ve boş başlatılır */
     }
 
     public double getDurationSeconds()

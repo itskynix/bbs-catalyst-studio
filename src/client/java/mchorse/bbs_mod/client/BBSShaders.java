@@ -23,6 +23,7 @@ public class BBSShaders
     private static ShaderProgram pixelArtTextIntensity;
 
     private static ShaderProgram pickerPreview;
+    private static ShaderProgram pickerOutline;
     private static ShaderProgram pickerBillboard;
     private static ShaderProgram pickerBillboardNoShading;
     private static ShaderProgram pickerParticles;
@@ -43,6 +44,7 @@ public class BBSShaders
         if (pixelArtTextIntensity != null) pixelArtTextIntensity.close();
 
         if (pickerPreview != null) pickerPreview.close();
+        if (pickerOutline != null) pickerOutline.close();
         if (pickerBillboard != null) pickerBillboard.close();
         if (pickerBillboardNoShading != null) pickerBillboardNoShading.close();
         if (pickerParticles != null) pickerParticles.close();
@@ -58,6 +60,7 @@ public class BBSShaders
             selection = new ShaderProgram(factory, "selection", VertexFormats.POSITION_TEXTURE_COLOR);
 
             pickerPreview = new ShaderProgram(factory, "picker_preview", VertexFormats.POSITION_TEXTURE_COLOR);
+            pickerOutline = new ShaderProgram(factory, "picker_outline", VertexFormats.POSITION_TEXTURE_COLOR);
             pickerBillboard = new ShaderProgram(factory, "picker_billboard", VertexFormats.POSITION_COLOR_TEXTURE_OVERLAY_LIGHT_NORMAL);
             pickerBillboardNoShading = new ShaderProgram(factory, "picker_billboard_no_shading", VertexFormats.POSITION_TEXTURE_LIGHT_COLOR);
             pickerParticles = new ShaderProgram(factory, "picker_particles", VertexFormats.POSITION_COLOR_TEXTURE_LIGHT);
@@ -130,6 +133,11 @@ public class BBSShaders
     public static ShaderProgram getPixelArtTextIntensityProgram()
     {
         return pixelArtTextIntensity;
+    }
+
+    public static ShaderProgram getPickerOutlineProgram()
+    {
+        return pickerOutline;
     }
 
     public static ShaderProgram getPickerPreviewProgram()

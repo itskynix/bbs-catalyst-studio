@@ -80,6 +80,9 @@ public class UIKeyframeDopeSheet implements IUIKeyframeGraph
      */
     private FoldState<String> folds = new FoldState<>();
 
+    /** Whether a section header row also draws its tracks' keyframes as a summary; off makes it a pure group title. */
+    public boolean sectionSummaries = true;
+
     /** What to draw when there are no tracks at all - see {@link #setEmptyState(IKey, IKey)}. */
     private IKey emptyLabel;
     private IKey emptyHint;
@@ -505,6 +508,24 @@ public class UIKeyframeDopeSheet implements IUIKeyframeGraph
         }
 
         this.pickSelected();
+    }
+
+    /** The section header row under the cursor, or null when the cursor is over a track (or nothing). */
+    public UIKeyframeSheet.Section getSection(int mouseY)
+    {
+        int relY = mouseY - this.getDopeSheetY();
+
+        for (Map.Entry<UIKeyframeSheet.Section, Integer> entry : this.sectionYCache.entrySet())
+        {
+            int y = entry.getValue();
+
+            if (relY >= y && relY < y + (int) this.trackHeight)
+            {
+                return entry.getKey();
+            }
+        }
+
+        return null;
     }
 
     @Override
@@ -1481,6 +1502,11 @@ public class UIKeyframeDopeSheet implements IUIKeyframeGraph
 
     private void renderSectionKeyframes(UIContext context, BufferBuilder builder, Matrix4f matrix, Area area)
     {
+        if (!this.sectionSummaries)
+        {
+            return;
+        }
+
         for (UIKeyframeSheet sheet : this.sheets)
         {
             Integer offset = this.sectionYCache.get(sheet.section);
@@ -1559,6 +1585,17 @@ public class UIKeyframeDopeSheet implements IUIKeyframeGraph
      * two sit together at the right end of the name column and read as one control, so hitting either
      * folds the row — the arrow alone is a 10px target, which is a lot to ask of a mouse.
      */
+    /** Whether the cursor is on the fold arrow of a visible row that has rows folding under it. */
+    public boolean isFoldToggleHit(UIContext context, UIKeyframeSheet sheet)
+    {
+        if (sheet == null || !this.hasChildren(sheet) || !this.isVisible(sheet))
+        {
+            return false;
+        }
+
+        return this.isFoldToggleHit(context, sheet, this.getDopeSheetY(sheet), this.keyframes.getLabelWidth());
+    }
+
     private boolean isFoldToggleHit(UIContext context, UIKeyframeSheet sheet, int y, int labelWidth)
     {
         int height = this.getTrackHeight(sheet);

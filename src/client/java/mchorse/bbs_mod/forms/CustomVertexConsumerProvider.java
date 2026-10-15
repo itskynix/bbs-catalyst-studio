@@ -23,6 +23,9 @@ public class CustomVertexConsumerProvider extends VertexConsumerProvider.Immedia
 {
     private static Consumer<RenderLayer> runnables;
 
+    /* Optional hook that swaps a render layer for another one before it is requested (null = off) */
+    public static java.util.function.UnaryOperator<RenderLayer> layerRemap;
+
     private Function<VertexConsumer, VertexConsumer> substitute;
     private Color overlay;
     private boolean ui;
@@ -78,6 +81,11 @@ public class CustomVertexConsumerProvider extends VertexConsumerProvider.Immedia
     @Override
     public VertexConsumer getBuffer(RenderLayer renderLayer)
     {
+        if (layerRemap != null)
+        {
+            renderLayer = layerRemap.apply(renderLayer);
+        }
+
         VertexConsumer buffer = super.getBuffer(renderLayer);
 
         if (this.substitute != null)

@@ -77,6 +77,36 @@ public class StencilFormFramebuffer
             0, texture.height, texture.width, 0, texture.width, texture.height);
     }
 
+    /** Rim around everything drawn with {@code index}: a silhouette outline instead of the filled highlight of {@link #renderPreview}. */
+    public void renderOutline(UIContext context, Area area, int index, int color)
+    {
+        ShaderProgram program = BBSShaders.getPickerOutlineProgram();
+
+        if (program == null || this.framebuffer == null || index <= 0)
+        {
+            return;
+        }
+
+        Texture texture = this.getFramebuffer().getMainTexture();
+        GlUniform target = program.getUniform("Target");
+
+        if (target != null)
+        {
+            target.set(index);
+        }
+
+        GlUniform highlight = program.getUniform("HighlightColor");
+
+        if (highlight != null)
+        {
+            highlight.set(Colors.getR(color), Colors.getG(color), Colors.getB(color), Colors.getA(color));
+        }
+
+        RenderSystem.enableBlend();
+        context.batcher.texturedBox(BBSShaders::getPickerOutlineProgram, texture.id, Colors.WHITE,
+            area.x, area.y, area.w, area.h,
+            0, texture.height, texture.width, 0, texture.width, texture.height);
+    }
     public int getIndex()
     {
         return this.index;

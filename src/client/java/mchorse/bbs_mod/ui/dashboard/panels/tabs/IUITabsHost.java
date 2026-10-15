@@ -28,6 +28,12 @@ public interface IUITabsHost
     /** Icon of a tab; the id is null for a tab with nothing open in it. */
     Icon getTabIcon(String id);
 
+    /** Label of a tab with something open in it; the id itself unless the host has a nicer name for it. */
+    default IKey getTabLabel(String id)
+    {
+        return IKey.raw(id);
+    }
+
     /** Tooltip of a tab, or null for none. */
     default IKey getTabTooltip(String id)
     {

@@ -173,6 +173,55 @@ public class FFmpegCommandBuilder
     }
 
     /**
+     * Builds arguments for a transparent (alpha channel) QuickTime {@code .mov} written from raw RGBA
+     * frames piped to stdin. The frames are already upright (no vflip) and the alpha channel is kept
+     * untouched all the way to the encoder: ProRes 4444 ({@code yuva444p10le}) or QuickTime Animation
+     * ({@code qtrle}, {@code argb}).
+     */
+    public static List<String> buildTransparentMovArgs(int width, int height, double fps, File output, boolean prores)
+    {
+        List<String> args = new ArrayList<>();
+
+        args.add(FFMpegUtils.getFFMPEG().replace("\"", "").trim());
+        args.add("-y");
+        args.add("-f");
+        args.add("rawvideo");
+        args.add("-pix_fmt");
+        args.add("rgba");
+        args.add("-s");
+        args.add(width + "x" + height);
+        args.add("-r");
+        args.add(String.valueOf((float) fps));
+        args.add("-i");
+        args.add("-");
+        args.add("-an");
+        args.add("-c:v");
+
+        if (prores)
+        {
+            args.add("prores_ks");
+            args.add("-profile:v");
+            args.add("4"); /* ProRes 4444 */
+            args.add("-vendor");
+            args.add("apl0");
+            args.add("-alpha_bits");
+            args.add("16");
+            args.add("-pix_fmt");
+            args.add("yuva444p10le");
+        }
+        else
+        {
+            args.add("qtrle");
+            args.add("-pix_fmt");
+            args.add("argb");
+        }
+
+        args.add(output.getAbsolutePath().replace("\"", "").trim());
+
+        return args;
+    }
+
+    /**
      * Builds arguments for {@link mchorse.bbs_mod.utils.VideoMuxer} secondary audio merge pass.
      */
     public List<String> buildMuxArgs(File videoFile, File audioFile, String outputMovieName)
