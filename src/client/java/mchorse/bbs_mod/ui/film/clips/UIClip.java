@@ -138,6 +138,13 @@ public abstract class UIClip <T extends Clip> extends UIElement
         register(ImageClip.class, UIImageClip::new);
         register(CurveClientClip.class, UICurveClip::new);
         register(DollyZoomClip.class, UIDollyZoomClip::new);
+        register(mchorse.bbs_mod.camera.clips.fx.ColorGradeClip.class, UIFxClips.UIColorGradeClip::new);
+        register(mchorse.bbs_mod.camera.clips.fx.CinematicEffectsClip.class, UIFxClips.UICinematicEffectsClip::new);
+        register(mchorse.bbs_mod.camera.clips.fx.VignetteClip.class, UIFxClips.UIVignetteClip::new);
+        register(mchorse.bbs_mod.camera.clips.fx.LetterboxClip.class, UIFxClips.UILetterboxClip::new);
+        register(mchorse.bbs_mod.camera.clips.fx.GrainClip.class, UIFxClips.UIGrainClip::new);
+        register(mchorse.bbs_mod.camera.clips.fx.EyeClip.class, UIFxClips.UIEyeClip::new);
+        register(mchorse.bbs_mod.camera.clips.fx.ScreenShaderGraphClip.class, UIFxClips.UIScreenShaderGraphClip::new);
 
         register(ChatActionClip.class, UIChatActionClip::new);
         register(CommandActionClip.class, UICommandActionClip::new);

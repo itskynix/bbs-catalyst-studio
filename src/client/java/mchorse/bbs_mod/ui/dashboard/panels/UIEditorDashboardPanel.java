@@ -50,14 +50,14 @@ public abstract class UIEditorDashboardPanel extends UIDashboardPanel implements
 
         this.topBar = new UIPanelTopBar();
         this.topBar.relative(this).w(1F).h(UIPanelTopBar.HEIGHT);
-        this.tabs.setBar(this.topBar.enableTabs(this.tabs));
+        /* No strip of its own: the tabs of every editor live in the dashboard's global strip, which
+         * reads them from this list — see UIGlobalTabs. The bar keeps just the actions. */
+        this.tabs.setListener(dashboard::syncGlobalTabs);
 
         this.editor = new UIElement();
 
         this.layoutUnderTopBar(this.editor);
         this.add(this.topBar, this.editor);
-
-        this.keys().register(Keys.OPEN_NEW_TAB, this.tabs::addTab);
 
         this.onOpen(() -> this.update = true);
         this.onAppear(this::requestNamesWhenStale);
@@ -147,7 +147,13 @@ public abstract class UIEditorDashboardPanel extends UIDashboardPanel implements
     @Override
     public IKey getNewTabLabel()
     {
-        return UIKeys.NEW_TAB;
+        return IKey.raw(this.getHubName());
+    }
+
+    /** What a tab with this editor's landing screen is called, e.g. "Film Editor Hub". */
+    public String getHubName()
+    {
+        return this.getTitle().get() + " Hub";
     }
 
     /** Icon of a tab; the id is null for a tab with nothing open in it. */

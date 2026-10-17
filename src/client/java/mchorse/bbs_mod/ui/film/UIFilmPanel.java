@@ -479,9 +479,9 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
     }
 
     @Override
-    public IKey getNewTabLabel()
+    public String getHubName()
     {
-        return UIKeys.NEW_TAB;
+        return "Film Editor Hub";
     }
 
     @Override

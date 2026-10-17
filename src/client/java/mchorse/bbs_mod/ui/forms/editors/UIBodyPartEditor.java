@@ -160,7 +160,7 @@ public class UIBodyPartEditor extends UIScrollView
             .add(Icons.SCALE, UIKeys.INHERIT_SCALE, () -> this.part.inheritScale)
             .resettable();
 
-        this.transform = new UIPropTransform().callbacks(() -> this.part.transform).barBackground();
+        this.transform = new UIPropTransform().withAnchor().callbacks(() -> this.part.transform).barBackground();
         this.transform.enableHotkeys(this.editor::isBodyPartGizmoMode);
         this.transform.hotkeyDrag(() -> this.editor.buildHotkeyDrag(this.transform));
         this.transform.valueBinding(() -> this.transform.setTransform(this.part == null ? null : this.part.transform.get()));

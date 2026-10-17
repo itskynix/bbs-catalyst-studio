@@ -30,6 +30,20 @@ public class KeyframeFactories
     public static final ParticleSettingsKeyframeFactory PARTICLE_SETTINGS = new ParticleSettingsKeyframeFactory();
     public static final BoneConstraintKeyframeFactory BONE_CONSTRAINT = new BoneConstraintKeyframeFactory();
 
+    /** Transform-like values, which the graph editor opens as one curve per component. */
+    public static boolean isComposite(IKeyframeFactory factory)
+    {
+        return factory instanceof TransformKeyframeFactory
+            || factory instanceof PoseTransformKeyframeFactory
+            || factory instanceof PoseKeyframeFactory;
+    }
+
+    /** Whether the graph editor can draw the factory's track at all. */
+    public static boolean isGraphable(IKeyframeFactory factory)
+    {
+        return isNumeric(factory) || isComposite(factory);
+    }
+
     public static boolean isNumeric(IKeyframeFactory factory)
     {
         return factory instanceof DoubleKeyframeFactory

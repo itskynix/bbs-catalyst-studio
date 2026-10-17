@@ -18,6 +18,7 @@ public class UITransformKeyframeFactory extends UIKeyframeFactory<Transform>
         super(keyframe, editor);
 
         this.transform = new UIPoseTransforms(this);
+        this.transform.withAnchor();
         this.transform.enableHotkeys();
         this.transform.setTransform(keyframe.getValue());
 

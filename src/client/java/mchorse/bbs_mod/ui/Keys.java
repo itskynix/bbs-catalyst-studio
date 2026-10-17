@@ -122,6 +122,7 @@ public class Keys
     public static final KeyCombo PIXEL_FLIP_V = new KeyCombo("flip_v", UIKeys.TEXTURES_KEYS_FLIP_V, GLFW.GLFW_KEY_V, GLFW.GLFW_KEY_LEFT_SHIFT).categoryKey("pixels");
 
     /* Keyframes */
+    public static final KeyCombo KEYFRAMES_GRAPH_EDITOR = new KeyCombo("graph_editor", UIKeys.KEYFRAMES_GRAPH_EDITOR, GLFW.GLFW_KEY_G, GLFW.GLFW_KEY_LEFT_SHIFT).categoryKey("keyframes");
     public static final KeyCombo KEYFRAMES_MAXIMIZE = new KeyCombo("maximize", UIKeys.KEYFRAMES_CONTEXT_MAXIMIZE, GLFW.GLFW_KEY_HOME).categoryKey("keyframes");
     public static final KeyCombo KEYFRAMES_SELECT_ALL = new KeyCombo("select_all", UIKeys.KEYFRAMES_CONTEXT_SELECT_ALL, GLFW.GLFW_KEY_A, GLFW.GLFW_KEY_LEFT_CONTROL).categoryKey("keyframes");
     public static final KeyCombo KEYFRAMES_SELECT_TRACK = new KeyCombo("select_track", UIKeys.KEYFRAMES_KEYS_SELECT_TRACK, GLFW.GLFW_KEY_A, GLFW.GLFW_KEY_LEFT_CONTROL, GLFW.GLFW_KEY_LEFT_SHIFT).categoryKey("keyframes");

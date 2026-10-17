@@ -21,6 +21,7 @@ public class BBSShaders
     private static ShaderProgram pixelArt;
     private static ShaderProgram pixelArtText;
     private static ShaderProgram pixelArtTextIntensity;
+    private static ShaderProgram postFx;
 
     private static ShaderProgram pickerPreview;
     private static ShaderProgram pickerOutline;
@@ -42,6 +43,9 @@ public class BBSShaders
         if (pixelArt != null) pixelArt.close();
         if (pixelArtText != null) pixelArtText.close();
         if (pixelArtTextIntensity != null) pixelArtTextIntensity.close();
+        if (postFx != null) postFx.close();
+
+        postFx = null;
 
         if (pickerPreview != null) pickerPreview.close();
         if (pickerOutline != null) pickerOutline.close();
@@ -94,6 +98,30 @@ public class BBSShaders
 
             e.printStackTrace();
         }
+
+        /* Also on its own: a driver that cannot build the post-production pass only loses the
+         * post-production clips, which then draw nothing */
+        try
+        {
+            postFx = new ShaderProgram(new ProxyResourceFactory(MinecraftClient.getInstance().getResourceManager()), "postfx", VertexFormats.POSITION_TEXTURE_COLOR);
+        }
+        catch (Throwable e)
+        {
+            if (postFx != null) postFx.close();
+
+            postFx = null;
+
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * The full-screen pass of the post-production clips. Null when the driver refused to build it,
+     * and whoever asks must treat that as "no effect", never as an error.
+     */
+    public static ShaderProgram getPostFxProgram()
+    {
+        return postFx;
     }
 
     public static ShaderProgram getModel()

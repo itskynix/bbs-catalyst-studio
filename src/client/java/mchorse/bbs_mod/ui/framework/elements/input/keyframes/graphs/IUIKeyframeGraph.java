@@ -25,6 +25,12 @@ public interface IUIKeyframeGraph
 
     public void resetView();
 
+    /** Pixels given up on the left of the canvas to a panel beside the graph (the channel tree of a composite track). */
+    public default int getLeftInset()
+    {
+        return 0;
+    }
+
     public default void updateZoom()
     {}
 

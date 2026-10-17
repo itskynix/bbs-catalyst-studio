@@ -80,7 +80,7 @@ public class UIGeneralFormPanel extends UIFormPanel
         this.uiScale.limit(0.01D, 100D);
         this.name = UIValues.textbox(120, () -> this.form.name);
 
-        this.transform = new UIPropTransform().callbacks(() -> this.form.transform).barBackground();
+        this.transform = new UIPropTransform().withAnchor().callbacks(() -> this.form.transform).barBackground();
         this.transform.enableHotkeys();
         this.transform.valueBinding(() -> this.transform.setTransform(this.form == null ? null : this.form.transform.get()));
 

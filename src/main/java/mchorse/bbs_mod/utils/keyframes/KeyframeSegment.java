@@ -179,7 +179,7 @@ public class KeyframeSegment <T>
 
         return interp.has(Interpolations.CUBIC) || interp.has(Interpolations.HERMITE)
             || interp.has(Interpolations.BSPLINE) || interp.has(Interpolations.AUTO)
-            || interp.has(Interpolations.AUTO_CLAMPED);
+            || interp.has(Interpolations.AUTO_CLAMPED) || interp.has(Interpolations.BEZIER);
     }
 
     private static boolean hasFullDuration(Keyframe<?> start, Keyframe<?> end)

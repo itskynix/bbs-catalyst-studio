@@ -32,6 +32,8 @@ public class FrameOverlays
      */
     public static void setup()
     {
+        /* The full-screen passes go first, so the images and subtitles are drawn over the graded frame */
+        register(PostFxRenderer::render);
         register((stack, batcher, context) -> UIImageRenderer.renderImages(stack, batcher, ImageClip.getImages(context)));
         register((stack, batcher, context) -> UISubtitleRenderer.renderSubtitles(stack, batcher, SubtitleClip.getSubtitles(context)));
     }

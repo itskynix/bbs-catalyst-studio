@@ -26,6 +26,13 @@ import mchorse.bbs_mod.camera.clips.converters.IdleToKeyframeConverter;
 import mchorse.bbs_mod.camera.clips.converters.IdleToPathConverter;
 import mchorse.bbs_mod.camera.clips.converters.PathToDollyConverter;
 import mchorse.bbs_mod.camera.clips.converters.PathToKeyframeConverter;
+import mchorse.bbs_mod.camera.clips.fx.CinematicEffectsClip;
+import mchorse.bbs_mod.camera.clips.fx.ColorGradeClip;
+import mchorse.bbs_mod.camera.clips.fx.EyeClip;
+import mchorse.bbs_mod.camera.clips.fx.GrainClip;
+import mchorse.bbs_mod.camera.clips.fx.LetterboxClip;
+import mchorse.bbs_mod.camera.clips.fx.ScreenShaderGraphClip;
+import mchorse.bbs_mod.camera.clips.fx.VignetteClip;
 import mchorse.bbs_mod.camera.clips.misc.AudioClip;
 import mchorse.bbs_mod.camera.clips.misc.CurveClip;
 import mchorse.bbs_mod.camera.clips.misc.ImageClip;
@@ -483,7 +490,14 @@ public class BBSMod implements ModInitializer
             .register(Link.bbs("video"), VideoClip.class, new ClipFactoryData(Icons.VIDEO_CAMERA, 0xd21f3c))
             .register(Link.bbs("curve"), CurveClip.class, new ClipFactoryData(Icons.ARC, 0xff1493))
             .register(Link.bbs("tracker"), TrackerClip.class, new ClipFactoryData(Icons.USER, 0xffffff))
-            .register(Link.bbs("dolly_zoom"), DollyZoomClip.class, new ClipFactoryData(Icons.FILTER, 0x7d56c9));
+            .register(Link.bbs("dolly_zoom"), DollyZoomClip.class, new ClipFactoryData(Icons.FILTER, 0x7d56c9))
+            .register(Link.bbs("color_grade"), ColorGradeClip.class, new ClipFactoryData(Icons.FILTER, 0xe8542a))
+            .register(Link.bbs("cinematic_effects"), CinematicEffectsClip.class, new ClipFactoryData(Icons.CAMERA, 0xf5a623))
+            .register(Link.bbs("vignette"), VignetteClip.class, new ClipFactoryData(Icons.SPHERE, 0x15213d))
+            .register(Link.bbs("letterbox"), LetterboxClip.class, new ClipFactoryData(Icons.FULLSCREEN, 0x2b2b2e))
+            .register(Link.bbs("grain"), GrainClip.class, new ClipFactoryData(Icons.SPARKLES, 0xb8ad98))
+            .register(Link.bbs("eye"), EyeClip.class, new ClipFactoryData(Icons.VISIBLE, 0x0f1a3a))
+            .register(Link.bbs("screen_shader_graph"), ScreenShaderGraphClip.class, new ClipFactoryData(Icons.CODE, 0x7a3fb0));
 
         events.post(new RegisterCameraClipsEvent(factoryCameraClips));
 

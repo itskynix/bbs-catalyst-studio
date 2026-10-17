@@ -186,6 +186,8 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
         public double posX = 0.0, posY = 0.0, posZ = 0.0;
         public double rotPitch = 0.0, rotYaw = 0.0, rotRoll = 0.0;
         public double scaleX = 1.0, scaleY = 1.0, scaleZ = 1.0;
+        /* The pivot rotation and scale turn about; position stays where it is */
+        public double anchorX = 0.0, anchorY = 0.0, anchorZ = 0.0;
         public double opacity = 1.0;
 
         /* Color overlay (multiplied onto the actor's own colours), driven by the Coloring keyframes */
@@ -293,6 +295,9 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
             this.scaleX = 1.0;
             this.scaleY = 1.0;
             this.scaleZ = 1.0;
+            this.anchorX = 0.0;
+            this.anchorY = 0.0;
+            this.anchorZ = 0.0;
             this.opacity = 1.0;
             this.tintR = 1F;
             this.tintG = 1F;
@@ -335,6 +340,9 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
             this.scaleX = 1.0;
             this.scaleY = 1.0;
             this.scaleZ = 1.0;
+            this.anchorX = 0.0;
+            this.anchorY = 0.0;
+            this.anchorZ = 0.0;
 
             this.channelPose.insert(0, 0.0);
 
@@ -410,6 +418,9 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
             copy.scaleX = this.scaleX;
             copy.scaleY = this.scaleY;
             copy.scaleZ = this.scaleZ;
+            copy.anchorX = this.anchorX;
+            copy.anchorY = this.anchorY;
+            copy.anchorZ = this.anchorZ;
             copy.opacity = this.opacity;
             copy.tintR = this.tintR;
             copy.tintG = this.tintG;
@@ -1479,8 +1490,10 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
         {
             stack.push();
             stack.translate((float) layer.posX, (float) layer.posY, (float) layer.posZ);
+            stack.translate((float) layer.anchorX, (float) layer.anchorY, (float) layer.anchorZ);
             stack.multiply(Matrices.toQuaternionZYXDegrees((float) layer.rotPitch, (float) layer.rotYaw, (float) layer.rotRoll));
             stack.scale((float) layer.scaleX, (float) layer.scaleY, (float) layer.scaleZ);
+            stack.translate((float) -layer.anchorX, (float) -layer.anchorY, (float) -layer.anchorZ);
 
             /* Transform overlay goes on top of the main transform; children inherit both */
             if (layer.overlay != null)
@@ -1718,7 +1731,22 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
             }
         }
 
+        /* Opacity/tint set the shader colour and blend state; none of it may outlive the layer, or
+         * (esp. with ImmediatelyFast / Sodium batching) every later GUI draw comes out transparent */
         private void renderSingleLayer(UIContext context, MatrixStack stack, VertexConsumerProvider.Immediate consumers, int light, int overlay, MotionLayer layer)
+        {
+            try
+            {
+                this.renderSingleLayerUnguarded(context, stack, consumers, light, overlay, layer);
+            }
+            finally
+            {
+                RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+                RenderSystem.defaultBlendFunc();
+            }
+        }
+
+        private void renderSingleLayerUnguarded(UIContext context, MatrixStack stack, VertexConsumerProvider.Immediate consumers, int light, int overlay, MotionLayer layer)
         {
             MinecraftClient mc = MinecraftClient.getInstance();
             boolean isSelected = UIMMotionPanel.this.getSelected() == layer;
@@ -2491,6 +2519,7 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
             t.translate.set((float) layer.posX, (float) layer.posY, (float) layer.posZ);
             t.rotate.set(MathUtils.toRad((float) layer.rotPitch), MathUtils.toRad((float) layer.rotYaw), MathUtils.toRad((float) layer.rotRoll));
             t.scale.set((float) layer.scaleX, (float) layer.scaleY, (float) layer.scaleZ);
+            t.anchor.set((float) layer.anchorX, (float) layer.anchorY, (float) layer.anchorZ);
             t.rotationMode = Transform.RotationMode.EULER;
 
             return t;
@@ -2566,6 +2595,7 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
         this.liveTransform.translate.set((float) layer.posX, (float) layer.posY, (float) layer.posZ);
         this.liveTransform.rotate.set(MathUtils.toRad((float) layer.rotPitch), MathUtils.toRad((float) layer.rotYaw), MathUtils.toRad((float) layer.rotRoll));
         this.liveTransform.scale.set((float) layer.scaleX, (float) layer.scaleY, (float) layer.scaleZ);
+        this.liveTransform.anchor.set((float) layer.anchorX, (float) layer.anchorY, (float) layer.anchorZ);
         this.liveTransform.rotationMode = Transform.RotationMode.EULER;
     }
 
@@ -2586,6 +2616,9 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
         layer.scaleX = this.liveTransform.scale.x;
         layer.scaleY = this.liveTransform.scale.y;
         layer.scaleZ = this.liveTransform.scale.z;
+        layer.anchorX = this.liveTransform.anchor.x;
+        layer.anchorY = this.liveTransform.anchor.y;
+        layer.anchorZ = this.liveTransform.anchor.z;
     }
     public UIElement propertiesArea;
     public UIElement timelineArea;
@@ -2978,9 +3011,9 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
     }
 
     @Override
-    public IKey getNewTabLabel()
+    public String getHubName()
     {
-        return UIKeys.NEW_TAB;
+        return "mMotion Hub";
     }
 
     @Override
@@ -3658,7 +3691,9 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
         Matrix4f local = new Matrix4f();
         local.translate((float) layer.posX, (float) layer.posY, (float) layer.posZ);
         local.rotate(Matrices.toQuaternionZYXDegrees((float) layer.rotPitch, (float) layer.rotYaw, (float) layer.rotRoll));
+        local.translate((float) layer.anchorX, (float) layer.anchorY, (float) layer.anchorZ);
         local.scale((float) layer.scaleX, (float) layer.scaleY, (float) layer.scaleZ);
+        local.translate((float) -layer.anchorX, (float) -layer.anchorY, (float) -layer.anchorZ);
 
         if (ownOverlay && layer.overlay != null)
         {
@@ -3680,7 +3715,11 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
     public Vector3d getBaseWorldPosition(MotionLayer layer)
     {
         if (layer == null) return new Vector3d();
-        Vector3f pos = this.getWorldMatrix(layer, false).getTranslation(new Vector3f());
+        /* The gizmo sits on the pivot, not on the position: the anchor point is where the local
+         * matrix leaves it (position + anchor), carried through the parents like any other point */
+        Vector3f pos = this.getWorldMatrix(layer, false).transformPosition(
+            new Vector3f((float) layer.anchorX, (float) layer.anchorY, (float) layer.anchorZ)
+        );
         return new Vector3d(pos.x, pos.y, pos.z);
     }
 
@@ -4578,7 +4617,7 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
             this.cameraRenderToggle
         );
 
-        this.transformEditor = new UIPropTransform();
+        this.transformEditor = new UIPropTransform().withAnchor();
         this.transformEditor.enableHotkeys();
         this.transformEditor.hotkeyDrag(() -> this.viewportRenderer.buildGizmoDrag());
         this.transformEditor.callbacks(
@@ -6100,6 +6139,9 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
                     layer.scaleX = t.scale.x;
                     layer.scaleY = t.scale.y;
                     layer.scaleZ = t.scale.z;
+                    layer.anchorX = t.anchor.x;
+                    layer.anchorY = t.anchor.y;
+                    layer.anchorZ = t.anchor.z;
                 }
             }
 

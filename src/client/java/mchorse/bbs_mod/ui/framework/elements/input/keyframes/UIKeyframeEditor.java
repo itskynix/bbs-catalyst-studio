@@ -200,6 +200,21 @@ public class UIKeyframeEditor extends UITimelinePanel
         this.pickKeyframe(null);
     }
 
+    /** Sheets for channels a clip owns that are not a {@link KeyframeClip}'s eight, each under a title of its own. */
+    public void setChannels(java.util.List<? extends KeyframeChannel<?>> channels, java.util.function.Function<KeyframeChannel<?>, IKey> titles)
+    {
+        this.view.removeAllSheets();
+
+        for (int i = 0; i < channels.size(); i++)
+        {
+            KeyframeChannel<?> channel = channels.get(i);
+
+            this.view.addSheet(new UIKeyframeSheet(channel.getId(), titles.apply(channel), getChannelColor(channel, i), channel, null));
+        }
+
+        this.pickKeyframe(null);
+    }
+
     public UIKeyframeSheet getSheet(Keyframe keyframe)
     {
         if (keyframe == null)

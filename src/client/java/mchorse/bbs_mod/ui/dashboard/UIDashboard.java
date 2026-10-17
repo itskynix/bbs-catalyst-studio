@@ -18,6 +18,9 @@ import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.dashboard.panels.IFlightSupported;
 import mchorse.bbs_mod.ui.dashboard.panels.UIDashboardPanel;
 import mchorse.bbs_mod.ui.dashboard.panels.UICatalystPanel;
+import mchorse.bbs_mod.ui.dashboard.panels.UICentralHubPanel;
+import mchorse.bbs_mod.ui.dashboard.panels.tabs.UIDataTabs;
+import mchorse.bbs_mod.ui.dashboard.panels.tabs.UIGlobalTabs;
 import mchorse.bbs_mod.ui.dashboard.panels.UIDashboardPanels;
 import mchorse.bbs_mod.ui.dashboard.panels.UIEditorDashboardPanel;
 import mchorse.bbs_mod.ui.dashboard.panels.hub.UICommunityHubPanel;
@@ -72,6 +75,7 @@ public class UIDashboard extends UIBaseMenu
     private final Deque<Runnable> buildSteps = new ArrayDeque<>();
 
     private UIDashboardPanels panels;
+    private UIGlobalTabs globalTabs;
 
     public UIIcon settings;
     public UIIcon selectors;
@@ -95,8 +99,12 @@ public class UIDashboard extends UIBaseMenu
 
         /* Setup panels */
         this.panels = new UIDashboardPanels();
+        this.globalTabs = new UIGlobalTabs(this);
+        this.globalTabs.setBar(this.panels.setTabStrip(new UIDataTabs(this.globalTabs)));
         this.panels.getEvents().register(UIDashboardPanels.PanelEvent.class, (e) ->
         {
+            this.globalTabs.onPanelChanged();
+
             this.orbitUI.setControl(this.panels.isFlightSupported());
 
             if (this.panels.panel instanceof IFlightSupported panel)
@@ -133,6 +141,7 @@ public class UIDashboard extends UIBaseMenu
         IKey category = UIKeys.DASHBOARD_CATEGORY;
 
         this.main.keys().register(Keys.CYCLE_PANELS, this::cyclePanels).category(category);
+        this.main.keys().register(Keys.OPEN_NEW_TAB, this::openCentralHubTab).category(category);
         this.overlay.keys().register(Keys.TOGGLE_VISIBILITY, () ->
         {
             if (this.panels.panel instanceof UIFilmPanel filmPanel && filmPanel.recorder != null && (filmPanel.recorder.isExporting() || filmPanel.recorder.isRecording()))
@@ -234,6 +243,24 @@ public class UIDashboard extends UIBaseMenu
         UIUtils.playClick();
     }
 
+    /** A card of the Central Hub was picked: the hub tab being looked at becomes that editor. */
+    public void openHubTarget(Class<? extends UIDashboardPanel> target)
+    {
+        this.globalTabs.pick(target);
+    }
+
+    /** + and Ctrl+N: a new "Central Hub" tab, whatever is on screen. */
+    public void openCentralHubTab()
+    {
+        this.globalTabs.openCentralHubTab();
+    }
+
+    /** The panels' tabs changed; the strip along the top follows. */
+    public void syncGlobalTabs()
+    {
+        this.globalTabs.sync();
+    }
+
     public UIDashboardPanels getPanels()
     {
         return this.panels;
@@ -266,7 +293,7 @@ public class UIDashboard extends UIBaseMenu
 
             /* Which panel is up is a question about the screen being opened, not about it being
              * built — the film panel is simply where a dashboard that has never been opened starts */
-            this.setPanel(this.panels.panel == null ? this.getPanel(UIFilmPanel.class) : this.panels.panel);
+            this.setPanel(this.panels.panel == null ? this.getPanel(UICentralHubPanel.class) : this.panels.panel);
         }
 
         BBSModClient.getCameraController().add(this.camera);
@@ -314,15 +341,17 @@ public class UIDashboard extends UIBaseMenu
 
     protected void registerPanels()
     {
-        this.buildStep("morphing", () -> this.panels.registerPanel(new UIMorphingPanel(this), UIKeys.MORPHING_TITLE, Icons.MORPH));
-        this.buildStep("film", () -> this.panels.registerPanel(new UIFilmPanel(this), UIKeys.FILM_TITLE, Icons.FILM));
-        this.buildStep("catalyst", () -> this.panels.registerPanel(new UICatalystPanel(this), UIKeys.CATALYST_TITLE, Icons.FIVE_STAR));
-        this.buildStep("mmotion", () -> this.panels.registerPanel(new UIMMotionPanel(this), UIKeys.MMOTION_TITLE, Icons.CURVES));
+        /* The editors have no buttons of their own in the bar: the Central Hub, first in line, leads to each of them */
+        this.buildStep("central hub", () -> this.panels.registerPanel(new UICentralHubPanel(this), IKey.raw("Central Hub"), Icons.LAYOUT));
+        this.buildStep("morphing",() -> this.panels.registerPanel(new UIMorphingPanel(this), UIKeys.MORPHING_TITLE, Icons.MORPH));
+        this.buildStep("film", () -> this.panels.registerHiddenPanel(new UIFilmPanel(this)));
+        this.buildStep("catalyst", () -> this.panels.registerHiddenPanel(new UICatalystPanel(this)));
+        this.buildStep("mmotion", () -> this.panels.registerHiddenPanel(new UIMMotionPanel(this)));
         this.buildStep("model blocks", () -> this.panels.registerPanel(new UIModelBlockPanel(this), UIKeys.MODEL_BLOCKS_TITLE, Icons.BLOCK));
-        this.buildStep("particles", () -> this.panels.registerPanel(new UIParticleSchemePanel(this), UIKeys.PANELS_PARTICLES, Icons.PARTICLE));
-        this.buildStep("model editor", () -> this.panels.registerPanel(new UIModelEditorPanel(this), UIKeys.MODEL_EDITOR_TITLE, Icons.POSE));
-        this.buildStep("textures", () -> this.panels.registerPanel(new UITextureManagerPanel(this), UIKeys.TEXTURES_TOOLTIP, Icons.MATERIAL));
-        this.buildStep("audio", () -> this.panels.registerPanel(new UIAudioEditorPanel(this), UIKeys.AUDIO_TITLE, Icons.SOUND));
+        this.buildStep("particles", () -> this.panels.registerHiddenPanel(new UIParticleSchemePanel(this)));
+        this.buildStep("model editor", () -> this.panels.registerHiddenPanel(new UIModelEditorPanel(this)));
+        this.buildStep("textures", () -> this.panels.registerHiddenPanel(new UITextureManagerPanel(this)));
+        this.buildStep("audio", () -> this.panels.registerHiddenPanel(new UIAudioEditorPanel(this)));
         this.buildStep("community assets", () -> this.panels.registerPanel(new UICommunityHubPanel(this), UIKeys.COMMUNITY_ASSETS_TITLE, Icons.GLOBE));
 
         /* Add-on panels go into the bar after ours, so this waits for the last of ours */

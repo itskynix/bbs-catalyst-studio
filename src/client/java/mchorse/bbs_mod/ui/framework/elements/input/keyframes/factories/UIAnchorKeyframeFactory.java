@@ -128,6 +128,7 @@ public class UIAnchorKeyframeFactory extends UIKeyframeFactory<Anchor>
             .add(Icons.ORBIT, UIKeys.INHERIT_ROTATION, () -> this.keyframe.getValue().inheritRotation, (v) -> this.retarget((anchor) -> anchor.inheritRotation = v))
             .add(Icons.SCALE, UIKeys.INHERIT_SCALE, () -> this.keyframe.getValue().inheritScale, (v) -> this.retarget((anchor) -> anchor.inheritScale = v));
         this.transform = new UIAnchorTransforms(this);
+        this.transform.withAnchor();
         this.transform.enableHotkeys();
         this.transform.setTransform(keyframe.getValue().transform);
 

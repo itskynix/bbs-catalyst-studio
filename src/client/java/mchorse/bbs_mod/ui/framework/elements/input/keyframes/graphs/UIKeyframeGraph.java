@@ -67,6 +67,40 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
         this.yAxis.stopZoom();
     }
 
+    /* Value hooks: a graph of a plain number reads it off the factory; a graph of one component of a
+     * composite value (see UIComponentGraph) reads that component instead. */
+
+    /** The graph-space value a keyframe sits at. */
+    protected double yOf(Keyframe frame)
+    {
+        return frame.getFactory().getY(frame.getValue());
+    }
+
+    /** The same for a bare (interpolated) value. */
+    protected double yOfValue(Object value)
+    {
+        return this.sheet.channel.getFactory().getY(value);
+    }
+
+    /** {lx, ly, rx, ry} of a keyframe, in graph units: handle offsets are drawn from the keyframe's own point. */
+    protected float[] handlesOf(Keyframe frame)
+    {
+        return new float[] {frame.lx, frame.ly, frame.rx, frame.ry};
+    }
+
+    /** Whether Bezier handles are drawn (and picked) in the pass being rendered. */
+    protected boolean showHandles()
+    {
+        return true;
+    }
+
+    /** Pixels the graph gives up on the left, for a panel that sits beside it. */
+    @Override
+    public int getLeftInset()
+    {
+        return 0;
+    }
+
     /* Graphing */
 
     public int toGraphY(double value)
@@ -104,8 +138,8 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
             {
                 Keyframe frame = keyframes.get(i);
 
-                minY = Math.min(minY, frame.getY());
-                maxY = Math.max(maxY, frame.getY());
+                minY = Math.min(minY, this.yOf(frame));
+                maxY = Math.max(maxY, this.yOf(frame));
             }
         }
         else
@@ -115,7 +149,7 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
 
             if (c == 1)
             {
-                minY = maxY = channel.get(0).getY();
+                minY = maxY = this.yOf(channel.get(0));
             }
         }
 
@@ -160,7 +194,7 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
         {
             Keyframe keyframe = (Keyframe) keyframes.get(i);
             int x = this.keyframes.toGraphX(keyframe.getTick());
-            int y = this.toGraphY(keyframe.getFactory().getY(keyframe.getValue()));
+            int y = this.toGraphY(this.yOf(keyframe));
 
             if (this.isNear(x, y, mouseX, 0))
             {
@@ -180,7 +214,7 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
         {
             Keyframe keyframe = (Keyframe) keyframes.get(i);
             int x = this.keyframes.toGraphX(keyframe.getTick());
-            int y = this.toGraphY(keyframe.getFactory().getY(keyframe.getValue()));
+            int y = this.toGraphY(this.yOf(keyframe));
 
             if (area.isInside(x, y))
             {
@@ -225,15 +259,15 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
         {
             Keyframe keyframe = (Keyframe) keyframes.get(i);
             int x = this.keyframes.toGraphX(keyframe.getTick());
-            int y = this.toGraphY(keyframe.getFactory().getY(keyframe.getValue()));
+            int y = this.toGraphY(this.yOf(keyframe));
 
             if (this.isNear(x, y, mouseX, mouseY))
             {
                 return new Pair<>(keyframe, KeyframeType.REGULAR);
             }
 
-            int lx = this.keyframes.toGraphX(keyframe.getTick() - keyframe.lx);
-            int ly = this.toGraphY(keyframe.getFactory().getY(keyframe.getValue()) + keyframe.ly);
+            int lx = this.keyframes.toGraphX(keyframe.getTick() - this.handlesOf(keyframe)[0]);
+            int ly = this.toGraphY(this.yOf(keyframe) + this.handlesOf(keyframe)[1]);
 
             if (i > 0 && ((Keyframe) keyframes.get(i - 1)).getInterpolation().getInterp() == Interpolations.BEZIER
                 && this.isNear(lx, ly, mouseX, mouseY))
@@ -241,8 +275,8 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
                 return new Pair<>(keyframe, KeyframeType.LEFT_HANDLE);
             }
 
-            int rx = this.keyframes.toGraphX(keyframe.getTick() + keyframe.rx);
-            int ry = this.toGraphY(keyframe.getFactory().getY(keyframe.getValue()) + keyframe.ry);
+            int rx = this.keyframes.toGraphX(keyframe.getTick() + this.handlesOf(keyframe)[2]);
+            int ry = this.toGraphY(this.yOf(keyframe) + this.handlesOf(keyframe)[3]);
 
             if (keyframe.getInterpolation().getInterp() == Interpolations.BEZIER && this.isNear(rx, ry, mouseX, mouseY))
             {
@@ -266,7 +300,7 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
             this.pickKeyframe(keyframe);
 
             double x = keyframe.getTick();
-            int y = this.toGraphY(keyframe.getFactory().getY(keyframe.getValue()));
+            int y = this.toGraphY(this.yOf(keyframe));
 
             this.keyframes.getXAxis().shiftIntoMiddle(x);
             this.yAxis.shiftIntoMiddle(y);
@@ -469,7 +503,7 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
             {
                 for (Keyframe keyframe : selected)
                 {
-                    int y = (int) this.yAxis.to(factory.getY(keyframe.getValue()));
+                    int y = (int) this.yAxis.to(this.yOf(keyframe));
                     float tick = mMax + this.keyframes.getStackOffset() + (keyframe.getTick() - mMin) + x;
 
                     this.renderPreviewKeyframe(context, current, tick, y, Colors.YELLOW);
@@ -505,7 +539,7 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
             for (int i = 0; i < selected.size(); i++)
             {
                 Keyframe keyframe = selected.get(i);
-                int y = (int) this.yAxis.to(factory.getY(keyframe.getValue()));
+                int y = (int) this.yAxis.to(this.yOf(keyframe));
 
                 this.renderPreviewKeyframe(context, current, currentTick + (keyframe.getTick() - firstTick), y, Colors.YELLOW);
             }
@@ -547,7 +581,7 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
             Keyframe frame = (Keyframe) keyframes.get(i);
             Keyframe prev = i > 0 ? (Keyframe) keyframes.get(i - 1) : null;
             int x = this.keyframes.toGraphX(frame.getTick());
-            int y = this.toGraphY(sheet.channel.getFactory().getY(frame.getValue()));
+            int y = this.toGraphY(this.yOf(frame));
 
             if (i == 0 && x > this.keyframes.area.x)
             {
@@ -558,7 +592,7 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
             {
                 IInterp interp = prev.getInterpolation().getInterp();
                 int px = this.keyframes.toGraphX(prev.getTick());
-                int py = this.toGraphY(sheet.channel.getFactory().getY(prev.getValue()));
+                int py = this.toGraphY(this.yOf(prev));
 
                 if (interp == Interpolations.CONST)
                 {
@@ -585,7 +619,7 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
 
                             segment.setup(prev.getTick() + a * (frame.getTick() - prev.getTick()));
 
-                            float interpolate = this.toGraphY((float) frame.getFactory().getY(segment.createInterpolated()));
+                            float interpolate = this.toGraphY((float) this.yOfValue(segment.createInterpolated()));
 
                             lineBuilder.add(Lerps.lerp(px, x, a), interpolate);
                         }
@@ -602,10 +636,10 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
 
             boolean add = false;
 
-            if (frame.getInterpolation().getInterp() == Interpolations.BEZIER)
+            if (this.showHandles() && frame.getInterpolation().getInterp() == Interpolations.BEZIER)
             {
-                int rx = this.keyframes.toGraphX(frame.getTick() + frame.rx);
-                int ry = this.toGraphY(sheet.channel.getFactory().getY(frame.getValue()) + frame.ry);
+                int rx = this.keyframes.toGraphX(frame.getTick() + this.handlesOf(frame)[2]);
+                int ry = this.toGraphY(this.yOf(frame) + this.handlesOf(frame)[3]);
 
                 lineBuilder.push();
                 lineBuilder.add(x, y);
@@ -614,10 +648,10 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
                 add = true;
             }
 
-            if (prev != null && prev.getInterpolation().getInterp() == Interpolations.BEZIER)
+            if (this.showHandles() && prev != null && prev.getInterpolation().getInterp() == Interpolations.BEZIER)
             {
-                int lx = this.keyframes.toGraphX(frame.getTick() - frame.lx);
-                int ly = this.toGraphY(sheet.channel.getFactory().getY(frame.getValue()) + frame.ly);
+                int lx = this.keyframes.toGraphX(frame.getTick() - this.handlesOf(frame)[0]);
+                int ly = this.toGraphY(this.yOf(frame) + this.handlesOf(frame)[1]);
 
                 lineBuilder.push();
                 lineBuilder.add(x, y);
@@ -656,7 +690,7 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
             float source = this.sheet.channel.getSourceTick(tick);
             if (source < previousSource) line.push();
             Object value = this.sheet.channel.interpolate(tick);
-            if (value != null) line.add(x, this.toGraphY(this.sheet.channel.getFactory().getY(value)));
+            if (value != null) line.add(x, this.toGraphY(this.yOfValue(value)));
             previousSource = source;
         }
 
@@ -665,18 +699,18 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
         for (int index = 0; index < originals.size(); index++)
         {
             Keyframe key = originals.get(index);
-            int x = this.keyframes.toGraphX(key.getTick()), y = this.toGraphY(key.getY());
+            int x = this.keyframes.toGraphX(key.getTick()), y = this.toGraphY(this.yOf(key));
             if (x < this.keyframes.graphArea.x - 20 || x > this.keyframes.graphArea.ex() + 20) continue;
             Keyframe previous = this.sheet.channel.get(index - 1);
-            if (key.getInterpolation().getInterp() == Interpolations.BEZIER)
+            if (this.showHandles() && key.getInterpolation().getInterp() == Interpolations.BEZIER)
             {
                 line.push(); line.add(x, y);
-                line.add(this.keyframes.toGraphX(key.getTick() + key.rx), this.toGraphY(key.getY() + key.ry));
+                line.add(this.keyframes.toGraphX(key.getTick() + this.handlesOf(key)[2]), this.toGraphY(this.yOf(key) + this.handlesOf(key)[3]));
             }
-            if (previous != null && previous.getInterpolation().getInterp() == Interpolations.BEZIER)
+            if (this.showHandles() && previous != null && previous.getInterpolation().getInterp() == Interpolations.BEZIER)
             {
                 line.push(); line.add(x, y);
-                line.add(this.keyframes.toGraphX(key.getTick() - key.lx), this.toGraphY(key.getY() + key.ly));
+                line.add(this.keyframes.toGraphX(key.getTick() - this.handlesOf(key)[0]), this.toGraphY(this.yOf(key) + this.handlesOf(key)[1]));
             }
         }
         line.render(context.batcher, SolidColorLineRenderer.get(Colors.COLOR.set(Colors.setA(this.sheet.color, 1F))));
@@ -699,7 +733,7 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
             float tick = frame.getTick();
             int x1 = this.keyframes.toGraphX(tick);
             int x2 = this.keyframes.toGraphX(tick + frame.getDuration());
-            int y = this.toGraphY(sheet.channel.getFactory().getY(frame.getValue()));
+            int y = this.toGraphY(this.yOf(frame));
 
             /* Render custom duration markers */
             if (x1 != x2)
@@ -734,18 +768,18 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
 
             UIKeyframeDopeSheet.renderShape(frame, context, builder, matrix, x1, y, offset, c);
 
-            if (frame.getInterpolation().getInterp() == Interpolations.BEZIER)
+            if (this.showHandles() && frame.getInterpolation().getInterp() == Interpolations.BEZIER)
             {
-                int rx = this.keyframes.toGraphX(frame.getTick() + frame.rx);
-                int ry = this.toGraphY(sheet.channel.getFactory().getY(frame.getValue()) + frame.ry);
+                int rx = this.keyframes.toGraphX(frame.getTick() + this.handlesOf(frame)[2]);
+                int ry = this.toGraphY(this.yOf(frame) + this.handlesOf(frame)[3]);
 
                 UIKeyframeDopeSheet.renderShape(frame, context, builder, matrix, rx, ry, 3, c);
             }
 
-            if (prev != null && prev.getInterpolation().getInterp() == Interpolations.BEZIER)
+            if (this.showHandles() && prev != null && prev.getInterpolation().getInterp() == Interpolations.BEZIER)
             {
-                int lx = this.keyframes.toGraphX(frame.getTick() - frame.lx);
-                int ly = this.toGraphY(sheet.channel.getFactory().getY(frame.getValue()) + frame.ly);
+                int lx = this.keyframes.toGraphX(frame.getTick() - this.handlesOf(frame)[0]);
+                int ly = this.toGraphY(this.yOf(frame) + this.handlesOf(frame)[1]);
 
                 UIKeyframeDopeSheet.renderShape(frame, context, builder, matrix, lx, ly, 3, c);
             }
@@ -756,7 +790,7 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
         {
             Keyframe frame = (Keyframe) keyframes.get(j);
             Keyframe prev = j > 0 ? (Keyframe) keyframes.get(j - 1) : null;
-            int y = this.toGraphY(sheet.channel.getFactory().getY(frame.getValue()));
+            int y = this.toGraphY(this.yOf(frame));
 
             int c = sheet.selection.has(j) ? Colors.ACTIVE : 0;
             int mx = this.keyframes.toGraphX(frame.getTick());
@@ -765,19 +799,19 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
 
             shapeResult.renderKeyframeBackground(context, builder, matrix, mx, y, 2, mc);
 
-            if (frame.getInterpolation().getInterp() == Interpolations.BEZIER)
+            if (this.showHandles() && frame.getInterpolation().getInterp() == Interpolations.BEZIER)
             {
-                int rx = this.keyframes.toGraphX(frame.getTick() + frame.rx);
-                int ry = this.toGraphY(sheet.channel.getFactory().getY(frame.getValue()) + frame.ry);
+                int rx = this.keyframes.toGraphX(frame.getTick() + this.handlesOf(frame)[2]);
+                int ry = this.toGraphY(this.yOf(frame) + this.handlesOf(frame)[3]);
 
                 shapeResult = UIKeyframeDopeSheet.renderShape(frame, context, builder, matrix, rx, ry, 2, c | Colors.A100);
                 shapeResult.renderKeyframeBackground(context, builder, matrix, rx, ry, 2, c | Colors.A100);
             }
 
-            if (prev != null && prev.getInterpolation().getInterp() == Interpolations.BEZIER)
+            if (this.showHandles() && prev != null && prev.getInterpolation().getInterp() == Interpolations.BEZIER)
             {
-                int lx = this.keyframes.toGraphX(frame.getTick() - frame.lx);
-                int ly = this.toGraphY(sheet.channel.getFactory().getY(frame.getValue()) + frame.ly);
+                int lx = this.keyframes.toGraphX(frame.getTick() - this.handlesOf(frame)[0]);
+                int ly = this.toGraphY(this.yOf(frame) + this.handlesOf(frame)[1]);
 
                 shapeResult = UIKeyframeDopeSheet.renderShape(frame, context, builder, matrix, lx, ly, 2, c | Colors.A100);
                 shapeResult.renderKeyframeBackground(context, builder, matrix, lx, ly, 2, c | Colors.A100);

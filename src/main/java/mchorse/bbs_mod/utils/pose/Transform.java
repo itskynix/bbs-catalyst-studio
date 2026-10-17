@@ -22,6 +22,14 @@ public class Transform implements IMapSerializable
     public final Vector3f scale = new Vector3f(DEFAULT_SCALE);
 
     /**
+     * The pivot (anchor point) rotation and scale happen around, in the transform's own
+     * space: {@code translate · translate(anchor) · rotate · scale · translate(-anchor)}.
+     * Moving it never moves the object's position; it only changes what it turns and
+     * grows about. Zero (the default) is the plain {@code translate · rotate · scale}.
+     */
+    public final Vector3f anchor = new Vector3f();
+
+    /**
      * How this transform stores its rotation, Blender-style per-bone
      * {@code rotation_mode}. {@link RotationMode#EULER} uses {@link #rotate}
      * (keeps &gt;360° spins and per-component curves); {@link RotationMode#QUATERNION}
@@ -41,6 +49,7 @@ public class Transform implements IMapSerializable
     {
         this.translate.lerp(transform.translate, a);
         this.scale.lerp(transform.scale, a);
+        this.anchor.lerp(transform.anchor, a);
         this.lerpRotation(transform, a);
     }
 
@@ -70,6 +79,7 @@ public class Transform implements IMapSerializable
     {
         this.lerp(this.translate, preA.translate, a.translate, b.translate, postB.translate, interp, x);
         this.lerp(this.scale, preA.scale, a.scale, b.scale, postB.scale, interp, x);
+        this.lerp(this.anchor, preA.anchor, a.anchor, b.anchor, postB.anchor, interp, x);
 
         /* Quaternion keyframes interpolate PER COMPONENT (w,x,y,z) through the
          * very same curve as every other channel, then re-normalize — Blender's
@@ -99,6 +109,7 @@ public class Transform implements IMapSerializable
     {
         this.autoLerp(this.translate, preA.translate, a.translate, b.translate, postB.translate, pt, at, bt, qt, clamped, x);
         this.autoLerp(this.scale, preA.scale, a.scale, b.scale, postB.scale, pt, at, bt, qt, clamped, x);
+        this.autoLerp(this.anchor, preA.anchor, a.anchor, b.anchor, postB.anchor, pt, at, bt, qt, clamped, x);
 
         if (a.rotationMode == RotationMode.QUATERNION || b.rotationMode == RotationMode.QUATERNION)
         {
@@ -183,6 +194,7 @@ public class Transform implements IMapSerializable
     {
         this.translate.add(transform.translate);
         this.scale.mul(transform.scale);
+        this.anchor.add(transform.anchor);
         this.addRotation(transform);
     }
 
@@ -215,6 +227,7 @@ public class Transform implements IMapSerializable
     {
         this.translate.set(0, 0, 0);
         this.scale.set(1, 1, 1);
+        this.anchor.set(0, 0, 0);
         this.rotate.set(0, 0, 0);
         this.quat.identity();
         this.rotationMode = RotationMode.EULER;
@@ -333,8 +346,21 @@ public class Transform implements IMapSerializable
     public Matrix4f setupMatrix(Matrix4f matrix)
     {
         matrix.translate(this.translate);
+
+        boolean anchored = this.anchor.x != 0F || this.anchor.y != 0F || this.anchor.z != 0F;
+
+        if (anchored)
+        {
+            matrix.translate(this.anchor);
+        }
+
         matrix.rotate(this.createRotation());
         matrix.scale(this.scale);
+
+        if (anchored)
+        {
+            matrix.translate(-this.anchor.x, -this.anchor.y, -this.anchor.z);
+        }
 
         return matrix;
     }
@@ -390,6 +416,15 @@ public class Transform implements IMapSerializable
 
         Quaternionf rotation = new Quaternionf().setFromNormalized(basis);
 
+        /* The matrix carries the anchor's shift (anchor - R·S·anchor) in its translation; take it
+         * back out so the position channel stays the pure position it was written as. */
+        if (this.anchor.x != 0F || this.anchor.y != 0F || this.anchor.z != 0F)
+        {
+            Vector3f shift = new Vector3f(this.anchor).mul(this.scale).rotate(rotation);
+
+            this.translate.sub(this.anchor).add(shift);
+        }
+
         if (this.rotationMode == RotationMode.QUATERNION)
         {
             this.quat.set(rotation);
@@ -414,7 +449,8 @@ public class Transform implements IMapSerializable
 
             if (this.rotationMode != transform.rotationMode
                 || !this.translate.equals(transform.translate)
-                || !this.scale.equals(transform.scale))
+                || !this.scale.equals(transform.scale)
+                || !this.anchor.equals(transform.anchor))
             {
                 return false;
             }
@@ -437,6 +473,7 @@ public class Transform implements IMapSerializable
         int hash = this.translate.hashCode();
 
         hash = 31 * hash + this.scale.hashCode();
+        hash = 31 * hash + this.anchor.hashCode();
         hash = 31 * hash + this.rotate.hashCode();
         hash = 31 * hash + this.quat.hashCode();
         hash = 31 * hash + this.rotationMode.ordinal();
@@ -457,6 +494,7 @@ public class Transform implements IMapSerializable
     {
         this.translate.set(transform.translate);
         this.scale.set(transform.scale);
+        this.anchor.set(transform.anchor);
         this.rotate.set(transform.rotate);
         this.quat.set(transform.quat);
         this.rotationMode = transform.rotationMode;
@@ -489,6 +527,11 @@ public class Transform implements IMapSerializable
             data.put("t", DataStorageUtils.vector3fToData(this.translate));
             data.put("s", DataStorageUtils.vector3fToData(this.scale));
 
+            if (this.anchor.x != 0F || this.anchor.y != 0F || this.anchor.z != 0F)
+            {
+                data.put("a", DataStorageUtils.vector3fToData(this.anchor));
+            }
+
             /* The presence of "q" is itself the mode discriminator, so no separate
              * flag is needed and old scenes (only r) read back as EULER. */
             if (this.rotationMode == RotationMode.QUATERNION)
@@ -509,6 +552,7 @@ public class Transform implements IMapSerializable
 
         this.translate.set(DataStorageUtils.vector3fFromData(data.getList("t")));
         this.scale.set(DataStorageUtils.vector3fFromData(data.getList("s"), DEFAULT_SCALE));
+        this.anchor.set(DataStorageUtils.vector3fFromData(data.getList("a")));
 
         if (data.has("q"))
         {

@@ -113,7 +113,24 @@ public abstract class UIForm <T extends Form> extends UIPanelBase<UIFormPanel<T>
 
     public Matrix4f getOrigin(float transition)
     {
-        return this.getOrigin(transition, this.bonePath(), this.getGizmoSpace());
+        return this.anchored(this.getOrigin(transition, this.bonePath(), this.getGizmoSpace()), this.bonePath());
+    }
+
+    /**
+     * The gizmo of the form's own transform sits on its pivot: the frame moved by the anchor, which
+     * leaves the frame's rotation and scale alone. Bones of a pose have no anchor, so only the path
+     * of the form itself is moved.
+     */
+    private Matrix4f anchored(Matrix4f matrix, String path)
+    {
+        if (matrix == null || matrix == Matrices.EMPTY_4F || !path.equals(FormUtils.getPath(this.form)))
+        {
+            return matrix;
+        }
+
+        Vector3f anchor = this.form.transform.get().anchor;
+
+        return anchor.x == 0F && anchor.y == 0F && anchor.z == 0F ? matrix : new Matrix4f(matrix).translate(anchor);
     }
 
     /** The space the gizmo should be drawn in (the active panel's transform space). */
@@ -135,7 +152,7 @@ public abstract class UIForm <T extends Form> extends UIPanelBase<UIFormPanel<T>
      *  silently collapse to identity. */
     public Matrix4f getOriginMatrix(float transition)
     {
-        return this.getOrigin(transition, this.bonePath(), TransformSpace.LOCAL);
+        return this.anchored(this.getOrigin(transition, this.bonePath(), TransformSpace.LOCAL), this.bonePath());
     }
 
     /** The twin of {@link #getOriginMatrix}: always the ORIGIN flavour, the frame before
@@ -143,7 +160,7 @@ public abstract class UIForm <T extends Form> extends UIPanelBase<UIFormPanel<T>
      *  two bone frames ({@code GizmoDrag#setFrameAxes}). */
     public Matrix4f getParentOriginMatrix(float transition)
     {
-        return this.getOrigin(transition, this.bonePath(), TransformSpace.PARENT);
+        return this.anchored(this.getOrigin(transition, this.bonePath(), TransformSpace.PARENT), this.bonePath());
     }
 
     /** Origin for the body part gizmo mode: the edited form's OWN root frame, ignoring any

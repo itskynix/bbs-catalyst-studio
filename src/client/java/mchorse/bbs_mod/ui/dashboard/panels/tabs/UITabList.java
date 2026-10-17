@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.function.IntPredicate;
+import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 
 /**
@@ -22,6 +23,7 @@ public class UITabList implements IUITabs, Iterable<DataTab>
     private final List<DataTab> tabs = new ArrayList<>();
 
     private UIDataTabs bar;
+    private Runnable listener;
     private int current;
 
     public UITabList(IUITabsHost host)
@@ -40,12 +42,49 @@ public class UITabList implements IUITabs, Iterable<DataTab>
         this.sync();
     }
 
+    /** Told whenever the tabs or what they hold changed: the global strip keeps itself up to date through it. */
+    public void setListener(Runnable listener)
+    {
+        this.listener = listener;
+    }
+
     public void sync()
     {
         if (this.bar != null)
         {
             this.bar.sync();
         }
+
+        if (this.listener != null)
+        {
+            this.listener.run();
+        }
+    }
+
+    public boolean contains(DataTab tab)
+    {
+        return this.tabs.contains(tab);
+    }
+
+    /**
+     * An empty tab nobody else claims — or a fresh one when there is none. Does not switch to it.
+     * The first tab is never removed, so there always is one to start from.
+     */
+    public DataTab takeEmptyTab(Predicate<DataTab> free)
+    {
+        for (DataTab tab : this.tabs)
+        {
+            if (tab.dataId == null && free.test(tab))
+            {
+                return tab;
+            }
+        }
+
+        DataTab tab = new DataTab(null);
+
+        this.tabs.add(tab);
+
+        return tab;
     }
 
     public int size()

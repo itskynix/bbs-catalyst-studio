@@ -71,8 +71,10 @@ public class MatrixStackUtils
     public static void applyTransform(MatrixStack stack, Transform transform)
     {
         stack.translate(transform.translate.x, transform.translate.y, transform.translate.z);
+        stack.translate(transform.anchor.x, transform.anchor.y, transform.anchor.z);
         stack.multiply(transform.createRotation());
         scaleStack(stack, transform.scale.x, transform.scale.y, transform.scale.z);
+        stack.translate(-transform.anchor.x, -transform.anchor.y, -transform.anchor.z);
     }
 
     public static void multiply(MatrixStack stack, Matrix4f matrix)

@@ -3,6 +3,7 @@ package mchorse.bbs_mod.utils.keyframes.factories;
 import mchorse.bbs_mod.data.types.BaseType;
 import mchorse.bbs_mod.utils.interps.IInterp;
 import mchorse.bbs_mod.utils.interps.Interpolations;
+import mchorse.bbs_mod.utils.keyframes.ComponentBezier;
 import mchorse.bbs_mod.utils.keyframes.Keyframe;
 import mchorse.bbs_mod.utils.pose.Pose;
 import mchorse.bbs_mod.utils.pose.PoseTransform;
@@ -98,7 +99,24 @@ public class PoseKeyframeFactory implements IKeyframeFactory<Pose>
             return this.i;
         }
 
-        return IKeyframeFactory.super.interpolate(preA, a, b, postB, interpolation, x);
+        Pose out = IKeyframeFactory.super.interpolate(preA, a, b, postB, interpolation, x);
+
+        /* Separate dimensions: each bone's components with their own handles ("bone/p.x", ...) are
+         * re-solved on their own curve. */
+        if (interpolation.has(Interpolations.BEZIER) && ComponentBezier.any(a, b))
+        {
+            for (String key : keys)
+            {
+                PoseTransform transform = out.get(key);
+
+                if (transform != null)
+                {
+                    ComponentBezier.apply(transform, key + "/", at(a.getValue(), key), at(b.getValue(), key), a, b, x);
+                }
+            }
+        }
+
+        return out;
     }
 
     @Override

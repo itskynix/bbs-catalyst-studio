@@ -1,6 +1,7 @@
 package mchorse.bbs_mod.utils.interps;
 
 import mchorse.bbs_mod.utils.MathUtils;
+import mchorse.bbs_mod.utils.keyframes.CubicBezierSolver;
 import mchorse.bbs_mod.utils.interps.easings.Easings;
 import mchorse.bbs_mod.utils.interps.types.BaseInterp;
 import mchorse.bbs_mod.utils.interps.types.EasingInterp;
@@ -143,6 +144,25 @@ public class Interpolations
     };
 
     /**
+     * A CSS style cubic-bezier easing: the segment runs from (0, 0) to (1, 1) with control points
+     * (v1, v2) leaving A and (v3, v4) arriving at B. The x values are held inside 0..1 so the curve
+     * stays a function of time; the y values may overshoot.
+     */
+    public static final IInterp CUBIC_BEZIER = new BaseInterp("cubic_bezier", GLFW.GLFW_KEY_Y)
+    {
+        @Override
+        public double interpolate(InterpContext context)
+        {
+            if (context.x <= 0D) return context.a;
+            if (context.x >= 1D) return context.b;
+
+            double t = CubicBezierSolver.solveT(context.args.v1, context.args.v3, context.x);
+
+            return Lerps.lerp(context.a, context.b, CubicBezierSolver.bezier(0D, context.args.v2, context.args.v4, 1D, t));
+        }
+    };
+
+    /**
      * Same as {@link #STEP}, but the steps are measured in ticks (v1) and snapped
      * to an absolute tick grid, rather than being a fraction of the segment.
      *
@@ -224,6 +244,7 @@ public class Interpolations
         MAP.put(AUTO_CLAMPED.getKey(), AUTO_CLAMPED);
         MAP.put(BSPLINE.getKey(), BSPLINE);
         MAP.put(STEP_TICK.getKey(), STEP_TICK);
+        MAP.put(CUBIC_BEZIER.getKey(), CUBIC_BEZIER);
     }
 
     public static IInterp get(String name)

@@ -34,6 +34,7 @@ import mchorse.bbs_mod.ui.framework.elements.utils.UITimelineCanvas;
 import mchorse.bbs_mod.ui.utils.Area;
 import mchorse.bbs_mod.ui.utils.Scroll;
 import mchorse.bbs_mod.ui.utils.UIUtils;
+import mchorse.bbs_mod.ui.framework.elements.events.UIRemovedEvent;
 import mchorse.bbs_mod.ui.utils.context.ContextMenuManager;
 import mchorse.bbs_mod.ui.utils.context.MenuVerb;
 import mchorse.bbs_mod.ui.utils.context.UIChoiceMenu;
@@ -367,6 +368,17 @@ public class UIClips extends UITimelineCanvas
             this.addPreview = null;
 
             this.getContext().notifyError(UIKeys.CAMERA_TIMELINE_CANT_FIT_NOTIFICATION);
+
+            return;
+        }
+
+        if (UIClipTypeMenu.applies(this.factory))
+        {
+            UIClipTypeMenu menu = new UIClipTypeMenu(this.factory, (type) -> this.addClip(type, preview.x, preview.y, preview.z));
+
+            menu.getEvents().register(UIRemovedEvent.class, (e) -> this.addPreview = null);
+            context.replaceContextMenu(menu);
+            this.addPreview = preview;
 
             return;
         }

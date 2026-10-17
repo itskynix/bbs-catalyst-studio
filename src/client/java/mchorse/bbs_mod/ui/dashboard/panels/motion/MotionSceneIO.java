@@ -264,6 +264,9 @@ public final class MotionSceneIO
             m.putDouble("scaleX", l.scaleX);
             m.putDouble("scaleY", l.scaleY);
             m.putDouble("scaleZ", l.scaleZ);
+            m.putDouble("anchorX", l.anchorX);
+            m.putDouble("anchorY", l.anchorY);
+            m.putDouble("anchorZ", l.anchorZ);
         }
 
         if (l.channelColor.isEmpty())
@@ -361,6 +364,9 @@ public final class MotionSceneIO
         l.scaleX = m.getDouble("scaleX", l.scaleX);
         l.scaleY = m.getDouble("scaleY", l.scaleY);
         l.scaleZ = m.getDouble("scaleZ", l.scaleZ);
+        l.anchorX = m.getDouble("anchorX", l.anchorX);
+        l.anchorY = m.getDouble("anchorY", l.anchorY);
+        l.anchorZ = m.getDouble("anchorZ", l.anchorZ);
         l.opacity = m.getDouble("opacity", l.opacity);
         l.tintR = m.getFloat("tintR", l.tintR);
         l.tintG = m.getFloat("tintG", l.tintG);
@@ -492,6 +498,9 @@ public final class MotionSceneIO
         l.scaleX = t.scale.x;
         l.scaleY = t.scale.y;
         l.scaleZ = t.scale.z;
+        l.anchorX = t.anchor.x;
+        l.anchorY = t.anchor.y;
+        l.anchorZ = t.anchor.z;
 
         l.channelTransform.removeAll();
     }

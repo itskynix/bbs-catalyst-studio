@@ -127,6 +127,7 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
     /* Action clips share the timeline area; the toggle below the categories switches to them. */
     private UIClipsPanel actionTimeline;
     private UIIcon actionsToggle;
+    private UIIcon graphToggle;
     private boolean actionsMode;
     /* «All tracks» view: shows every category's tracks at once, bypassing the category filter. */
     private UIIcon allToggle;
@@ -335,6 +336,11 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
         this.actionsToggle = new UIIcon(Icons.ACTION, b -> this.toggleActionsMode());
         this.actionsToggle.tooltip(UIKeys.FILM_REPLAY_ACTIONS_TIMELINE, Direction.RIGHT);
         this.actionsToggle.highlight(() -> this.actionsMode, Direction.LEFT);
+
+        /* Dope sheet <-> graph editor, for the track under the cursor or the selected one. */
+        this.graphToggle = new UIIcon(Icons.CURVES, b -> this.toggleGraphEditor());
+        this.graphToggle.tooltip(UIKeys.KEYFRAMES_GRAPH_EDITOR, Direction.RIGHT);
+        this.graphToggle.highlight(() -> this.keyframeEditor != null && this.keyframeEditor.view.isEditing(), Direction.LEFT);
         this.layoutActionsToggle();
 
         /* Everything at once is the view to open on: a category is a way to narrow down, and
@@ -344,7 +350,7 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
         TrackCategories.registerShortcuts(this.keys(), () -> TrackCategories.values().stream()
             .filter(category -> this.tabButtons.get(category).getParent() != null).toList(), this::setCategory);
 
-        this.add(this.iconBar, this.sectionsToggle, this.actionsToggle, this.replayTransform);
+        this.add(this.iconBar, this.sectionsToggle, this.graphToggle, this.actionsToggle, this.replayTransform);
         this.partHeader.relative(this).x(CATEGORY_BAR_WIDTH).y(0).w(120).h(TimelineRulerRenderer.RULER_BLOCK_HEIGHT);
         this.partHeader.add(new UIRenderable(context ->
         {
@@ -984,7 +990,8 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
 
         this.partHeader.removeFromParent();
         this.sectionsToggle.removeFromParent();
-        this.add(this.iconBar, this.sectionsToggle, this.actionsToggle, this.partHeader);
+        this.graphToggle.removeFromParent();
+        this.add(this.iconBar, this.sectionsToggle, this.graphToggle, this.actionsToggle, this.partHeader);
     }
 
     /** Pin the actions toggle below the category buttons. */
@@ -992,6 +999,15 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
     {
         this.sectionsToggle.relative(this).x(0).y(1F, -40).wh(CATEGORY_BAR_WIDTH, 20);
         this.actionsToggle.relative(this).x(0).y(1F, -20).wh(CATEGORY_BAR_WIDTH, 20);
+        this.graphToggle.relative(this).x(0).y(1F, -60).wh(CATEGORY_BAR_WIDTH, 20);
+    }
+
+    private void toggleGraphEditor()
+    {
+        if (this.keyframeEditor != null && !this.actionsMode)
+        {
+            this.keyframeEditor.view.toggleGraphEditor();
+        }
     }
 
     public void pickForm(Form form, String bone)
@@ -1198,6 +1214,7 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
 
         this.iconBar.setVisible(this.timelineVisible && notEditing);
         this.actionsToggle.setVisible(this.timelineVisible && notEditing);
+        this.graphToggle.setVisible(this.timelineVisible && !this.actionsMode && this.keyframeEditor != null);
         boolean sectionsAvailable = !this.actionsMode && this.keyframeEditor != null
             && this.keyframeEditor.view.getGraph() == this.keyframeEditor.view.getDopeSheet()
             && this.keyframeEditor.view.getDopeSheet().hasSections();

@@ -1,0 +1,27 @@
+{
+    "blend": {
+        "func": "add",
+        "srcrgb": "one",
+        "dstrgb": "zero"
+    },
+    "vertex": "postfx",
+    "fragment": "postfx",
+    "attributes": [
+        "Position",
+        "UV0",
+        "Color"
+    ],
+    "samplers": [
+        { "name": "Sampler0" }
+    ],
+    "uniforms": [
+        { "name": "Mode", "type": "float", "count": 1, "values": [ 0.0 ] },
+        { "name": "Size", "type": "float", "count": 2, "values": [ 1.0, 1.0 ] },
+        { "name": "U0", "type": "float", "count": 4, "values": [ 0.0, 0.0, 0.0, 0.0 ] },
+        { "name": "U1", "type": "float", "count": 4, "values": [ 0.0, 0.0, 0.0, 0.0 ] },
+        { "name": "U2", "type": "float", "count": 4, "values": [ 0.0, 0.0, 0.0, 0.0 ] },
+        { "name": "U3", "type": "float", "count": 4, "values": [ 0.0, 0.0, 0.0, 0.0 ] },
+        { "name": "U4", "type": "float", "count": 4, "values": [ 0.0, 0.0, 0.0, 0.0 ] },
+        { "name": "U5", "type": "float", "count": 4, "values": [ 0.0, 0.0, 0.0, 0.0 ] }
+    ]
+}

@@ -26,6 +26,7 @@ import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.utils.UITimelineCanvas;
 import mchorse.bbs_mod.ui.framework.elements.input.keyframes.graphs.IUIKeyframeGraph;
 import mchorse.bbs_mod.ui.framework.elements.input.keyframes.graphs.KeyframeType;
+import mchorse.bbs_mod.ui.framework.elements.input.keyframes.graphs.UIComponentGraph;
 import mchorse.bbs_mod.ui.framework.elements.input.keyframes.graphs.UIKeyframeDopeSheet;
 import mchorse.bbs_mod.ui.framework.elements.input.keyframes.graphs.UIKeyframeGraph;
 import mchorse.bbs_mod.ui.framework.elements.input.keyframes.overlays.UIKeyframeStyleOverlayPanel;
@@ -150,7 +151,7 @@ public class UIKeyframes extends UITimelineCanvas
                 {
                     menu.action(Icons.CLOSE, UIKeys.KEYFRAMES_CONTEXT_EXIT_TRACK, () -> this.editSheet(null));
                 }
-                else if (hovered != null && KeyframeFactories.isNumeric(hovered.channel.getFactory()))
+                else if (hovered != null && KeyframeFactories.isGraphable(hovered.channel.getFactory()))
                 {
                     menu.action(Icons.EDIT, UIKeys.KEYFRAMES_CONTEXT_EDIT_TRACK.format(hovered.id), () -> this.editSheet(hovered));
                 }
@@ -209,6 +210,7 @@ public class UIKeyframes extends UITimelineCanvas
         IKey category = UIKeys.KEYFRAMES_KEYS_CATEGORY;
         Supplier<Boolean> canModify = () -> !this.scaling;
 
+        this.keys().register(Keys.KEYFRAMES_GRAPH_EDITOR, this::toggleGraphEditor).inside().category(category);
         this.keys().register(Keys.KEYFRAMES_MAXIMIZE, this::resetView).inside().category(category);
         this.keys().register(Keys.KEYFRAMES_SELECT_ALL, () -> this.currentGraph.selectAll()).inside().category(category).active(canModify);
         this.keys().register(Keys.KEYFRAMES_SELECT_TRACK, this::selectAllOnTrackUnderCursor).inside().category(category).active(canModify);
@@ -698,9 +700,68 @@ public class UIKeyframes extends UITimelineCanvas
         return this.currentGraph != this.dopeSheet;
     }
 
+    /**
+     * Opens the graph editor on a track - the selected keyframe's, else the one under the cursor,
+     * else the first the graph can draw - or leaves it again.
+     */
+    public void toggleGraphEditor()
+    {
+        if (this.single)
+        {
+            return;
+        }
+
+        if (this.isEditing())
+        {
+            this.editSheet(null);
+
+            return;
+        }
+
+        /* The track of the selected keyframe, else the one last worked on, else the one under the
+         * cursor; the first graphable track is only for when none of those is graphable */
+        UIKeyframeSheet sheet = this.dopeSheet.getSheet(this.dopeSheet.getSelected());
+
+        if (sheet == null || !KeyframeFactories.isGraphable(sheet.channel.getFactory()))
+        {
+            sheet = this.dopeSheet.getLastSheet();
+        }
+
+        if ((sheet == null || !KeyframeFactories.isGraphable(sheet.channel.getFactory())) && this.getContext() != null)
+        {
+            sheet = this.dopeSheet.getSheet(this.getContext().mouseY);
+        }
+
+        if (sheet == null || !KeyframeFactories.isGraphable(sheet.channel.getFactory()))
+        {
+            sheet = null;
+
+            for (UIKeyframeSheet other : this.dopeSheet.getSheets())
+            {
+                if (KeyframeFactories.isGraphable(other.channel.getFactory()))
+                {
+                    sheet = other;
+
+                    break;
+                }
+            }
+        }
+
+        if (sheet != null)
+        {
+            this.editSheet(sheet);
+        }
+    }
+
     public void editSheet(UIKeyframeSheet sheet)
     {
         this.motionShift.release(false);
+
+        if (this.currentGraph instanceof UIComponentGraph component)
+        {
+            component.dispose();
+        }
+
         if (sheet == null)
         {
             this.currentGraph = this.dopeSheet;
@@ -710,7 +771,9 @@ public class UIKeyframes extends UITimelineCanvas
             this.dopeSheet.clearSelection();
             this.dopeSheet.pickSelected();
 
-            this.currentGraph = new UIKeyframeGraph(this, sheet);
+            this.currentGraph = KeyframeFactories.isComposite(sheet.channel.getFactory())
+                ? new UIComponentGraph(this, sheet)
+                : new UIKeyframeGraph(this, sheet);
 
             this.resetView();
         }
@@ -1119,7 +1182,11 @@ public class UIKeyframes extends UITimelineCanvas
         }
         else
         {
+            int inset = Math.min(this.currentGraph.getLeftInset(), this.area.w / 2);
+
             this.graphArea.copy(this.area);
+            this.graphArea.x += inset;
+            this.graphArea.w -= inset;
         }
 
         this.currentGraph.resize();
@@ -1477,6 +1544,11 @@ public class UIKeyframes extends UITimelineCanvas
 
         this.currentGraph.postRender(context);
         this.renderOverlay(context);
+
+        if (this.currentGraph instanceof UIComponentGraph component)
+        {
+            component.renderTree(context);
+        }
 
         context.batcher.unclip(context);
 

@@ -3,6 +3,7 @@ package mchorse.bbs_mod.utils.keyframes.factories;
 import mchorse.bbs_mod.data.types.BaseType;
 import mchorse.bbs_mod.utils.interps.IInterp;
 import mchorse.bbs_mod.utils.interps.Interpolations;
+import mchorse.bbs_mod.utils.keyframes.ComponentBezier;
 import mchorse.bbs_mod.utils.keyframes.Keyframe;
 import mchorse.bbs_mod.utils.pose.PoseTransform;
 
@@ -61,7 +62,15 @@ public class PoseTransformKeyframeFactory implements IKeyframeFactory<PoseTransf
             return this.i;
         }
 
-        return IKeyframeFactory.super.interpolate(preA, a, b, postB, interpolation, x);
+        PoseTransform out = IKeyframeFactory.super.interpolate(preA, a, b, postB, interpolation, x);
+
+        /* Separate dimensions: components with their own handles are re-solved on their own curve. */
+        if (interpolation.has(Interpolations.BEZIER) && ComponentBezier.any(a, b))
+        {
+            ComponentBezier.apply(out, "", a.getValue(), b.getValue(), a, b, x);
+        }
+
+        return out;
     }
 
     @Override

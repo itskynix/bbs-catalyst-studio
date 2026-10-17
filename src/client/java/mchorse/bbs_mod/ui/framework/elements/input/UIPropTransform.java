@@ -73,6 +73,12 @@ public class UIPropTransform extends UITransform implements TransformGesture.Hos
     private UITrackpad qy;
     private UITrackpad qz;
 
+    /* The anchor (pivot) row, built on demand by withAnchor(); null while the host has none. */
+    private UITrackpad ax;
+    private UITrackpad ay;
+    private UITrackpad az;
+    private UIElement anchorRow;
+
     /** Whether the rotate row currently shows the four quaternion pads (vs the three euler pads). */
     private boolean quatFields;
 
@@ -225,6 +231,91 @@ public class UIPropTransform extends UITransform implements TransformGesture.Hos
     private void applyRows()
     {
         this.h(this.rows * UIConstants.CONTROL_HEIGHT);
+    }
+
+    /**
+     * Add the anchor (pivot) row under rotate: the point rotation and scale turn about, in the
+     * transform's own space. Opt-in, for hosts whose target is a {@link Transform} that renders with
+     * it (forms, motion layers); a cube or a camera offset has no use for one.
+     */
+    public UIPropTransform withAnchor()
+    {
+        if (this.anchorRow != null)
+        {
+            return this;
+        }
+
+        IKey raw = IKey.constant("%s (%s)");
+
+        this.ax = new UITrackpad((value) -> this.internalSetA(value, Axis.X)).block().onlyNumbers();
+        this.ax.tooltip(raw.format(UIKeys.ANCHOR, UIKeys.GENERAL_X));
+        this.ax.textbox.setColor(Colors.RED);
+        this.ay = new UITrackpad((value) -> this.internalSetA(value, Axis.Y)).block().onlyNumbers();
+        this.ay.tooltip(raw.format(UIKeys.ANCHOR, UIKeys.GENERAL_Y));
+        this.ay.textbox.setColor(Colors.GREEN);
+        this.az = new UITrackpad((value) -> this.internalSetA(value, Axis.Z)).block().onlyNumbers();
+        this.az.tooltip(raw.format(UIKeys.ANCHOR, UIKeys.GENERAL_Z));
+        this.az.textbox.setColor(Colors.BLUE);
+
+        for (UITrackpad field : new UITrackpad[] {this.ax, this.ay, this.az})
+        {
+            field.getEvents().register(UITrackpadDragEndEvent.class, (e) -> this.endGesture());
+        }
+
+        UIIcon icon = new UIIcon(Icons.SPHERE, null);
+
+        icon.disabledColor = icon.hoverColor = Colors.WHITE;
+        icon.setEnabled(false);
+        icon.tooltip(UIKeys.ANCHOR);
+
+        this.anchorRow = this.addRow(icon, this.ax, this.ay, this.az);
+        this.hasFilled = false;
+
+        return this;
+    }
+
+    private void internalSetA(double x, Axis axis)
+    {
+        this.setA(
+            axis == Axis.X ? x : this.ax.value,
+            axis == Axis.Y ? x : this.ay.value,
+            axis == Axis.Z ? x : this.az.value
+        );
+    }
+
+    /** Write the anchor; a delta editor over a selection overrides this to fan the edit out. */
+    public void setA(double x, double y, double z)
+    {
+        if (this.transform == null)
+        {
+            return;
+        }
+
+        this.preCallback();
+        this.transform.anchor.set((float) x, (float) y, (float) z);
+        this.postCallback();
+    }
+
+    @Override
+    protected void reset()
+    {
+        super.reset();
+
+        if (this.anchorRow != null)
+        {
+            this.fillA(0, 0, 0);
+            this.setA(0, 0, 0);
+        }
+    }
+
+    private void fillA(double x, double y, double z)
+    {
+        if (this.anchorRow != null)
+        {
+            this.ax.setValue(x);
+            this.ay.setValue(y);
+            this.az.setValue(z);
+        }
     }
 
     /** Drop the scale row — for a target that has no scale to speak of, such as a group's rest in the model editor. */
@@ -570,6 +661,7 @@ public class UIPropTransform extends UITransform implements TransformGesture.Hos
             this.fillT(0, 0, 0);
             this.fillS(1, 1, 1);
             this.fillR(0, 0, 0);
+            this.fillA(0, 0, 0);
 
             return;
         }
@@ -600,6 +692,7 @@ public class UIPropTransform extends UITransform implements TransformGesture.Hos
 
         this.fillT(transform.translate.x, transform.translate.y, transform.translate.z);
         this.fillS(transform.scale.x, transform.scale.y, transform.scale.z);
+        this.fillA(transform.anchor.x, transform.anchor.y, transform.anchor.z);
 
         if (transform.rotationMode == Transform.RotationMode.QUATERNION)
         {

@@ -72,8 +72,34 @@ public abstract class UIBaseTextbox extends UIElement implements IFocusedUIEleme
         return this.textbox.getText();
     }
 
+    /** A context menu open over this textbox owns the mouse where it is: no text cursor through it. */
+    private boolean isCoveredByContextMenu(UIContext context)
+    {
+        UIElement menu = context.contextMenu;
+
+        if (menu == null || !menu.hasParent() || !menu.isVisible() || !menu.area.isInside(context))
+        {
+            return false;
+        }
+
+        for (UIElement parent = this; parent != null; parent = parent.getParent())
+        {
+            if (parent == menu)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     protected void requestTextCursor(UIContext context)
     {
+        if (this.isCoveredByContextMenu(context))
+        {
+            return;
+        }
+
         if (this.isEnabled() && (this.isFocused() || this.area.isInside(context)))
         {
             context.requestCursor(GLFW.GLFW_IBEAM_CURSOR);

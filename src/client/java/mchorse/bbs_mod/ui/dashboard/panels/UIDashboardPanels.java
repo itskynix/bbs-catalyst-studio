@@ -3,6 +3,7 @@ package mchorse.bbs_mod.ui.dashboard.panels;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.UIKeys;
+import mchorse.bbs_mod.ui.dashboard.panels.tabs.UIDataTabs;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.UIScrollView;
@@ -25,6 +26,9 @@ public class UIDashboardPanels extends UIElement
 {
     /** How thick the task bar is, whichever edge it is docked to — a bar icon is 20×20. */
     public static final int BAR = 20;
+
+    /** The global tab strip along the very top, above the panel and (when docked there) the bar. */
+    public static final int TABS = UIDataTabs.TABS_HEIGHT_PX;
 
     /**
      * The edges the bar can be docked to, in the order they are offered — and the order
@@ -161,6 +165,11 @@ public class UIDashboardPanels extends UIElement
         if (runsHorizontally(side))
         {
             this.taskBar.w(1F).h(BAR);
+
+            if (side == Direction.TOP)
+            {
+                this.taskBar.y(TABS);
+            }
             this.pinned.h(BAR).row(0).resize();
             this.panelButtons.x(1F, 5).h(BAR).wTo(this.taskBar.area, 1F).row(0).scroll();
             this.panelButtons.scroll.direction = ScrollDirection.HORIZONTAL;
@@ -172,7 +181,7 @@ public class UIDashboardPanels extends UIElement
         }
         else
         {
-            this.taskBar.w(BAR).h(1F);
+            this.taskBar.w(BAR).y(TABS).h(1F, -TABS);
             this.pinned.w(BAR).column(0).vertical();
             this.panelButtons.y(1F, 5).w(BAR).hTo(this.taskBar.area, 1F).column(0).vertical().scroll();
             this.panelButtons.scroll.direction = ScrollDirection.VERTICAL;
@@ -285,10 +294,10 @@ public class UIDashboardPanels extends UIElement
 
         switch (this.side)
         {
-            case TOP -> panel.y(BAR).w(1F).h(1F, -BAR);
-            case LEFT -> panel.x(BAR).w(1F, -BAR).h(1F);
-            case RIGHT -> panel.w(1F, -BAR).h(1F);
-            default -> panel.w(1F).h(1F, -BAR);
+            case TOP -> panel.y(BAR + TABS).w(1F).h(1F, -BAR - TABS);
+            case LEFT -> panel.x(BAR).y(TABS).w(1F, -BAR).h(1F, -TABS);
+            case RIGHT -> panel.y(TABS).w(1F, -BAR).h(1F, -TABS);
+            default -> panel.y(TABS).w(1F).h(1F, -BAR - TABS);
         }
     }
 
@@ -301,6 +310,26 @@ public class UIDashboardPanels extends UIElement
         this.panelButtons.add(button);
 
         return this.addBarButton(new BarButton(button, tooltip, () -> this.panel == panel));
+    }
+
+    /**
+     * Put the global tab strip along the top edge. It is added last, so it stays above whichever
+     * panel is showing (panels are prepended), and it is never moved by the side the bar is docked to.
+     */
+    public UIDataTabs setTabStrip(UIDataTabs strip)
+    {
+        strip.relative(this).x(0).y(0).w(1F).h(TABS);
+        this.add(strip);
+
+        return strip;
+    }
+
+    /** Register a panel that has no button in the bar: it is reached through the Central Hub. */
+    public <T extends UIDashboardPanel> T registerHiddenPanel(T panel)
+    {
+        this.panels.add(panel);
+
+        return panel;
     }
 
     /**

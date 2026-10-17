@@ -104,6 +104,27 @@ public abstract class UIDeltaPropTransform extends UIPropTransform
     }
 
     @Override
+    public void setA(double x, double y, double z)
+    {
+        Transform transform = this.getTargetTransform();
+
+        if (transform == null)
+        {
+            return;
+        }
+
+        float dx = (float) (x - transform.anchor.x);
+        float dy = (float) (y - transform.anchor.y);
+        float dz = (float) (z - transform.anchor.z);
+
+        this.preCallback();
+        this.applyToTarget((t) -> t.anchor.add(dx, dy, dz));
+        this.postCallback();
+
+        this.syncTargetTransform();
+    }
+
+    @Override
     public void setR(Axis axis, double x, double y, double z)
     {
         Transform transform = this.getTargetTransform();

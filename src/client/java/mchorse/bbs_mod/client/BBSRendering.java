@@ -299,7 +299,16 @@ public class BBSRendering
             return;
         }
 
-        IrisUtils.setup();
+        try
+        {
+            IrisUtils.setup();
+        }
+        catch (Throwable t)
+        {
+            /* Older/different Iris builds lack the PBR loader API: carry on with standard rendering */
+            iris = false;
+            System.err.println("[BBS] Iris PBR integration unavailable, continuing without it: " + t);
+        }
     }
 
     /* Framebuffers */

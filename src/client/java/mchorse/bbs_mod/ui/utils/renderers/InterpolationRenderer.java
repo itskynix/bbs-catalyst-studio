@@ -92,14 +92,31 @@ public class InterpolationRenderer
 
         fg.a = 1F;
 
-        context.batcher.clip(x - 1, y, w + 10, h, context);
+        context.batcher.clip(x - 6, y - 6, w + 18, h + 12, context);
+
+        /* Area under the curve: a column per pixel, fading out towards the baseline */
+        int rgb = fg.getRGBColor();
+        int base = y + h - padding;
+
+        for (int px = 0; px < w; px++)
+        {
+            float v = 1 - interp.interpolate(0, 1, px / (float) w);
+            int top = (int) (y + padding + v * (h - padding * 2F));
+            int from = Math.min(top, base);
+            int to = Math.max(top, base);
+
+            if (to > from)
+            {
+                context.batcher.gradientVBox(x + px, from, x + px + 1, to, Colors.setA(rgb, top < base ? 0.32F : 0F), Colors.setA(rgb, top < base ? 0F : 0.32F));
+            }
+        }
 
         /* Render the interpolation graph */
-        LineBuilder line = new LineBuilder(0.75F);
+        LineBuilder line = new LineBuilder(1.5F);
 
-        for (int i = 0; i <= iterations; i++)
+        for (int i = 0; i <= iterations * 2; i++)
         {
-            float factor = i / iterations;
+            float factor = i / (iterations * 2);
             float value = 1 - interp.interpolate(0, 1, factor);
 
             float x1 = x + factor * w;
@@ -110,8 +127,9 @@ public class InterpolationRenderer
 
         line.render(context.batcher, SolidColorLineRenderer.get(fg));
 
-        context.batcher.text("A", x + 4, (y + h - padding) + 4, fontColor);
-        context.batcher.text("B", x + w - 9, (y + padding) - context.batcher.getFont().getHeight() - 4, fontColor);
+        /* Keyframe pins on both ends */
+        renderPin(context, x, y + h - padding, rgb);
+        renderPin(context, x + w, y + padding, rgb);
 
         float tick = context.getTickTransition() % (duration + 20);
         float factor = MathUtils.clamp(tick / (float) duration, 0, 1);
@@ -119,6 +137,52 @@ public class InterpolationRenderer
         int py = y + padding + (int) ((1 - interp.interpolate(0, 1, factor)) * (h - padding * 2F));
 
         context.batcher.box(px - 2, py - 2, px + 2, py + 2, Colors.A100 + fg.getRGBColor());
+
+        /* The same moment as a dot riding the curve itself: x = t, y = curve(t) */
+        int cx = x + (int) (factor * w);
+
+        context.batcher.box(cx - 4, py - 4, cx + 5, py + 5, Colors.setA(Colors.WHITE, 0.25F));
+        context.batcher.box(cx - 2, py - 2, cx + 3, py + 3, Colors.A100 | Colors.WHITE);
         context.batcher.unclip(context);
+    }
+
+    /** A keyframe diamond with a dark rim. */
+    public static void renderPin(UIContext context, int cx, int cy, int rgb)
+    {
+        for (int dy = -5; dy <= 5; dy++)
+        {
+            int half = 5 - Math.abs(dy);
+
+            context.batcher.box(cx - half, cy + dy, cx + half + 1, cy + dy + 1, Colors.A100 | 0x101018);
+        }
+
+        for (int dy = -3; dy <= 3; dy++)
+        {
+            int half = 3 - Math.abs(dy);
+
+            context.batcher.box(cx - half, cy + dy, cx + half + 1, cy + dy + 1, Colors.A100 | Colors.WHITE);
+        }
+    }
+
+    /** A round handle knob; bigger and brighter while hovered or dragged. */
+    public static void renderKnob(UIContext context, int cx, int cy, int rgb, boolean active)
+    {
+        int r = active ? 5 : 4;
+
+        for (int dy = -r; dy <= r; dy++)
+        {
+            int half = (int) Math.round(Math.sqrt(r * r + 0.5 - dy * dy));
+
+            context.batcher.box(cx - half, cy + dy, cx + half + 1, cy + dy + 1, Colors.A100 | 0x101018);
+        }
+
+        r -= 1;
+
+        for (int dy = -r; dy <= r; dy++)
+        {
+            int half = (int) Math.round(Math.sqrt(r * r + 0.5 - dy * dy));
+
+            context.batcher.box(cx - half, cy + dy, cx + half + 1, cy + dy + 1, active ? Colors.A100 | Colors.WHITE : Colors.A100 | rgb);
+        }
     }
 }

@@ -2,12 +2,16 @@ package mchorse.bbs_mod.utils.keyframes;
 
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.data.types.BaseType;
+import mchorse.bbs_mod.data.types.ListType;
 import mchorse.bbs_mod.data.types.MapType;
 import mchorse.bbs_mod.settings.values.base.BaseValue;
 import mchorse.bbs_mod.utils.interps.Interpolation;
 import mchorse.bbs_mod.utils.interps.Interpolations;
 import mchorse.bbs_mod.utils.keyframes.factories.IKeyframeFactory;
 
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 
 public class Keyframe <T> extends BaseValue
@@ -19,6 +23,13 @@ public class Keyframe <T> extends BaseValue
     public float ly;
     public float rx = 5;
     public float ry;
+
+    /**
+     * Independent handle sets of a composite value's components (see {@link ComponentBezier}), by
+     * component key, each {lx, ly, rx, ry}. Null while no component has been customised, which is
+     * every keyframe of every older scene.
+     */
+    private Map<String, float[]> componentHandles;
 
     /** How this keyframe is drawn. Fresh keyframes start from whatever the settings say. */
     private final KeyframeStyle style = BBSSettings.getDefaultKeyframeStyle();
@@ -76,6 +87,7 @@ public class Keyframe <T> extends BaseValue
         hash = 31 * hash + Float.floatToIntBits(this.ly);
         hash = 31 * hash + Float.floatToIntBits(this.rx);
         hash = 31 * hash + Float.floatToIntBits(this.ry);
+        hash = 31 * hash + this.componentHandlesHash();
         hash = 31 * hash + System.identityHashCode(this.interp.getInterp());
         hash = 31 * hash + Double.hashCode(this.interp.getV1());
         hash = 31 * hash + Double.hashCode(this.interp.getV2());
@@ -84,6 +96,122 @@ public class Keyframe <T> extends BaseValue
         hash = 31 * hash + (this.value == null || this.factory == null ? 0 : this.factory.contentHash(this.value));
 
         return hash;
+    }
+
+    /** Order-independent hash of the component handles; 0 when there are none. */
+    private int componentHandlesHash()
+    {
+        int hash = 0;
+
+        if (this.componentHandles != null)
+        {
+            for (Map.Entry<String, float[]> entry : this.componentHandles.entrySet())
+            {
+                hash += entry.getKey().hashCode() * 31 + Arrays.hashCode(entry.getValue());
+            }
+        }
+
+        return hash;
+    }
+
+    public boolean hasComponentHandles()
+    {
+        return this.componentHandles != null && !this.componentHandles.isEmpty();
+    }
+
+    /** The component's {lx, ly, rx, ry} - the live array, do not edit it - or null when it has none. */
+    public float[] getComponentHandle(String key)
+    {
+        return this.componentHandles == null ? null : this.componentHandles.get(key);
+    }
+
+    /**
+     * Same as {@link #setComponentHandle} without notifying: for a drag, which like the key-level
+     * handles is mutated live and committed once by the editor.
+     */
+    public void putComponentHandle(String key, float lx, float ly, float rx, float ry)
+    {
+        if (this.componentHandles == null)
+        {
+            this.componentHandles = new LinkedHashMap<>();
+        }
+
+        this.componentHandles.put(key, new float[] {lx, ly, rx, ry});
+    }
+
+    public void setComponentHandle(String key, float lx, float ly, float rx, float ry)
+    {
+        this.preNotify();
+
+        if (this.componentHandles == null)
+        {
+            this.componentHandles = new LinkedHashMap<>();
+        }
+
+        this.componentHandles.put(key, new float[] {lx, ly, rx, ry});
+        this.postNotify();
+    }
+
+    /** Hands the component back to the default (key-level) handling. */
+    public void clearComponentHandle(String key)
+    {
+        if (this.componentHandles == null || !this.componentHandles.containsKey(key))
+        {
+            return;
+        }
+
+        this.preNotify();
+        this.componentHandles.remove(key);
+
+        if (this.componentHandles.isEmpty())
+        {
+            this.componentHandles = null;
+        }
+
+        this.postNotify();
+    }
+
+    private void copyComponentHandles(Keyframe<?> from)
+    {
+        if (from.componentHandles == null)
+        {
+            this.componentHandles = null;
+
+            return;
+        }
+
+        this.componentHandles = new LinkedHashMap<>();
+
+        for (Map.Entry<String, float[]> entry : from.componentHandles.entrySet())
+        {
+            this.componentHandles.put(entry.getKey(), entry.getValue().clone());
+        }
+    }
+
+    private static boolean sameComponentHandles(Keyframe<?> a, Keyframe<?> b)
+    {
+        boolean aEmpty = !a.hasComponentHandles();
+        boolean bEmpty = !b.hasComponentHandles();
+
+        if (aEmpty || bEmpty)
+        {
+            return aEmpty == bEmpty;
+        }
+
+        if (a.componentHandles.size() != b.componentHandles.size())
+        {
+            return false;
+        }
+
+        for (Map.Entry<String, float[]> entry : a.componentHandles.entrySet())
+        {
+            if (!Arrays.equals(entry.getValue(), b.componentHandles.get(entry.getKey())))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public float getTick()
@@ -210,6 +338,7 @@ public class Keyframe <T> extends BaseValue
         this.ly = keyframe.ly;
         this.rx = keyframe.rx;
         this.ry = keyframe.ry;
+        this.copyComponentHandles(keyframe);
     }
 
     @Override
@@ -228,6 +357,7 @@ public class Keyframe <T> extends BaseValue
                 && this.ly == kf.ly
                 && this.rx == kf.rx
                 && this.ry == kf.ry
+                && sameComponentHandles(this, kf)
                 && this.duration == kf.duration
                 && this.motionShift == kf.motionShift
                 && Objects.equals(this.interp, kf.interp);
@@ -251,6 +381,27 @@ public class Keyframe <T> extends BaseValue
         if (this.ly != 0F) data.putFloat("ly", this.ly);
         if (this.rx != 5F) data.putFloat("rx", this.rx);
         if (this.ry != 0F) data.putFloat("ry", this.ry);
+
+        /* Only the components that were customised are written. */
+        if (this.hasComponentHandles())
+        {
+            MapType handles = new MapType();
+
+            for (Map.Entry<String, float[]> entry : this.componentHandles.entrySet())
+            {
+                ListType list = new ListType();
+
+                for (float value : entry.getValue())
+                {
+                    list.addFloat(value);
+                }
+
+                handles.put(entry.getKey(), list);
+            }
+
+            data.put("handles", handles);
+        }
+
         this.style.toData(data);
 
         return data;
@@ -278,6 +429,35 @@ public class Keyframe <T> extends BaseValue
         if (map.has("ly")) this.ly = map.getFloat("ly");
         if (map.has("rx")) this.rx = map.getFloat("rx");
         if (map.has("ry")) this.ry = map.getFloat("ry");
+
+        if (map.has("handles") && map.get("handles").isMap())
+        {
+            MapType handles = map.get("handles").asMap();
+
+            this.componentHandles = null;
+
+            for (String key : handles.keys())
+            {
+                BaseType entry = handles.get(key);
+
+                if (entry != null && entry.isList() && entry.asList().size() >= 4)
+                {
+                    ListType list = entry.asList();
+
+                    if (this.componentHandles == null)
+                    {
+                        this.componentHandles = new LinkedHashMap<>();
+                    }
+
+                    this.componentHandles.put(key, new float[] {list.getFloat(0), list.getFloat(1), list.getFloat(2), list.getFloat(3)});
+                }
+            }
+        }
+        else
+        {
+            /* Restoring a state (undo) that had none: the live ones must go too. */
+            this.componentHandles = null;
+        }
     }
 
     public void copyOverExtra(Keyframe<?> a)
@@ -291,5 +471,6 @@ public class Keyframe <T> extends BaseValue
         this.ly = a.ly;
         this.rx = a.rx;
         this.ry = a.ry;
+        this.copyComponentHandles(a);
     }
 }
