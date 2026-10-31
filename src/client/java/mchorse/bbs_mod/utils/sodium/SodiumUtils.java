@@ -1,7 +1,15 @@
 package mchorse.bbs_mod.utils.sodium;
 
+//? if >=1.21 {
+/*import net.caffeinemc.mods.sodium.client.SodiumClientMod;
+*///?} else {
 import me.jellysquid.mods.sodium.client.SodiumClientMod;
+//?}
+//? if >=1.21 {
+/*import net.caffeinemc.mods.sodium.client.gui.SodiumGameOptions;
+*///?} else {
 import me.jellysquid.mods.sodium.client.gui.SodiumGameOptions;
+//?}
 import mchorse.bbs_mod.forms.renderers.utils.RecolorVertexSodiumConsumer;
 import mchorse.bbs_mod.utils.colors.Color;
 import net.minecraft.client.render.VertexConsumer;

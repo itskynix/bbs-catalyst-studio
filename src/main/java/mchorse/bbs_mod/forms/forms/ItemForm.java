@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.forms.forms;
 
+import mchorse.bbs_mod.forms.forms.utils.FormFxValues;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.ui.utils.icons.Icon;
 import mchorse.bbs_mod.settings.values.core.ValueColor;
@@ -17,6 +18,8 @@ public class ItemForm extends Form
     public final ValueItemStack stack = new ValueItemStack("item_stack");
     public final ValueModelTransformationMode modelTransform = new ValueModelTransformationMode("modelTransform", ModelTransformationMode.NONE);
     public final ValueColor color = new ValueColor("color", Color.white());
+    /** Dissolve and shatter: the item burning away or breaking apart. */
+    public final FormFxValues fx = new FormFxValues(this);
 
     public ItemForm()
     {

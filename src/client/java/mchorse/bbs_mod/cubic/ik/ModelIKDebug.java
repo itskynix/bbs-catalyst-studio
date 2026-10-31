@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.cubic.ik;
 
+import mchorse.bbs_mod.utils.Bufs;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.cubic.IModel;
@@ -172,8 +173,8 @@ public final class ModelIKDebug
             stack.multiply(RotationAxis.POSITIVE_Y.rotation(MathUtils.PI));
         }
 
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
-        builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+        BufferBuilder builder;
+        builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
 
         float unit = DebugOverlay.modelUnit(model);
 
@@ -207,7 +208,7 @@ public final class ModelIKDebug
             }
         }
 
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        Bufs.draw(builder);
 
         stack.pop();
 
@@ -279,12 +280,12 @@ public final class ModelIKDebug
         /* Lines: hairline GL lines by default, boxes once a thickness is set. */
         if (anyLine && !boxes)
         {
-            BufferBuilder lines = Tessellator.getInstance().getBuffer();
-            lines.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
+            BufferBuilder lines;
+            lines = Bufs.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
 
             emitLines(lines, matrix, 0F, dash, pts, target, pole, a, config);
 
-            BufferRenderer.drawWithGlobalProgram(lines.end());
+            Bufs.draw(lines);
         }
 
         if (!anyDot && !boxes)
@@ -293,8 +294,8 @@ public final class ModelIKDebug
         }
 
         /* Solid geometry: joint/accent markers, plus the thick lines. */
-        BufferBuilder dots = Tessellator.getInstance().getBuffer();
-        dots.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+        BufferBuilder dots;
+        dots = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
 
         if (boxes)
         {
@@ -328,7 +329,7 @@ public final class ModelIKDebug
             DebugOverlay.marker(dots, stack, config.pole.shape.get(), pole, unit * config.pole.size.get(), DebugOverlay.rgb(config.pole.color.get()), a);
         }
 
-        BufferRenderer.drawWithGlobalProgram(dots.end());
+        Bufs.draw(dots);
     }
 
     /** The chain's wires plus the bridges to the goal and the pole — the bridges are always dashed relationship lines. */

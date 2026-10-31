@@ -2,6 +2,7 @@ package mchorse.bbs_mod.cubic.render;
 
 import mchorse.bbs_mod.cubic.data.model.Model;
 import mchorse.bbs_mod.cubic.data.model.ModelGroup;
+import mchorse.bbs_mod.forms.renderers.utils.ShatterField;
 import mchorse.bbs_mod.utils.MatrixStackUtils;
 import mchorse.bbs_mod.utils.joml.Matrices;
 import mchorse.bbs_mod.utils.pose.Transform;
@@ -92,4 +93,10 @@ public interface ICubicRenderer
     }
 
     public boolean renderGroup(BufferBuilder builder, MatrixStack stack, ModelGroup group, Model model);
+
+    /** What breaks the model apart bone by bone as it is drawn, or null for a model that stays whole. */
+    public default ShatterField getShatter()
+    {
+        return null;
+    }
 }

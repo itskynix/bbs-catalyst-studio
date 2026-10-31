@@ -15,6 +15,8 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.statuseffect.render;
 
+import mchorse.bbs_mod.utils.EffectSprites;
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.camera.pov.actions.RecordedPovActions;
 import mchorse.bbs_mod.camera.pov.actions.clip.GuiPovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.clip.StatusEffectsPovActionClip;
@@ -32,8 +34,8 @@ import net.minecraft.util.Identifier;
 import net.minecraft.util.math.MathHelper;
 
 public final class StatusEffectActionRenderer {
-    private static final Identifier EFFECT_BACKGROUND_TEXTURE = new Identifier("hud/effect_background");
-    private static final Identifier EFFECT_BACKGROUND_LARGE_TEXTURE = new Identifier("container/inventory/effect_background_large");
+    private static final Identifier EFFECT_BACKGROUND_TEXTURE = Ids.of("hud/effect_background");
+    private static final Identifier EFFECT_BACKGROUND_LARGE_TEXTURE = Ids.of("container/inventory/effect_background_large");
 
     private StatusEffectActionRenderer() {
     }
@@ -79,7 +81,7 @@ public final class StatusEffectActionRenderer {
             int remainingTicks;
             Sprite sprite;
             StatusEffect effect;
-            if (entry.isExpired(elapsedTicks) || (effect = entry.getStatusEffect()) == null || (sprite = spriteManager.getSprite(effect)) == null) continue;
+            if (entry.isExpired(elapsedTicks) || (effect = entry.getStatusEffect()) == null || (sprite = EffectSprites.get(spriteManager, effect)) == null) continue;
             float alpha = 1.0f;
             if (!entry.isUnlimited() && (remainingTicks = (int)((float)entry.getDurationSeconds() * 20.0f - elapsedTicks)) <= 200) {
                 int m = Math.max(0, remainingTicks);
@@ -135,7 +137,7 @@ public final class StatusEffectActionRenderer {
                 context.fill(startX, startY, startX + cardWidth, startY + cardHeight, -534897122);
                 context.drawBorder(startX, startY, cardWidth, cardHeight, -13158601);
             }
-            Sprite sprite = spriteManager.getSprite(effect);
+            Sprite sprite = EffectSprites.get(spriteManager, effect);
             if (sprite != null) {
                 RenderSystem.enableBlend();
                 context.drawSprite(startX + 6, startY + 7, 0, 18, 18, sprite);

@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.utils;
 
+import mchorse.bbs_mod.utils.Bufs;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.graphics.Draw;
@@ -88,20 +89,20 @@ public class GizmoRings
             this.ringVbo = new VertexBuffer(VertexBuffer.Usage.STATIC);
             this.sphereVbo = new VertexBuffer(VertexBuffer.Usage.STATIC);
 
-            BufferBuilder builder = Tessellator.getInstance().getBuffer();
+            BufferBuilder builder;
 
             float radius = 0.22F * scale;
             float thicknessRing = 0.02F * scale * thickness;
 
-            builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+            builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
             Draw.arc3D(builder, new MatrixStack(), Axis.Y, radius, thicknessRing, 1F, 1F, 1F, 0F, 360F);
             this.ringVbo.bind();
-            this.ringVbo.upload(builder.end());
+            Bufs.upload(this.ringVbo, builder);
 
-            builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+            builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
             Draw.sphere(builder, new MatrixStack(), radius, 24, 24, 1F, 1F, 1F, 1F);
             this.sphereVbo.bind();
-            this.sphereVbo.upload(builder.end());
+            Bufs.upload(this.sphereVbo, builder);
 
             VertexBuffer.unbind();
 
@@ -150,15 +151,15 @@ public class GizmoRings
                 slot.vbo = new VertexBuffer(VertexBuffer.Usage.DYNAMIC);
             }
 
-            BufferBuilder builder = Tessellator.getInstance().getBuffer();
+            BufferBuilder builder;
 
             /* Tessellated in the ring's own frame (a Y-axis torus); the axis turn is applied
              * to the draw matrix below, so all three axes share one shape family. */
-            builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+            builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
             Draw.arc3D(builder, IDENTITY, Axis.Y, radius, thickness, 1F, 1F, 1F, arc.x, arc.y,
                 64, 12, arc.y < 360F ? RING_TAPER_DEGREES : 0F);
             slot.vbo.bind();
-            slot.vbo.upload(builder.end());
+            Bufs.upload(slot.vbo, builder);
             VertexBuffer.unbind();
 
             slot.radius = radius;

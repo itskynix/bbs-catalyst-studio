@@ -1,5 +1,7 @@
 package mchorse.bbs_mod.items;
 
+import mchorse.bbs_mod.utils.VersionCompat;
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.blocks.entities.ModelProperties;
 import mchorse.bbs_mod.data.DataStorageUtils;
 import mchorse.bbs_mod.data.types.BaseType;
@@ -72,7 +74,7 @@ public class GunProperties extends ModelProperties
 
     public static GunProperties get(ItemStack stack)
     {
-        NbtCompound nbt = stack.getNbt();
+        NbtCompound nbt = VersionCompat.getStackData(stack);
         GunProperties properties = new GunProperties();
 
         if (nbt == null)
@@ -105,7 +107,7 @@ public class GunProperties extends ModelProperties
         Transform tp = properties.getTransformThirdPerson();
         Transform fp = properties.getTransformFirstPerson();
 
-        value.particle = new Identifier("minecraft:falling_water");
+        value.particle = Ids.of("minecraft:falling_water");
         projectileForm.settings.set(value);
         projectileForm.frequency.set(1);
         projectileForm.offsetX.set(0.1F);

@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.dashboard.list;
 
+import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.input.list.UIList;
 import mchorse.bbs_mod.ui.framework.elements.utils.RowStyle;
@@ -14,7 +15,10 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 public class UIDataPathList extends UIList<DataPath>
 {
@@ -38,6 +42,14 @@ public class UIDataPathList extends UIList<DataPath>
     private boolean openOnSingleClick = true;
     private Consumer<List<DataPath>> openCallback;
     private ArrayList<DataPath> openArgs = new ArrayList<>(1);
+
+    /** When a path was last changed (ms), for sorting by date; null sorts by name whatever is picked */
+    private Function<DataPath, Long> timeProvider;
+
+    public static final int SORT_NEWEST = 0;
+    public static final int SORT_OLDEST = 1;
+    public static final int SORT_A_Z = 2;
+    public static final int SORT_Z_A = 3;
 
     public UIDataPathList(Consumer<List<DataPath>> callback)
     {
@@ -65,6 +77,26 @@ public class UIDataPathList extends UIList<DataPath>
         this.openArgs.add(dataPath);
 
         this.openCallback.accept(this.openArgs);
+    }
+
+    public void setTimeProvider(Function<DataPath, Long> timeProvider)
+    {
+        this.timeProvider = timeProvider;
+    }
+
+    /** Re-sorts the shown paths by the current pick, keeping the selection on the same rows. */
+    public void resort()
+    {
+        List<DataPath> selected = this.getCurrent();
+        List<DataPath> keep = new ArrayList<>(selected);
+
+        this.sort();
+        this.update();
+
+        if (!keep.isEmpty())
+        {
+            this.setCurrentScroll(keep.get(0));
+        }
     }
 
     public void setFileIcon(Icon icon)
@@ -232,7 +264,7 @@ public class UIDataPathList extends UIList<DataPath>
     @Override
     public boolean subMouseClicked(UIContext context)
     {
-        if (this.scroll.mouseClicked(context))
+        if (this.scroll.mouseClicked(context) || this.scroll.startAutoscroll(context))
         {
             return true;
         }
@@ -298,15 +330,43 @@ public class UIDataPathList extends UIList<DataPath>
     @Override
     protected boolean sortElements()
     {
+        int mode = BBSSettings.listSortMode == null ? SORT_A_Z : BBSSettings.listSortMode.get();
+        boolean byTime = (mode == SORT_NEWEST || mode == SORT_OLDEST) && this.timeProvider != null;
+        Map<DataPath, Long> times = new HashMap<>();
+
+        if (byTime)
+        {
+            /* Asked once per path, not once per comparison: it reads the disk */
+            for (DataPath path : this.list)
+            {
+                Long time = this.timeProvider.apply(path);
+
+                times.put(path, time == null ? 0L : time);
+            }
+        }
+
         this.list.sort((a, b) ->
         {
-            if (a.folder && !b.folder) return -1;
-            if (b.folder && !a.folder) return 1;
-
+            /* The way up and the folders stay on top whatever the order */
             if (a.toString().endsWith("/..")) return -1;
             if (b.toString().endsWith("/..")) return 1;
 
-            return NaturalOrderComparator.compare(true, a.toString(), b.toString());
+            if (a.folder && !b.folder) return -1;
+            if (b.folder && !a.folder) return 1;
+
+            int byName = NaturalOrderComparator.compare(true, a.toString(), b.toString());
+
+            if (byTime)
+            {
+                int byDate = Long.compare(times.get(a), times.get(b));
+
+                if (byDate != 0)
+                {
+                    return mode == SORT_NEWEST ? -byDate : byDate;
+                }
+            }
+
+            return mode == SORT_Z_A ? -byName : byName;
         });
 
         return true;

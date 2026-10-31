@@ -15,6 +15,7 @@
  */
 package mchorse.bbs_mod.camera.pov.hud.render;
 
+import mchorse.bbs_mod.utils.VersionCompat;
 import mchorse.bbs_mod.camera.pov.hand.RecordedHandData;
 import mchorse.bbs_mod.camera.pov.hud.RecordedHudData;
 import java.util.List;
@@ -135,21 +136,21 @@ public final class AttackIndicatorRenderer {
         double multiplyBase = 1.0;
         double multiplyTotal = 1.0;
         if (stack != null && !stack.isEmpty()) {
-            for (EntityAttributeModifier modifier : stack.getAttributeModifiers(EquipmentSlot.MAINHAND).get(EntityAttributes.GENERIC_ATTACK_SPEED)) {
-                switch (modifier.getOperation()) {
-                    case ADDITION: {
-                        addition += modifier.getValue();
-                        break;
-                    }
-                    case MULTIPLY_BASE: {
-                        multiplyBase += modifier.getValue();
-                        break;
-                    }
-                    case MULTIPLY_TOTAL: {
-                        multiplyTotal *= 1.0 + modifier.getValue();
-                    }
+            double[] sums = {0.0, 1.0, 1.0};
+
+            VersionCompat.forEachAttackSpeedModifier(stack, (operation, value) -> {
+                if (operation == 0) {
+                    sums[0] += value;
+                } else if (operation == 1) {
+                    sums[1] += value;
+                } else {
+                    sums[2] *= 1.0 + value;
                 }
-            }
+            });
+
+            addition = sums[0];
+            multiplyBase = sums[1];
+            multiplyTotal = sums[2];
         }
         double speed = Math.max(1.0E-4, (base + addition) * multiplyBase * multiplyTotal);
         return (float)(1.0 / speed * 20.0);

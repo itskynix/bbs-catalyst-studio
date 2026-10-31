@@ -54,6 +54,9 @@ import mchorse.bbs_mod.ui.film.UIFilmPanel;
 import mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.BackgroundRenderer;
+//? if >=1.21
+/*import net.minecraft.block.enums.CameraSubmersionType;*/
+//? if <1.21
 import net.minecraft.client.render.CameraSubmersionType;
 import net.minecraft.client.util.math.MatrixStack;
 import org.joml.Matrix4f;
@@ -84,7 +87,7 @@ public final class PovOverlayRenderer {
         if (filmPanel == null) {
             return;
         }
-        float tickDelta = MinecraftClient.getInstance().getTickDelta();
+        float tickDelta = MinecraftClient.getInstance()./*$ gtd*/getTickDelta()/**/;
         float filmTick = filmPanel.getRunner() != null && filmPanel.getRunner().isRunning() ? (float)filmPanel.getRunner().ticks + tickDelta : (float)filmPanel.getCursor();
         int povMode = filmPanel.getController().getPovMode();
         if (povMode == 1 || povMode == 2 || UIPovHandEditor.isActive()) {

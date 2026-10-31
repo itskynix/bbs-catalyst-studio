@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.forms.entities;
 
+import mchorse.bbs_mod.utils.VersionCompat;
 import mchorse.bbs_mod.cubic.jem.CemVariables;
 import mchorse.bbs_mod.forms.forms.Form;
 import mchorse.bbs_mod.mixin.EntityInvoker;
@@ -760,7 +761,7 @@ public class MCEntity implements IEntity
     {
         if (this.mcEntity instanceof LivingEntity living)
         {
-            return living.getRoll();
+            return VersionCompat.getGlideTicks(living);
         }
 
         return 0;

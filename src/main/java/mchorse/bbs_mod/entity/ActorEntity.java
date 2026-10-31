@@ -116,6 +116,26 @@ public class ActorEntity extends LivingEntity implements IEntityFormProvider
      * flag promised a body in the world and delivered a shin. Same properties the picking box in
      * the editor already reads, so the two agree.
      */
+    //? if >=1.21 {
+    /*@Override
+    protected EntityDimensions getBaseDimensions(EntityPose pose)
+    {
+        if (this.form == null || !this.form.hitbox.get())
+        {
+            return super.getBaseDimensions(pose);
+        }
+
+        float width = this.form.hitboxWidth.get();
+        float height = this.form.hitboxHeight.get();
+
+        if (pose == EntityPose.CROUCHING)
+        {
+            height *= this.form.hitboxSneakMultiplier.get();
+        }
+
+        return EntityDimensions.changing(width, height).withEyeHeight(this.form.hitboxEyeHeight.get());
+    }
+    *///?} else {
     @Override
     public EntityDimensions getDimensions(EntityPose pose)
     {
@@ -145,6 +165,7 @@ public class ActorEntity extends LivingEntity implements IEntityFormProvider
 
         return this.form.hitboxEyeHeight.get();
     }
+    //?}
 
     @Override
     public boolean shouldRender(double distance)

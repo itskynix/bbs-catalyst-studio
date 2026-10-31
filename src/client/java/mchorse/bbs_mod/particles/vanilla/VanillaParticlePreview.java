@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.particles.vanilla;
 
+import mchorse.bbs_mod.utils.Ids;
 import com.google.gson.JsonParser;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
@@ -73,22 +74,22 @@ public class VanillaParticlePreview
 
             if (blockSprite != null)
             {
-                return Optional.of(new Preview(SpriteAtlasTexture.BLOCK_ATLAS_TEXTURE, new Identifier(blockSprite), color));
+                return Optional.of(new Preview(SpriteAtlasTexture.BLOCK_ATLAS_TEXTURE, Ids.of(blockSprite), color));
             }
 
             color = sampleColor(particle.getPath());
 
             if (particle.getPath().equals("explosion_emitter"))
             {
-                particle = new Identifier("explosion");
+                particle = Ids.of("explosion");
             }
             else if (particle.getPath().equals("gust_emitter"))
             {
-                particle = new Identifier("gust");
+                particle = Ids.of("gust");
             }
         }
 
-        Identifier definition = new Identifier(particle.getNamespace(), "particles/" + particle.getPath() + ".json");
+        Identifier definition = Ids.of(particle.getNamespace(), "particles/" + particle.getPath() + ".json");
         Optional<Resource> resource = MinecraftClient.getInstance().getResourceManager().getResource(definition);
 
         if (resource.isPresent())

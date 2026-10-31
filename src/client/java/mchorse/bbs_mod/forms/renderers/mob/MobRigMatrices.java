@@ -101,7 +101,11 @@ public class MobRigMatrices
 
             MatrixStack stack = new MatrixStack();
 
+            //? if >=1.21 {
+            /*invoker.bbs$setupTransforms(living, stack, animationProgress, bodyYaw, transition, living.getScale());
+            *///?} else {
             invoker.bbs$setupTransforms(living, stack, animationProgress, bodyYaw, transition);
+            //?}
             stack.scale(-1F, -1F, 1F);
             invoker.bbs$scale(living, stack, transition);
             stack.translate(0F, -1.501F, 0F);

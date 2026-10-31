@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.utils.keyframes.factories;
 
+import mchorse.bbs_mod.utils.VersionCompat;
 import com.mojang.datafixers.util.Pair;
 import com.mojang.serialization.DataResult;
 import mchorse.bbs_mod.data.DataStorageUtils;
@@ -17,18 +18,15 @@ public class ItemStackKeyframeFactory implements IKeyframeFactory<ItemStack>
     @Override
     public ItemStack fromData(BaseType data)
     {
-        DataResult<Pair<ItemStack, NbtElement>> decode = ItemStack.CODEC.decode(NbtOps.INSTANCE, DataStorageUtils.toNbt(data));
-        Optional<Pair<ItemStack, NbtElement>> result = decode.result();
-
-        return result.map(Pair::getFirst).orElse(ItemStack.EMPTY);
+        return VersionCompat.stackFromNbt(DataStorageUtils.toNbt(data));
     }
 
     @Override
     public BaseType toData(ItemStack value)
     {
-        Optional<NbtElement> result = ItemStack.CODEC.encodeStart(NbtOps.INSTANCE, value).result();
+        NbtElement result = VersionCompat.stackToNbt(value);
 
-        return result.map(DataStorageUtils::fromNbt).orElse(new MapType());
+        return result == null ? new MapType() : DataStorageUtils.fromNbt(result);
     }
 
     @Override

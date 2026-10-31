@@ -28,6 +28,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.editor;
 
+import mchorse.bbs_mod.utils.EffectSprites;
 import mchorse.bbs_mod.camera.pov.actions.clip.StatusEffectsPovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.editor.UIPovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.statuseffect.StatusEffectEntry;
@@ -272,7 +273,7 @@ extends UIPovActionClip<StatusEffectsPovActionClip> {
             int iconX = x + 3;
             int iconY = y + (h - 16) / 2;
             context.batcher.box((float)(iconX - 1), (float)(iconY - 1), (float)(iconX + 17), (float)(iconY + 17), -872415232);
-            if (element != null && element.getStatusEffect() != null && context.batcher.getContext() != null && (sprite = MinecraftClient.getInstance().getStatusEffectSpriteManager().getSprite(element.getStatusEffect())) != null) {
+            if (element != null && element.getStatusEffect() != null && context.batcher.getContext() != null && (sprite = EffectSprites.get(MinecraftClient.getInstance().getStatusEffectSpriteManager(), element.getStatusEffect())) != null) {
                 RenderSystem.enableBlend();
                 context.batcher.getContext().drawSprite(iconX, iconY, 0, 16, 16, sprite);
             }
@@ -306,7 +307,7 @@ extends UIPovActionClip<StatusEffectsPovActionClip> {
             int iconX = x + 3;
             int iconY = y + (h - 16) / 2;
             context.batcher.box((float)(iconX - 1), (float)(iconY - 1), (float)(iconX + 17), (float)(iconY + 17), -872415232);
-            if (this.effect != null && context.batcher.getContext() != null && (sprite = MinecraftClient.getInstance().getStatusEffectSpriteManager().getSprite(this.effect)) != null) {
+            if (this.effect != null && context.batcher.getContext() != null && (sprite = EffectSprites.get(MinecraftClient.getInstance().getStatusEffectSpriteManager(), this.effect)) != null) {
                 RenderSystem.enableBlend();
                 context.batcher.getContext().drawSprite(iconX, iconY, 0, 16, 16, sprite);
             }

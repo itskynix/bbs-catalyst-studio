@@ -152,6 +152,9 @@ public class ActionManager
 
             this.players.add(player);
 
+            /* Built and registered first, only then does it put anything into the world */
+            player.init();
+
             /* The playback itself holds damage control, and lets go in ActionPlayer#stop - so
              * every way a playback can end, including ones added later, puts the world back
              * without having to remember to say so here. */

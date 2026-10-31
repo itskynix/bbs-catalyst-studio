@@ -3,6 +3,7 @@ package mchorse.bbs_mod.ui.film.export;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.camera.export.*;
 import mchorse.bbs_mod.client.BBSRendering;
+import mchorse.bbs_mod.l10n.L10n;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.catalyst.CatalystComposition;
@@ -107,6 +108,12 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
     public UIButton renderAllButton;
     public UIButton renderNowButton;
 
+    /* Render engine settings that belong to the delivery, not to the studio */
+    public UITrackpad motionBlurTrackpad;
+    public UITrackpad heldFramesTrackpad;
+    public UIToggle limitFrameRateToggle;
+    public UIToggle muteWhileRenderToggle;
+
     public UIDeliverOverlayPanel(UIFilmPanel filmPanel)
     {
         this(filmPanel, null);
@@ -119,7 +126,7 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
 
     public UIDeliverOverlayPanel(UIFilmPanel filmPanel, UICatalystPanel catalystPanel)
     {
-        super(IKey.raw("Deliver — Render & Export"));
+        super(key("title"));
 
         this.filmPanel = filmPanel;
         this.catalystPanel = catalystPanel;
@@ -162,9 +169,20 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
         RenderQueue.addListener(this::onQueueUpdated);
     }
 
+    /** A label of this panel in the current language. */
+    private static IKey key(String id)
+    {
+        return L10n.lang("bbs.ui.deliver." + id);
+    }
+
+    private static IKey rangeLabel(VideoExportProfile.RangeType type)
+    {
+        return L10n.lang("bbs.ui.deliver.range_type." + type.name().toLowerCase(), type.getLabel());
+    }
+
     private void setupTopPresetBar()
     {
-        this.presetButton = new UIButton(IKey.raw("Preset: " + this.currentProfile.getName()), (b) ->
+        this.presetButton = new UIButton(key("preset").format(this.currentProfile.getName()), (b) ->
         {
             this.getContext().replaceContextMenu((menu) ->
             {
@@ -183,8 +201,8 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
         this.savePreset = new UIIcon(Icons.SAVED, (b) ->
         {
             UIPromptOverlayPanel prompt = new UIPromptOverlayPanel(
-                IKey.raw("Save Preset"),
-                IKey.raw("Enter custom preset name:"),
+                key("save_preset"),
+                key("save_preset_prompt"),
                 (name) ->
                 {
                     if (name != null && !name.trim().isEmpty())
@@ -192,20 +210,20 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
                         this.currentProfile.setName(name.trim());
                         this.currentProfile.setId("custom_" + StringUtils.createTimestampFilename());
                         ExportProfiles.addProfile(this.currentProfile.copy());
-                        this.presetButton.label = IKey.raw("Preset: " + name.trim());
+                        this.presetButton.label = key("preset").format(name.trim());
                     }
                 }
             );
             UIOverlay.addOverlay(this.getContext(), prompt);
         });
-        this.savePreset.tooltip(IKey.raw("Save as Custom Preset"));
+        this.savePreset.tooltip(key("save_preset_tooltip"));
     }
 
     private void setupTabs()
     {
-        this.tabVideo = new UIButton(IKey.raw("Video"), (b) -> this.switchTab(0));
-        this.tabAudio = new UIButton(IKey.raw("Audio"), (b) -> this.switchTab(1));
-        this.tabFile = new UIButton(IKey.raw("File"), (b) -> this.switchTab(2));
+        this.tabVideo = new UIButton(key("tab_video"), (b) -> this.switchTab(0));
+        this.tabAudio = new UIButton(key("tab_audio"), (b) -> this.switchTab(1));
+        this.tabFile = new UIButton(key("tab_file"), (b) -> this.switchTab(2));
 
         this.settingsContainer = new UIElement();
         this.videoTabContent = UI.scrollView(4, 8);
@@ -232,11 +250,11 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
             this.currentProfile.setRangeType(VideoExportProfile.RangeType.ENTIRE);
         }
 
-        this.renderRangeButton = new UIButton(IKey.raw("Range: " + this.currentProfile.getRangeType().getLabel()), (b) ->
+        this.renderRangeButton = new UIButton(key("range").format(rangeLabel(this.currentProfile.getRangeType()).get()), (b) ->
         {
             this.getContext().replaceContextMenu((menu) ->
             {
-                String entireLabel = this.catalystPanel != null ? "Entire Composition" : "Entire Film";
+                String entireLabel = (this.catalystPanel != null ? key("range_entire_composition") : key("range_entire")).get();
                 menu.action(Icons.FILM, IKey.raw(entireLabel), () ->
                 {
                     this.currentProfile.setRangeType(VideoExportProfile.RangeType.ENTIRE);
@@ -246,7 +264,7 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
                 if (this.filmPanel != null)
                 {
                     boolean inOutAvailable = this.filmPanel.cameraEditor.clips.hasInOut();
-                    String inOutLabel = "In/Out Range" + (inOutAvailable ? " (" + this.filmPanel.cameraEditor.clips.getInPoint() + " - " + this.filmPanel.cameraEditor.clips.getOutPoint() + ")" : " (Not Set)");
+                    String inOutLabel = key("range_in_out").get() + (inOutAvailable ? " (" + this.filmPanel.cameraEditor.clips.getInPoint() + " - " + this.filmPanel.cameraEditor.clips.getOutPoint() + ")" : " (" + key("range_not_set").get() + ")");
                     if (inOutAvailable)
                     {
                         menu.action(Icons.LEFT_HANDLE, IKey.raw(inOutLabel), () ->
@@ -257,7 +275,7 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
                     }
                 }
 
-                menu.action(Icons.EDIT, IKey.raw("Custom Range"), () ->
+                menu.action(Icons.EDIT, key("range_custom"), () ->
                 {
                     this.currentProfile.setRangeType(VideoExportProfile.RangeType.CUSTOM);
                     this.updateRangeUI();
@@ -278,11 +296,11 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
         });
 
         boolean useSeconds = BBSSettings.editorSeconds.get();
-        String unitLabel = useSeconds ? "Seconds" : "Ticks";
+        String unitLabel = (useSeconds ? key("seconds") : key("ticks")).get();
 
         this.rangeInputsRow = UI.row(
-            UI.column(UI.label(IKey.raw("Start (" + unitLabel + ")")), this.rangeStartTextbox),
-            UI.column(UI.label(IKey.raw("End (" + unitLabel + ")")), this.rangeEndTextbox)
+            UI.column(UI.label(key("range_start").format(unitLabel)), this.rangeStartTextbox),
+            UI.column(UI.label(key("range_end").format(unitLabel)), this.rangeEndTextbox)
         );
 
         // 1. Format circulate
@@ -320,7 +338,7 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
             this.hwEncoderCirculate.addLabel(h.getLabel());
         }
 
-        this.gpuDetectedLabel = UI.label(IKey.raw("GPU: " + HardwareEncoder.getDetectedGpuName())).color(Colors.LIGHTER_GRAY);
+        this.gpuDetectedLabel = UI.label(key("gpu").format(HardwareEncoder.getDetectedGpuName())).color(Colors.LIGHTER_GRAY);
 
         // 4. Resolution & FPS
         int curW = BBSRendering.getVideoWidth();
@@ -380,36 +398,45 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
             String[] dithers = new String[]{"sierra2_4a", "bayer", "floyd_steinberg", "none"};
             this.currentProfile.setGifDither(dithers[c.getValue()]);
         });
-        this.gifDitherCirculate.addLabel(IKey.raw("Dither: Sierra 2-4A (HQ)"));
-        this.gifDitherCirculate.addLabel(IKey.raw("Dither: Bayer (Patterned)"));
-        this.gifDitherCirculate.addLabel(IKey.raw("Dither: Floyd-Steinberg"));
-        this.gifDitherCirculate.addLabel(IKey.raw("Dither: None"));
+        this.gifDitherCirculate.addLabel(key("dither_sierra"));
+        this.gifDitherCirculate.addLabel(key("dither_bayer"));
+        this.gifDitherCirculate.addLabel(key("dither_floyd"));
+        this.gifDitherCirculate.addLabel(key("dither_none"));
 
         this.gifColorsTrackpad = new UITrackpad((val) -> this.currentProfile.setGifMaxColors(val.intValue())).limit(2, 256).integer();
         this.gifColorsTrackpad.setValue(this.currentProfile.getGifMaxColors());
 
         UIElement gifRow = UI.row(
-            UI.column(UI.label(IKey.raw("GIF FPS")), this.gifFpsTrackpad),
-            UI.column(UI.label(IKey.raw("Dithering")), this.gifDitherCirculate),
-            UI.column(UI.label(IKey.raw("Max Colors")), this.gifColorsTrackpad)
+            UI.column(UI.label(key("gif_fps")), this.gifFpsTrackpad),
+            UI.column(UI.label(key("dithering")), this.gifDitherCirculate),
+            UI.column(UI.label(key("max_colors")), this.gifColorsTrackpad)
         );
         this.gifControls.add(gifRow);
         gifRow.relative(this.gifControls).w(1F).h(40);
 
+        this.motionBlurTrackpad = new UITrackpad((val) -> BBSSettings.videoMotionBlur.set(val.intValue())).limit(0, 6).integer();
+        this.motionBlurTrackpad.setValue(BBSSettings.videoMotionBlur.get());
+        this.motionBlurTrackpad.tooltip(key("motion_blur_tooltip"));
+        this.heldFramesTrackpad = new UITrackpad((val) -> BBSSettings.videoHeldFrames.set(val.intValue())).limit(1, 1000).integer();
+        this.heldFramesTrackpad.setValue(BBSSettings.videoHeldFrames.get());
+        this.heldFramesTrackpad.tooltip(key("held_frames_tooltip"));
+        this.limitFrameRateToggle = new UIToggle(key("limit_frame_rate"), BBSSettings.videoLimitFrameRate.get(), (t) -> BBSSettings.videoLimitFrameRate.set(t.getValue()));
+        this.limitFrameRateToggle.tooltip(key("limit_frame_rate_tooltip"));
+
         // Layout video tab
         UIElement resRow = UI.row(
-            UI.column(UI.label(IKey.raw("Width")), this.widthTrackpad),
-            UI.column(UI.label(IKey.raw("Height")), this.heightTrackpad),
-            UI.column(UI.label(IKey.raw("FPS")), this.fpsTrackpad)
+            UI.column(UI.label(key("width")), this.widthTrackpad),
+            UI.column(UI.label(key("height")), this.heightTrackpad),
+            UI.column(UI.label(key("fps")), this.fpsTrackpad)
         );
 
         UIElement rateRow = UI.row(
-            UI.column(UI.label(IKey.raw("Rate Control")), this.rateControlCirculate),
-            UI.column(UI.label(IKey.raw("CRF / Quality (0-51)")), this.qualityTrackpad),
-            UI.column(UI.label(IKey.raw("Bitrate (kbps)")), this.bitrateTrackpad)
+            UI.column(UI.label(key("rate_control")), this.rateControlCirculate),
+            UI.column(UI.label(key("quality")), this.qualityTrackpad),
+            UI.column(UI.label(key("bitrate")), this.bitrateTrackpad)
         );
 
-        this.exportVideoToggle = new UIToggle(IKey.raw("Export Video"), this.currentProfile.isExportVideo(), (t) ->
+        this.exportVideoToggle = new UIToggle(key("export_video"), this.currentProfile.isExportVideo(), (t) ->
         {
             this.currentProfile.setExportVideo(t.getValue());
             this.validateRenderButtons();
@@ -418,16 +445,21 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
         UIElement videoCol = UI.column(
             4, 0,
             this.exportVideoToggle,
-            UI.label(IKey.raw("Render Range")).color(Colors.LIGHTER_GRAY).marginTop(2), this.renderRangeButton,
+            UI.label(key("render_range")).color(Colors.LIGHTER_GRAY).marginTop(2), this.renderRangeButton,
             this.rangeInputsRow,
-            UI.label(IKey.raw("Container Format")).color(Colors.LIGHTER_GRAY).marginTop(2), this.formatCirculate,
-            UI.label(IKey.raw("Video Codec")).color(Colors.LIGHTER_GRAY).marginTop(2), this.codecCirculate,
-            UI.label(IKey.raw("Hardware Accelerator")).color(Colors.LIGHTER_GRAY).marginTop(2), this.hwEncoderCirculate,
+            UI.label(key("container")).color(Colors.LIGHTER_GRAY).marginTop(2), this.formatCirculate,
+            UI.label(key("video_codec")).color(Colors.LIGHTER_GRAY).marginTop(2), this.codecCirculate,
+            UI.label(key("hardware")).color(Colors.LIGHTER_GRAY).marginTop(2), this.hwEncoderCirculate,
             this.gpuDetectedLabel.marginTop(1),
             resRow.marginTop(4),
             rateRow.marginTop(4),
-            UI.label(IKey.raw("Encoder Speed Preset")).color(Colors.LIGHTER_GRAY).marginTop(2), this.presetCirculate,
-            this.gifControls.marginTop(4)
+            UI.label(key("speed_preset")).color(Colors.LIGHTER_GRAY).marginTop(2), this.presetCirculate,
+            this.gifControls.marginTop(4),
+            UI.row(
+                UI.column(UI.label(key("motion_blur")), this.motionBlurTrackpad),
+                UI.column(UI.label(key("held_frames")), this.heldFramesTrackpad)
+            ).marginTop(4),
+            this.limitFrameRateToggle.marginTop(4)
         );
 
         videoCol.relative(this.videoTabContent).w(1F);
@@ -436,7 +468,7 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
 
     private void setupAudioTab()
     {
-        this.exportAudioToggle = new UIToggle(IKey.raw("Export Audio"), this.currentProfile.isExportAudio(), (t) ->
+        this.exportAudioToggle = new UIToggle(key("export_audio"), this.currentProfile.isExportAudio(), (t) ->
         {
             this.currentProfile.setExportAudio(t.getValue());
             this.validateRenderButtons();
@@ -469,13 +501,16 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
             int[] bitrates = new int[]{128, 192, 256, 320};
             this.currentProfile.setAudioBitrate(bitrates[c.getValue()]);
         });
-        this.audioBitrateCirculate.addLabel(IKey.raw("128 kbps"));
-        this.audioBitrateCirculate.addLabel(IKey.raw("192 kbps (Standard)"));
-        this.audioBitrateCirculate.addLabel(IKey.raw("256 kbps (High Quality)"));
-        this.audioBitrateCirculate.addLabel(IKey.raw("320 kbps (Studio Master)"));
+        this.audioBitrateCirculate.addLabel(key("audio_bitrate_128"));
+        this.audioBitrateCirculate.addLabel(key("audio_bitrate_192"));
+        this.audioBitrateCirculate.addLabel(key("audio_bitrate_256"));
+        this.audioBitrateCirculate.addLabel(key("audio_bitrate_320"));
         this.audioBitrateCirculate.setValue(3);
 
-        this.captureMinecraftSoundsToggle = new UIToggle(IKey.raw("Capture In-Game Minecraft Sounds"), BBSSettings.videoExportMinecraftSounds.get(), (t) ->
+        this.muteWhileRenderToggle = new UIToggle(key("mute_while_render"), BBSSettings.videoMuteAudioWhileRender.get(), (t) -> BBSSettings.videoMuteAudioWhileRender.set(t.getValue()));
+        this.muteWhileRenderToggle.tooltip(key("mute_while_render_tooltip"));
+
+        this.captureMinecraftSoundsToggle = new UIToggle(key("minecraft_sounds"), BBSSettings.videoExportMinecraftSounds.get(), (t) ->
         {
             BBSSettings.videoExportMinecraftSounds.set(t.getValue());
         });
@@ -486,8 +521,8 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
             audioCol = UI.column(
                 6, 0,
                 this.exportAudioToggle,
-                UI.label(IKey.raw("Audio Codec")).color(Colors.LIGHTER_GRAY).marginTop(4), this.audioCodecCirculate,
-                UI.label(IKey.raw("Audio Bitrate")).color(Colors.LIGHTER_GRAY).marginTop(4), this.audioBitrateCirculate
+                UI.label(key("audio_codec_label")).color(Colors.LIGHTER_GRAY).marginTop(4), this.audioCodecCirculate,
+                UI.label(key("audio_bitrate")).color(Colors.LIGHTER_GRAY).marginTop(4), this.audioBitrateCirculate
             );
         }
         else
@@ -495,9 +530,10 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
             audioCol = UI.column(
                 6, 0,
                 this.exportAudioToggle,
-                UI.label(IKey.raw("Audio Codec")).color(Colors.LIGHTER_GRAY).marginTop(4), this.audioCodecCirculate,
-                UI.label(IKey.raw("Audio Bitrate")).color(Colors.LIGHTER_GRAY).marginTop(4), this.audioBitrateCirculate,
-                this.captureMinecraftSoundsToggle.marginTop(8)
+                UI.label(key("audio_codec_label")).color(Colors.LIGHTER_GRAY).marginTop(4), this.audioCodecCirculate,
+                UI.label(key("audio_bitrate")).color(Colors.LIGHTER_GRAY).marginTop(4), this.audioBitrateCirculate,
+                this.captureMinecraftSoundsToggle.marginTop(8),
+                this.muteWhileRenderToggle.marginTop(4)
             );
         }
 
@@ -528,7 +564,7 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
         this.outputFolderTextbox = new UITextbox((t) -> {});
         this.outputFolderTextbox.setText(movieFolder.getAbsolutePath());
 
-        this.browseFolderButton = new UIButton(IKey.raw("Open Videos Folder"), (b) ->
+        this.browseFolderButton = new UIButton(key("open_folder"), (b) ->
         {
             String custom = this.outputFolderTextbox.getText();
             File target = custom != null && !custom.trim().isEmpty() ? new File(custom.replace("\"", "").trim()) : BBSRendering.getVideoFolder();
@@ -538,8 +574,8 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
 
         UIElement fileCol = UI.column(
             6, 0,
-            UI.label(IKey.raw("Export Filename")).color(Colors.LIGHTER_GRAY), this.filenameTextbox,
-            UI.label(IKey.raw("Output Folder")).color(Colors.LIGHTER_GRAY).marginTop(4), this.outputFolderTextbox,
+            UI.label(key("filename")).color(Colors.LIGHTER_GRAY), this.filenameTextbox,
+            UI.label(key("output_folder")).color(Colors.LIGHTER_GRAY).marginTop(4), this.outputFolderTextbox,
             this.browseFolderButton.marginTop(4)
         );
 
@@ -551,18 +587,18 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
     {
         this.queueContainer = new UIElement();
 
-        UILabel queueLabel = UI.label(IKey.raw("Render Queue")).color(Colors.WHITE);
+        UILabel queueLabel = UI.label(key("queue")).color(Colors.WHITE);
         this.clearQueueButton = new UIIcon(Icons.CLOSE, (b) -> RenderQueue.clear());
-        this.clearQueueButton.tooltip(IKey.raw("Clear Completed / All"));
+        this.clearQueueButton.tooltip(key("queue_clear"));
 
-        this.addToQueueButton = new UIButton(IKey.raw("+ Add to Queue"), (b) -> this.addCurrentToQueue());
+        this.addToQueueButton = new UIButton(key("queue_add"), (b) -> this.addCurrentToQueue());
 
         this.jobList = new UIRenderJobList((list) -> {});
         this.jobList.background();
         this.jobList.updateList();
 
-        this.renderNowButton = new UIButton(IKey.raw("Render Now"), (b) -> this.startImmediateRender());
-        this.renderAllButton = new UIButton(IKey.raw("Render All Jobs"), (b) -> this.startQueueRender());
+        this.renderNowButton = new UIButton(key("render_now"), (b) -> this.startImmediateRender());
+        this.renderAllButton = new UIButton(key("render_all"), (b) -> this.startQueueRender());
 
         this.topQueueRow = UI.row(queueLabel, this.clearQueueButton);
 
@@ -592,7 +628,7 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
 
     private void applyProfileToUI()
     {
-        this.presetButton.label = IKey.raw("Preset: " + this.currentProfile.getName());
+        this.presetButton.label = key("preset").format(this.currentProfile.getName());
         this.formatCirculate.setValue(this.currentProfile.getFormat().ordinal());
         this.refreshCodecCirculate();
         this.hwEncoderCirculate.setValue(this.currentProfile.getHardwareEncoder().ordinal());
@@ -646,19 +682,19 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
         if (this.renderNowButton != null)
         {
             this.renderNowButton.setEnabled(valid);
-            if (!valid) this.renderNowButton.tooltip(IKey.raw("En az bir akış seçilmeli (Video veya Ses)!"));
+            if (!valid) this.renderNowButton.tooltip(key("need_stream"));
             else this.renderNowButton.removeTooltip();
         }
         if (this.addToQueueButton != null)
         {
             this.addToQueueButton.setEnabled(valid);
-            if (!valid) this.addToQueueButton.tooltip(IKey.raw("En az bir akış seçilmeli (Video veya Ses)!"));
+            if (!valid) this.addToQueueButton.tooltip(key("need_stream"));
             else this.addToQueueButton.removeTooltip();
         }
         if (this.renderAllButton != null)
         {
             this.renderAllButton.setEnabled(valid);
-            if (!valid) this.renderAllButton.tooltip(IKey.raw("En az bir akış seçilmeli (Video veya Ses)!"));
+            if (!valid) this.renderAllButton.tooltip(key("need_stream"));
             else this.renderAllButton.removeTooltip();
         }
     }
@@ -741,6 +777,10 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
             this.currentProfile.setQuality((int) this.qualityTrackpad.getValue());
         }
 
+        if (this.currentProfile.getWidth() > 0) BBSSettings.videoWidth.set(this.currentProfile.getWidth());
+        if (this.currentProfile.getHeight() > 0) BBSSettings.videoHeight.set(this.currentProfile.getHeight());
+        if (this.currentProfile.getFrameRate() > 0) BBSSettings.videoFrameRate.set((int) Math.round(this.currentProfile.getFrameRate()));
+
         if (this.currentProfile.getFormat().isGif())
         {
             this.currentProfile.setGifFps((int) this.gifFpsTrackpad.getValue());
@@ -788,7 +828,7 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
     private void updateRangeUI()
     {
         VideoExportProfile.RangeType type = this.currentProfile.getRangeType();
-        String label = "Range: " + type.getLabel();
+        String label = key("range").format(rangeLabel(type).get()).get();
         if (type == VideoExportProfile.RangeType.IN_OUT && this.filmPanel != null && this.filmPanel.cameraEditor.clips.hasInOut())
         {
             label += " (" + this.filmPanel.cameraEditor.clips.getInPoint() + " - " + this.filmPanel.cameraEditor.clips.getOutPoint() + ")";

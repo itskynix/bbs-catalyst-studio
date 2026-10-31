@@ -31,6 +31,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.editor;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.camera.pov.actions.clip.ToastPovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.editor.UIPovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.toast.ToastPresets;
@@ -242,7 +243,7 @@ extends UIPovActionClip<ToastPovActionClip> {
     private static ItemStack createItemStack(String iconId) {
         if (iconId != null && !iconId.isEmpty()) {
             try {
-                Item item = (Item)Registries.ITEM.get(new Identifier(iconId));
+                Item item = (Item)Registries.ITEM.get(Ids.of(iconId));
                 if (item != null && item != Items.AIR) {
                     return new ItemStack((ItemConvertible)item);
                 }

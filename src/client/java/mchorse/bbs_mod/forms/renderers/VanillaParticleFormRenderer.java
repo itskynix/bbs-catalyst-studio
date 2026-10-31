@@ -1,7 +1,11 @@
 package mchorse.bbs_mod.forms.renderers;
 
+import mchorse.bbs_mod.utils.VersionCompat;
+import mchorse.bbs_mod.utils.InverseViewRotation;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.brigadier.StringReader;
+//? if >=1.21
+/*import net.minecraft.command.argument.ParticleEffectArgumentType;*/
 import mchorse.bbs_mod.forms.ITickable;
 import mchorse.bbs_mod.forms.entities.IEntity;
 import mchorse.bbs_mod.forms.forms.VanillaParticleForm;
@@ -79,7 +83,7 @@ public class VanillaParticleFormRenderer extends FormRenderer<VanillaParticleFor
     {
         super.render3D(context);
 
-        Matrix4f matrix = new Matrix4f(RenderSystem.getInverseViewRotationMatrix());
+        Matrix4f matrix = new Matrix4f(InverseViewRotation.get());
 
         matrix.mul(context.stack.peek().getPositionMatrix());
 
@@ -293,6 +297,43 @@ public class VanillaParticleFormRenderer extends FormRenderer<VanillaParticleFor
         }
     }
 
+    //? if >=1.21 {
+    /*// Particle arguments are NBT since 1.20.5. What older films saved - "1 0 0 1" for dust, a block or
+    // item id for the ones that carry one - is turned into that, so they keep drawing the same.
+    private static String legacyArguments(String id, String arguments)
+    {
+        if (arguments.isEmpty() || arguments.startsWith("{"))
+        {
+            return arguments;
+        }
+
+        String[] parts = arguments.split("\s+");
+
+        try
+        {
+            switch (id)
+            {
+                case "minecraft:dust":
+                    return "{color:[" + parts[0] + "f," + parts[1] + "f," + parts[2] + "f],scale:" + parts[3] + "f}";
+                case "minecraft:dust_color_transition":
+                    return "{from_color:[" + parts[0] + "f," + parts[1] + "f," + parts[2] + "f],scale:" + parts[3] + "f,to_color:[" + parts[4] + "f," + parts[5] + "f," + parts[6] + "f]}";
+                case "minecraft:block":
+                case "minecraft:block_marker":
+                case "minecraft:falling_dust":
+                    return "{block_state:\"" + arguments + "\"}";
+                case "minecraft:item":
+                    return "{item:\"" + parts[0] + "\"}";
+                default:
+                    return "";
+            }
+        }
+        catch (RuntimeException e)
+        {
+            return "";
+        }
+    }
+    *///?}
+
     private ParticleEffect getEffect()
     {
         ParticleSettings settings = this.form.settings.get();
@@ -302,7 +343,13 @@ public class VanillaParticleFormRenderer extends FormRenderer<VanillaParticleFor
         {
             if (type != null)
             {
+                //? if >=1.21 {
+                /*String id = Registries.PARTICLE_TYPE.getId(type).toString();
+
+                return ParticleEffectArgumentType.readParameters(new StringReader(id + legacyArguments(id, settings.arguments.trim())), VersionCompat.lookup(MinecraftClient.getInstance().world));
+                *///?} else {
                 return type.getParametersFactory().read(type, new StringReader(" " + settings.arguments));
+                //?}
             }
         }
         catch (Exception e)

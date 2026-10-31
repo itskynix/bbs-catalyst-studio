@@ -41,6 +41,28 @@ public class PlayerEntityMixin
         }
     }
 
+    //? if >=1.21 {
+    /*/^ The eye height is part of the dimensions since 1.20.5, so one hook covers both. ^/
+    @Inject(method = "getBaseDimensions", at = @At("RETURN"), cancellable = true)
+    public void onGetDimensions(CallbackInfoReturnable<EntityDimensions> info)
+    {
+        if (this instanceof IMorphProvider provider)
+        {
+            Form form = provider.getMorph().getForm();
+
+            if (form != null && form.hitbox.get())
+            {
+                PlayerEntity player = (PlayerEntity) (Object) this;
+                EntityDimensions dimensions = info.getReturnValue();
+                float height = form.hitboxHeight.get() * (player.isSneaking() ? form.hitboxSneakMultiplier.get() : 1F);
+                float width = form.hitboxWidth.get();
+                EntityDimensions result = dimensions.fixed() ? EntityDimensions.fixed(width, height) : EntityDimensions.changing(width, height);
+
+                info.setReturnValue(result.withEyeHeight(form.hitboxEyeHeight.get() * height));
+            }
+        }
+    }
+    *///?} else {
     @Inject(method = "getDimensions", at = @At("RETURN"), cancellable = true)
     public void onGetDimensions(CallbackInfoReturnable<EntityDimensions> info)
     {
@@ -87,4 +109,5 @@ public class PlayerEntityMixin
             }
         }
     }
+    //?}
 }

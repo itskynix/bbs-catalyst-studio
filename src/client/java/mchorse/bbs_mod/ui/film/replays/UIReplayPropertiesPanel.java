@@ -6,7 +6,12 @@ import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
+import mchorse.bbs_mod.film.Film;
+import mchorse.bbs_mod.film.ReplayLookAt;
 import mchorse.bbs_mod.film.replays.Replay;
+import mchorse.bbs_mod.l10n.keys.IKey;
+import mchorse.bbs_mod.ui.framework.elements.buttons.UICirculate;
+import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.forms.forms.Form;
 import mchorse.bbs_mod.settings.values.base.BaseValue;
 import mchorse.bbs_mod.ui.UIKeys;
@@ -23,6 +28,14 @@ import mchorse.bbs_mod.ui.utils.UI;
 import mchorse.bbs_mod.ui.utils.UIConstants;
 
 import java.util.function.Consumer;
+
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.entity.Entity;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.EntityHitResult;
+import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Vec3d;
 
 public class UIReplayPropertiesPanel extends UIElement
 {
@@ -56,6 +69,15 @@ public class UIReplayPropertiesPanel extends UIElement
     public UITrackpad relativeOffsetZ;
     public UIToggle axesPreview;
     public UIButton pickAxesPreviewBone;
+    public UICirculate lookAtMode;
+    public UIButton lookAtTarget;
+    public UITrackpad lookAtX;
+    public UITrackpad lookAtY;
+    public UITrackpad lookAtZ;
+    public UIElement lookAtPoint;
+
+    /** The look-at mode the section is laid out for; the fields of the other modes are hidden */
+    private int shownLookAtMode = -1;
 
     private UIReplayList list;
 
@@ -165,6 +187,37 @@ public class UIReplayPropertiesPanel extends UIElement
             }
         });
 
+        this.lookAtMode = this.bound(new UICirculate((b) -> this.edit((replay) -> replay.lookAtMode.set(b.getValue()))), (r) ->
+        {
+            this.lookAtMode.setValue(r.lookAtMode.get());
+            this.showLookAtFields(r.lookAtMode.get());
+        });
+        this.lookAtMode.tooltip(UIKeys.FILM_REPLAY_LOOK_AT_NOTE);
+        this.lookAtMode.addLabel(UIKeys.FILM_REPLAY_LOOK_AT_OFF);
+        this.lookAtMode.addLabel(UIKeys.FILM_REPLAY_LOOK_AT_REPLAY);
+        this.lookAtMode.addLabel(UIKeys.FILM_REPLAY_LOOK_AT_CAMERA);
+        this.lookAtMode.addLabel(UIKeys.FILM_REPLAY_LOOK_AT_POINT);
+        this.lookAtTarget = this.bound(new UIButton(IKey.EMPTY, (b) -> this.openLookAtTargetMenu()), (r) -> this.lookAtTarget.label = this.lookAtTargetLabel(r));
+        this.lookAtTarget.tooltip(UIKeys.FILM_REPLAY_LOOK_AT_TARGET);
+        this.lookAtX = this.bound(new UITrackpad((v) -> this.edit((replay) -> BaseValue.edit(replay.lookAtPoint, (value) -> value.get().x = v))), (r) -> this.lookAtX.setValue(r.lookAtPoint.get().x));
+        this.lookAtY = this.bound(new UITrackpad((v) -> this.edit((replay) -> BaseValue.edit(replay.lookAtPoint, (value) -> value.get().y = v))), (r) -> this.lookAtY.setValue(r.lookAtPoint.get().y));
+        this.lookAtZ = this.bound(new UITrackpad((v) -> this.edit((replay) -> BaseValue.edit(replay.lookAtPoint, (value) -> value.get().z = v))), (r) -> this.lookAtZ.setValue(r.lookAtPoint.get().z));
+        this.lookAtX.tooltip(UIKeys.FILM_REPLAY_LOOK_AT_POINT);
+        this.lookAtY.tooltip(UIKeys.FILM_REPLAY_LOOK_AT_POINT);
+        this.lookAtZ.tooltip(UIKeys.FILM_REPLAY_LOOK_AT_POINT);
+        this.lookAtPoint = UI.row(this.lookAtX, this.lookAtY, this.lookAtZ);
+
+        for (UITrackpad trackpad : new UITrackpad[] {this.lookAtX, this.lookAtY, this.lookAtZ})
+        {
+            trackpad.context((menu) -> menu.action(Icons.BLOCK, UIKeys.FILM_REPLAY_LOOK_AT_FROM_LOOK, this::pasteLookAtFromLook));
+        }
+
+        UISection lookAtSection = new UISection(UIKeys.FILM_REPLAY_LOOK_AT);
+
+        lookAtSection.fields.add(
+            this.lookAtMode, this.lookAtTarget, this.lookAtPoint
+        );
+
         UISection shadowSection = new UISection(UIKeys.FILM_REPLAY_SHADOW);
 
         shadowSection.fields.add(
@@ -180,11 +233,13 @@ public class UIReplayPropertiesPanel extends UIElement
             this.axesPreview, this.pickAxesPreviewBone
         );
 
+        lookAtSection.setExpanded(false);
         shadowSection.setExpanded(false);
         other.setExpanded(false);
 
         this.properties = UI.scrollView(UIConstants.MARGIN, UIConstants.SCROLL_PADDING,
             this.pickEdit, this.enabled, this.label, this.nameTag,
+            lookAtSection,
             shadowSection,
             other
         );
@@ -198,7 +253,108 @@ public class UIReplayPropertiesPanel extends UIElement
         }
 
         this.add(this.properties);
+        this.showLookAtFields(ReplayLookAt.OFF);
         this.setReplay(null);
+    }
+
+    /** Only the fields of the chosen mode: the replay picker for a replay, X/Y/Z for a point. */
+    private void showLookAtFields(int mode)
+    {
+        if (mode == this.shownLookAtMode)
+        {
+            return;
+        }
+
+        this.shownLookAtMode = mode;
+        this.lookAtTarget.setVisible(mode == ReplayLookAt.REPLAY);
+        this.lookAtPoint.setVisible(mode == ReplayLookAt.POINT);
+
+        if (this.properties != null && this.properties.hasParent())
+        {
+            this.properties.resize();
+        }
+    }
+
+    /**
+     * Where the player is looking goes into the point: the middle of the block under the
+     * crosshair, or the eyes of the entity under it - the same look the action clips' block
+     * position takes, but as a point to face rather than a block.
+     */
+    private void pasteLookAtFromLook()
+    {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        HitResult result = mc == null ? null : mc.crosshairTarget;
+        Vec3d point = null;
+
+        if (result instanceof BlockHitResult bhr && result.getType() == HitResult.Type.BLOCK)
+        {
+            BlockPos pos = bhr.getBlockPos();
+
+            point = new Vec3d(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D);
+        }
+        else if (result instanceof EntityHitResult ehr && result.getType() == HitResult.Type.ENTITY)
+        {
+            Entity entity = ehr.getEntity();
+
+            point = entity.getEyePos();
+        }
+
+        if (point == null)
+        {
+            return;
+        }
+
+        Vec3d paste = point;
+
+        this.edit((replay) -> BaseValue.edit(replay.lookAtPoint, (value) ->
+        {
+            value.get().x = paste.x;
+            value.get().y = paste.y;
+            value.get().z = paste.z;
+        }));
+    }
+
+    private IKey lookAtTargetLabel(Replay replay)
+    {
+        Film film = this.filmPanel.getData();
+
+        if (film != null)
+        {
+            for (Replay other : film.replays.getList())
+            {
+                if (other.getId().equals(replay.lookAtTarget.get()))
+                {
+                    return IKey.constant(other.getName());
+                }
+            }
+        }
+
+        return IKey.constant("-");
+    }
+
+    private void openLookAtTargetMenu()
+    {
+        Film film = this.filmPanel.getData();
+
+        if (film == null || this.replay == null)
+        {
+            return;
+        }
+
+        this.getContext().replaceContextMenu((manager) ->
+        {
+            manager.autoKeys();
+
+            for (Replay other : film.replays.getList())
+            {
+                if (other == this.replay)
+                {
+                    continue;
+                }
+
+                manager.action(Icons.FILM, IKey.constant(other.getName()), () -> this.edit((replay) -> replay.lookAtTarget.set(other.getId())));
+            }
+        });
     }
 
     public void attachReplayList(UIReplayList list)

@@ -39,6 +39,7 @@
  */
 package mchorse.bbs_mod.camera.pov.integration.mixin.bbs;
 
+import mchorse.bbs_mod.utils.ModelViewStack;
 import mchorse.bbs_mod.camera.pov.PovAddon;
 import mchorse.bbs_mod.camera.pov.camera.clip.PovCameraClip;
 import mchorse.bbs_mod.camera.pov.camera.clip.PovCameraClips;
@@ -135,8 +136,8 @@ public class FilmStencilPickerPovMixin {
         MatrixStack matrices = worldContext.matrixStack();
         matrices.push();
         matrices.loadIdentity();
-        RenderSystem.getModelViewStack().push();
-        RenderSystem.getModelViewStack().loadIdentity();
+        ModelViewStack.push();
+        ModelViewStack.loadIdentity();
         RenderSystem.applyModelViewMatrix();
         try {
             Matrix4f handProjection = PovHandPicking.getProjection();
@@ -148,7 +149,7 @@ public class FilmStencilPickerPovMixin {
                 PovHandPicking.captureProjection(handProjection);
             }
             RenderSystem.setProjectionMatrix((Matrix4f)handProjection, (VertexSorter)VertexSorter.BY_Z);
-            boolean began = PovHandPlayback.begin(worldContext.tickDelta());
+            boolean began = PovHandPlayback.begin(worldContext./*$ wtd*/tickDelta()/**/);
             if (began) {
                 PovHandPlayback.useCapturedPose(PovHandMatrices.getCapturedPose());
                 VertexConsumerProvider.Immediate consumers = client.getBufferBuilders().getEntityVertexConsumers();
@@ -157,7 +158,7 @@ public class FilmStencilPickerPovMixin {
                 RenderSystem.enableDepthTest();
                 RenderSystem.depthMask((boolean)true);
                 RenderSystem.depthFunc((int)515);
-                PovHandPlayback.render(client.gameRenderer.firstPersonRenderer, worldContext.tickDelta(), matrices, consumers, player, light);
+                PovHandPlayback.render(client.gameRenderer.firstPersonRenderer, worldContext./*$ wtd*/tickDelta()/**/, matrices, consumers, player, light);
                 consumers.draw();
                 PovHandGizmo.renderStencil(this.stencilMap);
             }
@@ -175,7 +176,7 @@ public class FilmStencilPickerPovMixin {
         }
         finally {
             PovHandPlayback.end();
-            RenderSystem.getModelViewStack().pop();
+            ModelViewStack.pop();
             RenderSystem.applyModelViewMatrix();
             matrices.pop();
             client.getFramebuffer().beginWrite(true);

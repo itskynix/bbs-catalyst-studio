@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.forms.forms;
 
+import mchorse.bbs_mod.forms.forms.utils.FormFxValues;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.ui.utils.icons.Icon;
 import mchorse.bbs_mod.settings.values.mc.ValueBlockState;
@@ -14,6 +15,8 @@ public class BlockForm extends Form
 
     public final ValueBlockState blockState = new ValueBlockState("block_state");
     public final ValueColor color = new ValueColor("color", Color.white());
+    /** Dissolve and shatter: the block burning away or breaking apart. */
+    public final FormFxValues fx = new FormFxValues(this);
 
     public BlockForm()
     {

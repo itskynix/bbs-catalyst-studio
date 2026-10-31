@@ -49,7 +49,7 @@ public class CameraControllerPovMixin {
         if (PovPlaybackContext.getActive() == null && !PovEffectSuppression.isBbsActive()) {
             return;
         }
-        float tickDelta = MinecraftClient.getInstance().getTickDelta();
+        float tickDelta = MinecraftClient.getInstance()./*$ gtd*/getTickDelta()/**/;
         float zoomMultiplier = PovSpyglassZoomHelper.resolveZoomMultiplier(tickDelta);
         if (zoomMultiplier > 1.0E-4f && Math.abs(zoomMultiplier - 1.0f) > 1.0E-4f) {
             info.setReturnValue((info.getReturnValueD() * (double)zoomMultiplier));

@@ -2,6 +2,8 @@ package mchorse.bbs_mod.actions;
 
 import net.minecraft.network.ClientConnection;
 import net.minecraft.network.NetworkSide;
+//? if >=1.21
+/*import net.minecraft.network.NetworkState;*/
 import net.minecraft.network.PacketCallbacks;
 import net.minecraft.network.listener.PacketListener;
 import net.minecraft.network.packet.Packet;
@@ -18,7 +20,9 @@ public class SuperFakePlayerNetworkHandler extends ServerPlayNetworkHandler
 
     public SuperFakePlayerNetworkHandler(ServerPlayerEntity player)
     {
-        //? if >=1.20.4 {
+        //? if >=1.21 {
+        /*super(player.getServer(), FAKE_CONNECTION, player, ConnectedClientData.createDefault(player.getGameProfile(), false));
+        *///?} else if >=1.20.4 {
         super(player.getServer(), FAKE_CONNECTION, player, ConnectedClientData.createDefault(player.getGameProfile()));
         //?} else {
         /*super(player.getServer(), FAKE_CONNECTION, player);
@@ -42,8 +46,14 @@ public class SuperFakePlayerNetworkHandler extends ServerPlayNetworkHandler
             super(NetworkSide.CLIENTBOUND);
         }
 
+        //? if >=1.21 {
+        /*@Override
+        public <T extends PacketListener> void transitionInbound(NetworkState<T> state, T packetListener)
+        {}
+        *///?} else {
         @Override
         public void setPacketListener(PacketListener packetListener)
         {}
+        //?}
     }
 }

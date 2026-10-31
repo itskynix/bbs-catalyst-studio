@@ -6,6 +6,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.gui.render.screen;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.GuiRenderContext;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.GuiRenderer;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.GuiScreenChrome;
@@ -18,9 +19,9 @@ public final class AnvilGuiRenderer
 implements GuiRenderer,
 GuiScreenChrome {
     public static final AnvilGuiRenderer INSTANCE = new AnvilGuiRenderer();
-    private static final Identifier TEXT_FIELD = new Identifier("container/anvil/text_field");
-    private static final Identifier TEXT_FIELD_DISABLED = new Identifier("container/anvil/text_field_disabled");
-    private static final Identifier ERROR = new Identifier("container/anvil/error");
+    private static final Identifier TEXT_FIELD = Ids.of("container/anvil/text_field");
+    private static final Identifier TEXT_FIELD_DISABLED = Ids.of("container/anvil/text_field_disabled");
+    private static final Identifier ERROR = Ids.of("container/anvil/error");
 
     private AnvilGuiRenderer() {
     }

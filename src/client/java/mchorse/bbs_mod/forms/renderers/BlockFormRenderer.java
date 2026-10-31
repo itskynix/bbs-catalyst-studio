@@ -7,9 +7,12 @@ import mchorse.bbs_mod.forms.CustomVertexConsumerProvider;
 import mchorse.bbs_mod.forms.FormTranslucentQueue;
 import mchorse.bbs_mod.forms.FormUtilsClient;
 import mchorse.bbs_mod.forms.forms.BlockForm;
+import mchorse.bbs_mod.forms.forms.utils.FormFxValues;
 import mchorse.bbs_mod.forms.renderers.utils.FluidVertexConsumer;
 import mchorse.bbs_mod.forms.renderers.utils.FormColorBlend;
+import mchorse.bbs_mod.forms.renderers.utils.FormFx;
 import mchorse.bbs_mod.forms.renderers.utils.FormOverlay;
+import mchorse.bbs_mod.forms.renderers.utils.ShatterField;
 import mchorse.bbs_mod.forms.renderers.utils.SingleBlockRenderView;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.utils.MatrixStackUtils;
@@ -26,6 +29,7 @@ import net.minecraft.client.render.OverlayTexture;
 import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.render.RenderLayers;
 import net.minecraft.client.render.TexturedRenderLayers;
+import net.minecraft.client.render.VertexConsumer;
 import net.minecraft.client.render.VertexConsumerProvider;
 import net.minecraft.client.render.model.json.ModelTransformationMode;
 import net.minecraft.client.texture.SpriteAtlasTexture;
@@ -35,6 +39,8 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.util.math.BlockPos;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
+
+import java.util.function.Function;
 
 public class BlockFormRenderer extends FormRenderer<BlockForm>
 {
@@ -194,22 +200,51 @@ public class BlockFormRenderer extends FormRenderer<BlockForm>
         color.set(context.color);
         FormColorBlend.blend(color, this.form.color.get());
 
+        /* Dissolve and shatter, for the visible draw only. A dissolving block draws now, in the
+         * model shader, instead of through the deferred pass that would replay it unburnt. */
+        FormFxValues fx = this.form.fx;
+        boolean dissolve = !context.isPicking() && fx.isDissolving() && FormFx.supportsDissolve()
+            && FormFx.beginDissolve(fx, new Matrix4f(context.stack.peek().getPositionMatrix()).invert(), 0F, 1F);
+        Function<VertexConsumer, VertexConsumer> substitute = BBSRendering.getColorConsumer(color);
+
+        if (dissolve)
+        {
+            CustomVertexConsumerProvider.hijackVertexFormat(FormFx.withDissolve(overlayActive ? (l) -> setupOverlay(l, overlay) : null));
+        }
+
+        if (!context.isPicking() && fx.isShattering())
+        {
+            substitute = FormFx.shatter(substitute, new ShatterField(fx, context.stack.peek().getPositionMatrix(), ShatterField.CELL, false));
+        }
+
         /* Publishing the form's camera-space origin opts its translucent layers into the
          * deferred sorted pass (see CustomVertexConsumerProvider#draw(RenderLayer)); the
          * picking branch above never publishes, so the stencil keeps every pixel. */
-        if (!context.isPicking())
+        if (!context.isPicking() && !dissolve)
         {
             Vector3f origin = context.stack.peek().getPositionMatrix().getTranslation(new Vector3f());
 
             FormTranslucentQueue.setSortOrigin(new Matrix4f(RenderSystem.getModelViewMatrix()).transformPosition(origin));
         }
 
-        consumers.setSubstitute(BBSRendering.getColorConsumer(color));
+        consumers.setSubstitute(substitute);
         /* The block's translucent layer opts into the deferred pass above, and that draw happens
          * after the per-layer hook is gone — so the overlay travels with the command instead. */
         consumers.setOverlay(overlayActive ? overlay : null);
-        this.renderBlock(context.stack, overlayActive ? overlayProvider(consumers) : consumers, light, context.overlay, context.isPicking());
-        consumers.draw();
+
+        try
+        {
+            this.renderBlock(context.stack, overlayActive ? overlayProvider(consumers) : consumers, light, context.overlay, context.isPicking());
+            consumers.draw();
+        }
+        finally
+        {
+            if (dissolve)
+            {
+                FormFx.endDissolve();
+            }
+        }
+
         consumers.setSubstitute(null);
         consumers.setOverlay(null);
         FormTranslucentQueue.setSortOrigin(null);

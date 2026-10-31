@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.forms.renderers.mob;
 
+import net.minecraft.item.ItemStack;
 import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.StringReader;
 import mchorse.bbs_mod.forms.entities.EntityState;
@@ -39,6 +40,18 @@ public class MobStandIn
     public static final GameProfile SLIM = new GameProfile(UUID.fromString("5477bd28-e672-4f87-a209-c03cf75f3606"), "osmiq");
 
     private Entity entity;
+
+    private void equip(EquipmentSlot slot, ItemStack stack)
+    {
+        //? if >=1.21 {
+        /*if (this.entity instanceof LivingEntity living)
+        {
+            living.equipStack(slot, stack);
+        }
+        *///?} else {
+        this.entity.equipStack(slot, stack);
+        //?}
+    }
 
     private String lastId = "";
     private String lastNbt = "";
@@ -161,12 +174,12 @@ public class MobStandIn
         this.entity.setSwimming(source.isSwimming());
         ((EntityInvoker) this.entity).bbs$setFlag(EntityState.FALL_FLYING_FLAG, source.isFallFlying());
         this.entity.setPose(EntityState.pose(source));
-        this.entity.equipStack(EquipmentSlot.MAINHAND, source.getEquipmentStack(EquipmentSlot.MAINHAND));
-        this.entity.equipStack(EquipmentSlot.OFFHAND, source.getEquipmentStack(EquipmentSlot.OFFHAND));
-        this.entity.equipStack(EquipmentSlot.HEAD, source.getEquipmentStack(EquipmentSlot.HEAD));
-        this.entity.equipStack(EquipmentSlot.CHEST, source.getEquipmentStack(EquipmentSlot.CHEST));
-        this.entity.equipStack(EquipmentSlot.LEGS, source.getEquipmentStack(EquipmentSlot.LEGS));
-        this.entity.equipStack(EquipmentSlot.FEET, source.getEquipmentStack(EquipmentSlot.FEET));
+        this.equip(EquipmentSlot.MAINHAND, source.getEquipmentStack(EquipmentSlot.MAINHAND));
+        this.equip(EquipmentSlot.OFFHAND, source.getEquipmentStack(EquipmentSlot.OFFHAND));
+        this.equip(EquipmentSlot.HEAD, source.getEquipmentStack(EquipmentSlot.HEAD));
+        this.equip(EquipmentSlot.CHEST, source.getEquipmentStack(EquipmentSlot.CHEST));
+        this.equip(EquipmentSlot.LEGS, source.getEquipmentStack(EquipmentSlot.LEGS));
+        this.equip(EquipmentSlot.FEET, source.getEquipmentStack(EquipmentSlot.FEET));
         this.entity.age = source.getAge();
         this.entity.noClip = true;
 

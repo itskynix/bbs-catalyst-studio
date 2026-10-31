@@ -125,6 +125,9 @@ public final class MerchantSnapshot {
             TradeOffer offer = (TradeOffer)tradeOffers.get(i);
             MerchantSnapshot.packStack(sb, offer.getOriginalFirstBuyItem());
             sb.append('|');
+            //? if >=1.21
+            /*MerchantSnapshot.packStack(sb, offer.getSecondBuyItem().map(net.minecraft.village.TradedItem::itemStack).orElse(ItemStack.EMPTY));*/
+            //? if <1.21
             MerchantSnapshot.packStack(sb, offer.getSecondBuyItem());
             sb.append('|');
             MerchantSnapshot.packStack(sb, offer.getSellItem());

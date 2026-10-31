@@ -179,6 +179,9 @@ public class UIModelEditorRenderer extends UIFormRenderer implements GizmoViewpo
     {
         for (Map.Entry<EquipmentSlot, Item> entry : EQUIPMENT.entrySet())
         {
+            //? if >=1.21
+            /*boolean worn = entry.getKey().getType() == EquipmentSlot.Type.HUMANOID_ARMOR ? armor : items;*/
+            //? if <1.21
             boolean worn = entry.getKey().getType() == EquipmentSlot.Type.ARMOR ? armor : items;
 
             this.entity.setEquipmentStack(entry.getKey(), worn ? new ItemStack(entry.getValue()) : ItemStack.EMPTY);

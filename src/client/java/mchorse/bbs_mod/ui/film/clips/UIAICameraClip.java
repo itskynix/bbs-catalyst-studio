@@ -52,6 +52,12 @@ public class UIAICameraClip extends UIKeyframeClip
         this.angleModule.contextMenu();
 
         this.snapOriginBtn = new UIButton(L10n.lang("bbs.copilot.snap_origin_to_camera"), (b) -> this.snapOriginToCamera());
+
+        /* Work in progress: read only until the AI camera is rebuilt */
+        this.openCopilotBtn.setEnabled(false);
+        this.originModule.setEnabled(false);
+        this.angleModule.setEnabled(false);
+        this.snapOriginBtn.setEnabled(false);
     }
 
     @Override

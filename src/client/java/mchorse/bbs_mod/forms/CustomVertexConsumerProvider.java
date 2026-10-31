@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.forms;
 
+import mchorse.bbs_mod.utils.Bufs;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.client.BBSRendering;
 import mchorse.bbs_mod.forms.renderers.utils.RecolorVertexConsumer;
@@ -15,9 +16,15 @@ import org.joml.Vector3f;
 import org.lwjgl.opengl.GL11;
 
 import java.util.Map;
+//? if >=1.21 {
+/*import java.util.SequencedMap;
+import net.minecraft.client.util.BufferAllocator;
+*///?}
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
+
+import mchorse.bbs_mod.forms.renderers.utils.FormFx;
 
 public class CustomVertexConsumerProvider extends VertexConsumerProvider.Immediate
 {
@@ -36,6 +43,13 @@ public class CustomVertexConsumerProvider extends VertexConsumerProvider.Immedia
         {
             runnables.accept(layer);
         }
+
+        /* A block or an item cut by a 3D slice: only the model shader knows the plane, so its
+         * layers of the entity layout are drawn with it, the way a dissolve draws them */
+        if (FormMasking.isSliceActive())
+        {
+            FormFx.useDissolveProgram(layer);
+        }
     }
 
     public static void hijackVertexFormat(Consumer<RenderLayer> runnable)
@@ -48,9 +62,21 @@ public class CustomVertexConsumerProvider extends VertexConsumerProvider.Immedia
         runnables = null;
     }
 
+    //? if >=1.21 {
+    /*public CustomVertexConsumerProvider(BufferAllocator fallback, SequencedMap<RenderLayer, BufferAllocator> layers)
+    {
+        super(fallback, layers);
+    }
+    *///?} else {
     public CustomVertexConsumerProvider(BufferBuilder fallback, Map<RenderLayer, BufferBuilder> layers)
     {
         super(fallback, layers);
+    }
+    //?}
+
+    public Function<VertexConsumer, VertexConsumer> getSubstitute()
+    {
+        return this.substitute;
     }
 
     public void setSubstitute(Function<VertexConsumer, VertexConsumer> substitute)
@@ -123,6 +149,43 @@ public class CustomVertexConsumerProvider extends VertexConsumerProvider.Immedia
             return;
         }
 
+        //? if >=1.21 {
+        /*boolean current = Objects.equals(this.currentLayer, layer);
+        BufferBuilder builder = this.pending.remove(layer);
+
+        if (builder == null)
+        {
+            return;
+        }
+
+        /^ Ending and uploading the layer's buffer here is what the immediate provider's own
+         * draw would have done — including the vertex layout Iris pins around it. ^/
+        var built = builder.endNullable();
+
+        if (built != null)
+        {
+            boolean extended = BBSRendering.beginIrisBufferUpload(builder);
+            VertexBuffer buffer = new VertexBuffer(VertexBuffer.Usage.STATIC);
+
+            try
+            {
+                buffer.bind();
+                buffer.upload(built);
+                VertexBuffer.unbind();
+            }
+            finally
+            {
+                BBSRendering.endIrisBufferUpload(extended);
+            }
+
+            FormTranslucentQueue.add(new FormTranslucentQueue.RenderLayerCommand(layer, buffer, new Matrix4f(RenderSystem.getModelViewMatrix()), new Vector3f(origin)).overlayColor(this.overlay));
+        }
+
+        if (current)
+        {
+            this.currentLayer = null;
+        }
+        *///?} else {
         BufferBuilder builder = this.layerBuffers.getOrDefault(layer, this.fallbackBuffer);
         boolean current = Objects.equals(this.currentLayer, layer.asOptional());
 
@@ -138,15 +201,13 @@ public class CustomVertexConsumerProvider extends VertexConsumerProvider.Immedia
 
         if (builder.isBuilding())
         {
-            /* Ending and uploading the layer's buffer here is what the immediate provider's own
-             * draw would have done — including the vertex layout Iris pins around it. */
             boolean extended = BBSRendering.beginIrisBufferUpload(builder);
             VertexBuffer buffer = new VertexBuffer(VertexBuffer.Usage.STATIC);
 
             try
             {
                 buffer.bind();
-                buffer.upload(builder.end());
+                Bufs.upload(buffer, builder);
                 VertexBuffer.unbind();
             }
             finally
@@ -161,6 +222,7 @@ public class CustomVertexConsumerProvider extends VertexConsumerProvider.Immedia
         {
             this.currentLayer = java.util.Optional.empty();
         }
+        //?}
     }
 
     private static boolean isDeferrableTranslucent(RenderLayer layer)

@@ -40,6 +40,17 @@ public class TransformingVertexConsumer implements VertexConsumer
         return this;
     }
 
+    //? if >=1.21 {
+    /*@Override
+    public VertexConsumer vertex(float x, float y, float z)
+    {
+        this.position.set((float) x + this.offsetX, (float) y + this.offsetY, (float) z + this.offsetZ, 1F);
+        this.positionMatrix.transform(this.position);
+        this.delegate.vertex(this.position.x, this.position.y, this.position.z);
+
+        return this;
+    }
+    *///?} else {
     @Override
     public VertexConsumer vertex(double x, double y, double z)
     {
@@ -49,6 +60,7 @@ public class TransformingVertexConsumer implements VertexConsumer
 
         return this;
     }
+    //?}
 
     @Override
     public VertexConsumer color(int red, int green, int blue, int alpha)
@@ -92,6 +104,7 @@ public class TransformingVertexConsumer implements VertexConsumer
         return this;
     }
 
+    //? if <1.21 {
     @Override
     public void next()
     {
@@ -109,4 +122,5 @@ public class TransformingVertexConsumer implements VertexConsumer
     {
         this.delegate.unfixColor();
     }
+    //?}
 }

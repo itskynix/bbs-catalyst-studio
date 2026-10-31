@@ -39,6 +39,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.gui.render.screen;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.camera.pov.actions.clip.GuiPovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.GuiRenderContext;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.GuiRenderer;
@@ -49,6 +50,10 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.datafixers.util.Pair;
 import java.util.List;
 import mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D;
+//? if >=1.21 {
+/*import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.BannerPatternsComponent;
+*///?}
 import net.minecraft.block.entity.BannerBlockEntity;
 import net.minecraft.block.entity.BannerPattern;
 import net.minecraft.block.entity.BannerPatterns;
@@ -107,7 +112,7 @@ GuiScreenChrome {
         ItemStack dye = GuiSlotRenderer.sampleSlot(clip, "loom", "dye", tick);
         ItemStack patternItem = GuiSlotRenderer.sampleSlot(clip, "loom", "pattern", tick);
         ItemStack output = GuiSlotRenderer.sampleSlot(clip, "loom", "result", tick);
-        boolean canApply = banner.getItem() instanceof BannerItem && dye.getItem() instanceof DyeItem && BannerBlockEntity.getPatternCount((ItemStack)banner) < 6;
+        boolean canApply = banner.getItem() instanceof BannerItem && dye.getItem() instanceof DyeItem && LoomGuiRenderer.bannerLayerCount(banner) < 6;
         List<RegistryEntry<BannerPattern>> patterns = canApply ? LoomGuiRenderer.getLoomPatterns(banner, dye, patternItem) : List.of();
         int selected = LoomGuiRenderer.findSelectedLoomPattern(patterns, output);
         int rows = MathHelper.ceilDiv((int)patterns.size(), (int)4);
@@ -116,7 +121,7 @@ GuiScreenChrome {
         int topRow = MathHelper.clamp((int)((Integer)clip.loomRow.interpolate(tick, fallbackRow)), (int)0, (int)maxTopRow);
         int scrollY = maxTopRow == 0 ? 0 : Math.round((float)topRow * 41.0f / (float)maxTopRow);
         float screenScale = Math.min(scaleX, scaleY);
-        batcher.drawGuiTexture(new Identifier(canApply ? "container/loom/scroller" : "container/loom/scroller_disabled"), 119, 13 + scrollY, 12, 15);
+        batcher.drawGuiTexture(Ids.of(canApply ? "container/loom/scroller" : "container/loom/scroller_disabled"), 119, 13 + scrollY, 12, 15);
         int firstPattern = topRow * 4;
         int shown = Math.min(16, patterns.size() - firstPattern);
         for (i = 0; i < shown; ++i) {
@@ -126,7 +131,7 @@ GuiScreenChrome {
             int y = 13 + i / 4 * 14;
             boolean bl = hover = cursorX >= (float)x && cursorX < (float)(x + 14) && cursorY >= (float)y && cursorY < (float)(y + 14);
             String background = patternIndex == selected ? "container/loom/pattern_selected" : (hover ? "container/loom/pattern_highlighted" : "container/loom/pattern");
-            batcher.drawGuiTexture(new Identifier(background), x, y, 14, 14);
+            batcher.drawGuiTexture(Ids.of(background), x, y, 14, 14);
         }
         batcher.getContext().draw();
         RenderSystem.enableDepthTest();
@@ -141,9 +146,13 @@ GuiScreenChrome {
         Item x = output.getItem();
         if (x instanceof BannerItem) {
             BannerItem outputBanner = (BannerItem)x;
+            //? if >=1.21 {
+            /*LoomGuiRenderer.renderBannerCanvas(batcher, output.getOrDefault(DataComponentTypes.BANNER_PATTERNS, BannerPatternsComponent.DEFAULT), outputBanner.getColor(), originX + 139.0f * scaleX, originY + 52.0f * scaleY, 24.0f * screenScale, screenScale, false);
+            *///?} else {
             NbtList patternNbt = BannerBlockEntity.getPatternListNbt((ItemStack)output);
             List outputPatterns = BannerBlockEntity.getPatternsFromNbt((DyeColor)outputBanner.getColor(), (NbtList)(patternNbt == null ? new NbtList() : patternNbt));
             LoomGuiRenderer.renderBannerCanvas(batcher, outputPatterns, originX + 139.0f * scaleX, originY + 52.0f * scaleY, 24.0f * screenScale, screenScale, false);
+            //?}
         }
         batcher.getContext().draw();
         DiffuseLighting.enableGuiDepthLighting();
@@ -164,6 +173,28 @@ GuiScreenChrome {
         return List.copyOf(handler.getBannerPatterns());
     }
 
+    //? if >=1.21 {
+    /*private static int bannerLayerCount(ItemStack banner) {
+        return banner.getOrDefault(DataComponentTypes.BANNER_PATTERNS, BannerPatternsComponent.DEFAULT).layers().size();
+    }
+
+    private static int findSelectedLoomPattern(List<RegistryEntry<BannerPattern>> patterns, ItemStack output) {
+        List<BannerPatternsComponent.Layer> layers = output.getOrDefault(DataComponentTypes.BANNER_PATTERNS, BannerPatternsComponent.DEFAULT).layers();
+        if (layers.isEmpty()) {
+            return -1;
+        }
+        RegistryEntry<BannerPattern> selected = layers.get(layers.size() - 1).pattern();
+        for (int i = 0; i < patterns.size(); ++i) {
+            if (!patterns.get(i).equals(selected)) continue;
+            return i;
+        }
+        return -1;
+    }
+    *///?} else {
+    private static int bannerLayerCount(ItemStack banner) {
+        return BannerBlockEntity.getPatternCount((ItemStack)banner);
+    }
+
     private static int findSelectedLoomPattern(List<RegistryEntry<BannerPattern>> patterns, ItemStack output) {
         NbtList patternNbt = BannerBlockEntity.getPatternListNbt((ItemStack)output);
         if (patternNbt == null || patternNbt.isEmpty()) {
@@ -176,7 +207,15 @@ GuiScreenChrome {
         }
         return -1;
     }
+    //?}
 
+    //? if >=1.21 {
+    /*private static void renderLoomPattern(Batcher2D batcher, RegistryEntry<BannerPattern> pattern, float x, float y, float scale, float screenScale) {
+        LoomGuiRenderer.renderBannerCanvas(batcher, new BannerPatternsComponent.Builder().add(pattern, DyeColor.WHITE).build(), DyeColor.GRAY, x, y, scale, screenScale, true);
+    }
+
+    private static void renderBannerCanvas(Batcher2D batcher, BannerPatternsComponent patterns, DyeColor base, float x, float y, float scale, float screenScale, boolean thumbnail) {
+    *///?} else {
     private static void renderLoomPattern(Batcher2D batcher, RegistryEntry<BannerPattern> pattern, float x, float y, float scale, float screenScale) {
         NbtCompound nbt = new NbtCompound();
         nbt.put("Patterns", (NbtElement)new BannerPattern.Patterns().add(BannerPatterns.BASE, DyeColor.GRAY).add(pattern, DyeColor.WHITE).toNbt());
@@ -186,6 +225,7 @@ GuiScreenChrome {
     }
 
     private static void renderBannerCanvas(Batcher2D batcher, List<Pair<RegistryEntry<BannerPattern>, DyeColor>> patterns, float x, float y, float scale, float screenScale, boolean thumbnail) {
+    //?}
         if (loomBannerField == null) {
             loomBannerField = MinecraftClient.getInstance().getEntityModelLoader().getModelPart(EntityModelLayers.BANNER).getChild("flag");
         }
@@ -204,7 +244,11 @@ GuiScreenChrome {
         matrices.scale(0.6666667f, -0.6666667f, -0.6666667f);
         LoomGuiRenderer.loomBannerField.pitch = 0.0f;
         LoomGuiRenderer.loomBannerField.pivotY = -32.0f;
+        //? if >=1.21 {
+        /*BannerBlockEntityRenderer.renderCanvas((MatrixStack)matrices, (VertexConsumerProvider)batcher.getContext().getVertexConsumers(), (int)0xF000F0, (int)OverlayTexture.DEFAULT_UV, (ModelPart)loomBannerField, (SpriteIdentifier)ModelLoader.BANNER_BASE, (boolean)true, base, patterns);
+        *///?} else {
         BannerBlockEntityRenderer.renderCanvas((MatrixStack)matrices, (VertexConsumerProvider)batcher.getContext().getVertexConsumers(), (int)0xF000F0, (int)OverlayTexture.DEFAULT_UV, (ModelPart)loomBannerField, (SpriteIdentifier)ModelLoader.BANNER_BASE, (boolean)true, patterns);
+        //?}
         matrices.pop();
     }
 }

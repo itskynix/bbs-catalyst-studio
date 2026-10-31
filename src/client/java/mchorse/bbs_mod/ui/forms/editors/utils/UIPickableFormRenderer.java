@@ -3,19 +3,25 @@ package mchorse.bbs_mod.ui.forms.editors.utils;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.BBSSettings;
+import mchorse.bbs_mod.forms.FormMasking;
+import mchorse.bbs_mod.forms.FormPortals;
 import mchorse.bbs_mod.forms.FormTranslucentQueue;
 import mchorse.bbs_mod.forms.FormUtilsClient;
 import mchorse.bbs_mod.forms.entities.IEntity;
 import mchorse.bbs_mod.forms.forms.Form;
+import mchorse.bbs_mod.forms.forms.utils.FormMask;
 import mchorse.bbs_mod.forms.renderers.FormRenderType;
 import mchorse.bbs_mod.forms.renderers.FormRenderingContext;
 import mchorse.bbs_mod.graphics.Draw;
 import mchorse.bbs_mod.resources.Link;
 import mchorse.bbs_mod.ui.UIKeys;
+import mchorse.bbs_mod.ui.forms.editors.panels.UIMaskFormPanel;
 import mchorse.bbs_mod.ui.forms.editors.UIFormEditor;
 import mchorse.bbs_mod.ui.framework.UIBaseMenu;
 import mchorse.bbs_mod.ui.framework.UIContext;
+import mchorse.bbs_mod.ui.framework.elements.input.drag.TransformSpace;
 import mchorse.bbs_mod.ui.framework.elements.utils.StencilMap;
+import mchorse.bbs_mod.utils.joml.Matrices;
 import mchorse.bbs_mod.ui.utils.Gizmo;
 import mchorse.bbs_mod.ui.utils.GizmoInteraction;
 import mchorse.bbs_mod.ui.utils.GizmoViewport;
@@ -89,9 +95,23 @@ public class UIPickableFormRenderer extends UIFormRenderer implements GizmoViewp
         this.ensureFramebuffer();
     }
 
+    /** Handles and the pen answer the mouse only while the Mask tab is open. */
+    private boolean isEditingMask()
+    {
+        Form edited = this.formEditor.form;
+
+        return edited != null && edited.mask.isActive()
+            && this.formEditor.editor != null && this.formEditor.editor.view instanceof UIMaskFormPanel;
+    }
+
     @Override
     public boolean subMouseClicked(UIContext context)
     {
+        if (this.isEditingMask() && MaskEditing.mouseClicked(context, this.formEditor.form.mask))
+        {
+            return true;
+        }
+
         if (this.formEditor.clickViewport(context, this.stencil))
         {
             return true;
@@ -103,6 +123,13 @@ public class UIPickableFormRenderer extends UIFormRenderer implements GizmoViewp
     @Override
     public boolean subMouseReleased(UIContext context)
     {
+        if (MaskEditing.isDragging())
+        {
+            MaskEditing.mouseReleased();
+
+            return true;
+        }
+
         if (this.gizmo.mouseReleased(context))
         {
             return true;
@@ -156,6 +183,10 @@ public class UIPickableFormRenderer extends UIFormRenderer implements GizmoViewp
 
         this.formEditor.preFormRender(context, this.form);
 
+        /* The viewport has just cleared the depth buffer, so there is nothing in it to lose: the
+         * stencil a mask needs can be added right here, not a frame late */
+        FormPortals.ensureStencil(true);
+
         FormRenderingContext formContext = new FormRenderingContext()
             .set(FormRenderType.PREVIEW, this.target == null ? this.entity : this.target, context.batcher.getContext().getMatrices(), LightmapTextureManager.pack(15, 15), OverlayTexture.DEFAULT_UV, context.getTransition())
             .camera(this.camera)
@@ -174,6 +205,8 @@ public class UIPickableFormRenderer extends UIFormRenderer implements GizmoViewp
             {
                 this.renderFormHitbox(context);
             }
+
+            this.renderMaskGuide(context);
         }
 
         /* Keep the gizmo the same on-screen size as in the film preview (see
@@ -258,6 +291,54 @@ public class UIPickableFormRenderer extends UIFormRenderer implements GizmoViewp
             RenderSystem.disableDepthTest();
             Gizmo.INSTANCE.render(stack);
             RenderSystem.enableDepthTest();
+        }
+
+        stack.pop();
+    }
+
+    /** The outline of the mask of the form being edited, in that form's own frame. */
+    private void renderMaskGuide(UIContext context)
+    {
+        Form edited = this.formEditor.form;
+
+        if (edited == null || this.formEditor.editor == null || (!edited.mask.isSlicing() && edited.mask.type.get() == FormMask.NONE))
+        {
+            return;
+        }
+
+        Matrix4f matrix = this.formEditor.editor.getBodyPartGizmoOrigin(context.getTransition(), TransformSpace.LOCAL);
+
+        if (matrix == null || matrix == Matrices.EMPTY_4F)
+        {
+            return;
+        }
+
+        MatrixStack stack = context.batcher.getContext().getMatrices();
+
+        stack.push();
+        MatrixStackUtils.multiply(stack, matrix);
+
+        /* The handles keep a size on screen, whatever the zoom */
+        double dx = this.camera.position.x - this.pos.x;
+        double dy = this.camera.position.y - this.pos.y;
+        double dz = this.camera.position.z - this.pos.z;
+        float handle = 0.012F * (float) Math.max(0.5D, Math.sqrt(dx * dx + dy * dy + dz * dz));
+
+        /* What the mouse works with: this very view, form space to the clip space of the viewport */
+        MaskEditing.setView(new Matrix4f(this.camera.projection).mul(stack.peek().getPositionMatrix()), this.area);
+
+        if (this.isEditingMask())
+        {
+            MaskEditing.update(context, edited.mask);
+        }
+
+        if (edited.mask.isSlicing())
+        {
+            FormMasking.renderSliceGuide(stack, edited, handle);
+        }
+        else
+        {
+            FormMasking.renderGuide(stack, edited.mask, handle);
         }
 
         stack.pop();

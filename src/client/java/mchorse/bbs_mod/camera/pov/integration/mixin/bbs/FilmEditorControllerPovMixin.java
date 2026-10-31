@@ -46,7 +46,7 @@ public class FilmEditorControllerPovMixin {
             return;
         }
         Film film = self.film;
-        float filmTick = controller.panel.getRunner() != null && controller.panel.getRunner().isRunning() ? (float)controller.panel.getRunner().ticks + context.tickDelta() : (float)controller.panel.getCursor();
+        float filmTick = controller.panel.getRunner() != null && controller.panel.getRunner().isRunning() ? (float)controller.panel.getRunner().ticks + context./*$ wtd*/tickDelta()/**/ : (float)controller.panel.getCursor();
         PovCameraClip clip = PovCameraClips.resolve(film, filmTick);
         if (clip != null && ((Boolean)clip.headLook.get()).booleanValue() && clip.isFirstPerson() && replay == PovCameraClips.resolveReplay(film, clip)) {
             info.cancel();

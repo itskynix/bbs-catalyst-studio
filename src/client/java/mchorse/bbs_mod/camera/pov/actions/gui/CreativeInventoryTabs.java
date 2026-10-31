@@ -17,7 +17,11 @@ package mchorse.bbs_mod.camera.pov.actions.gui;
 
 import java.lang.reflect.Method;
 import java.util.List;
+//? if >=1.21 {
+/*import net.fabricmc.fabric.impl.itemgroup.FabricItemGroupImpl;
+*///?} else {
 import net.fabricmc.fabric.impl.itemgroup.FabricItemGroup;
+//?}
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.item.ItemGroup;
 import net.minecraft.item.ItemGroups;
@@ -98,10 +102,17 @@ public final class CreativeInventoryTabs {
         if (group == null) {
             return 0;
         }
+        //? if >=1.21 {
+        /*if (group instanceof FabricItemGroupImpl) {
+            FabricItemGroupImpl fig = (FabricItemGroupImpl)group;
+            return fig.fabric_getPage();
+        }
+        *///?} else {
         if (group instanceof FabricItemGroup) {
             FabricItemGroup fig = (FabricItemGroup)group;
             return fig.getPage();
         }
+        //?}
         try {
             m2 = group.getClass().getMethod("getPage", new Class[0]);
             res = m2.invoke(group, new Object[0]);

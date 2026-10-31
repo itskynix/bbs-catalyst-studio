@@ -389,7 +389,7 @@ public abstract class VideoExportSession
             File folder = BBSRendering.getVideoFolder();
             File audio = new File(folder, this.movieName + ".wav");
 
-            if (!MinecraftSoundMixer.mixToFile(audio, capture.getSounds(), capture.getFrames(), readWave(deferred), 48000, this.recordingFrameRate, recordedFrames))
+            if (!MinecraftSoundMixer.mixToFile(audio, capture.getSounds(), capture.getFrames(), capture.getExternalTracks(), readWave(deferred), 48000, this.recordingFrameRate, recordedFrames))
             {
                 return;
             }

@@ -152,6 +152,12 @@ public class UIKeyframeClip extends UIClip<KeyframeClip>
     }
 
     @Override
+    public boolean openSubEditor()
+    {
+        return this.openSubEditor(this.edit);
+    }
+
+    @Override
     public void fillData()
     {
         super.fillData();

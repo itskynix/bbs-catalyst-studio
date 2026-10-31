@@ -6,10 +6,14 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gl.Framebuffer;
 import net.minecraft.client.gl.GlUniform;
 import net.minecraft.client.gl.PostEffectPass;
+import net.minecraft.client.gl.ShaderProgram;
 import net.minecraft.client.gl.SimpleFramebuffer;
+import net.minecraft.client.render.GameRenderer;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
+import org.lwjgl.opengl.GL30;
+import com.mojang.blaze3d.platform.GlStateManager;
 
 /**
  * Dual Kawase background blur, adapted from quaIett's bbs-refreshed-addon.
@@ -87,6 +91,15 @@ public class InterfaceBlur
         MinecraftClient mc = MinecraftClient.getInstance();
         Framebuffer main = mc.getFramebuffer();
 
+        /* The interface is not going into main right now (the film preview at a custom or export
+         * size swaps a framebuffer of its own in as main): blurring main would blur the wrong
+         * picture and hand the interface to a framebuffer it is not drawing into, so this frame
+         * goes without. Nothing is changed before this check, so there is nothing to put back. */
+        if (main == null || main.fbo != GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING))
+        {
+            return;
+        }
+
         if (chain == null || chain[0] != main || main.textureWidth != width || main.textureHeight != height)
         {
             if (!rebuild(mc, main))
@@ -107,9 +120,16 @@ public class InterfaceBlur
         boolean depthTest = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
         boolean depthMask = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
         int mainFilter = main.texFilter;
+        /* A scissor left on by the interface would cut the passes, which draw whole targets */
+        boolean scissor = GL11.glIsEnabled(GL11.GL_SCISSOR_TEST);
 
         try
         {
+            if (scissor)
+            {
+                GlStateManager._disableScissorTest();
+            }
+
             /* Blur only changes color: the passes clear their output, and that must not wipe main's depth */
             RenderSystem.disableDepthTest();
             RenderSystem.depthMask(false);
@@ -138,8 +158,30 @@ public class InterfaceBlur
                 main.setTexFilter(mainFilter);
             }
 
-            /* PostEffectPass leaves GL_LEQUAL behind, but BBS paints its UI with GL_ALWAYS */
+            /* Main again, over the whole of it: the interface is always drawn with the full
+             * viewport. (Putting back whatever viewport was set before the blur instead kept the
+             * film preview's little one when the blur ran right after the preview, and every
+             * panel after it was squeezed into the preview's rectangle.) */
             main.beginWrite(true);
+
+            /* The passes run effect programs, which end by binding program 0 - behind the back of
+             * the game's own program cache, which still names whatever the interface drew with
+             * before the blur. The next draw with that same program would skip the bind and run
+             * with none: an element right after the blur (an overlay's backdrop) went missing.
+             * Unbinding through the game clears the cache with it. */
+            ShaderProgram any = GameRenderer.getPositionColorProgram();
+
+            if (any != null)
+            {
+                any.unbind();
+            }
+
+            if (scissor)
+            {
+                GlStateManager._enableScissorTest();
+            }
+
+            /* PostEffectPass leaves GL_LEQUAL behind, but BBS paints its UI with GL_ALWAYS */
             RenderSystem.depthMask(depthMask);
             RenderSystem.depthFunc(depthFunction);
 
@@ -286,7 +328,7 @@ public class InterfaceBlur
 
     private static PostEffectPass pass(MinecraftClient mc, String program, Framebuffer input, Framebuffer output) throws Exception
     {
-        PostEffectPass pass = new PostEffectPass(mc.getResourceManager(), program, input, output);
+        PostEffectPass pass = new PostEffectPass(mc.getResourceManager(), program, input, output/*$ pel*//*-*//**/);
 
         pass.setProjectionMatrix(new Matrix4f().setOrtho(0F, output.textureWidth, 0F, output.textureHeight, 0.1F, 1000F));
 

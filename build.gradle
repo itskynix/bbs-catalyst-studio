@@ -60,7 +60,7 @@ tasks.named('runClient', JavaExec) {
 	}
 }
 
-// Apply version-specific build script (1.20.1 / 1.20.4)
+// Apply version-specific build script (1.20.1 / 1.20.4 / 1.21.1)
 apply from: rootProject.file("versions/${project.name}/build.gradle")
 
 dependencies {
@@ -71,16 +71,18 @@ dependencies {
 	include "javazoom:jlayer:1.0.1"
 }
 
+def fabricModVersion = project.findProperty('mod_semver') ?: project.version
+
 processResources {
-	inputs.property "version", project.version
+	inputs.property "version", fabricModVersion
 
 	filesMatching("fabric.mod.json") {
-		expand "version": project.version
+		expand "version": fabricModVersion, "minecraft_dependency": project.minecraft_dependency, "java_dependency": project.java_dependency
 	}
 }
 
 tasks.withType(JavaCompile).configureEach {
-	it.options.release = 17
+	it.options.release = (project.findProperty('java_version') ?: '17').toInteger()
 }
 
 // src/test holds manual sanity mains (no JUnit); they are compiled, not discovered as tests.
@@ -115,8 +117,8 @@ java {
 	// If you remove this line, sources will not be generated.
 	withSourcesJar()
 
-	sourceCompatibility = JavaVersion.VERSION_17
-	targetCompatibility = JavaVersion.VERSION_17
+	sourceCompatibility = JavaVersion.toVersion(project.findProperty('java_version') ?: '17')
+	targetCompatibility = JavaVersion.toVersion(project.findProperty('java_version') ?: '17')
 }
 
 jar {
@@ -304,3 +306,16 @@ tasks.register('addonApiCheck') {
     dependsOn 'runAddonApiCheck'
 }
 tasks.named('check') { dependsOn 'addonApiCheck' }
+
+
+/* A version can leave mixins out of the configs (excluded_mixins in its gradle.properties, the
+ * names as they are written in the config): the classes may target something that is gone there. */
+def excludedMixins = (project.findProperty('excluded_mixins') ?: '').toString().split(',').collect { it.trim() }.findAll { !it.isEmpty() }
+
+if (!excludedMixins.isEmpty()) {
+	tasks.matching { it.name == 'processResources' || it.name == 'processClientResources' }.configureEach {
+		filesMatching('*.mixins.json') {
+			filter { String line -> excludedMixins.any { line.contains('"' + it + '"') } ? null : line }
+		}
+	}
+}

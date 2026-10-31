@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.framework.elements.input.list;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.particles.vanilla.VanillaParticlePreview;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.utils.RowStyle;
@@ -27,7 +28,7 @@ public class UIVanillaParticleList extends UIStringList
         int left = x + this.rowContentX(element);
         int top = y + (h - PREVIEW_SIZE) / 2;
 
-        VanillaParticlePreview.render(context, new Identifier(element), left, top, PREVIEW_SIZE, RowStyle.iconColor(hover || selected));
+        VanillaParticlePreview.render(context, Ids.of(element), left, top, PREVIEW_SIZE, RowStyle.iconColor(hover || selected));
         context.batcher.textShadow(element, left + PREVIEW_SIZE + 4, y + (h - context.batcher.getFont().getHeight()) / 2,
             RowStyle.textColor(hover || selected));
     }

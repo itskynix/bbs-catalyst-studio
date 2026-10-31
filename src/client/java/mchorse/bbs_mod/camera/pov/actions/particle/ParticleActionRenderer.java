@@ -274,6 +274,9 @@ public final class ParticleActionRenderer {
             }
             return;
         }
+        //? if >=1.21
+        /*boolean bl = status = effect.getType() == ParticleTypes.ENTITY_EFFECT;*/
+        //? if <1.21
         boolean bl = status = effect.getType() == ParticleTypes.ENTITY_EFFECT || effect.getType() == ParticleTypes.AMBIENT_ENTITY_EFFECT;
         if (status && !RANDOM.nextBoolean()) {
             return;

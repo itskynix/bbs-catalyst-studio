@@ -37,7 +37,7 @@ public class IrisEyeBrightnessPovMixin {
     @Inject(method={"getEyeBrightness"}, at={@At(value="HEAD")}, cancellable=true)
     private static void bbsPov$cameraEyeBrightness(CallbackInfoReturnable<Vector2i> info) {
         MinecraftClient client = MinecraftClient.getInstance();
-        if (client.world != null && PovHandPlayback.isHandActive(client.getTickDelta())) {
+        if (client.world != null && PovHandPlayback.isHandActive(client./*$ gtd*/getTickDelta()/**/)) {
             Vec3d camPos = client.gameRenderer.getCamera().getPos();
             BlockPos position = BlockPos.ofFloored((Position)camPos);
             if (!client.world.isAir(position) && client.world.isAir(position.up())) {
@@ -51,7 +51,7 @@ public class IrisEyeBrightnessPovMixin {
 
     @Inject(method={"getDarknessFactor"}, at={@At(value="HEAD")}, cancellable=true)
     private static void bbsPov$darknessFactor(CallbackInfoReturnable<Float> info) {
-        float delta = MinecraftClient.getInstance().getTickDelta();
+        float delta = MinecraftClient.getInstance()./*$ gtd*/getTickDelta()/**/;
         float factor = PovDarknessHelper.resolveDarknessFactor(delta);
         if (factor >= 0.0f) {
             info.setReturnValue(Float.valueOf(factor));
@@ -60,7 +60,7 @@ public class IrisEyeBrightnessPovMixin {
 
     @Inject(method={"getBlindness"}, at={@At(value="HEAD")}, cancellable=true)
     private static void bbsPov$blindnessUniform(CallbackInfoReturnable<Float> info) {
-        float delta = MinecraftClient.getInstance().getTickDelta();
+        float delta = MinecraftClient.getInstance()./*$ gtd*/getTickDelta()/**/;
         float blind = PovBlindnessHelper.resolveBlindnessFactor(delta);
         if (blind >= 0.0f) {
             info.setReturnValue(Float.valueOf(blind));

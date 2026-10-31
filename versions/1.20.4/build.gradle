@@ -1,3 +1,21 @@
+stonecutter.swap("nx", ".next()")
+stonecutter.swap("tdp", "float tickDelta")
+stonecutter.swap("ctr", "/*-*/")
+stonecutter.swap("hudp", "float tickDelta, long startTime, boolean tick")
+stonecutter.swap("smf", "/*-*/")
+stonecutter.swap("ge", "GameEvent")
+stonecutter.swap("pel", "/*-*/")
+stonecutter.swap("nst", "NbtTagSizeTracker")
+stonecutter.swap("dpt", "DefaultParticleType")
+stonecutter.swap("amt", "ArmorMaterial")
+stonecutter.swap("sek", "StatusEffect")
+stonecutter.swap("pct", "POSITION_COLOR_TEXTURE")
+stonecutter.swap("pctp", "getPositionColorTexProgram")
+stonecutter.swap("ptl", "GameRenderer::getPositionTexLightmapColorProgram")
+stonecutter.swap("gtd", "getTickDelta()")
+stonecutter.swap("gfd", "getLastFrameDuration()")
+stonecutter.swap("wtd", "tickDelta()")
+
 dependencies {
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
 	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"

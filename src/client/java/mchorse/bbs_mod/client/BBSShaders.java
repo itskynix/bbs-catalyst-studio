@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.client;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.BBSMod;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gl.ShaderProgram;
@@ -18,6 +19,7 @@ public class BBSShaders
     private static ShaderProgram multiLink;
     private static ShaderProgram subtitles;
     private static ShaderProgram selection;
+    private static ShaderProgram billboardFlat;
     private static ShaderProgram pixelArt;
     private static ShaderProgram pixelArtText;
     private static ShaderProgram pixelArtTextIntensity;
@@ -40,6 +42,7 @@ public class BBSShaders
         if (model != null) model.close();
         if (subtitles != null) subtitles.close();
         if (selection != null) selection.close();
+        if (billboardFlat != null) billboardFlat.close();
         if (pixelArt != null) pixelArt.close();
         if (pixelArtText != null) pixelArtText.close();
         if (pixelArtTextIntensity != null) pixelArtTextIntensity.close();
@@ -60,6 +63,7 @@ public class BBSShaders
 
             model = new ShaderProgram(factory, "model", VertexFormats.POSITION_COLOR_TEXTURE_OVERLAY_LIGHT_NORMAL);
             multiLink = new ShaderProgram(factory, "multilink", VertexFormats.POSITION_TEXTURE_COLOR);
+            billboardFlat = new ShaderProgram(factory, "billboard_flat", VertexFormats.POSITION_TEXTURE_LIGHT_COLOR);
             subtitles = new ShaderProgram(factory, "subtitles", VertexFormats.POSITION_TEXTURE_COLOR);
             selection = new ShaderProgram(factory, "selection", VertexFormats.POSITION_TEXTURE_COLOR);
 
@@ -168,6 +172,12 @@ public class BBSShaders
         return pickerOutline;
     }
 
+    /** An unshaded billboard lit by the lightmap only; vanilla has no such program since 1.21. */
+    public static ShaderProgram getBillboardFlat()
+    {
+        return billboardFlat;
+    }
+
     public static ShaderProgram getPickerPreviewProgram()
     {
         return pickerPreview;
@@ -207,14 +217,14 @@ public class BBSShaders
         {
             if (id.getPath().contains("/core/"))
             {
-                return this.manager.getResource(new Identifier(BBSMod.MOD_ID, id.getPath()));
+                return this.manager.getResource(Ids.of(BBSMod.MOD_ID, id.getPath()));
             }
 
             /* #moj_import always resolves in the minecraft namespace, so our own
              * includes have to be looked up in BBS first, vanilla's second */
             if (id.getPath().contains("/include/"))
             {
-                Optional<Resource> resource = this.manager.getResource(new Identifier(BBSMod.MOD_ID, id.getPath()));
+                Optional<Resource> resource = this.manager.getResource(Ids.of(BBSMod.MOD_ID, id.getPath()));
 
                 if (resource.isPresent())
                 {

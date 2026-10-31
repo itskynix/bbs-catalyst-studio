@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.camera.export;
 
+import mchorse.bbs_mod.l10n.L10n;
 import mchorse.bbs_mod.l10n.keys.IKey;
 
 /**
@@ -31,9 +32,10 @@ public enum VideoCodec
         return this.id;
     }
 
+    /** The label in the current language; the English one written above is the fallback. */
     public IKey getLabel()
     {
-        return this.label;
+        return L10n.lang("bbs.ui.deliver.codec." + this.name().toLowerCase(), this.label.get());
     }
 
     public String getSoftwareEncoder()

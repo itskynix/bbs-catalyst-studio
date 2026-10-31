@@ -35,7 +35,7 @@ public class FirstPersonFilmControllerPovMixin {
         if (replay != film.getFirstPersonReplay()) {
             return;
         }
-        float transition = controller.paused ? 0.0f : Math.max(0.0f, Math.min(1.0f, context.tickDelta()));
+        float transition = controller.paused ? 0.0f : Math.max(0.0f, Math.min(1.0f, context./*$ wtd*/tickDelta()/**/));
         float filmTick = (float)controller.getTick() + transition;
         PovCameraClip clip = PovCameraClips.resolve(film, filmTick);
         if (clip != null && ((Boolean)clip.headLook.get()).booleanValue() && clip.isFirstPerson() && replay == PovCameraClips.resolveReplay(film, clip)) {

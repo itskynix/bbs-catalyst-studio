@@ -81,7 +81,12 @@ public abstract class GameRendererHandPovMixin {
      * WARNING - Removed try catching itself - possible behaviour change.
      */
     @Inject(method={"renderHand"}, at={@At(value="HEAD")}, cancellable=true)
+    //? if >=1.21
+    /*private void bbsPov$renderHandBeforeBbsCancellation(Camera camera, float tickDelta, Matrix4f positionMatrix, CallbackInfo info) {*/
+    //? if <1.21
     private void bbsPov$renderHandBeforeBbsCancellation(MatrixStack matrices, Camera camera, float tickDelta, CallbackInfo info) {
+        //? if >=1.21
+        /*MatrixStack matrices = new MatrixStack();*/
         Area editorFrame;
         if (UIPovHandEditor.isActive()) {
             info.cancel();

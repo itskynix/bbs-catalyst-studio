@@ -205,15 +205,19 @@ public class UISoundOverlayPanel extends UIStringOverlayPanel
     public static Set<String> getSoundEvents()
     {
         Set<String> locations = new HashSet<>();
+        Link[] roots = new Link[] { Link.assets("audio"), Link.assets("sounds") };
 
-        for (Link link : BBSMod.getProvider().getLinksFromPath(Link.assets("audio")))
+        for (Link root : roots)
         {
-            String pathLower = link.path.toLowerCase();
-            boolean supported = pathLower.endsWith(".wav") || pathLower.endsWith(".ogg") || pathLower.endsWith(".mp3");
-
-            if (supported)
+            for (Link link : BBSMod.getProvider().getLinksFromPath(root))
             {
-                locations.add(link.toString());
+                String pathLower = link.path.toLowerCase();
+                boolean supported = pathLower.endsWith(".wav") || pathLower.endsWith(".ogg") || pathLower.endsWith(".mp3");
+
+                if (supported)
+                {
+                    locations.add(link.toString());
+                }
             }
         }
 
@@ -418,12 +422,6 @@ public class UISoundOverlayPanel extends UIStringOverlayPanel
             else
             {
                 link = Link.create(audio);
-
-                if (BBSMod.getProvider().getFile(link) == null)
-                {
-                    return;
-                }
-
                 wave = AudioReader.read(BBSMod.getProvider(), link);
             }
 
@@ -439,8 +437,11 @@ public class UISoundOverlayPanel extends UIStringOverlayPanel
 
                 if (newPlayer != null)
                 {
-                    BBSModClient.getSounds().deleteSounds();
+                    newPlayer.configure2DStereo();
+                    newPlayer.setVolume(1.0F);
+                    newPlayer.setPitch(1.0F);
                     newPlayer.play();
+                    newPlayer.updateRamp();
                 }
             }
         }

@@ -191,7 +191,13 @@ public class UIValues
 
     public static UIColor color(Supplier<ValueColor> value)
     {
-        UIColor color = new UIColor((v) -> value.get().set(Color.rgba(v)));
+        UIColor[] self = new UIColor[1];
+        /* A picker that does not edit alpha hands back the colour with its alpha bits clear; read as
+         * it was, that stored a fully transparent colour, which then never came back however it was
+         * picked again (a dissolve's burn, an outline). Without alpha editing it is opaque. */
+        UIColor color = new UIColor((v) -> value.get().set(Color.rgba(self[0] != null && !self[0].picker.editAlpha ? 0xFF000000 | v : v)));
+
+        self[0] = color;
 
         return bound(color, value, () ->
         {

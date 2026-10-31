@@ -17,7 +17,11 @@ package mchorse.bbs_mod.camera.pov.integration.mixin.minecraft;
 
 import mchorse.bbs_mod.camera.pov.actions.gui.recording.GuiSnapshotCapture;
 import mchorse.bbs_mod.camera.pov.integration.mixin.minecraft.TextFieldWidgetPovAccessor;
+//? if >=1.21 {
+/*import net.fabricmc.fabric.api.client.itemgroup.v1.FabricCreativeInventoryScreen;
+*///?} else {
 import net.fabricmc.fabric.impl.client.itemgroup.CreativeGuiExtensions;
+//?}
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.ingame.CreativeInventoryScreen;
 import net.minecraft.client.gui.widget.TextFieldWidget;
@@ -49,6 +53,9 @@ public abstract class CreativeInventoryScreenPovMixin {
         }
         int currentPage = 0;
         try {
+            //? if >=1.21
+            /*currentPage = ((FabricCreativeInventoryScreen)(Object)this).getCurrentPage();*/
+            //? if <1.21
             currentPage = ((CreativeGuiExtensions)(Object)this).fabric_currentPage();
         }
         catch (Throwable throwable) {

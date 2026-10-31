@@ -4,6 +4,7 @@ import mchorse.bbs_mod.ui.framework.elements.input.drag.TransformSpace;
 import mchorse.bbs_mod.film.BaseFilmController;
 import mchorse.bbs_mod.film.FilmEntityRenderer;
 import mchorse.bbs_mod.film.Film;
+import mchorse.bbs_mod.film.ReplayLookAt;
 import mchorse.bbs_mod.film.FilmControllerContext;
 import mchorse.bbs_mod.film.FilmTarget;
 import mchorse.bbs_mod.film.replays.Replay;
@@ -83,6 +84,7 @@ public class FilmEditorController extends BaseFilmController
         if (entity != this.controller.getControlled() || (this.controller.isRecording() && this.controller.getRecordingCountdown() <= 0 && groups != null))
         {
             replay.keyframes.apply(ticks, entity, entity == this.controller.getControlled() ? groups : null);
+            ReplayLookAt.apply(replay, this.film, ticks, entity);
             replay.applyClientActions(ticks, entity, this.film);
         }
 
@@ -222,7 +224,7 @@ public class FilmEditorController extends BaseFilmController
                     this.renderOnion(replay, pose.getKeyframes().indexOf(segment.b), 1, pose, onionSkin.postColor.get(), onionSkin.postFrames.get(), context, isPlaying, entity);
                     BBSProfiler.end(BBSProfiler.Timer.ONION);
 
-                    float tick = ticks + this.getTransition(entity, context.tickDelta());
+                    float tick = ticks + this.getTransition(entity, context./*$ wtd*/tickDelta()/**/);
                     replay.keyframes.apply(isPlaying ? ticks : tick, entity);
                     Form form = entity.getForm();
                     replay.properties.applyProperties(form, tick);
@@ -293,7 +295,7 @@ public class FilmEditorController extends BaseFilmController
         String aBone2 = replay.axesPreview.get() && !recording ? replay.axesPreviewBone.get() : null;
 
         return super.getFilmControllerContext(context, replay, entity)
-            .transition(this.getTransition(entity, context.tickDelta()))
+            .transition(this.getTransition(entity, context./*$ wtd*/tickDelta()/**/))
             .gizmoTarget(target)
             /* The UI camera is copied later in the frame. Use the view that is
              * actually drawing this pass, before any actor transforms go on it. */

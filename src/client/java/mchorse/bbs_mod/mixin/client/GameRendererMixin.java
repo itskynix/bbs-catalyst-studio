@@ -13,6 +13,8 @@ import mchorse.bbs_mod.items.GunZoom;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gl.ShaderProgram;
 import net.minecraft.client.render.GameRenderer;
+//? if >=1.21
+/*import net.minecraft.client.render.RenderTickCounter;*/
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.util.math.RotationAxis;
 import org.objectweb.asm.Opcodes;
@@ -79,8 +81,13 @@ public abstract class GameRendererMixin
         }
     }
 
+    //? if >=1.21 {
+    /*@Inject(method = "renderHand", at = @At("HEAD"), cancellable = true)
+    public void onRenderHand(net.minecraft.client.render.Camera camera, float tickDelta, Matrix4f positionMatrix, CallbackInfo info)
+    *///?} else {
     @Inject(method = "renderHand", at = @At("HEAD"), cancellable = true)
     public void onRenderHand(MatrixStack matrices, net.minecraft.client.render.Camera camera, float tickDelta, CallbackInfo info)
+    //?}
     {
         ICameraController current = BBSModClient.getCameraController().getCurrent();
 
@@ -132,6 +139,16 @@ public abstract class GameRendererMixin
      * pushes its near plane back, so the frustum never culls a section the
      * render would still have drawn.
      */
+    //? if >=1.21 {
+    /*@ModifyArg(
+        method = "renderWorld",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/client/render/WorldRenderer;setupFrustum(Lnet/minecraft/util/math/Vec3d;Lorg/joml/Matrix4f;Lorg/joml/Matrix4f;)V"
+        ),
+        index = 2
+    )
+    *///?} else {
     @ModifyArg(
         method = "renderWorld",
         at = @At(
@@ -140,11 +157,22 @@ public abstract class GameRendererMixin
         ),
         index = 2
     )
+    //?}
     private Matrix4f onSetupFrustumProjection(Matrix4f projection)
     {
         return BBSRendering.getOrthoProjection((GameRenderer) (Object) this, projection, 20F);
     }
 
+    //? if >=1.21 {
+    /*@ModifyArg(
+        method = "renderWorld",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/client/render/WorldRenderer;render(Lnet/minecraft/client/render/RenderTickCounter;ZLnet/minecraft/client/render/Camera;Lnet/minecraft/client/render/GameRenderer;Lnet/minecraft/client/render/LightmapTextureManager;Lorg/joml/Matrix4f;Lorg/joml/Matrix4f;)V"
+        ),
+        index = 6
+    )
+    *///?} else {
     @ModifyArg(
         method = "renderWorld",
         at = @At(
@@ -153,6 +181,7 @@ public abstract class GameRendererMixin
         ),
         index = 7
     )
+    //?}
     private Matrix4f onRenderProjection(Matrix4f projection)
     {
         Matrix4f ortho = BBSRendering.getOrthoProjection((GameRenderer) (Object) this, projection, 0F);
@@ -172,7 +201,7 @@ public abstract class GameRendererMixin
     }
 
     @Inject(method = "render", at = @At(value = "FIELD", target = "Lnet/minecraft/client/option/GameOptions;hudHidden:Z", opcode = Opcodes.GETFIELD, ordinal = 0))
-    private void onBeforeHudRendering(float tickDelta, long startTime, boolean tick, CallbackInfo info)
+    private void onBeforeHudRendering(/*$ hudp*/float tickDelta, long startTime, boolean tick/**/, CallbackInfo info)
     {
         if (MinecraftClient.getInstance().options.hudHidden)
         {

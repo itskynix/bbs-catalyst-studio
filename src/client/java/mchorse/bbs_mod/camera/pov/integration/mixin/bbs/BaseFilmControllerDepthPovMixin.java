@@ -35,7 +35,7 @@ public class BaseFilmControllerDepthPovMixin {
         if (BBSRendering.isIrisShadersEnabled() && IrisUtils.isShadowPass()) {
             return;
         }
-        float f = tickDelta = context != null ? context.tickDelta() : 0.0f;
+        float f = tickDelta = context != null ? context./*$ wtd*/tickDelta()/**/ : 0.0f;
         if (PovHandPlayback.isHandActive(tickDelta)) {
             PovHandDepthManager.onBeforeReplayRender();
         }
@@ -47,7 +47,7 @@ public class BaseFilmControllerDepthPovMixin {
         if (BBSRendering.isIrisShadersEnabled() && IrisUtils.isShadowPass()) {
             return;
         }
-        float f = tickDelta = context != null ? context.tickDelta() : 0.0f;
+        float f = tickDelta = context != null ? context./*$ wtd*/tickDelta()/**/ : 0.0f;
         if (PovHandPlayback.isHandActive(tickDelta)) {
             VertexConsumerProvider vertexConsumerProvider;
             if (context != null && (vertexConsumerProvider = context.consumers()) instanceof VertexConsumerProvider.Immediate) {

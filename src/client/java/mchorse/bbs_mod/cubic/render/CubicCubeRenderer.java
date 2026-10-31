@@ -8,6 +8,7 @@ import mchorse.bbs_mod.cubic.data.model.ModelMesh;
 import mchorse.bbs_mod.cubic.data.model.ModelQuad;
 import mchorse.bbs_mod.cubic.data.model.ModelVertex;
 import mchorse.bbs_mod.cubic.weld.WeldBinding;
+import mchorse.bbs_mod.forms.renderers.utils.ShatterField;
 import mchorse.bbs_mod.obj.shapes.ShapeKeys;
 import mchorse.bbs_mod.ui.framework.elements.utils.StencilMap;
 import mchorse.bbs_mod.utils.MathUtils;
@@ -55,6 +56,20 @@ public class CubicCubeRenderer implements ICubicRenderer
     /* The form-level color overlay texture is bound for the CPU draw (see ModelInstance), so
      * vertices must point at its single texel instead of the vanilla overlay UV. */
     protected boolean cpuOverlayActive;
+
+    /* Shatter: moves each bone off on its own as the walk reaches it; null leaves the pose alone */
+    private ShatterField shatter;
+
+    public void setShatter(ShatterField shatter)
+    {
+        this.shatter = shatter;
+    }
+
+    @Override
+    public ShatterField getShatter()
+    {
+        return this.shatter;
+    }
 
     /* Temporary variables to avoid allocating and GC vectors */
     protected Vector3f normal = new Vector3f();
@@ -500,7 +515,7 @@ public class CubicCubeRenderer implements ICubicRenderer
             builder.light(lu, lv);
         }
 
-        builder.normal(normal.x, normal.y, normal.z).next();
+        builder.normal(normal.x, normal.y, normal.z)/*$ nx*/.next()/**/;
     }
 
     /**

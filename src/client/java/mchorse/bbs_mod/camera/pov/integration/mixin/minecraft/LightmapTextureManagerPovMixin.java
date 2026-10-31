@@ -16,6 +16,7 @@
  */
 package mchorse.bbs_mod.camera.pov.integration.mixin.minecraft;
 
+import net.minecraft.registry.entry.RegistryEntry;
 import mchorse.bbs_mod.camera.pov.actions.screeneffect.render.PovDarknessHelper;
 import mchorse.bbs_mod.camera.pov.actions.screeneffect.render.PovNightVisionHelper;
 import mchorse.bbs_mod.camera.pov.utils.PovEffectSuppression;
@@ -45,6 +46,16 @@ public abstract class LightmapTextureManagerPovMixin {
         }
     }
 
+    //? if >=1.21 {
+    /*@Redirect(method={"update"}, at=@At(value="INVOKE", target="Lnet/minecraft/client/network/ClientPlayerEntity;hasStatusEffect(Lnet/minecraft/registry/entry/RegistryEntry;)Z"))
+    private boolean bbsPov$hasStatusEffect(ClientPlayerEntity player, RegistryEntry<StatusEffect> effect) {
+        float povNv;
+        if (effect == StatusEffects.NIGHT_VISION && (povNv = PovNightVisionHelper.resolveNightVisionStrength(0.0f)) >= 0.0f) {
+            return povNv > 0.001f;
+        }
+        return player.hasStatusEffect(effect);
+    }
+    *///?} else {
     @Redirect(method={"update"}, at=@At(value="INVOKE", target="Lnet/minecraft/client/network/ClientPlayerEntity;hasStatusEffect(Lnet/minecraft/entity/effect/StatusEffect;)Z"))
     private boolean bbsPov$hasStatusEffect(ClientPlayerEntity player, StatusEffect effect) {
         float povNv;
@@ -53,6 +64,7 @@ public abstract class LightmapTextureManagerPovMixin {
         }
         return player.hasStatusEffect(effect);
     }
+    //?}
 
     @Redirect(method={"update"}, at=@At(value="INVOKE", target="Lnet/minecraft/client/render/GameRenderer;getNightVisionStrength(Lnet/minecraft/entity/LivingEntity;F)F"))
     private float bbsPov$getNightVisionStrength(LivingEntity entity, float delta) {

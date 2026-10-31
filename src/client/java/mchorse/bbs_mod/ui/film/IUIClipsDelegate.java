@@ -25,6 +25,17 @@ public interface IUIClipsDelegate extends ICursor
 
     public void pickClip(Clip clip);
 
+    /**
+     * Open the given clip's own sub-editor (its keyframe editor), if it has one. The clip has to
+     * be the one picked, since the editor lives in the clip's properties panel.
+     *
+     * @return whether an editor was opened - false for a clip with nothing to open
+     */
+    public default boolean openClipEditor(Clip clip)
+    {
+        return false;
+    }
+
     public void setFlight(boolean flight);
 
     public boolean isFlying();

@@ -50,6 +50,22 @@ public final class PovNauseaApplier {
         matrixStack.multiply(axis.rotationDegrees(-angle));
     }
 
+    // The projection takes the same wobble since 1.21, where the game applies it there and not to a stack
+    public static void apply(org.joml.Matrix4f projection, float tickDelta, int ticks) {
+        Sample sample = PovNauseaApplier.resolve(tickDelta, ticks);
+        if (sample == null || sample.intensity <= 0.001f) {
+            return;
+        }
+        float nauseaIntensity = sample.intensity;
+        float scale = 5.0f / (nauseaIntensity * nauseaIntensity + 5.0f) - nauseaIntensity * 0.04f;
+        scale *= scale;
+        float angle = sample.time * (float)sample.speed;
+        RotationAxis axis = RotationAxis.of((Vector3f)new Vector3f(0.0f, MathHelper.SQUARE_ROOT_OF_TWO / 2.0f, MathHelper.SQUARE_ROOT_OF_TWO / 2.0f));
+        projection.rotate(axis.rotationDegrees(angle));
+        projection.scale(1.0f / scale, 1.0f, 1.0f);
+        projection.rotate(axis.rotationDegrees(-angle));
+    }
+
     private static Sample resolve(float tickDelta, int ticks) {
         boolean povEditMode;
         PovPlaybackContext.Frame playback = PovPlaybackContext.getActive(tickDelta);

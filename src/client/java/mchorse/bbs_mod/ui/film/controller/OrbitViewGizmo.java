@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.film.controller;
 
+import mchorse.bbs_mod.utils.Bufs;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.ui.framework.UIContext;
@@ -310,16 +311,16 @@ public class OrbitViewGizmo
     private void fillCircle(Batcher2D batcher, float x, float y, float radius, int color)
     {
         Matrix4f matrix = batcher.getContext().getMatrices().peek().getPositionMatrix();
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
+        BufferBuilder builder;
 
-        builder.begin(VertexFormat.DrawMode.TRIANGLE_FAN, VertexFormats.POSITION_COLOR);
-        builder.vertex(matrix, x, y, 0F).color(color).next();
+        builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLE_FAN, VertexFormats.POSITION_COLOR);
+        builder.vertex(matrix, x, y, 0F).color(color)/*$ nx*/.next()/**/;
 
         for (int i = 0; i <= SEGMENTS; i++)
         {
             double a = i / (double) SEGMENTS * Math.PI * 2D;
 
-            builder.vertex(matrix, (float) (x - Math.cos(a) * radius), (float) (y + Math.sin(a) * radius), 0F).color(color).next();
+            builder.vertex(matrix, (float) (x - Math.cos(a) * radius), (float) (y + Math.sin(a) * radius), 0F).color(color)/*$ nx*/.next()/**/;
         }
 
         this.draw(batcher, builder);
@@ -328,9 +329,9 @@ public class OrbitViewGizmo
     private void annulus(Batcher2D batcher, float x, float y, float inner, float outer, int color)
     {
         Matrix4f matrix = batcher.getContext().getMatrices().peek().getPositionMatrix();
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
+        BufferBuilder builder;
 
-        builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+        builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
 
         for (int i = 0; i < SEGMENTS; i++)
         {
@@ -345,12 +346,12 @@ public class OrbitViewGizmo
             float ox2 = (float) (x - Math.cos(a2) * outer);
             float oy2 = (float) (y + Math.sin(a2) * outer);
 
-            builder.vertex(matrix, ix2, iy2, 0F).color(color).next();
-            builder.vertex(matrix, ix1, iy1, 0F).color(color).next();
-            builder.vertex(matrix, ox1, oy1, 0F).color(color).next();
-            builder.vertex(matrix, ix2, iy2, 0F).color(color).next();
-            builder.vertex(matrix, ox1, oy1, 0F).color(color).next();
-            builder.vertex(matrix, ox2, oy2, 0F).color(color).next();
+            builder.vertex(matrix, ix2, iy2, 0F).color(color)/*$ nx*/.next()/**/;
+            builder.vertex(matrix, ix1, iy1, 0F).color(color)/*$ nx*/.next()/**/;
+            builder.vertex(matrix, ox1, oy1, 0F).color(color)/*$ nx*/.next()/**/;
+            builder.vertex(matrix, ix2, iy2, 0F).color(color)/*$ nx*/.next()/**/;
+            builder.vertex(matrix, ox1, oy1, 0F).color(color)/*$ nx*/.next()/**/;
+            builder.vertex(matrix, ox2, oy2, 0F).color(color)/*$ nx*/.next()/**/;
         }
 
         this.draw(batcher, builder);
@@ -371,13 +372,13 @@ public class OrbitViewGizmo
         float ny = dx / length * width / 2F;
 
         Matrix4f matrix = batcher.getContext().getMatrices().peek().getPositionMatrix();
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
+        BufferBuilder builder;
 
-        builder.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
-        builder.vertex(matrix, x1 - nx, y1 - ny, 0F).color(color).next();
-        builder.vertex(matrix, x1 + nx, y1 + ny, 0F).color(color).next();
-        builder.vertex(matrix, x2 + nx, y2 + ny, 0F).color(color).next();
-        builder.vertex(matrix, x2 - nx, y2 - ny, 0F).color(color).next();
+        builder = Bufs.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
+        builder.vertex(matrix, x1 - nx, y1 - ny, 0F).color(color)/*$ nx*/.next()/**/;
+        builder.vertex(matrix, x1 + nx, y1 + ny, 0F).color(color)/*$ nx*/.next()/**/;
+        builder.vertex(matrix, x2 + nx, y2 + ny, 0F).color(color)/*$ nx*/.next()/**/;
+        builder.vertex(matrix, x2 - nx, y2 - ny, 0F).color(color)/*$ nx*/.next()/**/;
 
         this.draw(batcher, builder);
     }
@@ -386,7 +387,7 @@ public class OrbitViewGizmo
     {
         RenderSystem.enableBlend();
         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        Bufs.draw(builder);
 
         batcher.getContext().draw();
     }

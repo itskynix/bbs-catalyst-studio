@@ -9,6 +9,8 @@ import net.minecraft.block.BlockRenderType;
 import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.BufferBuilder;
+//? if >=1.21
+/*import net.minecraft.client.util.BufferAllocator;*/
 import net.minecraft.client.render.OverlayTexture;
 import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.render.RenderLayers;
@@ -77,7 +79,11 @@ public class BakedStructure
     private static final Direction[] DIRECTIONS = Direction.values();
 
     /** Scratch builder reused across bakes (grows once and stays). */
+    //? if >=1.21 {
+    /*private static BufferAllocator scratchAllocator;
+    *///?} else {
     private static BufferBuilder scratch;
+    //?}
 
     private final List<BakedLayer> layers = new ArrayList<>();
 
@@ -409,6 +415,14 @@ public class BakedStructure
     /** Begin a scratch vertex buffer for the given draw mode + format (a single reused builder). */
     private static BufferBuilder beginBuffer(VertexFormat.DrawMode mode, VertexFormat format)
     {
+        //? if >=1.21 {
+        /*if (scratchAllocator == null)
+        {
+            scratchAllocator = new BufferAllocator(786432);
+        }
+
+        return new BufferBuilder(scratchAllocator, mode, format);
+        *///?} else {
         if (scratch == null)
         {
             scratch = new BufferBuilder(786432);
@@ -417,6 +431,7 @@ public class BakedStructure
         scratch.begin(mode, format);
 
         return scratch;
+        //?}
     }
 
     /** End the builder and copy its vertices into a tight {@code POSITION_COLOR_TEXTURE_LIGHT_NORMAL}
@@ -424,18 +439,26 @@ public class BakedStructure
      *  {@link BakedBuffer} with null data if the format misses standard block attributes. */
     private static BakedBuffer endAndNormalize(BufferBuilder builder)
     {
-        BufferBuilder.BuiltBuffer built = builder.endNullable();
+        var built = builder.endNullable();
 
         if (built == null)
         {
             return null;
         }
 
-        BufferBuilder.DrawParameters parameters = built.getParameters();
+        //? if >=1.21 {
+        /*var parameters = built.getDrawParameters();
+        int count = parameters.vertexCount();
+        ByteBuffer copy = normalize(built.getBuffer(), parameters.format(), count);
+
+        built.close();
+        *///?} else {
+        var parameters = built.getParameters();
         int count = parameters.vertexCount();
         ByteBuffer copy = normalize(built.getVertexBuffer(), parameters.format(), count);
 
         built.release();
+        //?}
 
         return new BakedBuffer(copy, count);
     }
@@ -465,6 +488,13 @@ public class BakedStructure
             return copy;
         }
 
+        //? if >=1.21 {
+        /*int posOffset = format.getOffset(VertexFormatElement.POSITION);
+        int colorOffset = format.getOffset(VertexFormatElement.COLOR);
+        int uvOffset = format.getOffset(VertexFormatElement.UV_0);
+        int lightOffset = format.getOffset(VertexFormatElement.UV_2);
+        int normalOffset = format.getOffset(VertexFormatElement.NORMAL);
+        *///?} else {
         int posOffset = -1;
         int colorOffset = -1;
         int uvOffset = -1;
@@ -482,6 +512,7 @@ public class BakedStructure
 
             offset += element.getByteLength();
         }
+        //?}
 
         if (posOffset < 0 || colorOffset < 0 || uvOffset < 0 || lightOffset < 0 || normalOffset < 0)
         {
@@ -513,7 +544,7 @@ public class BakedStructure
             .overlay(overlay)
             .light(blockLight, skyLight)
             .normal(nx, ny, nz)
-            .next();
+            /*$ nx*/.next()/**/;
     }
 
 }

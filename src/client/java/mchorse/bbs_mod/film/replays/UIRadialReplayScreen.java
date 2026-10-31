@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.film.replays;
 
+import mchorse.bbs_mod.utils.Bufs;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.film.Film;
@@ -534,24 +535,24 @@ public class UIRadialReplayScreen extends Screen
 
     private void quad(Matrix4f matrix, float x0, float y0, float x1, float y1, int color)
     {
-        BufferBuilder buffer = Tessellator.getInstance().getBuffer();
+        BufferBuilder buffer;
 
         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
-        buffer.begin(VertexFormat.DrawMode.TRIANGLE_STRIP, VertexFormats.POSITION_COLOR);
-        buffer.vertex(matrix, x0, y0, 0F).color(color).next();
-        buffer.vertex(matrix, x0, y1, 0F).color(color).next();
-        buffer.vertex(matrix, x1, y0, 0F).color(color).next();
-        buffer.vertex(matrix, x1, y1, 0F).color(color).next();
-        BufferRenderer.drawWithGlobalProgram(buffer.end());
+        buffer = Bufs.begin(VertexFormat.DrawMode.TRIANGLE_STRIP, VertexFormats.POSITION_COLOR);
+        buffer.vertex(matrix, x0, y0, 0F).color(color)/*$ nx*/.next()/**/;
+        buffer.vertex(matrix, x0, y1, 0F).color(color)/*$ nx*/.next()/**/;
+        buffer.vertex(matrix, x1, y0, 0F).color(color)/*$ nx*/.next()/**/;
+        buffer.vertex(matrix, x1, y1, 0F).color(color)/*$ nx*/.next()/**/;
+        Bufs.draw(buffer);
     }
 
     /** A filled ring segment between two radii and two angles (clockwise from the top); radius 0 makes a pie. */
     private void fan(Matrix4f matrix, int cx, int cy, float r0, float r1, double a0, double a1, int steps, int color)
     {
-        BufferBuilder buffer = Tessellator.getInstance().getBuffer();
+        BufferBuilder buffer;
 
         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
-        buffer.begin(VertexFormat.DrawMode.TRIANGLE_STRIP, VertexFormats.POSITION_COLOR);
+        buffer = Bufs.begin(VertexFormat.DrawMode.TRIANGLE_STRIP, VertexFormats.POSITION_COLOR);
 
         for (int i = 0; i <= steps; i++)
         {
@@ -559,10 +560,10 @@ public class UIRadialReplayScreen extends Screen
             float sin = (float) Math.sin(a);
             float cos = (float) Math.cos(a);
 
-            buffer.vertex(matrix, cx + sin * r0, cy - cos * r0, 0F).color(color).next();
-            buffer.vertex(matrix, cx + sin * r1, cy - cos * r1, 0F).color(color).next();
+            buffer.vertex(matrix, cx + sin * r0, cy - cos * r0, 0F).color(color)/*$ nx*/.next()/**/;
+            buffer.vertex(matrix, cx + sin * r1, cy - cos * r1, 0F).color(color)/*$ nx*/.next()/**/;
         }
 
-        BufferRenderer.drawWithGlobalProgram(buffer.end());
+        Bufs.draw(buffer);
     }
 }

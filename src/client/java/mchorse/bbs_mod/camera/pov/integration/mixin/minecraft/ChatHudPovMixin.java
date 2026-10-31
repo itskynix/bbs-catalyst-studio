@@ -37,6 +37,9 @@ public class ChatHudPovMixin {
     }
 
     @Inject(method={"render"}, at={@At(value="HEAD")}, cancellable=true)
+    //? if >=1.21
+    /*private void bbsPov$hideChatInBbsScreen(DrawContext context, int currentTick, int mouseX, int mouseY, boolean focused, CallbackInfo ci) {*/
+    //? if <1.21
     private void bbsPov$hideChatInBbsScreen(DrawContext context, int currentTick, int mouseX, int mouseY, CallbackInfo ci) {
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc != null && mc.currentScreen instanceof UIScreen) {

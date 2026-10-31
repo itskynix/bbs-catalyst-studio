@@ -45,7 +45,7 @@ public abstract class BBSRenderingPovMixin {
     @Inject(method={"onWorldRenderEnd"}, at={@At(value="HEAD")})
     private static void bbsPov$renderPlaybackOverlay(CallbackInfo info) {
         MinecraftClient client = MinecraftClient.getInstance();
-        float tickDelta = client.getTickDelta();
+        float tickDelta = client./*$ gtd*/getTickDelta()/**/;
         if (PovPlaybackContext.getActive(tickDelta) != null) {
             DrawContext context = new DrawContext(client, client.getBufferBuilders().getEntityVertexConsumers());
             PovOverlayRenderer.renderPlayback(new Batcher2D(context), tickDelta);

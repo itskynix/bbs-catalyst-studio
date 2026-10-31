@@ -62,6 +62,7 @@ public class TrackStyle
     {
         setupColors();
         setupIcons();
+        LABELS.put("occlusionFactor", IKey.constant("occlusion"));
     }
 
     /**
@@ -101,6 +102,13 @@ public class TrackStyle
         COLORS.put("has_cape", 0xe84118);
         COLORS.put("cape_texture", 0xc23616);
         COLORS.put("model", MODEL_TRACK);
+
+        /* 3D Audio tracks */
+        COLORS.put("volume", 0xffc825);
+        COLORS.put("radius", 0x2ecc71);
+        COLORS.put("pan", 0x9b59b6);
+        COLORS.put("offset", 0x3498db);
+        COLORS.put("occlusionFactor", 0xe67e22);
     }
 
     /**
@@ -246,6 +254,12 @@ public class TrackStyle
         ICONS.put("count", Icons.BUCKET);
         ICONS.put("settings", Icons.GEAR);
         ICONS.put("physics_targets", Icons.PHYSICS);
+
+        /* 3D Audio tracks */
+        ICONS.put("volume", Icons.SOUND);
+        ICONS.put("radius", Icons.SPHERE);
+        ICONS.put("pan", Icons.HORIZONTAL);
+        ICONS.put("occlusionFactor", Icons.FILTER);
     }
 
     private static void setupItemIcons()

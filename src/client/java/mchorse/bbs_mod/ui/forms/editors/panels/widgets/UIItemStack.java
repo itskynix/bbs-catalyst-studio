@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.forms.editors.panels.widgets;
 
+import mchorse.bbs_mod.utils.VersionCompat;
 import java.util.function.Consumer;
 
 import mchorse.bbs_mod.BBSSettings;
@@ -183,12 +184,7 @@ public class UIItemStack extends UIElement
 
         Identifier id = Registries.ITEM.getId(stack.getItem());
         StringBuilder command = new StringBuilder("give @s ").append(id);
-        NbtCompound tag = stack.getNbt();
-
-        if (tag != null && !tag.isEmpty())
-        {
-            command.append(tag);
-        }
+        command.append(VersionCompat.giveSuffix(stack));
 
         command.append(' ').append(stack.getCount());
 

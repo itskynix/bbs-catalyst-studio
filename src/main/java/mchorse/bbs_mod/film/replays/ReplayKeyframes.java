@@ -69,7 +69,7 @@ public class ReplayKeyframes extends ValueGroup
      */
     private static List<String> buildCuratedChannels()
     {
-        List<String> channels = new ArrayList<>(Arrays.asList("x", "y", "z", "pitch", "yaw", "headYaw", "bodyYaw"));
+        List<String> channels = new ArrayList<>(Arrays.asList("x", "y", "z", "pitch", "yaw", "headYaw", "bodyYaw", "look_at_weight", "look_at_x", "look_at_y", "look_at_z"));
 
         for (EntityState state : EntityState.values())
         {
@@ -93,6 +93,13 @@ public class ReplayKeyframes extends ValueGroup
     public final KeyframeChannel<Double> pitch = new KeyframeChannel<>("pitch", KeyframeFactories.DOUBLE);
     public final KeyframeChannel<Double> headYaw = new KeyframeChannel<>("headYaw", KeyframeFactories.DOUBLE);
     public final KeyframeChannel<Double> bodyYaw = new KeyframeChannel<>("bodyYaw", KeyframeFactories.DOUBLE);
+
+    /* Look At: how much the actor is turned toward its target (0..1, unkeyed reads as 1) and, for a
+     * free target, where it is. See ReplayLookAt. */
+    public final KeyframeChannel<Double> lookAtWeight = new KeyframeChannel<>("look_at_weight", KeyframeFactories.DOUBLE);
+    public final KeyframeChannel<Double> lookAtX = new KeyframeChannel<>("look_at_x", KeyframeFactories.DOUBLE);
+    public final KeyframeChannel<Double> lookAtY = new KeyframeChannel<>("look_at_y", KeyframeFactories.DOUBLE);
+    public final KeyframeChannel<Double> lookAtZ = new KeyframeChannel<>("look_at_z", KeyframeFactories.DOUBLE);
 
     /**
      * One channel per {@link EntityState}, keyed by the state and named after it. The fields
@@ -151,6 +158,10 @@ public class ReplayKeyframes extends ValueGroup
         this.add(this.pitch);
         this.add(this.headYaw);
         this.add(this.bodyYaw);
+        this.add(this.lookAtWeight);
+        this.add(this.lookAtX);
+        this.add(this.lookAtY);
+        this.add(this.lookAtZ);
 
         for (EntityState state : EntityState.values())
         {

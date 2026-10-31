@@ -14,6 +14,7 @@
  */
 package mchorse.bbs_mod.camera.pov.integration.mixin.minecraft;
 
+import net.minecraft.registry.entry.RegistryEntry;
 import mchorse.bbs_mod.camera.pov.actions.screeneffect.render.PovBlindnessHelper;
 import mchorse.bbs_mod.camera.pov.actions.screeneffect.render.PovDarknessHelper;
 import mchorse.bbs_mod.camera.pov.actions.screeneffect.render.PovNightVisionHelper;
@@ -31,9 +32,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(value={LivingEntity.class})
 public abstract class LivingEntityStatusEffectPovMixin {
     @Inject(method={"hasStatusEffect"}, at={@At(value="HEAD")}, cancellable=true)
-    private void bbsPov$suppressVisualStatusEffects(StatusEffect effect, CallbackInfoReturnable<Boolean> info) {
+    private void bbsPov$suppressVisualStatusEffects(/*$ sek*/StatusEffect/**/ effect, CallbackInfoReturnable<Boolean> info) {
         if (PovEffectSuppression.isBbsActive()) {
-            float tickDelta = MinecraftClient.getInstance().getTickDelta();
+            float tickDelta = MinecraftClient.getInstance()./*$ gtd*/getTickDelta()/**/;
             if (effect == StatusEffects.BLINDNESS) {
                 float factor = PovBlindnessHelper.resolveBlindnessFactor(tickDelta);
                 info.setReturnValue(factor > 0.001f);
@@ -57,9 +58,9 @@ public abstract class LivingEntityStatusEffectPovMixin {
     }
 
     @Inject(method={"getStatusEffect"}, at={@At(value="HEAD")}, cancellable=true)
-    private void bbsPov$suppressVisualStatusEffectInstance(StatusEffect effect, CallbackInfoReturnable<StatusEffectInstance> info) {
+    private void bbsPov$suppressVisualStatusEffectInstance(/*$ sek*/StatusEffect/**/ effect, CallbackInfoReturnable<StatusEffectInstance> info) {
         if (PovEffectSuppression.isBbsActive()) {
-            float tickDelta = MinecraftClient.getInstance().getTickDelta();
+            float tickDelta = MinecraftClient.getInstance()./*$ gtd*/getTickDelta()/**/;
             if (effect == StatusEffects.BLINDNESS) {
                 float factor = PovBlindnessHelper.resolveBlindnessFactor(tickDelta);
                 info.setReturnValue((factor > 0.001f ? new StatusEffectInstance(StatusEffects.BLINDNESS, 200, 0, false, false, false) : null));

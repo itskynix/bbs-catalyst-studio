@@ -6,7 +6,9 @@ import mchorse.bbs_mod.utils.StructureSaver;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtIo;
-//? if >=1.20.4 {
+//? if >=1.21 {
+/*import net.minecraft.nbt.NbtSizeTracker;
+*///?} else if >=1.20.4 {
 import net.minecraft.nbt.NbtTagSizeTracker;
 //?}
 import net.minecraft.server.MinecraftServer;
@@ -287,7 +289,7 @@ public class StructureManager
         try (InputStream stream = BBSMod.getProvider().getAsset(link))
         {
             //? if >=1.20.4 {
-            return NbtIo.readCompressed(stream, NbtTagSizeTracker.ofUnlimitedBytes());
+            return NbtIo.readCompressed(stream, /*$ nst*/NbtTagSizeTracker/**/.ofUnlimitedBytes());
             //?} else {
             /*return NbtIo.readCompressed(stream);
             *///?}
@@ -317,7 +319,7 @@ public class StructureManager
         }
 
         //? if >=1.20.4 {
-        return NbtIo.readCompressed(file, NbtTagSizeTracker.ofUnlimitedBytes());
+        return NbtIo.readCompressed(file, /*$ nst*/NbtTagSizeTracker/**/.ofUnlimitedBytes());
         //?} else {
         /*return NbtIo.readCompressed(file.toFile());
         *///?}

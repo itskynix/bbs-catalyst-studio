@@ -153,6 +153,7 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
     private final Map<String, FoldState<String>> expandedTracksByReplay = new HashMap<>();
     private final Map<String, String> selectedPartsByReplay = new HashMap<>();
     private String selectedPart = "";
+    private Form lastSelectedTargetForm;
 
     public static Icon getIcon(String key)
     {
@@ -184,6 +185,15 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
     /** Single home of the category rule: tabs only filter now, so collectors always gather and this decides where a sheet lands. */
     public static TrackCategory categoryOf(UIKeyframeSheet sheet)
     {
+        Form owner = getSheetForm(sheet);
+
+        if (owner != null && !(owner instanceof mchorse.bbs_mod.forms.forms.AudioForm))
+        {
+            TrackCategory cat = categoryOf(sheet.id, true);
+
+            return cat == TrackCategory.AUDIO ? TrackCategory.FORM : cat;
+        }
+
         return categoryOf(sheet.id, sheet.property != null || sheet.form != null);
     }
 
@@ -482,7 +492,27 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
         this.selectedPart = path;
         this.pendingPick = null;
         this.selectedPartsByReplay.put(this.replay.getId(), path);
+        this.autoSelectAudioCategoryIfApplicable();
         this.updateChannelsList();
+    }
+
+    private void autoSelectAudioCategoryIfApplicable()
+    {
+        if (this.replay == null || this.replay.form.get() == null)
+        {
+            return;
+        }
+
+        Form targetForm = this.selectedPart == null || this.selectedPart.isEmpty()
+            ? this.replay.form.get()
+            : FormUtils.getForm(this.replay.form.get(), this.selectedPart);
+
+        if (targetForm instanceof mchorse.bbs_mod.forms.forms.AudioForm)
+        {
+            this.actionsMode = false;
+            this.allMode = false;
+            this.category = TrackCategory.AUDIO;
+        }
     }
 
     public void setReplay(Replay replay)
@@ -508,6 +538,7 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
             this.pendingPick = null;
             this.replay = replay;
             this.selectedPart = replay == null ? "" : this.selectedPartsByReplay.getOrDefault(replay.getId(), "");
+            this.autoSelectAudioCategoryIfApplicable();
 
             if (orbit == OrbitReaction.RESET)
             {
@@ -563,7 +594,18 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
 
         if (this.replay == null)
         {
+            this.lastSelectedTargetForm = null;
             return;
+        }
+
+        Form currentTargetForm = this.selectedPart == null || this.selectedPart.isEmpty()
+            ? this.replay.form.get()
+            : FormUtils.getForm(this.replay.form.get(), this.selectedPart);
+
+        if (currentTargetForm != this.lastSelectedTargetForm)
+        {
+            this.lastSelectedTargetForm = currentTargetForm;
+            this.autoSelectAudioCategoryIfApplicable();
         }
 
         this.selectedPartsByReplay.put(this.replay.getId(), this.selectedPart);
@@ -1283,6 +1325,11 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
     {
         super.applyUndoData(data);
 
+        if (this.film == null || this.film.replays == null)
+        {
+            return;
+        }
+
         List<Integer> selection = DataStorageUtils.intListFromData(data.getList("selection"));
         List<Integer> currentIndices = this.replaysList.replays.getCurrentIndices();
 
@@ -1304,6 +1351,12 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
     public void collectUndoData(MapType data)
     {
         super.collectUndoData(data);
+
+        /* The undo chain walks every element, including a replay editor no film has been given yet */
+        if (this.film == null || this.film.replays == null)
+        {
+            return;
+        }
 
         int index = this.film.replays.getList().indexOf(this.getReplay());
 

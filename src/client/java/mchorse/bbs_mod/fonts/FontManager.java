@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.fonts;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.BBSMod;
 import mchorse.bbs_mod.resources.Link;
 import mchorse.bbs_mod.ui.framework.elements.utils.FontRenderer;
@@ -9,6 +10,13 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.Font;
 import net.minecraft.client.font.FontStorage;
 import net.minecraft.client.font.TextRenderer;
+//? if >=1.21 {
+/*import net.minecraft.client.font.FontFilterType;
+import net.minecraft.client.font.FreeTypeUtil;
+import org.lwjgl.PointerBuffer;
+import org.lwjgl.util.freetype.FT_Face;
+import org.lwjgl.util.freetype.FreeType;
+*///?}
 import net.minecraft.client.font.TrueTypeFont;
 import net.minecraft.util.Identifier;
 import org.lwjgl.stb.STBTTFontinfo;
@@ -21,6 +29,7 @@ import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -73,9 +82,115 @@ public class FontManager implements IWatchDogListener
         return lower.endsWith(".ttf") || lower.endsWith(".otf");
     }
 
+    /** Folders the player may keep fonts in outside the assets, relative to the game folder. */
+    private static final String[] EXTERNAL_FOLDERS = {"config/bbs/fonts", "fonts"};
+
+    /** Resource pack archives already read, and when - so a picker opened again does not open them again. */
+    private static final Map<String, Long> SCANNED_PACKS = new HashMap<>();
+
+    /**
+     * Bring fonts from outside the assets in, where the rest of the system finds them: every .ttf and
+     * .otf in {@link #EXTERNAL_FOLDERS}, and the ones inside resource pack archives (assets/ * /font).
+     * They are copied into the fonts folder of the assets - only when missing or newer there - so a
+     * font picked from the list is the same kind of link as any other, and the ones from a pack are
+     * named after it (pack_font.ttf) to tell them apart in the list.
+     */
+    public static void importExternalFonts()
+    {
+        File target = getFolder();
+
+        for (String folder : EXTERNAL_FOLDERS)
+        {
+            File[] files = BBSMod.getGamePath(folder).listFiles();
+
+            if (files == null)
+            {
+                continue;
+            }
+
+            for (File file : files)
+            {
+                if (!file.isFile() || !isFont(file.getName()))
+                {
+                    continue;
+                }
+
+                File copy = new File(target, file.getName());
+
+                if (!copy.isFile() || file.lastModified() > copy.lastModified())
+                {
+                    try
+                    {
+                        target.mkdirs();
+                        Files.copy(file.toPath(), copy.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+                    }
+                    catch (Exception e)
+                    {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+
+        File[] packs = BBSMod.getGamePath("resourcepacks").listFiles();
+
+        if (packs == null)
+        {
+            return;
+        }
+
+        for (File pack : packs)
+        {
+            String name = pack.getName();
+
+            if (!pack.isFile() || !name.toLowerCase().endsWith(".zip") || Long.valueOf(pack.lastModified()).equals(SCANNED_PACKS.get(name)))
+            {
+                continue;
+            }
+
+            SCANNED_PACKS.put(name, pack.lastModified());
+
+            String prefix = name.substring(0, name.length() - 4).replaceAll("[^A-Za-z0-9_.-]", "_") + "_";
+
+            try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(pack))
+            {
+                java.util.Enumeration<? extends java.util.zip.ZipEntry> entries = zip.entries();
+
+                while (entries.hasMoreElements())
+                {
+                    java.util.zip.ZipEntry entry = entries.nextElement();
+                    String path = entry.getName();
+
+                    if (entry.isDirectory() || !isFont(path) || !path.matches("(?i)assets/[^/]+/font/.+"))
+                    {
+                        continue;
+                    }
+
+                    File copy = new File(target, prefix + path.substring(path.lastIndexOf('/') + 1));
+
+                    if (!copy.isFile())
+                    {
+                        target.mkdirs();
+
+                        try (java.io.InputStream in = zip.getInputStream(entry))
+                        {
+                            Files.copy(in, copy.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                e.printStackTrace();
+            }
+        }
+    }
+
     /** Every font file sitting in the assets, for the pickers. */
     public static List<Link> getFontLinks()
     {
+        importExternalFonts();
+
         List<Link> links = new ArrayList<>();
 
         for (Link link : BBSMod.getProvider().getLinksFromPath(Link.assets(FOLDER)))
@@ -211,19 +326,57 @@ public class FontManager implements IWatchDogListener
 
             info = STBTTFontinfo.malloc();
 
-            if (!STBTruetype.stbtt_InitFont(info, buffer))
+            /* The first font of the file: 0 for a lone .ttf/.otf, past the header for a collection */
+            int offset = Math.max(0, STBTruetype.stbtt_GetFontOffsetForIndex(buffer, 0));
+
+            if (!STBTruetype.stbtt_InitFont(info, buffer, offset))
             {
-                throw new IllegalArgumentException("Not a TrueType font: " + key.link);
+                throw new IllegalArgumentException("Not a TrueType or OpenType font: " + key.link);
             }
 
+            /* OpenType with CFF outlines (an .otf starting "OTTO"): stb measures each glyph by running
+             * its outline, so the boxes are right as they come, and the game's own font is used as it
+             * is - that path was what worked for them. */
+            boolean cff = bytes.length >= offset + 4 && bytes[offset] == 'O' && bytes[offset + 1] == 'T' && bytes[offset + 2] == 'T' && bytes[offset + 3] == 'O';
+
             FontMetrics metrics = FontMetrics.read(info, key.size);
+            //? if >=1.21 {
+            /*/^ Since 1.21 the game lays glyphs out with FreeType, so the face comes from there; stb stays
+             * only for the vertical metrics, and is done with once they are read. ^/
+            info.free();
+            info = null;
+
+            FT_Face face;
+
+            synchronized (FreeTypeUtil.LOCK)
+            {
+                try (MemoryStack stack = MemoryStack.stackPush())
+                {
+                    PointerBuffer pointer = stack.mallocPointer(1);
+
+                    FreeTypeUtil.checkFatalError(FreeType.FT_New_Memory_Face(FreeTypeUtil.initialize(), buffer, 0L, pointer), "Initializing font face");
+                    face = FT_Face.create(pointer.get());
+                }
+
+                FreeTypeUtil.checkFatalError(FreeType.FT_Select_Charmap(face, FreeType.FT_ENCODING_UNICODE), "Find unicode charmap");
+            }
+
+            TrueTypeFont ttf = new TrueTypeFont(buffer, face, key.size, key.oversample, 0F, 0F, "");
+            *///?} else {
             TrueTypeFont ttf = new TrueTypeFont(buffer, info, key.size, key.oversample, 0F, 0F, "");
+            //?}
 
             adopted = true;
 
             FontStorage storage = new FontStorage(MinecraftClient.getInstance().getTextureManager(), this.getStorageId(key));
 
-            storage.setFonts(Collections.singletonList((Font) ttf));
+            //? if >=1.21 {
+            /*storage.setFonts(Collections.singletonList(new Font.FontFilterPair(ttf, FontFilterType.FilterMap.NO_FILTER)), Collections.emptySet());
+            *///?} else {
+            /* TrueType outlines: the game's glyphs are cut to the box the font file states, which
+             * script fonts get wrong */
+            storage.setFonts(Collections.singletonList(cff ? (Font) ttf : (Font) new OutlineBoundsFont(ttf, info, key.size, key.oversample)));
+            //?}
 
             FontRenderer font = new FontRenderer();
 
@@ -266,7 +419,7 @@ public class FontManager implements IWatchDogListener
             builder.append(valid ? c : '_');
         }
 
-        return new Identifier(BBSMod.MOD_ID, builder.append('_').append(key.size).append('x').append(key.oversample).toString());
+        return Ids.of(BBSMod.MOD_ID, builder.append('_').append(key.size).append('x').append(key.oversample).toString());
     }
 
     /**

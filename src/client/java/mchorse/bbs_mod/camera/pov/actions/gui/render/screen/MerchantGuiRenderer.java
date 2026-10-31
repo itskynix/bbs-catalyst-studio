@@ -17,6 +17,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.gui.render.screen;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.camera.pov.actions.clip.GuiPovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.gui.data.MerchantSnapshot;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.GuiPointerHover;
@@ -44,15 +45,15 @@ public final class MerchantGuiRenderer
 implements GuiRenderer,
 GuiScreenChrome {
     public static final MerchantGuiRenderer INSTANCE = new MerchantGuiRenderer();
-    private static final Identifier EXP_BAR_BG = new Identifier("container/villager/experience_bar_background");
-    private static final Identifier EXP_BAR_CURRENT = new Identifier("container/villager/experience_bar_current");
-    private static final Identifier TRADE_ARROW = new Identifier("container/villager/trade_arrow");
-    private static final Identifier TRADE_ARROW_OUT_OF_STOCK = new Identifier("container/villager/trade_arrow_out_of_stock");
-    private static final Identifier DISCOUNT_STRIKETHROUGH = new Identifier("container/villager/discount_strikethrough");
-    private static final Identifier SCROLLER = new Identifier("container/villager/scroller");
-    private static final Identifier SCROLLER_DISABLED = new Identifier("container/villager/scroller_disabled");
-    private static final Identifier BUTTON = new Identifier("widget/button");
-    private static final Identifier BUTTON_HIGHLIGHTED = new Identifier("widget/button_highlighted");
+    private static final Identifier EXP_BAR_BG = Ids.of("container/villager/experience_bar_background");
+    private static final Identifier EXP_BAR_CURRENT = Ids.of("container/villager/experience_bar_current");
+    private static final Identifier TRADE_ARROW = Ids.of("container/villager/trade_arrow");
+    private static final Identifier TRADE_ARROW_OUT_OF_STOCK = Ids.of("container/villager/trade_arrow_out_of_stock");
+    private static final Identifier DISCOUNT_STRIKETHROUGH = Ids.of("container/villager/discount_strikethrough");
+    private static final Identifier SCROLLER = Ids.of("container/villager/scroller");
+    private static final Identifier SCROLLER_DISABLED = Ids.of("container/villager/scroller_disabled");
+    private static final Identifier BUTTON = Ids.of("widget/button");
+    private static final Identifier BUTTON_HIGHLIGHTED = Ids.of("widget/button_highlighted");
 
     private MerchantGuiRenderer() {
     }

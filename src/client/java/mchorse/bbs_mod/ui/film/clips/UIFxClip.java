@@ -68,6 +68,12 @@ public abstract class UIFxClip <T extends FxClip> extends UIClip<T>
     }
 
     @Override
+    public boolean openSubEditor()
+    {
+        return this.openSubEditor(this.edit);
+    }
+
+    @Override
     public void fillData()
     {
         super.fillData();

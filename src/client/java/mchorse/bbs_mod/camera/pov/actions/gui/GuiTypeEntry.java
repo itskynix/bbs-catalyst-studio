@@ -10,6 +10,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.gui;
 
+import mchorse.bbs_mod.utils.Ids;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -154,7 +155,7 @@ public final class GuiTypeEntry {
     }
 
     public static GuiTypeEntry register(String id, String name, String category, String texturePath, int u, int v, int regionWidth, int regionHeight, int textureWidth, int textureHeight, String title, String titleKey, int titleX, int titleY) {
-        Identifier tex = new Identifier("minecraft", texturePath);
+        Identifier tex = Ids.of("minecraft", texturePath);
         GuiTypeEntry entry = new GuiTypeEntry(id, name, category, tex, u, v, regionWidth, regionHeight, textureWidth, textureHeight, title, titleKey, titleX, titleY);
         REGISTRY.put(id, entry);
         ALL_ENTRIES.add(entry);

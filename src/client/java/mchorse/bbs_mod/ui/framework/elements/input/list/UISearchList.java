@@ -20,6 +20,16 @@ public class UISearchList <T> extends UIElement
         this.add(this.search, this.list);
     }
 
+    /** A button squeezed in at the right of the search bar (sorting, filtering). */
+    public UISearchList<T> searchButton(UIElement button)
+    {
+        this.search.w(1F, -20);
+        button.relative(this).x(1F, -20).y(0).wh(20, 20);
+        this.add(button);
+
+        return this;
+    }
+
     public UISearchList<T> label(IKey label)
     {
         this.search.textbox.setPlaceholder(label);

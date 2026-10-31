@@ -3,6 +3,7 @@ package mchorse.bbs_mod.forms;
 import com.mojang.logging.LogUtils;
 import it.unimi.dsi.fastutil.objects.Object2ObjectLinkedOpenHashMap;
 import mchorse.bbs_mod.forms.forms.AnchorForm;
+import mchorse.bbs_mod.forms.forms.PortalForm;
 import mchorse.bbs_mod.forms.forms.BillboardForm;
 import mchorse.bbs_mod.forms.forms.BlockForm;
 import mchorse.bbs_mod.forms.forms.ExtrudedForm;
@@ -11,6 +12,8 @@ import mchorse.bbs_mod.forms.forms.Form;
 import mchorse.bbs_mod.forms.forms.FramebufferForm;
 import mchorse.bbs_mod.forms.forms.ItemForm;
 import mchorse.bbs_mod.forms.forms.LabelForm;
+import mchorse.bbs_mod.forms.forms.AnchorForm;
+import mchorse.bbs_mod.forms.forms.AudioForm;
 import mchorse.bbs_mod.forms.forms.MobForm;
 import mchorse.bbs_mod.forms.forms.ModelForm;
 import mchorse.bbs_mod.forms.forms.ParticleForm;
@@ -19,6 +22,8 @@ import mchorse.bbs_mod.forms.forms.TrailForm;
 import mchorse.bbs_mod.forms.forms.VanillaParticleForm;
 import mchorse.bbs_mod.forms.forms.VideoForm;
 import mchorse.bbs_mod.forms.renderers.AnchorFormRenderer;
+import mchorse.bbs_mod.forms.renderers.AudioFormRenderer;
+import mchorse.bbs_mod.forms.renderers.PortalFormRenderer;
 import mchorse.bbs_mod.forms.renderers.BillboardFormRenderer;
 import mchorse.bbs_mod.forms.renderers.BlockFormRenderer;
 import mchorse.bbs_mod.forms.renderers.ExtrudedFormRenderer;
@@ -41,7 +46,12 @@ import mchorse.bbs_mod.ui.framework.UIContext;
 import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.render.TexturedRenderLayers;
+//? if >=1.21 {
+/*import net.minecraft.client.render.chunk.BlockBufferAllocatorStorage;
+import net.minecraft.client.util.BufferAllocator;
+*///?} else {
 import net.minecraft.client.render.chunk.BlockBufferBuilderStorage;
+//?}
 import net.minecraft.client.render.model.ModelLoader;
 import net.minecraft.util.Util;
 import org.slf4j.Logger;
@@ -73,7 +83,11 @@ public class FormUtilsClient
 
     private static CustomVertexConsumerProvider createProvider()
     {
+        //? if >=1.21 {
+        /*BlockBufferAllocatorStorage storage = new BlockBufferAllocatorStorage();
+        *///?} else {
         BlockBufferBuilderStorage storage = new BlockBufferBuilderStorage();
+        //?}
         SortedMap sortedMap = Util.make(new Object2ObjectLinkedOpenHashMap(), map -> {
             map.put(TexturedRenderLayers.getEntitySolid(), storage.get(RenderLayer.getSolid()));
             map.put(TexturedRenderLayers.getEntityCutout(), storage.get(RenderLayer.getCutout()));
@@ -96,10 +110,16 @@ public class FormUtilsClient
             assignBufferBuilder(map, TexturedRenderLayers.getShulkerBoxes());
             assignBufferBuilder(map, TexturedRenderLayers.getSign());
             assignBufferBuilder(map, TexturedRenderLayers.getHangingSign());
+            //? if >=1.21 {
+            /*map.put(TexturedRenderLayers.getChest(), new BufferAllocator(786432));
+            *///?} else {
             map.put(TexturedRenderLayers.getChest(), new BufferBuilder(786432));
+            //?}
+            //? if <1.21
             assignBufferBuilder(map, RenderLayer.getArmorGlint());
             assignBufferBuilder(map, RenderLayer.getArmorEntityGlint());
             assignBufferBuilder(map, RenderLayer.getGlint());
+            //? if <1.21
             assignBufferBuilder(map, RenderLayer.getDirectGlint());
             assignBufferBuilder(map, RenderLayer.getGlintTranslucent());
             assignBufferBuilder(map, RenderLayer.getEntityGlint());
@@ -111,7 +131,11 @@ public class FormUtilsClient
             assignBufferBuilder(map, BakedStructure.OVERLAY_LAYER);
         });
 
+        //? if >=1.21 {
+        /*return new CustomVertexConsumerProvider(new BufferAllocator(1536), sortedMap);
+        *///?} else {
         return new CustomVertexConsumerProvider(new BufferBuilder(1536), sortedMap);
+        //?}
     }
 
     /**
@@ -132,17 +156,26 @@ public class FormUtilsClient
         register(BlockForm.class, BlockFormRenderer::new);
         register(ItemForm.class, ItemFormRenderer::new);
         register(AnchorForm.class, AnchorFormRenderer::new);
+        register(PortalForm.class, PortalFormRenderer::new);
         register(MobForm.class, MobFormRenderer::new);
         register(VanillaParticleForm.class, VanillaParticleFormRenderer::new);
         register(TrailForm.class, TrailFormRenderer::new);
         register(FramebufferForm.class, FramebufferFormRenderer::new);
         register(StructureForm.class, StructureFormRenderer::new);
+        register(AudioForm.class, AudioFormRenderer::new);
     }
 
+    //? if >=1.21 {
+    /*private static void assignBufferBuilder(Object2ObjectLinkedOpenHashMap<RenderLayer, BufferAllocator> builderStorage, RenderLayer layer)
+    {
+        builderStorage.put(layer, new BufferAllocator(layer.getExpectedBufferSize()));
+    }
+    *///?} else {
     private static void assignBufferBuilder(Object2ObjectLinkedOpenHashMap<RenderLayer, BufferBuilder> builderStorage, RenderLayer layer)
     {
         builderStorage.put(layer, new BufferBuilder(layer.getExpectedBufferSize()));
     }
+    //?}
 
     public static CustomVertexConsumerProvider getProvider()
     {

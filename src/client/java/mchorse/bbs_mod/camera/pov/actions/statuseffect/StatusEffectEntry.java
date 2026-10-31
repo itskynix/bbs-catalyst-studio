@@ -11,6 +11,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.statuseffect;
 
+import mchorse.bbs_mod.utils.EffectCompat;
 import mchorse.bbs_mod.data.types.MapType;
 import net.minecraft.entity.effect.StatusEffect;
 import net.minecraft.entity.effect.StatusEffects;
@@ -71,7 +72,7 @@ public final class StatusEffectEntry {
         if (id != null && Registries.STATUS_EFFECT.containsId(id)) {
             return (StatusEffect)Registries.STATUS_EFFECT.get(id);
         }
-        return StatusEffects.SPEED;
+        return EffectCompat.value(StatusEffects.SPEED);
     }
 
     public String getDisplayName() {

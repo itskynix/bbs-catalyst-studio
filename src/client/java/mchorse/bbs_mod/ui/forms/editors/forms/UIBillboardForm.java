@@ -1,5 +1,7 @@
 package mchorse.bbs_mod.ui.forms.editors.forms;
 
+import mchorse.bbs_mod.ui.utils.icons.Icons;
+import mchorse.bbs_mod.ui.forms.editors.panels.UIFormEffectsPanel;
 import mchorse.bbs_mod.forms.forms.BillboardForm;
 import mchorse.bbs_mod.ui.Keys;
 import mchorse.bbs_mod.ui.UIKeys;
@@ -18,6 +20,7 @@ public class UIBillboardForm extends UIForm<BillboardForm>
 
         this.registerPanel(this.defaultPanel, UIKeys.FORMS_EDITORS_BILLBOARD_TITLE, BillboardForm.ICON);
         this.registerDefaultPanels();
+        this.registerPanel(new UIFormEffectsPanel<BillboardForm>(this, (f) -> f.fx), UIKeys.FORMS_EDITORS_EFFECTS, Icons.SHAPES);
 
         this.defaultPanel.keys().register(Keys.FORMS_PICK_TEXTURE, () ->
         {

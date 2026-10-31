@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.mixin;
 
+import mchorse.bbs_mod.utils.VersionCompat;
 import mchorse.bbs_mod.BBSMod;
 import mchorse.bbs_mod.actions.types.AttackActionClip;
 import mchorse.bbs_mod.actions.types.item.ReleaseUseItemActionClip;
@@ -25,7 +26,13 @@ public class LivingEntityMixin
     {
         Entity attacker = source.getAttacker();
 
-        if (!source.isIndirect() && attacker != null && attacker.getClass() == ServerPlayerEntity.class)
+        //? if >=1.21 {
+        /*boolean direct = source.isDirect();
+        *///?} else {
+        boolean direct = !source.isIndirect();
+        //?}
+
+        if (direct && attacker != null && attacker.getClass() == ServerPlayerEntity.class)
         {
             BBSMod.getActions().addAction((ServerPlayerEntity) attacker, () ->
             {
@@ -57,7 +64,7 @@ public class LivingEntityMixin
             }
 
             boolean mainHand = player.getActiveHand() == Hand.MAIN_HAND;
-            int charge = active.getMaxUseTime() - player.getItemUseTimeLeft();
+            int charge = VersionCompat.getMaxUseTime(active, player) - player.getItemUseTimeLeft();
             ItemStack stack = active.copy();
             ItemStack recordedProjectile = player.getProjectileType(active).copy();
 
@@ -75,7 +82,7 @@ public class LivingEntityMixin
              * asks the WORLD, not the item: a riptide trident released in water
              * or rain launches its owner and is never thrown. The playback fake
              * player always stands dry, so the answer has to be recorded. */
-            boolean riptide = charge >= 10 && EnchantmentHelper.getRiptide(active) > 0 && player.isTouchingWaterOrRain();
+            boolean riptide = charge >= 10 && VersionCompat.getRiptideLevel(active, player) > 0 && player.isTouchingWaterOrRain();
 
             BBSMod.getActions().addAction(player, () ->
             {

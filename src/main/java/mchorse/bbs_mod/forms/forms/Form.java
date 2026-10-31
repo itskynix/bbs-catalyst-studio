@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.forms.forms;
 
+import mchorse.bbs_mod.utils.VersionCompat;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import mchorse.bbs_mod.api.FormPropertyAliases;
@@ -15,6 +16,7 @@ import mchorse.bbs_mod.forms.FormUtils;
 import mchorse.bbs_mod.forms.ITickable;
 import mchorse.bbs_mod.forms.entities.IEntity;
 import mchorse.bbs_mod.forms.forms.utils.Anchor;
+import mchorse.bbs_mod.forms.forms.utils.FormMask;
 import mchorse.bbs_mod.forms.states.AnimationState;
 import mchorse.bbs_mod.forms.states.AnimationStates;
 import mchorse.bbs_mod.forms.states.StatePlayer;
@@ -95,6 +97,41 @@ public abstract class Form extends ValueGroup
     public final ValueFloat stepHeight = new ValueFloat("step_height", 0.5F);
 
     public final ValueInt hotkey = new ValueInt("keybind", 0);
+
+    /**
+     * The turn of the mask's plane, in degrees. They sit on the form itself, not in the mask:
+     * only a property of the form is a track of the timeline, so the mask can be turned over time.
+     */
+    public final ValueFloat maskRotationX = new ValueFloat("mask_rotation_x", 0F, -360F, 360F);
+    public final ValueFloat maskRotationY = new ValueFloat("mask_rotation_y", 0F, -360F, 360F);
+    public final ValueFloat maskRotationZ = new ValueFloat("mask_rotation_z", 0F, -360F, 360F);
+
+    /**
+     * The mask's animation in its own plane, on top of where it was placed: a slide along the
+     * plane and a stretch of the shape about its middle, as a layer's mask is animated in a
+     * compositor. Tracks of the timeline, like the rotation.
+     */
+    public final ValueFloat maskPosX = new ValueFloat("mask_pos_x", 0F);
+    public final ValueFloat maskPosY = new ValueFloat("mask_pos_y", 0F);
+    public final ValueFloat maskScaleX = new ValueFloat("mask_scale_x", 1F);
+    public final ValueFloat maskScaleY = new ValueFloat("mask_scale_y", 1F);
+
+    /**
+     * The 3D slice: a plane in the form's own space, through the point {@code slice_pos_*} and facing up
+     * turned by pitch, yaw and roll, that cuts the form, keeping what is above it (below, inverted).
+     * Tracks of the timeline, like the mask's rotation. The angles have no limit: a plane may turn any
+     * number of times over a shot.
+     */
+    public final ValueFloat slicePosX = new ValueFloat("slice_pos_x", 0F);
+    public final ValueFloat slicePosY = new ValueFloat("slice_pos_y", 0F);
+    public final ValueFloat slicePosZ = new ValueFloat("slice_pos_z", 0F);
+    public final ValueFloat sliceYaw = new ValueFloat("slice_yaw", 0F);
+    public final ValueFloat slicePitch = new ValueFloat("slice_pitch", 0F);
+    public final ValueFloat sliceRoll = new ValueFloat("slice_roll", 0F);
+    public final ValueBoolean sliceInvert = new ValueBoolean("slice_invert", false);
+
+    /** Geometric mask the form is drawn through (circle, rectangle or custom shape). */
+    public final FormMask mask = new FormMask("mask", this.maskRotationX, this.maskRotationY, this.maskRotationZ, this.maskPosX, this.maskPosY, this.maskScaleX, this.maskScaleY);
 
     public final BodyPartManager parts = new BodyPartManager("parts");
     public final AnimationStates states = new AnimationStates("states");
@@ -190,6 +227,21 @@ public abstract class Form extends ValueGroup
         this.hotkey.invisible();
 
         this.add(this.hotkey);
+        this.add(this.slicePosX);
+        this.add(this.slicePosY);
+        this.add(this.slicePosZ);
+        this.add(this.sliceYaw);
+        this.add(this.slicePitch);
+        this.add(this.sliceRoll);
+        this.add(this.sliceInvert);
+        this.add(this.maskRotationX);
+        this.add(this.maskRotationY);
+        this.add(this.maskRotationZ);
+        this.add(this.maskPosX);
+        this.add(this.maskPosY);
+        this.add(this.maskScaleX);
+        this.add(this.maskScaleY);
+        this.add(this.mask);
 
         this.add(this.parts);
         this.add(this.states);
@@ -377,7 +429,7 @@ public abstract class Form extends ValueGroup
             entity.setHealth(hp);
         }
         if (speed != 0.1F) entity.getAttributeInstance(EntityAttributes.GENERIC_MOVEMENT_SPEED).setBaseValue(speed);
-        if (stepHeight != 0.5F) entity.setStepHeight(stepHeight);
+        if (stepHeight != 0.5F) VersionCompat.setStepHeight(entity, stepHeight);
     }
 
     public void onDemorph(LivingEntity entity)
@@ -385,7 +437,7 @@ public abstract class Form extends ValueGroup
         entity.getAttributeInstance(EntityAttributes.GENERIC_MAX_HEALTH).setBaseValue(20F);
         entity.setHealth(20F);
         entity.getAttributeInstance(EntityAttributes.GENERIC_MOVEMENT_SPEED).setBaseValue(0.1F);
-        entity.setStepHeight(0.5F);
+        VersionCompat.setStepHeight(entity, 0.5F);
     }
 
     /* ID and display name */

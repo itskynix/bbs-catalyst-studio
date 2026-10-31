@@ -36,8 +36,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(value={WorldRenderer.class})
 public abstract class WorldRendererPovMixin {
+    //? if >=1.21 {
+    /*@Inject(method={"renderSky(Lorg/joml/Matrix4f;Lorg/joml/Matrix4f;FLnet/minecraft/client/render/Camera;ZLjava/lang/Runnable;)V"}, at={@At(value="HEAD")}, cancellable=true)
+    private void bbsPov$suppressSkyAndStarsOnDarkness(Matrix4f viewMatrix, Matrix4f projectionMatrix, float tickDelta, Camera camera, boolean thickFog, Runnable fogCallback, CallbackInfo info) {
+    *///?} else {
     @Inject(method={"renderSky(Lnet/minecraft/client/util/math/MatrixStack;Lorg/joml/Matrix4f;FLnet/minecraft/client/render/Camera;ZLjava/lang/Runnable;)V"}, at={@At(value="HEAD")}, cancellable=true)
     private void bbsPov$suppressSkyAndStarsOnDarkness(MatrixStack matrices, Matrix4f projectionMatrix, float tickDelta, Camera camera, boolean thickFog, Runnable fogCallback, CallbackInfo info) {
+    //?}
         float darkFactor = PovDarknessHelper.resolveDarknessFactor(tickDelta);
         float blindFactor = PovBlindnessHelper.resolveBlindnessFactor(tickDelta);
         if (darkFactor > 0.05f || blindFactor > 0.05f) {
@@ -45,8 +50,14 @@ public abstract class WorldRendererPovMixin {
         }
     }
 
+    //? if >=1.21 {
+    /*@Inject(method={"render"}, at={@At(value="HEAD")})
+    private void bbsPov$onRenderWorldStart(net.minecraft.client.render.RenderTickCounter tickCounter, boolean renderBlockOutline, Camera camera, GameRenderer gameRenderer, LightmapTextureManager lightmapTextureManager, Matrix4f viewMatrix, Matrix4f projectionMatrix, CallbackInfo info) {
+        float tickDelta = tickCounter.getTickDelta(false);
+    *///?} else {
     @Inject(method={"render"}, at={@At(value="HEAD")})
     private void bbsPov$onRenderWorldStart(MatrixStack matrices, float tickDelta, long limitTime, boolean renderBlockOutline, Camera camera, GameRenderer gameRenderer, LightmapTextureManager lightmapTextureManager, Matrix4f projectionMatrix, CallbackInfo info) {
+    //?}
         if (BBSRendering.isIrisShadersEnabled() && IrisUtils.isShadowPass()) {
             return;
         }
@@ -55,8 +66,14 @@ public abstract class WorldRendererPovMixin {
         }
     }
 
+    //? if >=1.21 {
+    /*@Inject(method={"render"}, at={@At(value="TAIL")})
+    private void bbsPov$onRenderWorldEnd(net.minecraft.client.render.RenderTickCounter tickCounter, boolean renderBlockOutline, Camera camera, GameRenderer gameRenderer, LightmapTextureManager lightmapTextureManager, Matrix4f viewMatrix, Matrix4f projectionMatrix, CallbackInfo info) {
+        float tickDelta = tickCounter.getTickDelta(false);
+    *///?} else {
     @Inject(method={"render"}, at={@At(value="TAIL")})
     private void bbsPov$onRenderWorldEnd(MatrixStack matrices, float tickDelta, long limitTime, boolean renderBlockOutline, Camera camera, GameRenderer gameRenderer, LightmapTextureManager lightmapTextureManager, Matrix4f projectionMatrix, CallbackInfo info) {
+    //?}
         if (BBSRendering.isIrisShadersEnabled() && IrisUtils.isShadowPass()) {
             return;
         }

@@ -2,6 +2,8 @@ package mchorse.bbs_mod.cubic.render.vao;
 
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
+import mchorse.bbs_mod.forms.renderers.utils.FormFx;
+import mchorse.bbs_mod.utils.InverseViewRotation;
 import net.minecraft.client.gl.GlUniform;
 import net.minecraft.client.gl.ShaderProgram;
 import net.minecraft.client.util.math.MatrixStack;
@@ -85,6 +87,8 @@ public class ModelVAORenderer
             shader.modelViewMat.set(modelView);
         }
 
+        FormFx.onVaoDraw(shader, modelView);
+
         /* NormalMat is present by default in Iris' shaders, but when there is no Iris,
          * the BBS mod's model.json shader is being used instead that provides NormalMat
          * uniform.
@@ -96,10 +100,19 @@ public class ModelVAORenderer
             normalUniform.set(normalMat);
         }
 
+        //? if <1.21 {
         if (shader.viewRotationMat != null)
         {
             shader.viewRotationMat.set(RenderSystem.getInverseViewRotationMatrix());
         }
+        //?} else {
+        /*GlUniform viewRotation = shader.getUniform("IViewRotMat");
+
+        if (viewRotation != null)
+        {
+            viewRotation.set(InverseViewRotation.get());
+        }
+        *///?}
 
         if (shader.fogStart != null)
         {

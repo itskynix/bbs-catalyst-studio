@@ -141,6 +141,33 @@ vec3 radial(vec2 uv)
     return sum / 12.0;
 }
 
+/* 15: blur along a screen-space vector, U1.xy in frame fractions (set by the renderer from the camera turn) */
+vec3 mblur(vec2 uv)
+{
+    vec2 v = U1.xy;
+    float pixels = length(v * Size);
+
+    if (pixels < 0.5)
+    {
+        return scene(uv);
+    }
+
+    int n = int(clamp(pixels * 0.5, 4.0, 32.0));
+    vec3 sum = vec3(0.0);
+
+    for (int k = 0; k < 32; k++)
+    {
+        if (k >= n)
+        {
+            break;
+        }
+
+        sum += scene(uv + v * ((float(k) + 0.5) / float(n) - 0.5));
+    }
+
+    return sum / float(n);
+}
+
 /* 5: smudges lit by the bright parts of the frame, and drops bending what is behind them */
 vec3 lens(vec2 uv)
 {
@@ -353,6 +380,63 @@ vec3 eye(vec3 c, vec2 uv)
     return mix(c, U0.rgb, clamp(m * U0.a, 0.0, 1.0));
 }
 
+/* 16: lens distortion. The frame is read at a radius pushed out (barrel, U0.x > 0) or in
+ * (pincushion, U0.x < 0); U0.y splits red and blue apart by a growing amount toward the edges;
+ * U0.z is the zoom. Radii are measured from the centre with the corner at 1, and a barrel zooms
+ * in by itself so the pulled-in frame never shows past its edge. */
+vec3 lensDistortion(vec2 uv)
+{
+    vec2 half_ = 0.5 * vec2(aspect(), 1.0);
+    float norm = length(half_);
+    vec2 q = (uv - 0.5) * vec2(aspect(), 1.0) / norm;
+
+    /* No upper bound on the strength: it only grows the curve. A barrel (k > 0) zooms by the
+     * root of z^3 - z^2 = k, the one zoom at which the corner of the output reads exactly the
+     * corner of the frame, so the picture fills the screen however strong it is. A pincushion
+     * pulls the edges in with a curve that stays monotonic at any strength and keeps the
+     * corner on the corner. */
+    float k = abs(U0.x) * 0.6;
+    bool barrel = U0.x >= 0.0;
+    float auto = 1.0;
+
+    if (barrel)
+    {
+        auto = 1.0 + pow(k, 1.0 / 3.0);
+
+        for (int n = 0; n < 5; n++)
+        {
+            auto -= (auto * auto * auto - auto * auto - k) / max(3.0 * auto * auto - 2.0 * auto, 0.001);
+        }
+    }
+
+    float zoom = max(U0.z, 0.05) * auto;
+    float c = U0.y * 0.03;
+
+    vec2 p = q / zoom;
+    float r2 = dot(p, p);
+    float f = barrel ? 1.0 + k * r2 : (1.0 + k) / (1.0 + k * r2);
+    vec2 back = norm / vec2(aspect(), 1.0);
+
+    vec3 col;
+    col.r = scene(0.5 + p * (f + c * r2) * back).r;
+    col.g = scene(0.5 + p * f * back).g;
+    col.b = scene(0.5 + p * (f - c * r2) * back).b;
+
+    return col;
+}
+
+/* 17: the frame moved by U0.xy (fractions of its size), turned by U0.z degrees and zoomed by U0.w,
+ * all worked out by the clip */
+vec3 screenShake(vec2 uv)
+{
+    float a = aspect();
+    vec2 p = (uv - 0.5) * vec2(a, 1.0);
+
+    p = rotate(p, U0.z) / max(U0.w, 0.01);
+
+    return scene(p / vec2(a, 1.0) + 0.5 + U0.xy);
+}
+
 void main()
 {
     vec2 uv = texCoord0;
@@ -373,6 +457,9 @@ void main()
     else if (mode == 12) c = letterbox(scene(uv), uv);
     else if (mode == 13) c = grain(scene(uv));
     else if (mode == 14) c = eye(scene(uv), uv);
+    else if (mode == 15) c = mblur(uv);
+    else if (mode == 16) c = lensDistortion(uv);
+    else if (mode == 17) c = screenShake(uv);
     else c = scene(uv);
 
     fragColor = vec4(clamp(c, 0.0, 1.0), 1.0);

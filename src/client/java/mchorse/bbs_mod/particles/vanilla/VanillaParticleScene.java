@@ -1,5 +1,7 @@
 package mchorse.bbs_mod.particles.vanilla;
 
+import mchorse.bbs_mod.utils.Bufs;
+import mchorse.bbs_mod.utils.ModelViewStack;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.mixin.client.CameraInvoker;
@@ -240,19 +242,16 @@ public class VanillaParticleScene
      */
     private static void applyModelView(Matrix4f matrix)
     {
-        MatrixStack modelView = RenderSystem.getModelViewStack();
 
-        modelView.push();
-        modelView.loadIdentity();
-        modelView.multiplyPositionMatrix(matrix);
+        ModelViewStack.push();
+        ModelViewStack.loadIdentity();
+        ModelViewStack.multiply(matrix);
         RenderSystem.applyModelViewMatrix();
-        modelView.pop();
+        ModelViewStack.pop();
     }
 
     private void renderSheets(float transition)
     {
-        Tessellator tessellator = Tessellator.getInstance();
-        BufferBuilder builder = tessellator.getBuffer();
 
         /* A billboard is a flat quad spun to face the camera, so which way its
          * vertices wind depends on where that camera is. Vanilla gets away with
@@ -286,7 +285,7 @@ public class VanillaParticleScene
             RenderSystem.defaultBlendFunc();
             RenderSystem.depthMask(true);
 
-            builder.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE_COLOR_LIGHT);
+            BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE_COLOR_LIGHT);
 
             for (Particle particle : this.particles)
             {
@@ -305,7 +304,13 @@ public class VanillaParticleScene
                 }
             }
 
-            BufferRenderer.drawWithGlobalProgram(builder.end());
+            /* A sheet whose particles all died while building has nothing to draw */
+            var built = builder.endNullable();
+
+            if (built != null)
+            {
+                BufferRenderer.drawWithGlobalProgram(built);
+            }
         }
 
         if (culling)

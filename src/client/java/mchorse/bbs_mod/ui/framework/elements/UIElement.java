@@ -1164,9 +1164,9 @@ public class UIElement implements IUIElement, IUndoElement
 
         this.afterResizeApplied();
 
-        for (IUIElement element : this.children)
+        for (int i = 0; i < this.children.size(); i++)
         {
-            element.resize();
+            this.children.get(i).resize();
         }
 
         if (this.resizer != null)
@@ -1542,9 +1542,9 @@ public class UIElement implements IUIElement, IUndoElement
             return true;
         }
 
-        for (IUIElement child : this.children)
+        for (int i = 0; i < this.children.size(); i++)
         {
-            if (child instanceof UIElement element && element.isUserEditing())
+            if (this.children.get(i) instanceof UIElement element && element.isUserEditing())
             {
                 return true;
             }
@@ -1575,8 +1575,11 @@ public class UIElement implements IUIElement, IUndoElement
             context.resetTooltip();
         }
 
-        for (IUIElement element : this.children)
+        /* Index based walk: children may be added/removed while rendering (dynamic panels, menus) */
+        for (int i = 0; i < this.children.size(); i++)
         {
+            IUIElement element = this.children.get(i);
+
             if (element.isVisible() && element.canBeRendered(context.getViewport()))
             {
                 element.render(context);

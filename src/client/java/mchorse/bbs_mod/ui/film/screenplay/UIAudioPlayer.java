@@ -67,6 +67,8 @@ public class UIAudioPlayer extends UIElement implements IUITreeEventListener
 
     public void loadAudio(Wave wave, List<ColorCode> colorCodes)
     {
+        this.delete();
+
         this.wave = wave;
         this.waveform = new Waveform();
 
@@ -75,7 +77,9 @@ public class UIAudioPlayer extends UIElement implements IUITreeEventListener
         this.buffer = new SoundBuffer(null, this.wave, this.waveform);
         this.player = new SoundPlayer(this.buffer);
 
-        this.player.setRelative(true);
+        this.player.configure2DStereo();
+        this.player.setVolume(1.0F);
+        this.player.setPitch(1.0F);
         this.player.stop();
     }
 
@@ -89,7 +93,10 @@ public class UIAudioPlayer extends UIElement implements IUITreeEventListener
             }
             else
             {
+                this.player.configure2DStereo();
+                this.player.setVolume(1.0F);
                 this.player.play();
+                this.player.updateRamp();
             }
 
             this.wasPlaying = this.player.isPlaying();
@@ -107,7 +114,17 @@ public class UIAudioPlayer extends UIElement implements IUITreeEventListener
             float offset = playback > 2F ? playback - 2F : 0F;
             float newPlayback = (context.mouseX - (this.area.x + 20)) / PIXELS;
 
+            this.player.configure2DStereo();
+            this.player.setVolume(1.0F);
             this.player.setPlaybackPosition(newPlayback + offset);
+
+            if (!this.player.isPlaying())
+            {
+                this.player.play();
+            }
+
+            this.player.updateRamp();
+            this.wasPlaying = this.player.isPlaying();
 
             return true;
         }
@@ -118,6 +135,11 @@ public class UIAudioPlayer extends UIElement implements IUITreeEventListener
     @Override
     public void render(UIContext context)
     {
+        if (this.player != null)
+        {
+            this.player.updateRamp();
+        }
+
         this.area.render(context.batcher, Colors.A75);
 
         if (this.waveform != null)

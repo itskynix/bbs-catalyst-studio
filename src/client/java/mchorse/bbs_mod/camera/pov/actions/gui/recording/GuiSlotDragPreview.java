@@ -14,6 +14,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.gui.recording;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.camera.pov.actions.gui.GuiSlotSchema;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -122,7 +123,7 @@ public final class GuiSlotDragPreview {
         String[] parts = encoded.split("\\|", 4);
         if (parts.length >= 4 && !parts[2].isBlank()) {
             try {
-                Identifier id = new Identifier(parts[2]);
+                Identifier id = Ids.of(parts[2]);
                 Item item = (Item)Registries.ITEM.get(id);
                 if (item != null && item != Items.AIR) {
                     return new ItemStack((ItemConvertible)item);

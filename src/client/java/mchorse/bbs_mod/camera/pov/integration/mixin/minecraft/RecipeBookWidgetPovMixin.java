@@ -66,6 +66,9 @@ public abstract class RecipeBookWidgetPovMixin {
     @Shadow
     private ClientRecipeBook field_3096;
     @Shadow
+    //? if >=1.21
+    /*protected AbstractRecipeScreenHandler<?, ?> field_3095;*/
+    //? if <1.21
     protected AbstractRecipeScreenHandler<?> field_3095;
 
     @Inject(method={"render"}, at={@At(value="HEAD")})

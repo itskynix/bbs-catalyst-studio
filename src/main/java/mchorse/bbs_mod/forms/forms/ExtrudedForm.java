@@ -1,10 +1,12 @@
 package mchorse.bbs_mod.forms.forms;
 
+import mchorse.bbs_mod.forms.forms.utils.FormFxValues;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.ui.utils.icons.Icon;
 import mchorse.bbs_mod.settings.values.core.ValueColor;
 import mchorse.bbs_mod.resources.Link;
 import mchorse.bbs_mod.settings.values.numeric.ValueBoolean;
+import mchorse.bbs_mod.settings.values.numeric.ValueFloat;
 import mchorse.bbs_mod.settings.values.core.ValueLink;
 import mchorse.bbs_mod.utils.colors.Color;
 
@@ -17,6 +19,10 @@ public class ExtrudedForm extends Form
     public final ValueColor color = new ValueColor("color", Color.white());
     public final ValueBoolean billboard = new ValueBoolean("billboard", false);
     public final ValueBoolean shading = new ValueBoolean("shading", true);
+    /** How thick the extrusion is, as a multiple of its natural depth: 0 is flat, 1 as made. A track of the timeline. */
+    public final ValueFloat extrudeDepth = new ValueFloat("extrude_depth", 1F, 0F, 20F);
+    /** Dissolve and shatter: the extrusion burning away or breaking apart. */
+    public final FormFxValues fx = new FormFxValues(this);
 
     public ExtrudedForm()
     {
@@ -26,6 +32,7 @@ public class ExtrudedForm extends Form
         this.add(this.color);
         this.add(this.billboard);
         this.add(this.shading);
+        this.add(this.extrudeDepth);
     }
 
     @Override

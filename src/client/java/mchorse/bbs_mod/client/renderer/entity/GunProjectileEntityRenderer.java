@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.client.renderer.entity;
 
+import mchorse.bbs_mod.utils.Ids;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.entity.GunProjectileEntity;
 import mchorse.bbs_mod.forms.FormUtilsClient;
@@ -28,7 +29,7 @@ public class GunProjectileEntityRenderer extends EntityRenderer<GunProjectileEnt
     @Override
     public Identifier getTexture(GunProjectileEntity entity)
     {
-        return new Identifier("minecraft:textures/entity/player/wide/steve.png");
+        return Ids.of("minecraft:textures/entity/player/wide/steve.png");
     }
 
     @Override

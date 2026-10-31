@@ -14,6 +14,7 @@ public final class TrackCategory
     public static final TrackCategory POSE = builtin("pose", Icons.POSE);
     public static final TrackCategory IK = builtin("ik", Icons.IK);
     public static final TrackCategory PHYSICS = builtin("physics", Icons.PHYSICS);
+    public static final TrackCategory AUDIO = builtin("audio", Icons.SOUND);
 
     public final String id;
     public final Icon icon;

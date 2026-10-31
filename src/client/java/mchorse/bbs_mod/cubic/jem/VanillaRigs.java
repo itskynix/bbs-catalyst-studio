@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.cubic.jem;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.forms.renderers.mob.IBBSModelPart;
 import net.minecraft.client.model.ModelPart;
 import net.minecraft.client.model.TexturedModelData;
@@ -24,7 +25,7 @@ import java.util.Map;
  * anything to be ready — and {@link TexturedModelData#createModel()} turns one into a fresh tree of
  * its own, so nothing here touches the parts a renderer is drawing with. Walking it is free too:
  * {@code ModelPartMixin} already teaches every part its name and its parent. The layer an entity's
- * own model sits under is {@code new EntityModelLayer(new Identifier("cow"), "main")}, so the
+ * own model sits under is {@code new EntityModelLayer(Ids.of("cow"), "main")}, so the
  * entity's name is the key with no table to write.</p>
  *
  * <p>The rotation points come along too, but they are for the parts a pack leaves <em>empty</em> (see

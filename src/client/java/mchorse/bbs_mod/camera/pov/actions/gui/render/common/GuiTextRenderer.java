@@ -15,6 +15,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.gui.render.common;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D;
 import mchorse.bbs_mod.utils.keyframes.KeyframeChannel;
 import net.minecraft.client.MinecraftClient;
@@ -27,7 +28,7 @@ import net.minecraft.util.Util;
 import net.minecraft.util.math.MathHelper;
 
 public final class GuiTextRenderer {
-    public static final Identifier SEARCH_FIELD = new Identifier("widget/text_field");
+    public static final Identifier SEARCH_FIELD = Ids.of("widget/text_field");
 
     private GuiTextRenderer() {
     }

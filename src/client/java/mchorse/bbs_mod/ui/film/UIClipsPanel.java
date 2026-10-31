@@ -16,6 +16,7 @@ import mchorse.bbs_mod.ui.film.clips.UIProCameraClip;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.utils.UITimelinePanel;
+import mchorse.bbs_mod.utils.CollectionUtils;
 import mchorse.bbs_mod.utils.DataPath;
 import mchorse.bbs_mod.utils.clips.Clip;
 import mchorse.bbs_mod.utils.clips.Clips;
@@ -239,6 +240,12 @@ public class UIClipsPanel extends UITimelinePanel implements IUIClipsDelegate
         this.filmPanel.pickClip(clip, this);
     }
 
+    @Override
+    public boolean openClipEditor(Clip clip)
+    {
+        return clip != null && this.panel != null && this.panel.clip == clip && this.panel.openSubEditor();
+    }
+
     private void resizeTarget()
     {
         if (this.target != null)
@@ -384,6 +391,12 @@ public class UIClipsPanel extends UITimelinePanel implements IUIClipsDelegate
     {
         super.applyUndoData(data);
 
+        /* No camera clips to restore until a film is loaded */
+        if (this.clips.getClips() == null)
+        {
+            return;
+        }
+
         List<Integer> selection = DataStorageUtils.intListFromData(data.getList("selection"));
 
         this.clips.getXAxis().view(data.getDouble("x_min"), data.getDouble("x_max"));
@@ -391,7 +404,7 @@ public class UIClipsPanel extends UITimelinePanel implements IUIClipsDelegate
         this.clips.vertical.updateTarget();
 
         this.clips.setSelection(selection);
-        this.pickClip(selection.isEmpty() ? null : this.clips.getClips().get(selection.get(selection.size() - 1)));
+        this.pickClip(selection.isEmpty() ? null : CollectionUtils.getSafe(this.clips.getClips().get(), selection.get(selection.size() - 1)));
     }
 
     @Override

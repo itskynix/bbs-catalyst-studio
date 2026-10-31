@@ -11,6 +11,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.statuseffect.recording;
 
+import mchorse.bbs_mod.utils.EffectCompat;
 import mchorse.bbs_mod.camera.pov.actions.PovActionType;
 import mchorse.bbs_mod.camera.pov.actions.clip.StatusEffectsPovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.statuseffect.StatusEffectEntry;
@@ -59,7 +60,7 @@ public final class StatusEffectRecorder {
         }
         HashSet<String> newEffectIds = new HashSet<String>();
         for (StatusEffectInstance inst : active) {
-            Identifier identifier = Registries.STATUS_EFFECT.getId(inst.getEffectType());
+            Identifier identifier = Registries.STATUS_EFFECT.getId(EffectCompat.type(inst));
             if (identifier == null) continue;
             newEffectIds.add(identifier.toString());
         }
@@ -72,7 +73,7 @@ public final class StatusEffectRecorder {
             ArrayList<StatusEffectInstance> sortedActive = new ArrayList<StatusEffectInstance>(active);
             sortedActive.sort(null);
             for (StatusEffectInstance statusEffectInstance : sortedActive) {
-                Identifier id = Registries.STATUS_EFFECT.getId(statusEffectInstance.getEffectType());
+                Identifier id = Registries.STATUS_EFFECT.getId(EffectCompat.type(statusEffectInstance));
                 if (id == null) continue;
                 boolean unlimited = statusEffectInstance.isInfinite();
                 int durationSeconds = unlimited ? 100 : Math.max(1, statusEffectInstance.getDuration() / 20);

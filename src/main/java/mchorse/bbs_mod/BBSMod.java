@@ -1,5 +1,7 @@
 package mchorse.bbs_mod;
 
+import mchorse.bbs_mod.utils.VersionCompat;
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.actions.ActionHandler;
 import mchorse.bbs_mod.actions.ActionManager;
 import mchorse.bbs_mod.actions.types.AttackActionClip;
@@ -30,7 +32,10 @@ import mchorse.bbs_mod.camera.clips.fx.CinematicEffectsClip;
 import mchorse.bbs_mod.camera.clips.fx.ColorGradeClip;
 import mchorse.bbs_mod.camera.clips.fx.EyeClip;
 import mchorse.bbs_mod.camera.clips.fx.GrainClip;
+import mchorse.bbs_mod.camera.clips.fx.LensDistortionClip;
 import mchorse.bbs_mod.camera.clips.fx.LetterboxClip;
+import mchorse.bbs_mod.camera.clips.fx.ScreenShakeClip;
+import mchorse.bbs_mod.camera.clips.fx.MotionBlurClip;
 import mchorse.bbs_mod.camera.clips.fx.ScreenShaderGraphClip;
 import mchorse.bbs_mod.camera.clips.fx.VignetteClip;
 import mchorse.bbs_mod.camera.clips.misc.AudioClip;
@@ -40,6 +45,7 @@ import mchorse.bbs_mod.camera.clips.misc.SubtitleClip;
 import mchorse.bbs_mod.camera.clips.misc.VideoClip;
 import mchorse.bbs_mod.camera.clips.modifiers.AngleClip;
 import mchorse.bbs_mod.camera.clips.modifiers.DollyZoomClip;
+import mchorse.bbs_mod.camera.clips.modifiers.FovPunchClip;
 import mchorse.bbs_mod.camera.clips.modifiers.DragClip;
 import mchorse.bbs_mod.camera.clips.modifiers.LookClip;
 import mchorse.bbs_mod.camera.clips.modifiers.MathClip;
@@ -70,6 +76,8 @@ import mchorse.bbs_mod.api.events.RegisterSourcePacksEvent;
 import mchorse.bbs_mod.film.FilmManager;
 import mchorse.bbs_mod.forms.FormArchitect;
 import mchorse.bbs_mod.forms.forms.AnchorForm;
+import mchorse.bbs_mod.forms.forms.AudioForm;
+import mchorse.bbs_mod.forms.forms.PortalForm;
 import mchorse.bbs_mod.forms.forms.BillboardForm;
 import mchorse.bbs_mod.forms.forms.VideoForm;
 import mchorse.bbs_mod.forms.forms.BlockForm;
@@ -174,7 +182,7 @@ public class BBSMod implements ModInitializer
 
     public static final EntityType<ActorEntity> ACTOR_ENTITY = Registry.register(
         Registries.ENTITY_TYPE,
-        new Identifier(MOD_ID, "actor"),
+        Ids.of(MOD_ID, "actor"),
         FabricEntityTypeBuilder.create(SpawnGroup.CREATURE, ActorEntity::new)
             .dimensions(EntityDimensions.fixed(0.6F, 1.8F))
             .trackRangeBlocks(256)
@@ -183,7 +191,7 @@ public class BBSMod implements ModInitializer
 
     public static final EntityType<GunProjectileEntity> GUN_PROJECTILE_ENTITY = Registry.register(
         Registries.ENTITY_TYPE,
-        new Identifier(MOD_ID, "gun_projectile"),
+        Ids.of(MOD_ID, "gun_projectile"),
         FabricEntityTypeBuilder.create(SpawnGroup.CREATURE, GunProjectileEntity::new)
             .dimensions(EntityDimensions.fixed(0.25F, 0.25F))
             .trackRangeChunks(24)
@@ -228,7 +236,7 @@ public class BBSMod implements ModInitializer
 
     public static final BlockEntityType<ModelBlockEntity> MODEL_BLOCK_ENTITY = Registry.register(
         Registries.BLOCK_ENTITY_TYPE,
-        new Identifier(MOD_ID, "model_block_entity"),
+        Ids.of(MOD_ID, "model_block_entity"),
         FabricBlockEntityTypeBuilder.create(ModelBlockEntity::new, MODEL_BLOCK).build()
     );
 
@@ -255,7 +263,7 @@ public class BBSMod implements ModInitializer
 
     private static SoundEvent registerSound(String path)
     {
-        Identifier id = new Identifier(MOD_ID, path);
+        Identifier id = Ids.of(MOD_ID, path);
 
         return Registry.register(Registries.SOUND_EVENT, id, SoundEvent.of(id));
     }
@@ -275,7 +283,6 @@ public class BBSMod implements ModInitializer
     {
         ItemStack stack = new ItemStack(MODEL_BLOCK_ITEM);
         ModelBlockEntity entity = new ModelBlockEntity(BlockPos.ORIGIN, MODEL_BLOCK.getDefaultState());
-        NbtCompound nbt = new NbtCompound();
         BillboardForm form = new BillboardForm();
         ModelProperties properties = entity.getProperties();
 
@@ -284,10 +291,7 @@ public class BBSMod implements ModInitializer
         properties.setForm(form);
         properties.getTransformFirstPerson().translate.set(0F, 0F, -0.25F);
 
-        NbtCompound compound = entity.createNbtWithId();
-
-        nbt.put("BlockEntityTag", compound);
-        stack.setNbt(nbt);
+        VersionCompat.setBlockEntityData(stack, VersionCompat.createNbtWithId(entity));
 
         return stack;
     }
@@ -445,11 +449,13 @@ public class BBSMod implements ModInitializer
             .register(Link.bbs("block"), BlockForm.class, null)
             .register(Link.bbs("item"), ItemForm.class, null)
             .register(Link.bbs("anchor"), AnchorForm.class, null)
+            .register(Link.bbs("portal"), PortalForm.class, null)
             .register(Link.bbs("mob"), MobForm.class, null)
             .register(Link.bbs("vanilla_particles"), VanillaParticleForm.class, null)
             .register(Link.bbs("trail"), TrailForm.class, null)
             .register(Link.bbs("framebuffer"), FramebufferForm.class, null)
-            .register(Link.bbs("structure"), StructureForm.class, null);
+            .register(Link.bbs("structure"), StructureForm.class, null)
+            .register(Link.bbs("audio"), AudioForm.class, null);
 
         events.post(new RegisterFormsEvent(forms));
         events.post(new RegisterFormModifiersEvent());
@@ -491,12 +497,16 @@ public class BBSMod implements ModInitializer
             .register(Link.bbs("curve"), CurveClip.class, new ClipFactoryData(Icons.ARC, 0xff1493))
             .register(Link.bbs("tracker"), TrackerClip.class, new ClipFactoryData(Icons.USER, 0xffffff))
             .register(Link.bbs("dolly_zoom"), DollyZoomClip.class, new ClipFactoryData(Icons.FILTER, 0x7d56c9))
+            .register(Link.bbs("fov_punch"), FovPunchClip.class, new ClipFactoryData(Icons.SEARCH, 0xe0457b))
             .register(Link.bbs("color_grade"), ColorGradeClip.class, new ClipFactoryData(Icons.FILTER, 0xe8542a))
             .register(Link.bbs("cinematic_effects"), CinematicEffectsClip.class, new ClipFactoryData(Icons.CAMERA, 0xf5a623))
             .register(Link.bbs("vignette"), VignetteClip.class, new ClipFactoryData(Icons.SPHERE, 0x15213d))
             .register(Link.bbs("letterbox"), LetterboxClip.class, new ClipFactoryData(Icons.FULLSCREEN, 0x2b2b2e))
             .register(Link.bbs("grain"), GrainClip.class, new ClipFactoryData(Icons.SPARKLES, 0xb8ad98))
             .register(Link.bbs("eye"), EyeClip.class, new ClipFactoryData(Icons.VISIBLE, 0x0f1a3a))
+            .register(Link.bbs("motion_blur"), MotionBlurClip.class, new ClipFactoryData(Icons.FADING, 0x3a7bd5))
+            .register(Link.bbs("lens_distortion"), LensDistortionClip.class, new ClipFactoryData(Icons.FULLSCREEN, 0x2f8f83))
+            .register(Link.bbs("screen_shake"), ScreenShakeClip.class, new ClipFactoryData(Icons.EXCHANGE, 0xc2562f))
             .register(Link.bbs("screen_shader_graph"), ScreenShaderGraphClip.class, new ClipFactoryData(Icons.CODE, 0x7a3fb0));
 
         events.post(new RegisterCameraClipsEvent(factoryCameraClips));
@@ -534,29 +544,29 @@ public class BBSMod implements ModInitializer
         FabricDefaultAttributeRegistry.register(ACTOR_ENTITY, ActorEntity.createActorAttributes());
 
         /* Blocks */
-        Registry.register(Registries.BLOCK, new Identifier(MOD_ID, "model"), MODEL_BLOCK);
-        Registry.register(Registries.BLOCK, new Identifier(MOD_ID, "chroma_red"), CHROMA_RED_BLOCK);
-        Registry.register(Registries.BLOCK, new Identifier(MOD_ID, "chroma_green"), CHROMA_GREEN_BLOCK);
-        Registry.register(Registries.BLOCK, new Identifier(MOD_ID, "chroma_blue"), CHROMA_BLUE_BLOCK);
-        Registry.register(Registries.BLOCK, new Identifier(MOD_ID, "chroma_cyan"), CHROMA_CYAN_BLOCK);
-        Registry.register(Registries.BLOCK, new Identifier(MOD_ID, "chroma_magenta"), CHROMA_MAGENTA_BLOCK);
-        Registry.register(Registries.BLOCK, new Identifier(MOD_ID, "chroma_yellow"), CHROMA_YELLOW_BLOCK);
-        Registry.register(Registries.BLOCK, new Identifier(MOD_ID, "chroma_black"), CHROMA_BLACK_BLOCK);
-        Registry.register(Registries.BLOCK, new Identifier(MOD_ID, "chroma_white"), CHROMA_WHITE_BLOCK);
+        Registry.register(Registries.BLOCK, Ids.of(MOD_ID, "model"), MODEL_BLOCK);
+        Registry.register(Registries.BLOCK, Ids.of(MOD_ID, "chroma_red"), CHROMA_RED_BLOCK);
+        Registry.register(Registries.BLOCK, Ids.of(MOD_ID, "chroma_green"), CHROMA_GREEN_BLOCK);
+        Registry.register(Registries.BLOCK, Ids.of(MOD_ID, "chroma_blue"), CHROMA_BLUE_BLOCK);
+        Registry.register(Registries.BLOCK, Ids.of(MOD_ID, "chroma_cyan"), CHROMA_CYAN_BLOCK);
+        Registry.register(Registries.BLOCK, Ids.of(MOD_ID, "chroma_magenta"), CHROMA_MAGENTA_BLOCK);
+        Registry.register(Registries.BLOCK, Ids.of(MOD_ID, "chroma_yellow"), CHROMA_YELLOW_BLOCK);
+        Registry.register(Registries.BLOCK, Ids.of(MOD_ID, "chroma_black"), CHROMA_BLACK_BLOCK);
+        Registry.register(Registries.BLOCK, Ids.of(MOD_ID, "chroma_white"), CHROMA_WHITE_BLOCK);
 
-        Registry.register(Registries.ITEM, new Identifier(MOD_ID, "model"), MODEL_BLOCK_ITEM);
-        Registry.register(Registries.ITEM, new Identifier(MOD_ID, "gun"), GUN_ITEM);
-        Registry.register(Registries.ITEM, new Identifier(MOD_ID, "structure_wand"), STRUCTURE_WAND_ITEM);
-        Registry.register(Registries.ITEM, new Identifier(MOD_ID, "chroma_red"), CHROMA_RED_BLOCK_ITEM);
-        Registry.register(Registries.ITEM, new Identifier(MOD_ID, "chroma_green"), CHROMA_GREEN_BLOCK_ITEM);
-        Registry.register(Registries.ITEM, new Identifier(MOD_ID, "chroma_blue"), CHROMA_BLUE_BLOCK_ITEM);
-        Registry.register(Registries.ITEM, new Identifier(MOD_ID, "chroma_cyan"), CHROMA_CYAN_BLOCK_ITEM);
-        Registry.register(Registries.ITEM, new Identifier(MOD_ID, "chroma_magenta"), CHROMA_MAGENTA_BLOCK_ITEM);
-        Registry.register(Registries.ITEM, new Identifier(MOD_ID, "chroma_yellow"), CHROMA_YELLOW_BLOCK_ITEM);
-        Registry.register(Registries.ITEM, new Identifier(MOD_ID, "chroma_black"), CHROMA_BLACK_BLOCK_ITEM);
-        Registry.register(Registries.ITEM, new Identifier(MOD_ID, "chroma_white"), CHROMA_WHITE_BLOCK_ITEM);
+        Registry.register(Registries.ITEM, Ids.of(MOD_ID, "model"), MODEL_BLOCK_ITEM);
+        Registry.register(Registries.ITEM, Ids.of(MOD_ID, "gun"), GUN_ITEM);
+        Registry.register(Registries.ITEM, Ids.of(MOD_ID, "structure_wand"), STRUCTURE_WAND_ITEM);
+        Registry.register(Registries.ITEM, Ids.of(MOD_ID, "chroma_red"), CHROMA_RED_BLOCK_ITEM);
+        Registry.register(Registries.ITEM, Ids.of(MOD_ID, "chroma_green"), CHROMA_GREEN_BLOCK_ITEM);
+        Registry.register(Registries.ITEM, Ids.of(MOD_ID, "chroma_blue"), CHROMA_BLUE_BLOCK_ITEM);
+        Registry.register(Registries.ITEM, Ids.of(MOD_ID, "chroma_cyan"), CHROMA_CYAN_BLOCK_ITEM);
+        Registry.register(Registries.ITEM, Ids.of(MOD_ID, "chroma_magenta"), CHROMA_MAGENTA_BLOCK_ITEM);
+        Registry.register(Registries.ITEM, Ids.of(MOD_ID, "chroma_yellow"), CHROMA_YELLOW_BLOCK_ITEM);
+        Registry.register(Registries.ITEM, Ids.of(MOD_ID, "chroma_black"), CHROMA_BLACK_BLOCK_ITEM);
+        Registry.register(Registries.ITEM, Ids.of(MOD_ID, "chroma_white"), CHROMA_WHITE_BLOCK_ITEM);
 
-        Registry.register(Registries.ITEM_GROUP, new Identifier(MOD_ID, "main"), ITEM_GROUP);
+        Registry.register(Registries.ITEM_GROUP, Ids.of(MOD_ID, "main"), ITEM_GROUP);
 
         events.post(new BBSReadyEvent());
     }
@@ -574,11 +584,23 @@ public class BBSMod implements ModInitializer
         });
 
         ServerLifecycleEvents.SERVER_STARTED.register((event) -> worldFolder = event.getSavePath(WorldSavePath.ROOT).toFile());
-        ServerPlayConnectionEvents.JOIN.register((a, b, c) -> ServerNetwork.sendHandshake(c, b));
+        ServerPlayConnectionEvents.JOIN.register((a, b, c) ->
+        {
+            /* Every connection is an editing session of its own (see EditSessions) */
+            mchorse.bbs_mod.network.EditSessions.start(a.getPlayer());
+            ServerNetwork.sendHandshake(c, b);
+
+            if (mchorse.bbs_mod.network.EditSessions.isShared(c))
+            {
+                ServerNetwork.sendLocks(a.getPlayer());
+            }
+        });
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
         {
             actions.stopFor(handler.getPlayer());
             ServerNetwork.forgetPlayer(handler.getPlayer().getUuid());
+            mchorse.bbs_mod.network.EditSessions.end(handler.getPlayer().getUuid());
+            ServerNetwork.broadcastLocks(server);
         });
 
         ActionHandler.registerHandlers(actions);

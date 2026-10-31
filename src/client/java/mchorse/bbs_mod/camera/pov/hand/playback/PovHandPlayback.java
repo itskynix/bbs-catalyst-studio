@@ -351,7 +351,7 @@ public final class PovHandPlayback {
         HandPlaybackSession current = active;
         if (current != null) {
             matrices.push();
-            CameraShakeApplier.apply(matrices, MinecraftClient.getInstance().getTickDelta());
+            CameraShakeApplier.apply(matrices, MinecraftClient.getInstance()./*$ gtd*/getTickDelta()/**/);
             MatrixStackUtils.applyTransform((MatrixStack)matrices, (Transform)current.state.cameraOffset);
         }
     }

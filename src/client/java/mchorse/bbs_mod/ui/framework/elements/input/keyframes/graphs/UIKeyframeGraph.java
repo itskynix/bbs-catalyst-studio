@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.framework.elements.input.keyframes.graphs;
 
+import mchorse.bbs_mod.utils.Bufs;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.camera.utils.TimeUtils;
 import mchorse.bbs_mod.data.types.MapType;
@@ -560,7 +561,7 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
     @SuppressWarnings({"rawtypes", "IntegerDivisionInFloatingPointContext"})
     protected void renderGraph(UIContext context)
     {
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
+        BufferBuilder builder = null;
         Matrix4f matrix = context.batcher.getContext().getMatrices().peek().getPositionMatrix();
 
         if (!this.sheet.channel.getLoops().isEmpty())
@@ -670,12 +671,12 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
         lineBuilder.render(context.batcher, SolidColorLineRenderer.get(Colors.COLOR.set(Colors.setA(sheet.color, 1F))));
 
         /* Render track bars (horizontal lines) */
-        builder.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
+        builder = Bufs.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
         this.renderGraphPointShapes(context, builder, matrix, keyframes);
 
         RenderSystem.enableBlend();
         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        Bufs.draw(builder);
     }
 
     /** Sample the actual finite-loop playback instead of drawing a fictitious line from the
@@ -714,11 +715,11 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
             }
         }
         line.render(context.batcher, SolidColorLineRenderer.get(Colors.COLOR.set(Colors.setA(this.sheet.color, 1F))));
-        builder.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
+        builder = Bufs.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
         this.renderGraphPointShapes(context, builder, matrix, this.sheet.channel.getKeyframes());
         RenderSystem.enableBlend();
         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        Bufs.draw(builder);
     }
 
     protected void renderGraphPointShapes(UIContext context, BufferBuilder builder, Matrix4f matrix, List keyframes)
@@ -823,16 +824,16 @@ public class UIKeyframeGraph implements IUIKeyframeGraph
     public void renderTopmostKeyframes(UIContext context)
     {
         Area area = this.keyframes.graphArea;
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
+        BufferBuilder builder;
         Matrix4f matrix = context.batcher.getContext().getMatrices().peek().getPositionMatrix();
         List keyframes = this.sheet.channel.getKeyframes();
 
         context.batcher.clip(area, context);
-        builder.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
+        builder = Bufs.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
         this.renderGraphPointShapes(context, builder, matrix, keyframes);
         RenderSystem.enableBlend();
         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        Bufs.draw(builder);
         context.batcher.unclip(context);
     }
 

@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.utils.resources;
 
+import mchorse.bbs_mod.utils.Ids;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -653,7 +654,7 @@ public class CemSourcePack implements ISourcePack
     {
         try
         {
-            return new Identifier("minecraft", path);
+            return Ids.of("minecraft", path);
         }
         catch (Exception e)
         {

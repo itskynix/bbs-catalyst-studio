@@ -26,6 +26,9 @@ public class UIPanelBase <T extends UIElement> extends UIElement
     public List<T> panels = new ArrayList<>();
     public Direction direction;
 
+    /** The content of a tab just picked sliding in from the right (the interface animation settings time it) */
+    private mchorse.bbs_mod.ui.framework.elements.overlay.SlideState viewSlide;
+
     public UIPanelBase()
     {
         this(Direction.BOTTOM);
@@ -146,6 +149,13 @@ public class UIPanelBase <T extends UIElement> extends UIElement
      */
     public void setPanel(T panel)
     {
+        /* Only a change of tab slides: the first panel of an editor is simply there */
+        boolean change = this.view != null && panel != null && this.view != panel;
+
+        this.viewSlide = change && mchorse.bbs_mod.ui.framework.elements.overlay.OverlayAnimation.isEnabled()
+            ? mchorse.bbs_mod.ui.framework.elements.overlay.SlideState.opening()
+            : null;
+
         if (this.view != null)
         {
             this.view.removeFromParent();
@@ -160,6 +170,30 @@ public class UIPanelBase <T extends UIElement> extends UIElement
             this.view.resize();
             this.prepend(this.view);
         }
+    }
+
+    /**
+     * How far (pixels, to the right) the shown tab's content is drawn off its place this frame, 0
+     * once it has settled. Asked by the content as it draws itself, once a frame.
+     */
+    public int viewShift(UIElement view)
+    {
+        if (this.viewSlide == null || view != this.view)
+        {
+            return 0;
+        }
+
+        boolean done = this.viewSlide.update();
+        int shift = (int) Math.round((1D - this.viewSlide.shown()) * view.area.w);
+
+        if (done)
+        {
+            this.viewSlide = null;
+
+            return 0;
+        }
+
+        return shift;
     }
 
     protected void renderOverlay(UIContext context)

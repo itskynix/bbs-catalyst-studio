@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.forms.forms;
 
+import mchorse.bbs_mod.forms.forms.utils.FormFxValues;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.ui.utils.icons.Icon;
 import mchorse.bbs_mod.settings.values.core.ValueColor;
@@ -27,6 +28,8 @@ public class BillboardForm extends Form
     public final ValueFloat offsetY = new ValueFloat("offsetY", 0F);
     public final ValueFloat rotation = new ValueFloat("rotation", 0F);
     public final ValueBoolean shading = new ValueBoolean("shading", true);
+    /** Dissolve and shatter: the image burning away or breaking into tiles. */
+    public final FormFxValues fx = new FormFxValues(this);
 
     public BillboardForm()
     {

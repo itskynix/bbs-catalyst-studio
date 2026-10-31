@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.utils.resources;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.resources.ISourcePack;
 import mchorse.bbs_mod.resources.Link;
 import mchorse.bbs_mod.utils.DataPath;
@@ -76,13 +77,13 @@ public class MinecraftSourcePack implements ISourcePack
     @Override
     public boolean hasAsset(Link link)
     {
-        return this.manager.getResource(new Identifier(link.toString())).isPresent();
+        return this.manager.getResource(Ids.of(link.toString())).isPresent();
     }
 
     @Override
     public InputStream getAsset(Link link) throws IOException
     {
-        Optional<Resource> resource = this.manager.getResource(new Identifier(link.toString()));
+        Optional<Resource> resource = this.manager.getResource(Ids.of(link.toString()));
 
         if (resource.isPresent())
         {

@@ -1,6 +1,7 @@
 package mchorse.bbs_mod.mixin.client;
 
 import mchorse.bbs_mod.BBSModClient;
+import mchorse.bbs_mod.camera.WorldFreeCam;
 import mchorse.bbs_mod.camera.controller.CameraController;
 import net.minecraft.client.render.Camera;
 import net.minecraft.entity.Entity;
@@ -10,6 +11,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Camera.class)
@@ -17,6 +19,17 @@ public abstract class CameraMixin
 {
     @Shadow protected abstract void setRotation(float yaw, float pitch);
     @Shadow protected abstract void setPos(double x, double y, double z);
+
+    /**
+     * With the free camera on, the game believes the camera is in the third person - which is
+     * what makes it draw the player's body, even if the player is in first person. The body then
+     * stays where the player was left, seen from wherever the camera flies.
+     */
+    @ModifyVariable(method = "update", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+    private boolean bbs$freeCamThirdPerson(boolean thirdPerson)
+    {
+        return thirdPerson || WorldFreeCam.isActive();
+    }
 
     @Inject(method = "update", at = @At(value = "RETURN"))
     public void onUpdate(BlockView area, Entity focusedEntity, boolean thirdPerson, boolean inverseView, float tickDelta, CallbackInfo ci)

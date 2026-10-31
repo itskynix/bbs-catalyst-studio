@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.framework.elements.input.keyframes;
 
+import mchorse.bbs_mod.utils.Bufs;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.data.types.BaseType;
 import mchorse.bbs_mod.graphics.window.Window;
@@ -362,9 +363,9 @@ public class UIKeyframeLoops
         double lastTick = Math.min(end, this.view.fromGraphX(this.view.graphArea.ex() + 6));
         double pixelPeriod = Math.abs(this.view.toGraphX(loop.sourceEnd()) - this.view.toGraphX(loop.start()));
         double stride = Math.max(1, Math.ceil(8 / Math.max(0.001, pixelPeriod)));
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
+        BufferBuilder builder;
         Matrix4f matrix = context.batcher.getContext().getMatrices().peek().getPositionMatrix();
-        builder.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
+        builder = Bufs.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
         int drawn = 0;
         for (Object entry : sheet.channel.getKeyframes())
         {
@@ -383,6 +384,6 @@ public class UIKeyframeLoops
         }
         RenderSystem.enableBlend();
         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        Bufs.draw(builder);
     }
 }

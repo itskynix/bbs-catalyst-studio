@@ -6,7 +6,8 @@ import org.slf4j.Logger;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -29,7 +30,8 @@ public class AudioCacheManager
     private AudioCacheManager()
     {
         this.cacheDir = BBSMod.getAudioCacheFolder();
-        this.cachedFiles = new HashMap<>();
+        /* Access-ordered: iteration starts at the least recently used entry */
+        this.cachedFiles = new LinkedHashMap<>(16, 0.75F, true);
         
         if (!this.cacheDir.exists() && !this.cacheDir.mkdirs())
         {
@@ -52,7 +54,7 @@ public class AudioCacheManager
     
     /**
      * Create temporary cache file for the specified audio path.
-     * Clears all cache if limit is exceeded.
+     * Evicts the least recently used files if the limit is exceeded.
      */
     public File createTempCacheFile(String soundPath) throws IOException
     {
@@ -143,12 +145,27 @@ public class AudioCacheManager
     
     /**
      * Cleanup excess cache when limit is reached.
-     * Uses simple "clear all" strategy instead of LRU.
+     * Evicts only the least recently used files, down to 3/4 of the limit, so the sounds
+     * still in use stay cached.
      */
     private void cleanupExcessCache()
     {
-        this.clearAllCache();
+        int target = MAX_CACHE_FILES * 3 / 4;
+        Iterator<Map.Entry<String, File>> iterator = this.cachedFiles.entrySet().iterator();
+
+        while (this.cachedFiles.size() > target && iterator.hasNext())
+        {
+            File file = iterator.next().getValue();
+
+            iterator.remove();
+
+            if (file.exists() && !file.delete())
+            {
+                LOGGER.warn("Failed to delete cache file: " + file.getAbsolutePath());
+            }
+        }
     }
+
     
     /**
      * Clean up invalid cache entries.

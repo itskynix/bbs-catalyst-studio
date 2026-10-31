@@ -1,5 +1,10 @@
 package mchorse.bbs_mod.ui.dashboard.panels.motion;
 
+import mchorse.bbs_mod.utils.Ids;
+import mchorse.bbs_mod.utils.VersionCompat;
+import mchorse.bbs_mod.utils.LightingCompat;
+import mchorse.bbs_mod.utils.InverseViewRotation;
+import mchorse.bbs_mod.utils.Bufs;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.graphics.window.Window;
 import mchorse.bbs_mod.l10n.keys.IKey;
@@ -856,7 +861,7 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
             {
                 Vector3f diagonal = new Vector3f(1F, 1F, 1F).normalize();
 
-                RenderSystem.setupLevelDiffuseLighting(diagonal, new Vector3f(diagonal).negate(), this.camera.view);
+                LightingCompat.setupLevel(diagonal, new Vector3f(diagonal).negate(), this.camera.view);
             }
 
             if (mode == 2)
@@ -876,7 +881,7 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
 
             if (mode == 1 || mode == 2)
             {
-                RenderSystem.setupLevelDiffuseLighting(
+                LightingCompat.setupLevel(
                     new Vector3f(0, 0.85F, -1).normalize(),
                     new Vector3f(0, 0.85F, 1).normalize(),
                     this.camera.view
@@ -973,13 +978,13 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
 
             MatrixStackUtils.cacheMatrices();
             RenderSystem.setProjectionMatrix(this.camera.projection, com.mojang.blaze3d.systems.VertexSorter.BY_Z);
-            RenderSystem.setInverseViewRotationMatrix(new org.joml.Matrix3f(this.camera.view).invert());
+            InverseViewRotation.setOverride(new org.joml.Matrix3f(this.camera.view).invert());
 
             stack.push();
             MatrixStackUtils.multiply(stack, this.camera.view);
             stack.translate(-this.camera.position.x, -this.camera.position.y, -this.camera.position.z);
 
-            RenderSystem.setupLevelDiffuseLighting(
+            LightingCompat.setupLevel(
                 new Vector3f(0, 0.85F, -1).normalize(),
                 new Vector3f(0, 0.85F, 1).normalize(),
                 this.camera.view
@@ -1038,8 +1043,8 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
 
         private static void cameraLine(BufferBuilder bld, Matrix4f m, float x1, float y1, float z1, float x2, float y2, float z2, float r, float g, float b, float a)
         {
-            bld.vertex(m, x1, y1, z1).color(r, g, b, a).next();
-            bld.vertex(m, x2, y2, z2).color(r, g, b, a).next();
+            bld.vertex(m, x1, y1, z1).color(r, g, b, a)/*$ nx*/.next()/**/;
+            bld.vertex(m, x2, y2, z2).color(r, g, b, a)/*$ nx*/.next()/**/;
         }
 
         /** Camera actor marker: a small camera body plus the wire frame pyramid of its frustum (local +Z is forward). */
@@ -1056,18 +1061,18 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
             float b = selected ? 0.2F : Colors.getB(base);
             float a = selected ? 1F : 0.9F;
 
-            BufferBuilder bld = Tessellator.getInstance().getBuffer();
+            BufferBuilder bld;
 
             RenderSystem.setShader(GameRenderer::getPositionColorProgram);
             RenderSystem.enableBlend();
             RenderSystem.defaultBlendFunc();
 
             /* Body, lens and viewfinder */
-            bld.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+            bld = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
             Draw.fillBox(bld, stack, -0.12F, -0.09F, -0.3F, 0.12F, 0.09F, 0F, 0xFF000000 | base);
             Draw.fillBox(bld, stack, -0.05F, -0.05F, 0F, 0.05F, 0.05F, 0.1F, 0xFF1F2937);
             Draw.fillBox(bld, stack, -0.04F, 0.09F, -0.22F, 0.04F, 0.14F, -0.1F, 0xFF000000 | base);
-            BufferRenderer.drawWithGlobalProgram(bld.end());
+            Bufs.draw(bld);
 
             /* Selection highlight / body outline */
             Draw.renderBox(stack, -0.12F, -0.09F, -0.3F, 0.24F, 0.18F, 0.3F, r, g, b, a);
@@ -1078,7 +1083,7 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
             Matrix4f m = stack.peek().getPositionMatrix();
             float[][] c = {{-halfW, -halfH}, {halfW, -halfH}, {halfW, halfH}, {-halfW, halfH}};
 
-            bld.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
+            bld = Bufs.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
 
             for (int i = 0; i < 4; i++)
             {
@@ -1092,7 +1097,7 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
             cameraLine(bld, m, -halfW * 0.25F, halfH, depth, 0F, halfH * 1.3F, depth, r, g, b, a);
             cameraLine(bld, m, 0F, halfH * 1.3F, depth, halfW * 0.25F, halfH, depth, r, g, b, a);
 
-            BufferRenderer.drawWithGlobalProgram(bld.end());
+            Bufs.draw(bld);
             RenderSystem.lineWidth(1F);
         }
 
@@ -1105,9 +1110,9 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
                 double a0 = Math.PI * 2.0 * i / seg;
                 double a1 = Math.PI * 2.0 * (i + 1) / seg;
 
-                bld.vertex(m, 0F, 0F, 0F).color(r, g, b, alpha).next();
-                bld.vertex(m, (float) Math.cos(a0) * radius, -length, (float) Math.sin(a0) * radius).color(r, g, b, 0F).next();
-                bld.vertex(m, (float) Math.cos(a1) * radius, -length, (float) Math.sin(a1) * radius).color(r, g, b, 0F).next();
+                bld.vertex(m, 0F, 0F, 0F).color(r, g, b, alpha)/*$ nx*/.next()/**/;
+                bld.vertex(m, (float) Math.cos(a0) * radius, -length, (float) Math.sin(a0) * radius).color(r, g, b, 0F)/*$ nx*/.next()/**/;
+                bld.vertex(m, (float) Math.cos(a1) * radius, -length, (float) Math.sin(a1) * radius).color(r, g, b, 0F)/*$ nx*/.next()/**/;
             }
         }
 
@@ -1133,7 +1138,7 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
             double energy = Math.min(1.0, 0.15 + Math.log10(1.0 + Math.max(0.0, layer.lightIntensity)) * 0.55);
             float k = (float) (MathUtils.clamp(layer.lightGlow, 0.0, 1.0) * energy);
             Matrix4f m = stack.peek().getPositionMatrix();
-            BufferBuilder bld = Tessellator.getInstance().getBuffer();
+            BufferBuilder bld;
 
             RenderSystem.setShader(GameRenderer::getPositionColorProgram);
             RenderSystem.enableBlend();
@@ -1154,7 +1159,7 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
             RenderSystem.depthMask(false);
             RenderSystem.disableCull();
 
-            bld.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+            bld = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
 
             if (spot)
             {
@@ -1181,15 +1186,15 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
                     float c1 = (float) Math.cos(a1) * rad;
                     float s1 = (float) Math.sin(a1) * rad;
 
-                    bld.vertex(m, 0F, 0F, 0F).color(cr, cg, cb, k * 0.7F).next();
-                    bld.vertex(m, right.x * c0 + up.x * s0, right.y * c0 + up.y * s0, right.z * c0 + up.z * s0).color(cr, cg, cb, 0F).next();
-                    bld.vertex(m, right.x * c1 + up.x * s1, right.y * c1 + up.y * s1, right.z * c1 + up.z * s1).color(cr, cg, cb, 0F).next();
+                    bld.vertex(m, 0F, 0F, 0F).color(cr, cg, cb, k * 0.7F)/*$ nx*/.next()/**/;
+                    bld.vertex(m, right.x * c0 + up.x * s0, right.y * c0 + up.y * s0, right.z * c0 + up.z * s0).color(cr, cg, cb, 0F)/*$ nx*/.next()/**/;
+                    bld.vertex(m, right.x * c1 + up.x * s1, right.y * c1 + up.y * s1, right.z * c1 + up.z * s1).color(cr, cg, cb, 0F)/*$ nx*/.next()/**/;
                 }
             }
 
             try
             {
-                BufferRenderer.drawWithGlobalProgram(bld.end());
+                Bufs.draw(bld);
             }
             finally
             {
@@ -1231,7 +1236,7 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
             float range = (float) Math.max(0.1, layer.lightRange);
             String type = layer.type;
 
-            BufferBuilder bld = Tessellator.getInstance().getBuffer();
+            BufferBuilder bld;
 
             RenderSystem.setShader(GameRenderer::getPositionColorProgram);
             RenderSystem.enableBlend();
@@ -1240,9 +1245,9 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
             /* Bulb */
             float h = 0.09F;
 
-            bld.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+            bld = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
             Draw.fillBox(bld, stack, -h, -h, -h, h, h, h, 0xFF000000 | base);
-            BufferRenderer.drawWithGlobalProgram(bld.end());
+            Bufs.draw(bld);
             Draw.renderBox(stack, -h, -h, -h, h * 2F, h * 2F, h * 2F, r, g, b, a);
 
             this.renderLightVolume(stack, layer, range);
@@ -1251,7 +1256,7 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
 
             Matrix4f m = stack.peek().getPositionMatrix();
 
-            bld.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
+            bld = Bufs.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
 
             if (type.equalsIgnoreCase("PointLight"))
             {
@@ -1305,7 +1310,7 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
                 cameraLine(bld, m, 0F, -nl, 0F, 0F, -nl + 0.15F, -0.08F, r, g, b, a);
             }
 
-            BufferRenderer.drawWithGlobalProgram(bld.end());
+            Bufs.draw(bld);
             RenderSystem.lineWidth(1F);
         }
 
@@ -1541,6 +1546,15 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
                 this.b = (id >> 16) & 0xFF;
             }
 
+            //? if >=1.21 {
+            /*@Override
+            public net.minecraft.client.render.VertexConsumer vertex(float x, float y, float z)
+            {
+                if (this.delegate != null) this.delegate.vertex(x, y, z);
+
+                return this;
+            }
+            *///?} else {
             @Override
             public net.minecraft.client.render.VertexConsumer vertex(double x, double y, double z)
             {
@@ -1548,6 +1562,7 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
 
                 return this;
             }
+            //?}
 
             @Override
             public net.minecraft.client.render.VertexConsumer color(int red, int green, int blue, int alpha)
@@ -1581,6 +1596,7 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
                 return this;
             }
 
+            //? if <1.21 {
             @Override
             public void next()
             {
@@ -1596,6 +1612,7 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
             public void unfixColor()
             {
             }
+            //?}
         }
 
         private static final class IdProvider implements VertexConsumerProvider
@@ -1655,7 +1672,7 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
                     }
                     else
                     {
-                        result = net.minecraft.client.render.RenderLayer.getEntityTranslucent(new net.minecraft.util.Identifier(texture));
+                        result = net.minecraft.client.render.RenderLayer.getEntityTranslucent(Ids.of(texture));
                     }
                 }
             }
@@ -1806,8 +1823,7 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
                 itemStack.setCount(Math.max(1, layer.itemCount));
                 if (layer.itemGlint)
                 {
-                    itemStack.getOrCreateNbt().put("Enchantments", new NbtList());
-                    itemStack.getOrCreateNbt().getList("Enchantments", 10).add(new NbtCompound());
+                    VersionCompat.setGlint(itemStack);
                 }
                 ModelTransformationMode mode = layer.itemTransformMode != null ? layer.itemTransformMode : ModelTransformationMode.FIXED;
                 stack.push();
@@ -1907,27 +1923,27 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
                 float size = 0.24F * li;
 
                 /* 1. Solid glowing bulb cube */
-                BufferBuilder bld = Tessellator.getInstance().getBuffer();
+                BufferBuilder bld;
                 RenderSystem.setShader(GameRenderer::getPositionColorProgram);
                 RenderSystem.enableBlend();
                 RenderSystem.defaultBlendFunc();
-                bld.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+                bld = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
                 Draw.fillBox(bld, stack, -half, -half, -half, half, half, half, layer.lightColor | Colors.A100);
-                BufferRenderer.drawWithGlobalProgram(bld.end());
+                Bufs.draw(bld);
 
                 /* 2. Outer cage frame */
                 Draw.renderBox(stack, -half, -half, -half, size, size, size, 1.0F, 1.0F, 1.0F, 0.9F);
 
                 /* 3. Directional Light indicator rays */
-                bld.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
+                bld = Bufs.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
                 float rayLen = 0.6F * li;
-                bld.vertex(stack.peek().getPositionMatrix(), 0F, 0F, 0F).color(lr, lg, lb, 0.9F).next();
-                bld.vertex(stack.peek().getPositionMatrix(), 0F, -rayLen, 0F).color(lr, lg, lb, 0.1F).next();
-                bld.vertex(stack.peek().getPositionMatrix(), -half, -half, -half).color(lr, lg, lb, 0.7F).next();
-                bld.vertex(stack.peek().getPositionMatrix(), -half * 1.8F, -rayLen, -half * 1.8F).color(lr, lg, lb, 0.1F).next();
-                bld.vertex(stack.peek().getPositionMatrix(), half, -half, half).color(lr, lg, lb, 0.7F).next();
-                bld.vertex(stack.peek().getPositionMatrix(), half * 1.8F, -rayLen, half * 1.8F).color(lr, lg, lb, 0.1F).next();
-                BufferRenderer.drawWithGlobalProgram(bld.end());
+                bld.vertex(stack.peek().getPositionMatrix(), 0F, 0F, 0F).color(lr, lg, lb, 0.9F)/*$ nx*/.next()/**/;
+                bld.vertex(stack.peek().getPositionMatrix(), 0F, -rayLen, 0F).color(lr, lg, lb, 0.1F)/*$ nx*/.next()/**/;
+                bld.vertex(stack.peek().getPositionMatrix(), -half, -half, -half).color(lr, lg, lb, 0.7F)/*$ nx*/.next()/**/;
+                bld.vertex(stack.peek().getPositionMatrix(), -half * 1.8F, -rayLen, -half * 1.8F).color(lr, lg, lb, 0.1F)/*$ nx*/.next()/**/;
+                bld.vertex(stack.peek().getPositionMatrix(), half, -half, half).color(lr, lg, lb, 0.7F)/*$ nx*/.next()/**/;
+                bld.vertex(stack.peek().getPositionMatrix(), half * 1.8F, -rayLen, half * 1.8F).color(lr, lg, lb, 0.1F)/*$ nx*/.next()/**/;
+                Bufs.draw(bld);
             }
             else
             {

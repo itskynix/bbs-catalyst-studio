@@ -2,10 +2,16 @@ package mchorse.bbs_mod.mixin.client;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import net.minecraft.client.gl.PostEffectProcessor;
+//? if >=1.21
+/*import net.minecraft.entity.player.BlockBreakingInfo;*/
+//? if <1.21
 import net.minecraft.client.render.BlockBreakingInfo;
+import net.minecraft.client.render.BuiltChunkStorage;
+import net.minecraft.client.render.LightmapTextureManager;
 import net.minecraft.client.render.WorldRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
+import org.spongepowered.asm.mixin.gen.Invoker;
 
 import java.util.SortedSet;
 
@@ -17,4 +23,10 @@ public interface WorldRendererAccessor
 
     @Accessor("transparencyPostProcessor")
     PostEffectProcessor bbs$getTransparencyPostProcessor();
+
+    @Accessor("chunks")
+    BuiltChunkStorage bbs$getChunks();
+
+    @Invoker("renderWeather")
+    void bbs$renderWeather(LightmapTextureManager manager, float tickDelta, double cameraX, double cameraY, double cameraZ);
 }

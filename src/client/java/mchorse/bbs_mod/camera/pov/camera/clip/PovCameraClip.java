@@ -88,6 +88,15 @@ extends CameraClip {
     public final ValueBoolean blockOutline = new ValueBoolean("block_outline", true);
     public final ValueInt perspective = new ValueInt("perspective", Integer.valueOf(0));
     public final ValueFloat fov = new ValueFloat("fov", Float.valueOf(70.0f), Float.valueOf(1.0f), Float.valueOf(180.0f));
+    /* Third-person camera offsets, in the actor's own frame: X to its right, Y up, Z along the way it
+     * faces. Each third-person view keeps its own set; first person has none. */
+    public static final float OFFSET_LIMIT = 10.0f;
+    public final ValueFloat backOffsetX = new ValueFloat("back_offset_x", Float.valueOf(0.0f), Float.valueOf(-OFFSET_LIMIT), Float.valueOf(OFFSET_LIMIT));
+    public final ValueFloat backOffsetY = new ValueFloat("back_offset_y", Float.valueOf(0.0f), Float.valueOf(-OFFSET_LIMIT), Float.valueOf(OFFSET_LIMIT));
+    public final ValueFloat backOffsetZ = new ValueFloat("back_offset_z", Float.valueOf(0.0f), Float.valueOf(-OFFSET_LIMIT), Float.valueOf(OFFSET_LIMIT));
+    public final ValueFloat frontOffsetX = new ValueFloat("front_offset_x", Float.valueOf(0.0f), Float.valueOf(-OFFSET_LIMIT), Float.valueOf(OFFSET_LIMIT));
+    public final ValueFloat frontOffsetY = new ValueFloat("front_offset_y", Float.valueOf(0.0f), Float.valueOf(-OFFSET_LIMIT), Float.valueOf(OFFSET_LIMIT));
+    public final ValueFloat frontOffsetZ = new ValueFloat("front_offset_z", Float.valueOf(0.0f), Float.valueOf(-OFFSET_LIMIT), Float.valueOf(OFFSET_LIMIT));
 
     public PovCameraClip() {
         this.add((BaseValue)this.selector);
@@ -103,6 +112,21 @@ extends CameraClip {
         this.add((BaseValue)this.blockOutline);
         this.add((BaseValue)this.perspective);
         this.add((BaseValue)this.fov);
+        this.add((BaseValue)this.backOffsetX);
+        this.add((BaseValue)this.backOffsetY);
+        this.add((BaseValue)this.backOffsetZ);
+        this.add((BaseValue)this.frontOffsetX);
+        this.add((BaseValue)this.frontOffsetY);
+        this.add((BaseValue)this.frontOffsetZ);
+    }
+
+    /** The offset set of a view - X, Y, Z - or null for the first person view, which has none. */
+    public ValueFloat[] getOffsets(int view) {
+        return switch (view) {
+            case VIEW_THIRD_PERSON_BACK -> new ValueFloat[]{this.backOffsetX, this.backOffsetY, this.backOffsetZ};
+            case VIEW_THIRD_PERSON_FRONT -> new ValueFloat[]{this.frontOffsetX, this.frontOffsetY, this.frontOffsetZ};
+            default -> null;
+        };
     }
 
     public static String getPerspectiveLabel(int mode) {
@@ -200,6 +224,15 @@ extends CameraClip {
                     double fy = -sinPitch;
                     double fz = cosYaw * cosPitch;
                     double maxDistance = 4.0;
+                    /* The view's own offset moves the pivot in the actor's frame (right = forward turned
+                     * a quarter to the right), before the wall check so the arm still stops at walls */
+                    ValueFloat[] offsets = this.getOffsets(view);
+                    double offsetX = (double)((Float)offsets[0].get()).floatValue();
+                    double offsetY = (double)((Float)offsets[1].get()).floatValue();
+                    double offsetZ = (double)((Float)offsets[2].get()).floatValue();
+                    x += -cosYaw * offsetX + -sinYaw * offsetZ;
+                    y += offsetY;
+                    z += -sinYaw * offsetX + cosYaw * offsetZ;
                     MinecraftClient mc = MinecraftClient.getInstance();
                     if (view == 1) {
                         Vec3d dir;

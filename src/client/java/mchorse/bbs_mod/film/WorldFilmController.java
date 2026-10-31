@@ -78,7 +78,7 @@ public class WorldFilmController extends BaseFilmController
             return;
         }
 
-        this.context.setup(tick, context.tickDelta());
+        this.context.setup(tick, context./*$ wtd*/tickDelta()/**/);
 
         for (Clip clip : clips)
         {

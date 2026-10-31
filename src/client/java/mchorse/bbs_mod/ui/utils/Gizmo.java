@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.utils;
 
+import mchorse.bbs_mod.utils.Bufs;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.systems.VertexSorter;
 import mchorse.bbs_mod.BBSSettings;
@@ -838,8 +839,8 @@ public class Gizmo
         stack.push();
         this.orientGuide(stack);
 
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
-        builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+        BufferBuilder builder;
+        builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
 
         float size = 10000F;
         float t = 0.005F;
@@ -861,7 +862,7 @@ public class Gizmo
 
         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
         RenderSystem.depthFunc(GL11.GL_ALWAYS);
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        Bufs.draw(builder);
         RenderSystem.depthFunc(GL11.GL_LEQUAL);
 
         stack.pop();
@@ -1374,7 +1375,7 @@ public class Gizmo
         Handle active = layout.active;
         float axisOffset = layout.axisOffset;
 
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
+        BufferBuilder builder = null;
         boolean building = false;
 
         if (layout.showRotate)
@@ -1411,11 +1412,13 @@ public class Gizmo
 
         if (layout.showsBoxes())
         {
-            builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+            BufferBuilder boxes = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+
+            builder = boxes;
             building = true;
 
             this.collectHandles(layout, (handle, x1, y1, z1, x2, y2, z2, color) ->
-                Draw.fillBox(builder, stack, x1, y1, z1, x2, y2, z2, color));
+                Draw.fillBox(boxes, stack, x1, y1, z1, x2, y2, z2, color));
         }
 
         /* The centre cube is decoration, not a handle, so any filtered drag hides it — but
@@ -1434,7 +1437,7 @@ public class Gizmo
 
             if (!building)
             {
-                builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+                builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
                 building = true;
             }
 
@@ -1449,7 +1452,7 @@ public class Gizmo
             RenderSystem.setShaderColor(1F, 1F, 1F, BBSSettings.gizmoOpacity.get());
             RenderSystem.setShader(GameRenderer::getPositionColorProgram);
 
-            BufferRenderer.drawWithGlobalProgram(builder.end());
+            Bufs.draw(builder);
         }
     }
 
@@ -1484,9 +1487,9 @@ public class Gizmo
 
         if (layout.showsBoxes())
         {
-            BufferBuilder builder = Tessellator.getInstance().getBuffer();
+            BufferBuilder builder;
 
-            builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+            builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
 
             this.collectHandles(layout, new HandleSink()
             {
@@ -1505,7 +1508,7 @@ public class Gizmo
 
             RenderSystem.setShader(GameRenderer::getPositionColorProgram);
 
-            BufferRenderer.drawWithGlobalProgram(builder.end());
+            Bufs.draw(builder);
         }
 
         RenderSystem.enableDepthTest();

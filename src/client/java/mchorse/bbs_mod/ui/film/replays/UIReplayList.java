@@ -58,7 +58,12 @@ import mchorse.bbs_mod.utils.colors.Colors;
 import mchorse.bbs_mod.utils.keyframes.Keyframe;
 import mchorse.bbs_mod.utils.keyframes.KeyframeChannel;
 import mchorse.bbs_mod.utils.presets.PresetManager;
+import mchorse.bbs_mod.network.StudioLocks;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.PlayerSkinDrawer;
+import net.minecraft.client.network.PlayerListEntry;
+import net.minecraft.client.util.DefaultSkinHelper;
+import net.minecraft.client.util.SkinTextures;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
@@ -1958,5 +1963,46 @@ public class UIReplayList extends UIList<ReplayListEntry>
                 context.batcher.outlinedIcon(Icons.ARROW_UP, formX, my, 0.5F, 0.5F);
             }
         }
+
+        this.renderRecordingBadge(context, replay, y, rowHeight);
+    }
+
+    /**
+     * Another player recording this replay live: a red "REC" and that player's face, left of the
+     * form preview. The replay is read only here meanwhile (see UIFilmPanel).
+     */
+    private void renderRecordingBadge(UIContext context, Replay replay, int y, int rowHeight)
+    {
+        Film film = this.panel == null ? null : this.panel.getData();
+
+        if (film == null)
+        {
+            return;
+        }
+
+        StudioLocks.Entry recording = StudioLocks.recordingOf(film.getId(), film.replays.getList().indexOf(replay));
+
+        if (recording == null)
+        {
+            return;
+        }
+
+        String rec = "\u25CF REC";
+        int head = 10;
+        int textW = context.batcher.getFont().getWidth(rec);
+        int right = this.area.x + this.area.w - 30 - 4;
+        int headX = right - head;
+        int textX = headX - 4 - textW;
+        int my = y + rowHeight / 2;
+
+        context.batcher.box(textX - 3, my - 7, right + 2, my + 7, 0xCC000000);
+        context.batcher.textShadow(rec, textX, my - context.batcher.getFont().getHeight() / 2, 0xFFFF3B3B);
+
+        /* The face comes straight off the player's skin, drawn by the game */
+        PlayerListEntry entry = MinecraftClient.getInstance().getNetworkHandler() == null ? null : MinecraftClient.getInstance().getNetworkHandler().getPlayerListEntry(recording.player);
+        SkinTextures skin = entry != null ? entry.getSkinTextures() : DefaultSkinHelper.getSkinTextures(recording.player);
+
+        context.batcher.flush();
+        PlayerSkinDrawer.draw(context.batcher.getContext(), skin, headX, my - head / 2, head);
     }
 }

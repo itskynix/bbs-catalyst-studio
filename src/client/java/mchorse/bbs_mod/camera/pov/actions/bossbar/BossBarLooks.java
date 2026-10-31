@@ -8,6 +8,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.bossbar;
 
+import mchorse.bbs_mod.utils.Ids;
 import java.util.Locale;
 import net.minecraft.entity.boss.BossBar;
 import net.minecraft.util.Identifier;
@@ -17,8 +18,8 @@ public final class BossBarLooks {
     public static final String[] STYLES = new String[]{"progress", "notched_6", "notched_10", "notched_12", "notched_20"};
     private static final Identifier[] BACKGROUNDS = new Identifier[COLORS.length];
     private static final Identifier[] PROGRESS = new Identifier[COLORS.length];
-    private static final Identifier[] NOTCHED_BACKGROUNDS = new Identifier[]{new Identifier("boss_bar/notched_6_background"), new Identifier("boss_bar/notched_10_background"), new Identifier("boss_bar/notched_12_background"), new Identifier("boss_bar/notched_20_background")};
-    private static final Identifier[] NOTCHED_PROGRESS = new Identifier[]{new Identifier("boss_bar/notched_6_progress"), new Identifier("boss_bar/notched_10_progress"), new Identifier("boss_bar/notched_12_progress"), new Identifier("boss_bar/notched_20_progress")};
+    private static final Identifier[] NOTCHED_BACKGROUNDS = new Identifier[]{Ids.of("boss_bar/notched_6_background"), Ids.of("boss_bar/notched_10_background"), Ids.of("boss_bar/notched_12_background"), Ids.of("boss_bar/notched_20_background")};
+    private static final Identifier[] NOTCHED_PROGRESS = new Identifier[]{Ids.of("boss_bar/notched_6_progress"), Ids.of("boss_bar/notched_10_progress"), Ids.of("boss_bar/notched_12_progress"), Ids.of("boss_bar/notched_20_progress")};
 
     private BossBarLooks() {
     }
@@ -99,8 +100,8 @@ public final class BossBarLooks {
 
     static {
         for (int i = 0; i < COLORS.length; ++i) {
-            BossBarLooks.BACKGROUNDS[i] = new Identifier("boss_bar/" + COLORS[i] + "_background");
-            BossBarLooks.PROGRESS[i] = new Identifier("boss_bar/" + COLORS[i] + "_progress");
+            BossBarLooks.BACKGROUNDS[i] = Ids.of("boss_bar/" + COLORS[i] + "_background");
+            BossBarLooks.PROGRESS[i] = Ids.of("boss_bar/" + COLORS[i] + "_progress");
         }
     }
 }

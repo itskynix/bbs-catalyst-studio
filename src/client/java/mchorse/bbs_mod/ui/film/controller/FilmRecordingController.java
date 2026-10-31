@@ -69,6 +69,21 @@ public class FilmRecordingController
 
     public void startRecording(List<String> groups)
     {
+        /* Another player is recording the picked replay or working on it: nothing starts */
+        if (this.controller.panel.getData() != null)
+        {
+            Replay picked = this.controller.panel.replayEditor.getReplay();
+            int pickedIndex = this.controller.panel.getData().replays.getList().indexOf(picked);
+            mchorse.bbs_mod.network.StudioLocks.Entry busy = pickedIndex < 0 ? null : mchorse.bbs_mod.network.StudioLocks.busy(this.controller.panel.getData().getId(), pickedIndex);
+
+            if (busy != null)
+            {
+                mchorse.bbs_mod.network.StudioLocks.notifyBusy(busy);
+
+                return;
+            }
+        }
+
         if (groups != null && groups.contains("outside"))
         {
             MinecraftClient.getInstance().setScreen(null);

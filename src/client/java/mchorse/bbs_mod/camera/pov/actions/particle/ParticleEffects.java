@@ -21,6 +21,9 @@ import mchorse.bbs_mod.camera.pov.actions.clip.ParticleEffectPovActionClip;
 import net.minecraft.block.Block;
 import net.minecraft.block.Blocks;
 import net.minecraft.particle.BlockStateParticleEffect;
+//? if >=1.21
+/*import net.minecraft.particle.SimpleParticleType;*/
+//? if <1.21
 import net.minecraft.particle.DefaultParticleType;
 import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.particle.ItemStackParticleEffect;
@@ -42,8 +45,8 @@ final class ParticleEffects {
         if (type == null) {
             return ParticleTypes.POOF;
         }
-        if (type instanceof DefaultParticleType) {
-            DefaultParticleType simple = (DefaultParticleType)type;
+        if (type instanceof /*$ dpt*/DefaultParticleType/**/) {
+            /*$ dpt*/DefaultParticleType/**/ simple = (/*$ dpt*/DefaultParticleType/**/)type;
             return simple;
         }
         if (type == ParticleTypes.BLOCK || type == ParticleTypes.BLOCK_MARKER || type == ParticleTypes.FALLING_DUST) {

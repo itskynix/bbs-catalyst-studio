@@ -97,6 +97,12 @@ public class UIModelFormPanel extends UIFormPanel<ModelForm>
         this.options.add(this.pickModel, this.pick, this.poseEditor, this.capeSection);
     }
 
+    @Override
+    public void finishEdit()
+    {
+        super.finishEdit();
+    }
+
     /**
      * The states a CEM pack asks about that a form cannot know — whether the creature sits, is tamed,
      * is angry. In the world a morph reads them off the entity it rides; a film's actor is a stand-in

@@ -26,6 +26,7 @@
  */
 package mchorse.bbs_mod.camera.pov.hud.render;
 
+import mchorse.bbs_mod.utils.Bufs;
 import mchorse.bbs_mod.camera.pov.hud.HudState;
 import mchorse.bbs_mod.camera.pov.render.PovViewportMetrics;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -446,13 +447,13 @@ public class HudRenderer {
         RenderSystem.setShaderTexture((int)0, (Identifier)sprite.getAtlasId());
         RenderSystem.setShader(GameRenderer::getPositionTexProgram);
         Matrix4f matrix = context.getMatrices().peek().getPositionMatrix();
-        BufferBuilder bufferBuilder = Tessellator.getInstance().getBuffer();
-        bufferBuilder.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE);
-        bufferBuilder.vertex(matrix, (float)x, (float)y, 0.0f).texture(u1, v1).next();
-        bufferBuilder.vertex(matrix, (float)x, (float)(y + height), 0.0f).texture(u1, v2).next();
-        bufferBuilder.vertex(matrix, (float)(x + width), (float)(y + height), 0.0f).texture(u2, v2).next();
-        bufferBuilder.vertex(matrix, (float)(x + width), (float)y, 0.0f).texture(u2, v1).next();
-        BufferRenderer.drawWithGlobalProgram((BufferBuilder.BuiltBuffer)bufferBuilder.end());
+        BufferBuilder bufferBuilder;
+        bufferBuilder = Bufs.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE);
+        bufferBuilder.vertex(matrix, (float)x, (float)y, 0.0f).texture(u1, v1)/*$ nx*/.next()/**/;
+        bufferBuilder.vertex(matrix, (float)x, (float)(y + height), 0.0f).texture(u1, v2)/*$ nx*/.next()/**/;
+        bufferBuilder.vertex(matrix, (float)(x + width), (float)(y + height), 0.0f).texture(u2, v2)/*$ nx*/.next()/**/;
+        bufferBuilder.vertex(matrix, (float)(x + width), (float)y, 0.0f).texture(u2, v1)/*$ nx*/.next()/**/;
+        Bufs.draw(bufferBuilder);
         //?} else {
         /*mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, texture, x, y, width, height);
         *///?}

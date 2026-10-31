@@ -24,7 +24,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class IrisCapturedRenderingStatePovMixin {
     @Inject(method={"getDarknessLightFactor"}, at={@At(value="HEAD")}, cancellable=true)
     private void bbsPov$getDarknessLightFactor(CallbackInfoReturnable<Float> info) {
-        float delta = MinecraftClient.getInstance().getTickDelta();
+        float delta = MinecraftClient.getInstance()./*$ gtd*/getTickDelta()/**/;
         float factor = PovDarknessHelper.resolveDarknessLightFactor(delta);
         if (factor >= 0.0f) {
             info.setReturnValue(Float.valueOf(factor));

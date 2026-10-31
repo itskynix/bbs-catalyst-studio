@@ -104,6 +104,8 @@ implements UIFilmPanelPovAccess {
         this.main.add((IUIElement)this.bbsPov$editor);
         this.panels.add(this.bbsPov$editor);
         panel.actions().editor(this.bbsPov$openEditor, () -> this.bbsPov$editor != null && this.bbsPov$editor.isVisible());
+        /* The tour's "editors" step covers all three buttons, the point of view one included */
+        mchorse.bbs_mod.ui.onboarding.TourAnchors.register("film.editors", () -> panel.openCameraEditor, () -> panel.openReplayEditor, () -> this.bbsPov$openEditor);
     }
 
     @Inject(method={"fillData(Lmchorse/bbs_mod/film/Film;)V"}, at={@At(value="TAIL")})

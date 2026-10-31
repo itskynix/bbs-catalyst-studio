@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.dashboard.panels;
 
+import mchorse.bbs_mod.BBSMod;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.settings.values.core.ValueGroup;
@@ -15,6 +16,8 @@ import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIIcon;
 import mchorse.bbs_mod.ui.utils.UIDataUtils;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
+import mchorse.bbs_mod.utils.DataPath;
+import net.minecraft.client.MinecraftClient;
 import mchorse.bbs_mod.utils.Timer;
 import mchorse.bbs_mod.ui.utils.UIUtils;
 
@@ -199,12 +202,86 @@ public abstract class UIDataDashboardPanel <T extends ValueGroup> extends UICRUD
     @Override
     protected UICRUDOverlayPanel createOverlayPanel()
     {
-        return new UIDataOverlayPanel<>(this.getTitle(), this, this::pickData);
+        UIDataOverlayPanel<T> overlay = new UIDataOverlayPanel<>(this.getTitle(), this, this::pickData);
+
+        overlay.namesList.setTimeProvider(this::getModifiedTime);
+
+        return overlay;
+    }
+
+    /**
+     * When a document was last changed, from its file. Films live on the server, so their files
+     * are only within reach in single player; elsewhere every film reads as 0 and the list falls
+     * back to names.
+     */
+    private Long getModifiedTime(DataPath path)
+    {
+        File folder = this.getType().getRepository().getFolder();
+
+        if (folder == null && this.getType() == ContentType.FILMS && MinecraftClient.getInstance().isIntegratedServerRunning() && BBSMod.getFilms() != null)
+        {
+            folder = BBSMod.getFilms().getFolder();
+        }
+
+        if (folder == null || path.getLast().equals(".."))
+        {
+            return 0L;
+        }
+
+        File file = new File(folder, path.toString() + (path.folder ? "" : ".json"));
+
+        if (!file.exists())
+        {
+            file = new File(folder, path.toString());
+        }
+
+        return file.lastModified();
     }
 
     public void requestData(String id)
     {
-        this.getType().getRepository().load(id, (data) -> this.fill((T) data));
+        /* From another machine (a server, a LAN host) the data comes over the network: until it
+         * does, the tab is open with nothing to show, which read as a black screen */
+        this.loadingId = id;
+        this.loadingSince = System.currentTimeMillis();
+
+        this.getType().getRepository().load(id, (data) ->
+        {
+            if (id.equals(this.loadingId))
+            {
+                this.loadingId = null;
+            }
+
+            this.fill((T) data);
+        });
+    }
+
+    /* The data asked for and not here yet, and since when */
+    private String loadingId;
+    private long loadingSince;
+
+    /** How long (ms) the wait for data reads as loading before it reads as failed */
+    private static final long LOADING_TIMEOUT = 15000L;
+
+    /** Over the empty panel while its data is on the way: "Loading...", then that it did not come. */
+    private void renderLoading(UIContext context)
+    {
+        if (this.data != null || this.loadingId == null || this.tabs.getCurrentId() == null)
+        {
+            return;
+        }
+
+        long elapsed = System.currentTimeMillis() - this.loadingSince;
+        boolean failed = elapsed > LOADING_TIMEOUT;
+        String label = failed
+            ? UIKeys.PANELS_LOADING_FAILED.format(this.loadingId).get()
+            : UIKeys.PANELS_LOADING.get() + ".".repeat((int) (elapsed / 400 % 4));
+        int w = context.batcher.getFont().getWidth(label) + 20;
+        int x = this.area.mx() - w / 2;
+        int y = this.area.my() - 12;
+
+        context.batcher.box(x, y, x + w, y + 24, 0xDD101010);
+        context.batcher.textShadow(label, x + 10, y + 12 - context.batcher.getFont().getHeight() / 2, failed ? 0xFFFF6B6B : 0xFFE0E0E0);
     }
 
     /* Data population */
@@ -293,6 +370,8 @@ public abstract class UIDataDashboardPanel <T extends ValueGroup> extends UICRUD
         {
             this.renderLockedArea(context);
         }
+
+        this.renderLoading(context);
 
         this.checkPeriodicSave(context);
     }

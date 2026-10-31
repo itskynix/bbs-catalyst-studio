@@ -1,5 +1,7 @@
 package mchorse.bbs_mod;
 
+import mchorse.bbs_mod.utils.Bufs;
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.api.client.editor.TrackCategories;
 import mchorse.bbs_mod.api.client.events.RegisterTrackCategoriesEvent;
 
@@ -20,6 +22,7 @@ import mchorse.bbs_mod.camera.clips.misc.TrackerClientClip;
 import mchorse.bbs_mod.camera.clips.misc.VideoClientClip;
 import mchorse.bbs_mod.fonts.FontManager;
 import mchorse.bbs_mod.video.VideoManager;
+import mchorse.bbs_mod.camera.WorldFreeCam;
 import mchorse.bbs_mod.camera.controller.CameraController;
 import mchorse.bbs_mod.client.BBSRendering;
 import mchorse.bbs_mod.client.renderer.LivePlayerItemUse;
@@ -68,6 +71,7 @@ import mchorse.bbs_mod.film.Recorder;
 import mchorse.bbs_mod.film.WorldVideoExportSession;
 import mchorse.bbs_mod.film.replays.Replay;
 import mchorse.bbs_mod.forms.FormCategories;
+import mchorse.bbs_mod.forms.FormPortals;
 import mchorse.bbs_mod.forms.categories.UserFormCategory;
 import mchorse.bbs_mod.forms.forms.Form;
 import mchorse.bbs_mod.forms.structure.BakedStructure;
@@ -171,6 +175,7 @@ public class BBSModClient implements ClientModInitializer
     private static ParticleManager particles;
 
     private static KeyBinding keyDashboard;
+    private static KeyBinding keyFreeCam;
     private static KeyBinding keyItemEditor;
     private static KeyBinding keyPlayFilm;
     private static KeyBinding keyPauseFilm;
@@ -178,7 +183,6 @@ public class BBSModClient implements ClientModInitializer
     private static KeyBinding keyReplayNextTrack;
     private static KeyBinding keyReplayPrevTrack;
     private static KeyBinding keyReplayRadial;
-    private static KeyBinding keyRecordVideo;
     private static KeyBinding keyPlayFilmAndRecord;
     private static KeyBinding keyOpenReplays;
     private static KeyBinding keyOpenMorphing;
@@ -318,9 +322,9 @@ public class BBSModClient implements ClientModInitializer
         return keyZoom;
     }
 
-    public static KeyBinding getKeyRecordVideo()
+    public static KeyBinding getKeyPlayFilmAndRecord()
     {
-        return keyRecordVideo;
+        return keyPlayFilmAndRecord;
     }
 
     public static boolean isVideoExportDelayPending()
@@ -498,7 +502,7 @@ public class BBSModClient implements ClientModInitializer
             @Override
             public Identifier getFabricId()
             {
-                return new Identifier(BBSMod.MOD_ID, "resource_pack_models");
+                return Ids.of(BBSMod.MOD_ID, "resource_pack_models");
             }
 
             @Override
@@ -590,6 +594,15 @@ public class BBSModClient implements ClientModInitializer
 
         BBSSettings.language.postCallback((v, f) -> reloadLanguage(getLanguageKey()));
         BBSSettings.userIntefaceScale.postCallback((v, f) ->
+        {
+            MinecraftClient mc = MinecraftClient.getInstance();
+
+            if (mc.currentScreen instanceof UIScreen)
+            {
+                mc.onResolutionChanged();
+            }
+        });
+        BBSSettings.responsiveScale.postCallback((v, f) ->
         {
             MinecraftClient mc = MinecraftClient.getInstance();
 
@@ -709,6 +722,7 @@ public class BBSModClient implements ClientModInitializer
 
         /* Keybinds */
         keyDashboard = this.createKey("dashboard", GLFW.GLFW_KEY_0);
+        keyFreeCam = this.createKey("free_cam", GLFW.GLFW_KEY_F7);
         keyItemEditor = this.createKey("item_editor", GLFW.GLFW_KEY_HOME);
         keyPlayFilm = this.createKey("play_film", GLFW.GLFW_KEY_RIGHT_CONTROL);
         keyPauseFilm = this.createKey("pause_film", GLFW.GLFW_KEY_BACKSLASH);
@@ -716,7 +730,6 @@ public class BBSModClient implements ClientModInitializer
         keyReplayNextTrack = this.createKey("replay_next_track", GLFW.GLFW_KEY_RIGHT);
         keyReplayPrevTrack = this.createKey("replay_prev_track", GLFW.GLFW_KEY_LEFT);
         keyReplayRadial = this.createKey("replay_radial", GLFW.GLFW_KEY_R);
-        keyRecordVideo = this.createKey("record_video", GLFW.GLFW_KEY_F4);
         keyPlayFilmAndRecord = this.createKey("play_film_and_record", GLFW.GLFW_KEY_F6);
         keyOpenReplays = this.createKey("open_replays", GLFW.GLFW_KEY_RIGHT_SHIFT);
         keyOpenMorphing = this.createKey("open_morphing", GLFW.GLFW_KEY_B);
@@ -725,6 +738,8 @@ public class BBSModClient implements ClientModInitializer
         keyZoom = this.createKeyMouse("zoom", 2);
 
         StructureWand.register();
+
+        WorldRenderEvents.START.register((context) -> mchorse.bbs_mod.utils.InverseViewRotation.setOverride(null));
 
         WorldRenderEvents.BEFORE_ENTITIES.register((context) -> BBSRendering.beginEntityPass());
 
@@ -758,9 +773,9 @@ public class BBSModClient implements ClientModInitializer
                     stack.translate(0F, 0F, -d);
 
                     RenderSystem.enableDepthTest();
-                    BufferBuilder builder = Tessellator.getInstance().getBuffer();
+                    BufferBuilder builder;
 
-                    builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+                    builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
 
                     float fov = MinecraftClient.getInstance().options.getFov().getValue();
                     float dd = d * (float) Math.pow(fov / 40F, 2F);
@@ -775,7 +790,7 @@ public class BBSModClient implements ClientModInitializer
 
                     RenderSystem.setShader(GameRenderer::getPositionColorProgram);
 
-                    BufferRenderer.drawWithGlobalProgram(builder.end());
+                    Bufs.draw(builder);
                     RenderSystem.disableDepthTest();
 
                     stack.pop();
@@ -790,6 +805,9 @@ public class BBSModClient implements ClientModInitializer
 
         WorldRenderEvents.LAST.register((context) ->
         {
+            /* Portal windows of the frame - films, entities and model blocks alike - once all of those are drawn */
+            FormPortals.flush();
+
             if (videoRecorder.isRecording() && BBSRendering.canRender)
             {
                 RenderSystem.enableDepthTest();
@@ -818,6 +836,7 @@ public class BBSModClient implements ClientModInitializer
 
             ClientNetwork.resetHandshake();
             films.reset();
+            WorldFreeCam.reset();
             cameraController.reset();
         });
 
@@ -858,6 +877,7 @@ public class BBSModClient implements ClientModInitializer
             }
 
             cameraController.update();
+            FormPortals.tick(mc);
 
             if (!mc.isPaused())
             {
@@ -881,6 +901,7 @@ public class BBSModClient implements ClientModInitializer
             DashboardWarmup.tick(mc);
 
             while (keyDashboard.wasPressed()) UIScreen.open(getDashboard());
+            while (keyFreeCam.wasPressed()) WorldFreeCam.toggle();
             while (keyItemEditor.wasPressed()) this.keyOpenModelBlockEditor(mc);
             while (keyPlayFilm.wasPressed()) this.keyPlayFilm();
             while (keyPauseFilm.wasPressed()) this.keyPauseFilm();
@@ -908,7 +929,6 @@ public class BBSModClient implements ClientModInitializer
                 }
             }
             while (keyReplayRadial.wasPressed()) this.keyReplayRadial(mc);
-            while (keyRecordVideo.wasPressed()) this.keyRecordVideo(mc);
             while (keyPlayFilmAndRecord.wasPressed()) this.keyPlayFilmAndRecord();
             while (keyOpenReplays.wasPressed()) this.keyOpenReplays();
             while (keyOpenMorphing.wasPressed())
@@ -939,13 +959,18 @@ public class BBSModClient implements ClientModInitializer
         /* Baked structures hold sprite UVs — stale after resource reload (pack switch, F3+A) */
         InvalidateRenderStateCallback.EVENT.register(BakedStructure::invalidateAll);
 
-        HudRenderCallback.EVENT.register((drawContext, tickDelta) ->
+        HudRenderCallback.EVENT.register((drawContext, tickCounter) ->
         {
+            //? if >=1.21
+            /*float tickDelta = tickCounter.getTickDelta(true);*/
+            //? if <1.21
+            float tickDelta = tickCounter;
+
             BBSRendering.renderHud(drawContext, tickDelta);
 
             if (gunZoom != null)
             {
-                gunZoom.update(keyZoom.isPressed(), MinecraftClient.getInstance().getLastFrameDuration());
+                gunZoom.update(keyZoom.isPressed(), MinecraftClient.getInstance()./*$ gfd*/getLastFrameDuration()/**/);
 
                 if (gunZoom.canBeRemoved())
                 {
@@ -1023,18 +1048,6 @@ public class BBSModClient implements ClientModInitializer
         }
 
         BBSMod.events.post(new BBSClientReadyEvent());
-    }
-
-    private void keyRecordVideo(MinecraftClient mc)
-    {
-        if (worldExportSession.isExporting())
-        {
-            worldExportSession.cancel();
-
-            return;
-        }
-
-        worldExportSession.start(null, null);
     }
 
     private KeyBinding createKey(String id, int key)

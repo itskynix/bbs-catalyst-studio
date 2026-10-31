@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.framework.elements.utils;
 
+import mchorse.bbs_mod.utils.Bufs;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.BBSSettings;
@@ -16,6 +17,8 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gl.ShaderProgram;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.render.BufferBuilder;
+//? if >=1.21
+/*import net.minecraft.client.util.BufferAllocator;*/
 import net.minecraft.client.render.BufferRenderer;
 import net.minecraft.client.render.GameRenderer;
 import net.minecraft.client.render.Tessellator;
@@ -82,6 +85,8 @@ public class Batcher2D
      * flushes the pending quads first. The buffer is our own, not the shared Tessellator one,
      * so code that builds on the Tessellator directly can never collide with an open batch. */
     private BufferBuilder batchBuilder;
+    //? if >=1.21
+    /*private BufferAllocator batchAllocator;*/
     private boolean batching;
     private boolean batchStarted;
 
@@ -121,7 +126,7 @@ public class Batcher2D
         RenderSystem.enableBlend();
         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
         BBSProfiler.count(BBSProfiler.Section.UI_DRAW_CALLS);
-        BufferRenderer.drawWithGlobalProgram(this.batchBuilder.end());
+        Bufs.draw(this.batchBuilder);
 
         this.context.draw();
     }
@@ -233,12 +238,21 @@ public class Batcher2D
         {
             if (!this.batchStarted)
             {
+                //? if >=1.21 {
+                /*if (this.batchAllocator == null)
+                {
+                    this.batchAllocator = new BufferAllocator(262144);
+                }
+
+                this.batchBuilder = new BufferBuilder(this.batchAllocator, VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
+                *///?} else {
                 if (this.batchBuilder == null)
                 {
                     this.batchBuilder = new BufferBuilder(262144);
                 }
 
                 this.batchBuilder.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
+                //?}
                 this.batchStarted = true;
             }
 
@@ -247,16 +261,16 @@ public class Batcher2D
             return;
         }
 
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
+        BufferBuilder builder;
 
-        builder.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
+        builder = Bufs.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
 
         this.fillRect(builder, matrix4f, x, y, w, h, color1, color2, color3, color4);
 
         RenderSystem.enableBlend();
         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
         BBSProfiler.count(BBSProfiler.Section.UI_DRAW_CALLS);
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        Bufs.draw(builder);
 
         this.context.draw();
     }
@@ -271,21 +285,21 @@ public class Batcher2D
         this.flushBatch();
 
         Matrix4f matrix4f = this.context.getMatrices().peek().getPositionMatrix();
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
+        BufferBuilder builder;
 
-        builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+        builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
 
-        builder.vertex(matrix4f, x1, y1, 0F).color(topLeft).next();
-        builder.vertex(matrix4f, x1, y2, 0F).color(topLeft).next();
-        builder.vertex(matrix4f, x2, y1, 0F).color(topLeft).next();
-        builder.vertex(matrix4f, x2, y1, 0F).color(bottomRight).next();
-        builder.vertex(matrix4f, x1, y2, 0F).color(bottomRight).next();
-        builder.vertex(matrix4f, x2, y2, 0F).color(bottomRight).next();
+        builder.vertex(matrix4f, x1, y1, 0F).color(topLeft)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f, x1, y2, 0F).color(topLeft)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f, x2, y1, 0F).color(topLeft)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f, x2, y1, 0F).color(bottomRight)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f, x1, y2, 0F).color(bottomRight)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f, x2, y2, 0F).color(bottomRight)/*$ nx*/.next()/**/;
 
         RenderSystem.enableBlend();
         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
         BBSProfiler.count(BBSProfiler.Section.UI_DRAW_CALLS);
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        Bufs.draw(builder);
 
         this.context.draw();
     }
@@ -295,10 +309,10 @@ public class Batcher2D
         /* c1 ---- c2
          * |        |
          * c3 ---- c4 */
-        builder.vertex(matrix4f, x, y, 0).color(color1).next();
-        builder.vertex(matrix4f, x, y + h, 0).color(color3).next();
-        builder.vertex(matrix4f, x + w, y + h, 0).color(color4).next();
-        builder.vertex(matrix4f, x + w, y, 0).color(color2).next();
+        builder.vertex(matrix4f, x, y, 0).color(color1)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f, x, y + h, 0).color(color3)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f, x + w, y + h, 0).color(color4)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f, x + w, y, 0).color(color2)/*$ nx*/.next()/**/;
     }
 
     public void surfaceBox(int x1, int y1, int x2, int y2, int fill, boolean shadow, boolean border)
@@ -354,44 +368,44 @@ public class Batcher2D
         bottom += offset;
 
         Matrix4f matrix4f = this.context.getMatrices().peek().getPositionMatrix();
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
+        BufferBuilder builder;
 
-        builder.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
+        builder = Bufs.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
 
         /* Draw opaque part */
-        builder.vertex(matrix4f, left + offset, top + offset, 0).color(opaque).next();
-        builder.vertex(matrix4f,left + offset, bottom - offset, 0).color(opaque).next();
-        builder.vertex(matrix4f, right - offset, bottom - offset, 0).color(opaque).next();
-        builder.vertex(matrix4f, right - offset, top + offset, 0).color(opaque).next();
+        builder.vertex(matrix4f, left + offset, top + offset, 0).color(opaque)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f,left + offset, bottom - offset, 0).color(opaque)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f, right - offset, bottom - offset, 0).color(opaque)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f, right - offset, top + offset, 0).color(opaque)/*$ nx*/.next()/**/;
 
         /* Draw top shadow */
-        builder.vertex(matrix4f, left, top, 0).color(shadow).next();
-        builder.vertex(matrix4f,left + offset, top + offset, 0).color(opaque).next();
-        builder.vertex(matrix4f, right - offset, top + offset, 0).color(opaque).next();
-        builder.vertex(matrix4f, right, top, 0).color(shadow).next();
+        builder.vertex(matrix4f, left, top, 0).color(shadow)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f,left + offset, top + offset, 0).color(opaque)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f, right - offset, top + offset, 0).color(opaque)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f, right, top, 0).color(shadow)/*$ nx*/.next()/**/;
 
         /* Draw bottom shadow */
-        builder.vertex(matrix4f, left + offset, bottom - offset, 0).color(opaque).next();
-        builder.vertex(matrix4f,left, bottom, 0).color(shadow).next();
-        builder.vertex(matrix4f, right, bottom, 0).color(shadow).next();
-        builder.vertex(matrix4f, right - offset, bottom - offset, 0).color(opaque).next();
+        builder.vertex(matrix4f, left + offset, bottom - offset, 0).color(opaque)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f,left, bottom, 0).color(shadow)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f, right, bottom, 0).color(shadow)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f, right - offset, bottom - offset, 0).color(opaque)/*$ nx*/.next()/**/;
 
         /* Draw left shadow */
-        builder.vertex(matrix4f, left, top, 0).color(shadow).next();
-        builder.vertex(matrix4f, left, bottom, 0).color(shadow).next();
-        builder.vertex(matrix4f, left + offset, bottom - offset, 0).color(opaque).next();
-        builder.vertex(matrix4f,left + offset, top + offset, 0).color(opaque).next();
+        builder.vertex(matrix4f, left, top, 0).color(shadow)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f, left, bottom, 0).color(shadow)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f, left + offset, bottom - offset, 0).color(opaque)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f,left + offset, top + offset, 0).color(opaque)/*$ nx*/.next()/**/;
 
         /* Draw right shadow */
-        builder.vertex(matrix4f, right - offset, top + offset, 0).color(opaque).next();
-        builder.vertex(matrix4f, right - offset, bottom - offset, 0).color(opaque).next();
-        builder.vertex(matrix4f, right, bottom, 0).color(shadow).next();
-        builder.vertex(matrix4f,right, top, 0).color(shadow).next();
+        builder.vertex(matrix4f, right - offset, top + offset, 0).color(opaque)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f, right - offset, bottom - offset, 0).color(opaque)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f, right, bottom, 0).color(shadow)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f,right, top, 0).color(shadow)/*$ nx*/.next()/**/;
 
         RenderSystem.enableBlend();
         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
         BBSProfiler.count(BBSProfiler.Section.UI_DRAW_CALLS);
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        Bufs.draw(builder);
     }
 
     /* Gradients */
@@ -453,16 +467,16 @@ public class Batcher2D
         this.flushBatch();
 
         Matrix4f matrix4f = this.context.getMatrices().peek().getPositionMatrix();
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
+        BufferBuilder builder;
 
-        builder.begin(VertexFormat.DrawMode.TRIANGLE_FAN, VertexFormats.POSITION_COLOR);
-        builder.vertex(matrix4f, x, y, 0F).color(opaque).next();
+        builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLE_FAN, VertexFormats.POSITION_COLOR);
+        builder.vertex(matrix4f, x, y, 0F).color(opaque)/*$ nx*/.next()/**/;
 
         for (int i = 0; i <= segments; i ++)
         {
             double a = i / (double) segments * Math.PI * 2 - Math.PI / 2;
 
-            builder.vertex(matrix4f, (float) (x - Math.cos(a) * radius), (float) (y + Math.sin(a) * radius), 0F).color(shadow).next();
+            builder.vertex(matrix4f, (float) (x - Math.cos(a) * radius), (float) (y + Math.sin(a) * radius), 0F).color(shadow)/*$ nx*/.next()/**/;
         }
     }
 
@@ -479,43 +493,43 @@ public class Batcher2D
 
         Matrix4f matrix4f = this.context.getMatrices().peek().getPositionMatrix();
 
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
+        BufferBuilder builder;
 
         RenderSystem.enableBlend();
         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
 
         /* Draw opaque base */
-        builder.begin(VertexFormat.DrawMode.TRIANGLE_FAN, VertexFormats.POSITION_COLOR);
-        builder.vertex(matrix4f, x, y, 0F).color(opaque).next();
+        builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLE_FAN, VertexFormats.POSITION_COLOR);
+        builder.vertex(matrix4f, x, y, 0F).color(opaque)/*$ nx*/.next()/**/;
 
         for (int i = 0; i <= segments; i ++)
         {
             double a = i / (double) segments * Math.PI * 2 - Math.PI / 2;
 
-            builder.vertex(matrix4f, (int) (x - Math.cos(a) * offset), (int) (y + Math.sin(a) * offset), 0F).color(opaque).next();
+            builder.vertex(matrix4f, (int) (x - Math.cos(a) * offset), (int) (y + Math.sin(a) * offset), 0F).color(opaque)/*$ nx*/.next()/**/;
         }
 
         BBSProfiler.count(BBSProfiler.Section.UI_DRAW_CALLS);
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        Bufs.draw(builder);
 
         /* Draw outer shadow */
-        builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+        builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
 
         for (int i = 0; i < segments; i ++)
         {
             double alpha1 = i / (double) segments * Math.PI * 2 - Math.PI / 2;
             double alpha2 = (i + 1) / (double) segments * Math.PI * 2 - Math.PI / 2;
 
-            builder.vertex(matrix4f, (float) (x - Math.cos(alpha2) * offset), (float) (y + Math.sin(alpha2) * offset), 0F).color(opaque).next();
-            builder.vertex(matrix4f, (float) (x - Math.cos(alpha1) * offset), (float) (y + Math.sin(alpha1) * offset), 0F).color(opaque).next();
-            builder.vertex(matrix4f, (float) (x - Math.cos(alpha1) * radius), (float) (y + Math.sin(alpha1) * radius), 0F).color(shadow).next();
-            builder.vertex(matrix4f, (float) (x - Math.cos(alpha2) * offset), (float) (y + Math.sin(alpha2) * offset), 0F).color(opaque).next();
-            builder.vertex(matrix4f, (float) (x - Math.cos(alpha1) * radius), (float) (y + Math.sin(alpha1) * radius), 0F).color(shadow).next();
-            builder.vertex(matrix4f, (float) (x - Math.cos(alpha2) * radius), (float) (y + Math.sin(alpha2) * radius), 0F).color(shadow).next();
+            builder.vertex(matrix4f, (float) (x - Math.cos(alpha2) * offset), (float) (y + Math.sin(alpha2) * offset), 0F).color(opaque)/*$ nx*/.next()/**/;
+            builder.vertex(matrix4f, (float) (x - Math.cos(alpha1) * offset), (float) (y + Math.sin(alpha1) * offset), 0F).color(opaque)/*$ nx*/.next()/**/;
+            builder.vertex(matrix4f, (float) (x - Math.cos(alpha1) * radius), (float) (y + Math.sin(alpha1) * radius), 0F).color(shadow)/*$ nx*/.next()/**/;
+            builder.vertex(matrix4f, (float) (x - Math.cos(alpha2) * offset), (float) (y + Math.sin(alpha2) * offset), 0F).color(opaque)/*$ nx*/.next()/**/;
+            builder.vertex(matrix4f, (float) (x - Math.cos(alpha1) * radius), (float) (y + Math.sin(alpha1) * radius), 0F).color(shadow)/*$ nx*/.next()/**/;
+            builder.vertex(matrix4f, (float) (x - Math.cos(alpha2) * radius), (float) (y + Math.sin(alpha2) * radius), 0F).color(shadow)/*$ nx*/.next()/**/;
         }
 
         BBSProfiler.count(BBSProfiler.Section.UI_DRAW_CALLS);
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        Bufs.draw(builder);
     }
 
     /* Outline methods */
@@ -668,18 +682,18 @@ public class Batcher2D
         RenderSystem.setShaderTexture(0, texture.id);
 
         Matrix4f matrix = this.context.getMatrices().peek().getPositionMatrix();
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
+        BufferBuilder builder;
 
         /* The colour carries an alpha and the caller means it, so blending is turned on here
          * rather than borrowed from whatever was drawn before - see the note above box() */
         RenderSystem.enableBlend();
         RenderSystem.setShader(texturedProgram(texture));
 
-        builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_TEXTURE_COLOR);
+        builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_TEXTURE_COLOR);
         this.fillTexturedBox(builder, matrix, color, x, y, w, h, u1, v1, u2, v2, textureW, textureH);
 
         BBSProfiler.count(BBSProfiler.Section.UI_DRAW_CALLS);
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        Bufs.draw(builder);
     }
 
     public void texturedBox(int texture, int color, float x, float y, float w, float h, float u1, float v1, float u2, float v2, int textureW, int textureH)
@@ -694,26 +708,26 @@ public class Batcher2D
         RenderSystem.setShaderTexture(0, texture);
 
         Matrix4f matrix = this.context.getMatrices().peek().getPositionMatrix();
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
+        BufferBuilder builder;
 
         RenderSystem.enableBlend();
         RenderSystem.setShader(shader);
 
-        builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_TEXTURE_COLOR);
+        builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_TEXTURE_COLOR);
         this.fillTexturedBox(builder, matrix, color, x, y, w, h, u1, v1, u2, v2, textureW, textureH);
 
         BBSProfiler.count(BBSProfiler.Section.UI_DRAW_CALLS);
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        Bufs.draw(builder);
     }
 
     private void fillTexturedBox(BufferBuilder builder, Matrix4f matrix, int color, float x, float y, float w, float h, float u1, float v1, float u2, float v2, int textureW, int textureH)
     {
-        builder.vertex(matrix, x, y + h, 0F).texture(u1 / (float) textureW, v2 / (float) textureH).color(color).next();
-        builder.vertex(matrix, x + w, y + h, 0F).texture(u2 / (float) textureW, v2 / (float) textureH).color(color).next();
-        builder.vertex(matrix, x + w, y, 0F).texture(u2 / (float) textureW, v1 / (float) textureH).color(color).next();
-        builder.vertex(matrix, x, y + h, 0F).texture(u1 / (float) textureW, v2 / (float) textureH).color(color).next();
-        builder.vertex(matrix, x + w, y, 0F).texture(u2 / (float) textureW, v1 / (float) textureH).color(color).next();
-        builder.vertex(matrix, x, y, 0F).texture(u1 / (float) textureW, v1 / (float) textureH).color(color).next();
+        builder.vertex(matrix, x, y + h, 0F).texture(u1 / (float) textureW, v2 / (float) textureH).color(color)/*$ nx*/.next()/**/;
+        builder.vertex(matrix, x + w, y + h, 0F).texture(u2 / (float) textureW, v2 / (float) textureH).color(color)/*$ nx*/.next()/**/;
+        builder.vertex(matrix, x + w, y, 0F).texture(u2 / (float) textureW, v1 / (float) textureH).color(color)/*$ nx*/.next()/**/;
+        builder.vertex(matrix, x, y + h, 0F).texture(u1 / (float) textureW, v2 / (float) textureH).color(color)/*$ nx*/.next()/**/;
+        builder.vertex(matrix, x + w, y, 0F).texture(u2 / (float) textureW, v1 / (float) textureH).color(color)/*$ nx*/.next()/**/;
+        builder.vertex(matrix, x, y, 0F).texture(u1 / (float) textureW, v1 / (float) textureH).color(color)/*$ nx*/.next()/**/;
     }
 
     /* Repeatable textured box */
@@ -728,13 +742,13 @@ public class Batcher2D
         float fillerY = h - (countY - 1) * tileH;
 
         Matrix4f matrix = this.context.getMatrices().peek().getPositionMatrix();
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
+        BufferBuilder builder;
 
         RenderSystem.enableBlend();
         RenderSystem.setShader(texturedProgram(texture));
         RenderSystem.setShaderTexture(0, texture.id);
 
-        builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_TEXTURE_COLOR);
+        builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_TEXTURE_COLOR);
 
         for (int i = 0, c = countX * countY; i < c; i ++)
         {
@@ -749,7 +763,7 @@ public class Batcher2D
         }
 
         BBSProfiler.count(BBSProfiler.Section.UI_DRAW_CALLS);
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        Bufs.draw(builder);
     }
 
     /* Text with default font */

@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.client.renderer;
 
+import mchorse.bbs_mod.utils.VersionCompat;
 import mchorse.bbs_mod.cubic.animation.ItemUsePose;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.LivingEntity;
@@ -53,7 +54,7 @@ public class ItemPredicateDonor
         }
 
         donor.activeItemStack = stack;
-        donor.itemUseTimeLeft = Math.max(0, Math.round(stack.getMaxUseTime() - use.elapsed()));
+        donor.itemUseTimeLeft = Math.max(0, Math.round(VersionCompat.getMaxUseTime(stack, null) - use.elapsed()));
 
         return donor;
     }

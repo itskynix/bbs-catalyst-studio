@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.cubic.animation;
 
+import mchorse.bbs_mod.utils.VersionCompat;
 import mchorse.bbs_mod.cubic.animation.ItemUsePose.Use;
 import net.minecraft.item.CrossbowItem;
 import net.minecraft.item.ItemStack;
@@ -192,7 +193,7 @@ public class VanillaArmPoses
         charging.pitch(-0.97079635F);
         other.pitch(charging.pitch());
 
-        float pullTime = use == null ? 25F : Math.max(1, CrossbowItem.getPullTime(use.stack()));
+        float pullTime = use == null ? 25F : Math.max(1, VersionCompat.getPullTime(use.stack(), null));
         float used = MathHelper.clamp(use == null ? 0F : use.elapsed(), 0F, pullTime);
         float progress = used / pullTime;
 

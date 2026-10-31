@@ -7,6 +7,7 @@ import java.util.Map;
 
 import mchorse.bbs_mod.client.BBSRendering;
 import mchorse.bbs_mod.cubic.IBoneHierarchy;
+import mchorse.bbs_mod.forms.FormMasking;
 import mchorse.bbs_mod.forms.FormUtilsClient;
 import mchorse.bbs_mod.forms.entities.IEntity;
 import mchorse.bbs_mod.forms.forms.BodyPart;
@@ -171,14 +172,17 @@ public abstract class FormRenderer <T extends Form>
         u = (int) Lerps.lerp(u, LightmapTextureManager.MAX_BLOCK_LIGHT_COORDINATE, lf);
         context.light = u | v << 16;
 
-        this.render3D(context);
-
-        if (isPicking)
+        FormMasking.render(context, this.form, () ->
         {
-            this.updateStencilMap(context);
-        }
+            this.render3D(context);
 
-        this.renderBodyParts(context);
+            if (isPicking)
+            {
+                this.updateStencilMap(context);
+            }
+
+            this.renderBodyParts(context);
+        });
 
         context.stack.pop();
         if (context.world != null)

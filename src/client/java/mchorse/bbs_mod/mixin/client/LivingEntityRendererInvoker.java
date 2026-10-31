@@ -16,7 +16,11 @@ public interface LivingEntityRendererInvoker
     public float bbs$getHandSwingProgress(LivingEntity entity, float tickDelta);
 
     @Invoker("setupTransforms")
+    //? if >=1.21 {
+    /*public void bbs$setupTransforms(LivingEntity entity, MatrixStack matrices, float animationProgress, float bodyYaw, float tickDelta, float scale);
+    *///?} else {
     public void bbs$setupTransforms(LivingEntity entity, MatrixStack matrices, float animationProgress, float bodyYaw, float tickDelta);
+    //?}
 
     @Invoker("scale")
     public void bbs$scale(LivingEntity entity, MatrixStack matrices, float tickDelta);

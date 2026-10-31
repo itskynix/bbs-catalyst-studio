@@ -94,6 +94,17 @@ public class UIOverlayPanel extends UIElement
         return this.resized;
     }
 
+    /** The smallest the corner grip may size this panel to; a panel with more to fit asks for more. */
+    public int getMinWidth()
+    {
+        return MIN_WIDTH;
+    }
+
+    public int getMinHeight()
+    {
+        return MIN_HEIGHT;
+    }
+
     /**
      * Adds the corner grip. Called by {@link UIOverlay} rather than from the constructor: whether a
      * panel is resizable can depend on fields its subclass sets after {@code super(...)} has run.
@@ -125,8 +136,10 @@ public class UIOverlayPanel extends UIElement
         /* Past the overlay's own size the bounds resizer starts sliding the panel to keep it on
          * screen, which moves the anchor the corner is solved against, and the grip runs away from
          * the hand */
-        int maxWidth = Math.max(parent.area.w, MIN_WIDTH);
-        int maxHeight = Math.max(parent.area.h, MIN_HEIGHT);
+        int maxWidth = Math.max(parent.area.w, Math.min(this.getMinWidth(), parent.area.w));
+        int maxHeight = Math.max(parent.area.h, Math.min(this.getMinHeight(), parent.area.h));
+        int minWidth = Math.min(this.getMinWidth(), maxWidth);
+        int minHeight = Math.min(this.getMinHeight(), maxHeight);
 
         /* The panel is placed by its anchor, so a centered one grows in both directions and its
          * corner travels at half the speed of the size. Solving for the corner rather than adding
@@ -137,7 +150,7 @@ public class UIOverlayPanel extends UIElement
             int width = (int) ((context.mouseX - origin) / (1F - anchorX));
 
             this.flex.w.max = 0;
-            this.flex.w.set(0F, MathUtils.clamp(width, MIN_WIDTH, maxWidth));
+            this.flex.w.set(0F, MathUtils.clamp(width, minWidth, maxWidth));
         }
 
         if (anchorY < 1F)
@@ -146,7 +159,7 @@ public class UIOverlayPanel extends UIElement
             int height = (int) ((context.mouseY - origin) / (1F - anchorY));
 
             this.flex.h.max = 0;
-            this.flex.h.set(0F, MathUtils.clamp(height, MIN_HEIGHT, maxHeight));
+            this.flex.h.set(0F, MathUtils.clamp(height, minHeight, maxHeight));
         }
 
         this.resized = true;
@@ -218,6 +231,7 @@ public class UIOverlayPanel extends UIElement
     public void resize()
     {
         super.resize();
+        this.fitInsideParent();
 
         int height = this.getContentHeight();
 
@@ -231,6 +245,40 @@ public class UIOverlayPanel extends UIElement
             this.flex.h.max = 0;
             this.flex.h.set(0F, height);
 
+            super.resize();
+        }
+    }
+
+    /**
+     * A panel larger than the screen it opens on - a fixed size meant for a bigger window, a size
+     * remembered from one, or a larger GUI scale - is shrunk to fit, so its corner, and the grip in
+     * it, is never pushed off screen.
+     */
+    private void fitInsideParent()
+    {
+        UIElement parent = this.getParent();
+
+        if (parent == null || parent.area.w <= 0 || parent.area.h <= 0)
+        {
+            return;
+        }
+
+        boolean changed = false;
+
+        if (this.area.w > parent.area.w)
+        {
+            this.flex.w.max = parent.area.w;
+            changed = true;
+        }
+
+        if (this.area.h > parent.area.h)
+        {
+            this.flex.h.max = parent.area.h;
+            changed = true;
+        }
+
+        if (changed)
+        {
             super.resize();
         }
     }

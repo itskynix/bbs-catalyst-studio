@@ -1,5 +1,7 @@
 package mchorse.bbs_mod.forms.structure;
 
+import mchorse.bbs_mod.utils.ClientCompat;
+import mchorse.bbs_mod.utils.Bufs;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.BBSMod;
 import mchorse.bbs_mod.BBSModClient;
@@ -118,6 +120,9 @@ public class StructureWand
 
         /* The item stays a plain Item: the tooltip is the one thing it would need a class for, and
          * it belongs on the client with the rest of the wand anyway */
+        //? if >=1.21
+        /*ItemTooltipCallback.EVENT.register((stack, context, type, lines) ->*/
+        //? if <1.21
         ItemTooltipCallback.EVENT.register((stack, context, lines) ->
         {
             if (stack.isOf(BBSMod.STRUCTURE_WAND_ITEM))
@@ -230,10 +235,10 @@ public class StructureWand
             return blockHit.getBlockPos();
         }
 
-        float tickDelta = mc.getTickDelta();
+        float tickDelta = mc./*$ gtd*/getTickDelta()/**/;
         Vec3d eye = mc.player.getCameraPosVec(tickDelta);
         Vec3d look = mc.player.getRotationVec(tickDelta);
-        double reach = mc.interactionManager == null ? 4.5 : mc.interactionManager.getReachDistance();
+        double reach = mc.interactionManager == null ? 4.5 : ClientCompat.getReach(mc);
 
         return BlockPos.ofFloored(eye.add(look.multiply(reach)));
     }
@@ -343,7 +348,7 @@ public class StructureWand
             return;
         }
 
-        float tickDelta = context.tickDelta();
+        float tickDelta = context./*$ wtd*/tickDelta()/**/;
         Vec3d camera = context.camera().getPos();
         Box box = StructureSelection.getBox();
 
@@ -456,12 +461,12 @@ public class StructureWand
          * makes the one filled face unmistakable */
         if (face != null)
         {
-            BufferBuilder builder = Tessellator.getInstance().getBuffer();
+            BufferBuilder builder;
 
             RenderSystem.setShader(GameRenderer::getPositionColorProgram);
-            builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+            builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
             fillFace(builder, stack, face, w, h, d, COLOR.r, COLOR.g, COLOR.b, FACE_HOVER);
-            BufferRenderer.drawWithGlobalProgram(builder.end());
+            Bufs.draw(builder);
         }
 
         Draw.renderBox(stack, 0, 0, 0, w, h, d, COLOR.r, COLOR.g, COLOR.b, 1F);
@@ -505,12 +510,12 @@ public class StructureWand
         stack.push();
         stack.translate(pos.getX() - camera.x, pos.getY() - camera.y, pos.getZ() - camera.z);
 
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
+        BufferBuilder builder;
 
         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
-        builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+        builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
         Draw.fillBox(builder, stack, 0, 0, 0, 1, 1, 1, r, g, b, CORNER_FILL);
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        Bufs.draw(builder);
 
         Draw.renderBox(stack, 0, 0, 0, 1, 1, 1, r, g, b, 1F);
 

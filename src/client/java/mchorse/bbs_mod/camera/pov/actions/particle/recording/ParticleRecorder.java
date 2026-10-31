@@ -17,6 +17,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.particle.recording;
 
+import mchorse.bbs_mod.utils.EffectCompat;
 import mchorse.bbs_mod.camera.pov.actions.PovActionType;
 import mchorse.bbs_mod.camera.pov.actions.clip.ParticleEffectPovActionClip;
 import mchorse.bbs_mod.camera.pov.config.PovSettings;
@@ -173,6 +174,9 @@ public final class ParticleRecorder {
             return;
         }
         ParticleType type = parameters.getType();
+        //? if >=1.21
+        /*if (type == ParticleTypes.ENTITY_EFFECT || type == ParticleTypes.EFFECT || type == ParticleTypes.TOTEM_OF_UNDYING || !ParticleRecorder.isBurstEffect(type)) {*/
+        //? if <1.21
         if (type == ParticleTypes.ENTITY_EFFECT || type == ParticleTypes.AMBIENT_ENTITY_EFFECT || type == ParticleTypes.EFFECT || type == ParticleTypes.TOTEM_OF_UNDYING || !ParticleRecorder.isBurstEffect(type)) {
             return;
         }
@@ -192,7 +196,7 @@ public final class ParticleRecorder {
         int color = -1;
         for (StatusEffectInstance instance : player.getStatusEffects()) {
             if (instance == null || !instance.shouldShowParticles()) continue;
-            color = instance.getEffectType().getColor();
+            color = EffectCompat.type(instance).getColor();
         }
         return color;
     }

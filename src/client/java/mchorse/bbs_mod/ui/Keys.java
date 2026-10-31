@@ -52,6 +52,7 @@ public class Keys
     public static final KeyCombo CLIP_SELECT_AFTER = new KeyCombo("clip_select_after", UIKeys.CAMERA_EDITOR_KEYS_EDITOR_SELECT_AFTER, GLFW.GLFW_KEY_PERIOD, GLFW.GLFW_KEY_LEFT_CONTROL).categoryKey("camera");
     public static final KeyCombo CLIP_SELECT_BEFORE = new KeyCombo("clip_select_before", UIKeys.CAMERA_EDITOR_KEYS_EDITOR_SELECT_BEFORE, GLFW.GLFW_KEY_COMMA, GLFW.GLFW_KEY_LEFT_CONTROL).categoryKey("camera");
     public static final KeyCombo FLIGHT = new KeyCombo("flight", UIKeys.CAMERA_EDITOR_KEYS_MODES_FLIGHT, GLFW.GLFW_KEY_F).categoryKey("camera");
+    public static final KeyCombo FREE_CAM = new KeyCombo("free_cam", UIKeys.CAMERA_EDITOR_KEYS_MODES_FREE_CAM, GLFW.GLFW_KEY_F7).categoryKey("camera");
     public static final KeyCombo LOOPING = new KeyCombo("looping", UIKeys.CAMERA_EDITOR_KEYS_MODES_LOOPING, GLFW.GLFW_KEY_L).categoryKey("camera");
     public static final KeyCombo LOOPING_SET_MAX = new KeyCombo("looping_set_max", UIKeys.CAMERA_EDITOR_KEYS_LOOPING_SET_MAX, GLFW.GLFW_KEY_RIGHT_BRACKET).categoryKey("camera");
     public static final KeyCombo LOOPING_SET_MIN = new KeyCombo("looping_set_min", UIKeys.CAMERA_EDITOR_KEYS_LOOPING_SET_MIN, GLFW.GLFW_KEY_LEFT_BRACKET).categoryKey("camera");

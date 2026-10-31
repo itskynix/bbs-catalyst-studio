@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.audio;
 
+import mchorse.bbs_mod.resources.Link;
 import mchorse.bbs_mod.utils.MathUtils;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.sound.Sound;
@@ -15,8 +16,11 @@ import net.minecraft.util.Identifier;
 import net.minecraft.util.math.Vec3d;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Captures Minecraft sounds (footsteps, digging, mobs, weather, etc.) played while a
@@ -47,6 +51,13 @@ public class MinecraftSoundCapture implements SoundInstanceListener
     private final List<ListenerFrame> frames = new ArrayList<>();
     private final List<CapturedSound> playingLoops = new ArrayList<>();
 
+    /**
+     * Sounds that bypass vanilla's sound engine (AudioForm plays straight through
+     * OpenAL), reported per recorded frame by their owners as ready-made PCM state.
+     */
+    private final List<ExternalTrack> externalTracks = new ArrayList<>();
+    private final Map<Object, ExternalTrack> externalByOwner = new IdentityHashMap<>();
+
     private boolean active;
 
     public boolean isActive()
@@ -64,6 +75,52 @@ public class MinecraftSoundCapture implements SoundInstanceListener
         return this.frames;
     }
 
+    public List<ExternalTrack> getExternalTracks()
+    {
+        return this.externalTracks;
+    }
+
+    /** Index of the recording frame that is being rendered right now. */
+    public int getCurrentFrame()
+    {
+        return this.frames.size();
+    }
+
+    /**
+     * Report the state of an externally played sound (not going through vanilla's
+     * sound engine) for the frame currently being rendered. Reporting the same
+     * owner several times within one frame keeps the last report.
+     *
+     * @param owner     identity of the playing source (one track per owner and file)
+     * @param link      BBS asset of the audio file
+     * @param sourceSec playback position inside the file at this frame, in seconds
+     * @param gainL     final left channel gain (volume, distance, pan, muffle applied)
+     * @param gainR     final right channel gain
+     * @param pitch     playback speed factor
+     * @param lowPass   high frequency gain (1 = open air, towards 0 = muffled)
+     * @param loop      whether the file wraps around at its end
+     */
+    public void reportExternal(Object owner, Link link, double sourceSec, float gainL, float gainR, float pitch, float lowPass, boolean loop)
+    {
+        if (!this.active || owner == null || link == null)
+        {
+            return;
+        }
+
+        ExternalTrack track = this.externalByOwner.get(owner);
+
+        if (track == null || !track.link.equals(link))
+        {
+            track = new ExternalTrack(link);
+
+            this.externalByOwner.put(owner, track);
+            this.externalTracks.add(track);
+        }
+
+        track.loop = loop;
+        track.put(this.frames.size(), new ExternalFrame(sourceSec, gainL, gainR, pitch, lowPass));
+    }
+
     public void begin()
     {
         /* A stale capture (e.g. an export torn down without finishing, like a
@@ -72,6 +129,8 @@ public class MinecraftSoundCapture implements SoundInstanceListener
 
         this.sounds.clear();
         this.frames.clear();
+        this.externalTracks.clear();
+        this.externalByOwner.clear();
         this.active = true;
 
         MinecraftClient.getInstance().getSoundManager().registerListener(this);
@@ -89,6 +148,7 @@ public class MinecraftSoundCapture implements SoundInstanceListener
         }
 
         this.active = false;
+        this.externalByOwner.clear();
 
         MinecraftClient.getInstance().getSoundManager().unregisterListener(this);
 
@@ -368,6 +428,53 @@ public class MinecraftSoundCapture implements SoundInstanceListener
             this.x = x;
             this.y = y;
             this.z = z;
+        }
+    }
+
+    /**
+     * An externally played sound (AudioForm) captured as per-frame playback state:
+     * where in the file it is, how loud on each channel, how fast and how muffled.
+     * Frames without a report are silent (paused timeline, hidden form, out of range).
+     */
+    public static class ExternalTrack
+    {
+        public final Link link;
+        public boolean loop;
+        public final Map<Integer, ExternalFrame> frames = new HashMap<>();
+        public int minFrame = Integer.MAX_VALUE;
+        public int maxFrame = Integer.MIN_VALUE;
+
+        public ExternalTrack(Link link)
+        {
+            this.link = link;
+        }
+
+        public void put(int frame, ExternalFrame state)
+        {
+            this.frames.put(frame, state);
+            this.minFrame = Math.min(this.minFrame, frame);
+            this.maxFrame = Math.max(this.maxFrame, frame);
+        }
+    }
+
+    /**
+     * State of an external sound at one recorded frame.
+     */
+    public static class ExternalFrame
+    {
+        public final double sourceSec;
+        public final float gainL;
+        public final float gainR;
+        public final float pitch;
+        public final float lowPass;
+
+        public ExternalFrame(double sourceSec, float gainL, float gainR, float pitch, float lowPass)
+        {
+            this.sourceSec = sourceSec;
+            this.gainL = gainL;
+            this.gainR = gainR;
+            this.pitch = pitch;
+            this.lowPass = lowPass;
         }
     }
 

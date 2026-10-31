@@ -15,6 +15,14 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -98,10 +106,23 @@ public class VideoPlayer
      * worker restarts the process and decodes the frame into frameBuffer; the render
      * thread only uploads the result. While seeking is true the render thread stays
      * away from the process and the buffer. */
-    private Thread seekThread;
+    private ExecutorService seekExecutor;
+    private Future<?> seekFuture;
+    private final AtomicInteger seekGeneration = new AtomicInteger();
     private volatile boolean seeking;
     private volatile boolean pendingReady;
     private volatile int pendingFrame = -1;
+
+    /* Counts the frames put on the texture, so whoever derives something from a
+     * frame (the alpha mask below) can tell a new one arrived */
+    private int uploadVersion;
+
+    /* The alpha of the frame on the texture, sampled down to a grid, for the video
+     * forms that extrude it; read lazily, only by the ones that ask */
+    private byte[] alphaMask;
+    private int alphaMaskWidth;
+    private int alphaMaskHeight;
+    private int alphaMaskVersion = -1;
 
     public VideoPlayer(File file)
     {
@@ -516,17 +537,51 @@ public class VideoPlayer
 
     private void startSeek(float seconds)
     {
+        int generation = this.seekGeneration.incrementAndGet();
+        Future<?> previous = this.seekFuture;
+
+        /* A newer request supersedes the one still running: it is cancelled and its ffmpeg
+         * process is killed so a worker blocked on the pipe returns at once. */
+        if (previous != null && !previous.isDone())
+        {
+            previous.cancel(true);
+
+            Process running = this.process;
+
+            if (running != null)
+            {
+                running.destroyForcibly();
+            }
+        }
+
+        if (this.seekExecutor == null)
+        {
+            this.seekExecutor = Executors.newSingleThreadExecutor((runnable) ->
+            {
+                Thread thread = new Thread(runnable, "BBS Video Seek");
+
+                thread.setDaemon(true);
+
+                return thread;
+            });
+        }
+
         this.seeking = true;
-        this.seekThread = new Thread(() ->
+        this.seekFuture = this.seekExecutor.submit(() ->
         {
             try
             {
+                if (this.isSeekStale(generation))
+                {
+                    return;
+                }
+
                 if (this.state == STATE_UNPROBED)
                 {
                     this.probe();
                 }
 
-                if (this.state != STATE_VALID)
+                if (this.state != STATE_VALID || this.isSeekStale(generation))
                 {
                     return;
                 }
@@ -536,7 +591,19 @@ public class VideoPlayer
 
                 this.restart(target / this.fps, target);
 
-                if (this.readFrame())
+                if (this.isSeekStale(generation))
+                {
+                    return;
+                }
+
+                boolean read = this.readFrame();
+
+                if (this.isSeekStale(generation))
+                {
+                    return;
+                }
+
+                if (read)
                 {
                     this.streamFrame = target + 1;
                     this.pendingFrame = target;
@@ -554,31 +621,44 @@ public class VideoPlayer
             }
             finally
             {
-                this.seeking = false;
+                /* Only the newest request clears the flag; a superseded one must not */
+                if (generation == this.seekGeneration.get())
+                {
+                    this.seeking = false;
+                }
             }
-        }, "BBS Video Seek");
-
-        this.seekThread.setDaemon(true);
-        this.seekThread.start();
+        });
     }
 
+    private boolean isSeekStale(int generation)
+    {
+        return generation != this.seekGeneration.get() || Thread.currentThread().isInterrupted();
+    }
+
+    /**
+     * Wait for the in-flight seek. Only for paths that must be exact right now (recording,
+     * seekFrame, probing from the UI, delete) - the per-frame preview path never calls it
+     * and keeps showing the last valid frame while {@link #seeking} is set.
+     */
     private void finishSeek()
     {
-        Thread thread = this.seekThread;
+        Future<?> future = this.seekFuture;
 
-        if (thread != null && thread.isAlive())
+        if (future != null && !future.isDone())
         {
             try
             {
-                thread.join(1000);
+                future.get(1000, TimeUnit.MILLISECONDS);
             }
-            catch (InterruptedException e)
-            {}
-
-            if (thread.isAlive())
+            catch (TimeoutException e)
             {
+                this.seekGeneration.incrementAndGet();
+                future.cancel(true);
                 this.stop();
+                this.seeking = false;
             }
+            catch (InterruptedException | ExecutionException | CancellationException e)
+            {}
         }
     }
 
@@ -692,6 +772,71 @@ public class VideoPlayer
         this.texture.unbind();
 
         this.currentFrame = frame;
+        this.uploadVersion++;
+    }
+
+    /**
+     * Brings the alpha mask up to the frame on the texture: the alpha of the pixel
+     * at the middle of each cell of a grid at most {@code maxSide} cells on its long
+     * side. Only reads the frame buffer when it surely holds that frame (no seek in
+     * flight, no decoded frame waiting for upload); otherwise the old mask stays and
+     * the next call tries again. Must be called on the render thread.
+     *
+     * @return the version of the frame the mask is of, -1 when there is none yet.
+     */
+    public int updateAlphaMask(int maxSide)
+    {
+        if (this.alphaMaskVersion == this.uploadVersion && this.alphaMask != null)
+        {
+            return this.alphaMaskVersion;
+        }
+
+        if (this.seeking || this.pendingReady || this.frameBuffer == null || this.texture == null || this.renderWidth <= 0 || this.renderHeight <= 0)
+        {
+            return this.alphaMask == null ? -1 : this.alphaMaskVersion;
+        }
+
+        float scale = Math.min(1F, maxSide / (float) Math.max(this.renderWidth, this.renderHeight));
+        int w = Math.max(1, Math.round(this.renderWidth * scale));
+        int h = Math.max(1, Math.round(this.renderHeight * scale));
+
+        if (this.alphaMask == null || this.alphaMask.length != w * h)
+        {
+            this.alphaMask = new byte[w * h];
+        }
+
+        for (int j = 0; j < h; j++)
+        {
+            int y = Math.min(this.renderHeight - 1, (int) ((j + 0.5F) * this.renderHeight / h));
+
+            for (int i = 0; i < w; i++)
+            {
+                int x = Math.min(this.renderWidth - 1, (int) ((i + 0.5F) * this.renderWidth / w));
+
+                this.alphaMask[j * w + i] = this.frameBuffer.get((y * this.renderWidth + x) * 4 + 3);
+            }
+        }
+
+        this.alphaMaskWidth = w;
+        this.alphaMaskHeight = h;
+        this.alphaMaskVersion = this.uploadVersion;
+
+        return this.alphaMaskVersion;
+    }
+
+    public byte[] getAlphaMask()
+    {
+        return this.alphaMask;
+    }
+
+    public int getAlphaMaskWidth()
+    {
+        return this.alphaMaskWidth;
+    }
+
+    public int getAlphaMaskHeight()
+    {
+        return this.alphaMaskHeight;
     }
 
     /**
@@ -732,6 +877,12 @@ public class VideoPlayer
         /* The worker writes into frameBuffer - it must be done before the buffer is freed */
         this.stop();
         this.finishSeek();
+
+        if (this.seekExecutor != null)
+        {
+            this.seekExecutor.shutdownNow();
+            this.seekExecutor = null;
+        }
 
         if (this.texture != null)
         {

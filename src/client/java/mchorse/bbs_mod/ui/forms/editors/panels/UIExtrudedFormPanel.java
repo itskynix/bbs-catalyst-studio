@@ -5,6 +5,7 @@ import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.forms.editors.forms.UIForm;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIButton;
 import mchorse.bbs_mod.ui.framework.elements.input.UITexturePicker;
+import mchorse.bbs_mod.ui.utils.UI;
 import mchorse.bbs_mod.ui.utils.values.UIValues;
 
 public class UIExtrudedFormPanel extends UIFormPanel<ExtrudedForm>
@@ -25,7 +26,14 @@ public class UIExtrudedFormPanel extends UIFormPanel<ExtrudedForm>
             this.pick,
             UIValues.color(() -> this.form.color).withAlpha(),
             UIValues.toggle(UIKeys.FORMS_EDITORS_BILLBOARD_TITLE, () -> this.form.billboard),
-            UIValues.toggle(UIKeys.FORMS_EDITORS_BILLBOARD_SHADING, () -> this.form.shading)
+            UIValues.toggle(UIKeys.FORMS_EDITORS_BILLBOARD_SHADING, () -> this.form.shading),
+            UI.labelRow(UIKeys.FORMS_EDITORS_EXTRUDED_DEPTH, UIValues.trackpad(() -> this.form.extrudeDepth).limit(0, 20).tooltip(UIKeys.FORMS_EDITORS_EXTRUDED_DEPTH_TOOLTIP))
         );
+    }
+
+    @Override
+    public void finishEdit()
+    {
+        super.finishEdit();
     }
 }

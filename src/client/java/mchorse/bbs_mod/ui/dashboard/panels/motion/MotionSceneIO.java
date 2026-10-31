@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.dashboard.panels.motion;
 
+import mchorse.bbs_mod.utils.VersionCompat;
 import mchorse.bbs_mod.data.DataToString;
 import mchorse.bbs_mod.data.types.BaseType;
 import mchorse.bbs_mod.data.types.ListType;
@@ -315,7 +316,7 @@ public final class MotionSceneIO
 
         if (l.itemStack != null)
         {
-            m.putString("itemStack", l.itemStack.writeNbt(new NbtCompound()).toString());
+            m.putString("itemStack", String.valueOf(VersionCompat.stackToNbt(l.itemStack)));
         }
 
         if (l.form != null)
@@ -436,7 +437,7 @@ public final class MotionSceneIO
         {
             try
             {
-                ItemStack stack = ItemStack.fromNbt(StringNbtReader.parse(m.getString("itemStack")));
+                ItemStack stack = VersionCompat.stackFromNbt(StringNbtReader.parse(m.getString("itemStack")));
 
                 l.itemStack = stack;
 

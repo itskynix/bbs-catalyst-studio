@@ -82,6 +82,12 @@ public class UIClips extends UITimelineCanvas
     /* Navigation */
     public Scroll vertical = new Scroll(new Area());
 
+    /** Two presses on the same clip this close together (in ms) are a double click. */
+    private static final long CLIP_DOUBLE_CLICK_MS = 300;
+
+    private Clip lastClickedClip;
+    private long lastClipClickTime;
+
     private boolean canGrab;
     private boolean grabbing;
     private boolean scrubbing;
@@ -1664,6 +1670,23 @@ public class UIClips extends UITimelineCanvas
         return this.clips.getClipAt(tick, layerIndex);
     }
 
+    /**
+     * Whether this press is the second of a double click on the same clip. Every press on a clip
+     * body is recorded; one with a modifier held is a selection gesture, not a double click, and
+     * neither is a press that comes too late or lands on another clip.
+     */
+    private boolean isClipDoubleClick(Clip clip, boolean modified)
+    {
+        long now = System.currentTimeMillis();
+        boolean doubled = !modified && clip == this.lastClickedClip && now - this.lastClipClickTime <= CLIP_DOUBLE_CLICK_MS;
+
+        /* A double click is spent: a third press starts counting again instead of pairing up */
+        this.lastClickedClip = doubled || modified ? null : clip;
+        this.lastClipClickTime = now;
+
+        return doubled;
+    }
+
     private boolean handleLeftClick(UIContext context, int mouseX, int mouseY, boolean ctrl, boolean shift, boolean alt)
     {
         /* Clicks on the ruler are "solid": they scrub the cursor and never grab a
@@ -1711,6 +1734,20 @@ public class UIClips extends UITimelineCanvas
                     {
                         this.setSelected(clip);
                         this.delegate.pickClip(clip);
+                    }
+
+                    if (this.isClipDoubleClick(clip, ctrl || shift || alt))
+                    {
+                        /* A clip with a sub-editor opens it; any other clip has nothing to open and
+                         * the click falls through to the plain select-and-grab it always was. */
+                        if (this.delegate.openClipEditor(clip))
+                        {
+                            this.grabbing = false;
+                            this.grabbedClips = Collections.emptyList();
+                            this.otherClips = Collections.emptyList();
+
+                            return true;
+                        }
                     }
 
                     this.grabbedClips = this.getClipsFromSelection();

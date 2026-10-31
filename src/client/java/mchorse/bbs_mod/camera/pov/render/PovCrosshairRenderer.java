@@ -11,6 +11,7 @@
  */
 package mchorse.bbs_mod.camera.pov.render;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.camera.pov.hud.render.AttackIndicatorRenderer;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -19,9 +20,9 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.util.Identifier;
 
 public final class PovCrosshairRenderer {
-    private static final Identifier CROSSHAIR_TEXTURE = new Identifier("hud/crosshair");
-    private static final Identifier ATTACK_BACKGROUND = new Identifier("hud/crosshair_attack_indicator_background");
-    private static final Identifier ATTACK_PROGRESS = new Identifier("hud/crosshair_attack_indicator_progress");
+    private static final Identifier CROSSHAIR_TEXTURE = Ids.of("hud/crosshair");
+    private static final Identifier ATTACK_BACKGROUND = Ids.of("hud/crosshair_attack_indicator_background");
+    private static final Identifier ATTACK_PROGRESS = Ids.of("hud/crosshair_attack_indicator_progress");
 
     private PovCrosshairRenderer() {
     }

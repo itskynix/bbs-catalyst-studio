@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.framework.elements.input.list;
 
+import mchorse.bbs_mod.utils.Ids;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import mchorse.bbs_mod.audio.AudioCacheManager;
@@ -217,7 +218,7 @@ public class UIVanillaSoundList extends UIStringList
     {
         try
         {
-            Identifier soundsJsonId = new Identifier("minecraft", "sounds.json");
+            Identifier soundsJsonId = Ids.of("minecraft", "sounds.json");
             Optional<Resource> resource = resourceManager.getResource(soundsJsonId);
 
             if (resource.isPresent())
@@ -568,7 +569,7 @@ public class UIVanillaSoundList extends UIStringList
                     return null;
                 }
                 
-                Identifier soundFileId = new Identifier("minecraft", "sounds/" + soundPath);
+                Identifier soundFileId = Ids.of("minecraft", "sounds/" + soundPath);
                 MinecraftClient client = MinecraftClient.getInstance();
                 Optional<Resource> resource = client.getResourceManager().getResource(soundFileId);
 
@@ -657,7 +658,7 @@ public class UIVanillaSoundList extends UIStringList
                     soundPath = soundPath + ".ogg";
                 }
                 
-                Identifier soundFileId = new Identifier("minecraft", "sounds/" + soundPath);
+                Identifier soundFileId = Ids.of("minecraft", "sounds/" + soundPath);
                 MinecraftClient client = MinecraftClient.getInstance();
                 Optional<Resource> resource = client.getResourceManager().getResource(soundFileId);
 

@@ -84,7 +84,7 @@ public class HeldItemRendererPovPickingMixin {
     @ModifyVariable(method={"renderItem(FLnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/VertexConsumerProvider$Immediate;Lnet/minecraft/client/network/ClientPlayerEntity;I)V"}, at=@At(value="HEAD"), argsOnly=true, ordinal=0)
     private int bbsPov$cameraLight(int original) {
         MinecraftClient client = MinecraftClient.getInstance();
-        if (client.world != null && PovHandPlayback.isHandActive(client.getTickDelta())) {
+        if (client.world != null && PovHandPlayback.isHandActive(client./*$ gtd*/getTickDelta()/**/)) {
             return WorldRenderer.getLightmapCoordinates((BlockRenderView)client.world, (BlockPos)client.gameRenderer.getCamera().getBlockPos());
         }
         return original;
@@ -206,9 +206,15 @@ public class HeldItemRendererPovPickingMixin {
         return original;
     }
 
+    //? if >=1.21 {
+    /*@Redirect(method={"applyEatOrDrinkTransformation"}, at=@At(value="INVOKE", target="Lnet/minecraft/item/ItemStack;getMaxUseTime(Lnet/minecraft/entity/LivingEntity;)I"))
+    private int bbsPov$overrideMaxUseTime(ItemStack stack, LivingEntity user) {
+        int original = stack.getMaxUseTime(user);
+    *///?} else {
     @Redirect(method={"applyEatOrDrinkTransformation"}, at=@At(value="INVOKE", target="Lnet/minecraft/item/ItemStack;getMaxUseTime()I"))
     private int bbsPov$overrideMaxUseTime(ItemStack stack) {
         int original = stack.getMaxUseTime();
+    //?}
         if (PovHandPlayback.isActive() && original <= 0) {
             return 32;
         }

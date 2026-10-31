@@ -35,7 +35,9 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.util.Arm;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
@@ -69,16 +71,30 @@ public abstract class GameRendererPovMixin {
     }
 
     @Inject(method={"renderFloatingItem"}, at={@At(value="HEAD")}, cancellable=true)
+    //? if >=1.21
+    /*private void bbsPov$suppressFloatingItem(net.minecraft.client.gui.DrawContext context, float tickDelta, CallbackInfo info) {*/
+    //? if <1.21
     private void bbsPov$suppressFloatingItem(int scaledWidth, int scaledHeight, float tickDelta, CallbackInfo info) {
         if (PovEffectSuppression.isBbsActive()) {
             info.cancel();
         }
     }
 
+    //? if >=1.21 {
+    /*@ModifyArg(method={"renderWorld"}, at=@At(value="INVOKE", target="Lnet/minecraft/client/render/GameRenderer;loadProjectionMatrix(Lorg/joml/Matrix4f;)V", ordinal=0), index=0)
+    private Matrix4f bbsPov$applyNauseaWorldWobble(Matrix4f projection) {
+        float tickDelta = MinecraftClient.getInstance().getRenderTickCounter().getTickDelta(true);
+
+        PovNauseaApplier.apply(projection, tickDelta, this.field_47130);
+
+        return projection;
+    }
+    *///?} else {
     @Inject(method={"renderWorld"}, at={@At(value="INVOKE", target="Lnet/minecraft/client/render/GameRenderer;loadProjectionMatrix(Lorg/joml/Matrix4f;)V")})
     private void bbsPov$applyNauseaWorldWobble(float tickDelta, long limitTime, MatrixStack matrixStack, CallbackInfo info) {
         PovNauseaApplier.apply(matrixStack, tickDelta, this.field_47130);
     }
+    //?}
 
     @Inject(method={"getFov"}, at={@At(value="RETURN")}, cancellable=true)
     private void bbsPov$applySpyglassZoom(CallbackInfoReturnable<Double> info) {
@@ -89,7 +105,7 @@ public abstract class GameRendererPovMixin {
         if (controller != null && controller.getCurrent() != null) {
             return;
         }
-        float tickDelta = MinecraftClient.getInstance().getTickDelta();
+        float tickDelta = MinecraftClient.getInstance()./*$ gtd*/getTickDelta()/**/;
         float zoomMultiplier = PovSpyglassZoomHelper.resolveZoomMultiplier(tickDelta);
         if (zoomMultiplier > 1.0E-4f && Math.abs(zoomMultiplier - 1.0f) > 1.0E-4f) {
             info.setReturnValue((info.getReturnValueD() * (double)zoomMultiplier));

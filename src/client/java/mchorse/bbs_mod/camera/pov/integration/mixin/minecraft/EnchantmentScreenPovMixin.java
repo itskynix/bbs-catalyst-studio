@@ -42,7 +42,7 @@ public abstract class EnchantmentScreenPovMixin {
         EnchantmentScreenHandler handler = (EnchantmentScreenHandler)screen.getScreenHandler();
         MinecraftClient client = MinecraftClient.getInstance();
         ClientPlayerEntity player = client.player;
-        float open = MathHelper.lerp((float)client.getTickDelta(), (float)this.field_2904, (float)this.field_2905);
+        float open = MathHelper.lerp((float)client./*$ gtd*/getTickDelta()/**/, (float)this.field_2904, (float)this.field_2905);
         GuiSnapshotCapture.updateEnchantment(handler.enchantmentPower, handler.enchantmentId, handler.enchantmentLevel, handler.getSeed(), player == null ? 0 : player.experienceLevel, player != null && player.getAbilities().creativeMode, open);
     }
 }

@@ -19,6 +19,7 @@ import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.forms.editors.UIFormEditor;
 import mchorse.bbs_mod.ui.forms.editors.panels.UIFormPanel;
 import mchorse.bbs_mod.ui.forms.editors.panels.UIGeneralFormPanel;
+import mchorse.bbs_mod.ui.forms.editors.panels.UIMaskFormPanel;
 import mchorse.bbs_mod.ui.forms.editors.panels.UIMaterialFormPanel;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.UIPanelBase;
@@ -212,6 +213,15 @@ public abstract class UIForm <T extends Form> extends UIPanelBase<UIFormPanel<T>
         this.generalPanel = panel;
         this.general = panel.transform;
         this.general.hotkeyDrag(() -> this.editor == null ? null : this.editor.buildHotkeyDrag(this.general));
+    }
+
+    /**
+     * The Mask tab. Only the forms that are drawn as geometry in the replay take it - models, blocks,
+     * items, structures and text; the others never call this, so their strip has no such tab.
+     */
+    protected void registerMaskPanel()
+    {
+        this.registerPanel(new UIMaskFormPanel(this), UIKeys.FORMS_EDITORS_MASK, Icons.SQUARE);
     }
 
     public void setEditor(UIFormEditor editor)

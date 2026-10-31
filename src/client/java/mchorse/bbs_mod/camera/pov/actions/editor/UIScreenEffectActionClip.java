@@ -40,6 +40,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.editor;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.camera.pov.actions.clip.ScreenEffectPovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.editor.UIPovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.screeneffect.ScreenEffectEntry;
@@ -348,7 +349,7 @@ extends UIPovActionClip<ScreenEffectPovActionClip> {
             return new ItemStack((ItemConvertible)Items.TOTEM_OF_UNDYING);
         }
         try {
-            Item item = (Item)Registries.ITEM.get(new Identifier(id));
+            Item item = (Item)Registries.ITEM.get(Ids.of(id));
             if (item != null && item != Items.AIR) {
                 return new ItemStack((ItemConvertible)item);
             }
@@ -411,6 +412,12 @@ extends UIPovActionClip<ScreenEffectPovActionClip> {
         }
         String lower = id.toLowerCase();
         return "fire".equals(lower) || "portal".equals(lower) || "frost".equals(lower) || "underwater".equals(lower);
+    }
+
+    @Override
+    public boolean openSubEditor()
+    {
+        return this.openSubEditor(this.editKeyframes);
     }
 
     @Override

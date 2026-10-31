@@ -17,8 +17,8 @@ import java.io.File;
 import java.util.List;
 
 /**
- * Video export of the live world, driven by the F4 (record) and F6 (play film
- * and record) keybinds. Owns the export window sizing, the custom render size,
+ * Video export of the live world, driven by the F6 (play film
+ * and record) keybind. Owns the export window sizing, the custom render size,
  * and — when recording a film — pausing it for the warm-up and stopping the
  * recording once the film finishes.
  */
@@ -26,9 +26,9 @@ public class WorldVideoExportSession extends VideoExportSession
 {
     private final WorldExportWindowSession windowSession = new WorldExportWindowSession();
 
-    /** Id of the film being played and recorded (F6), or {@code null} for a plain world recording (F4). */
+    /** Id of the film being played and recorded (F6), or {@code null} for a plain world recording. */
     private String filmId;
-    /** The film being recorded (F6), used to render its audio track; {@code null} for a plain world recording (F4). */
+    /** The film being recorded (F6), used to render its audio track; {@code null} for a plain world recording. */
     private Film film;
     private boolean firstTickPaused;
 
@@ -40,7 +40,7 @@ public class WorldVideoExportSession extends VideoExportSession
     /**
      * Start a world recording. Pass a film id and its data to also play that film
      * and stop when it finishes (F6), or {@code null}/{@code null} to record the
-     * live world (F4). The film is used to render its audio track when the
+     * live world. The film is used to render its audio track when the
      * "export audio" setting is on.
      */
     public boolean start(String filmId, Film film)

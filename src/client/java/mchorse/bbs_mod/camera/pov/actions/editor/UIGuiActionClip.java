@@ -195,6 +195,12 @@ extends UIPovActionClip<GuiPovActionClip> {
     }
 
     @Override
+    public boolean openSubEditor()
+    {
+        return this.openSubEditor(this.editKeyframes);
+    }
+
+    @Override
     public void fillData() {
         super.fillData();
         String currentId = ((GuiPovActionClip)this.clip).state.isEmpty() ? "inventory" : (String)((GuiPovActionClip)this.clip).state.get(0).getValue();

@@ -46,12 +46,21 @@ public class BBSSettings {
 	public static ValueStringKeys disabledSheets;
 	public static ValueTrackStyles trackStyles;
 	public static ValueStringKeys disabledMorphFormCategories;
+	/** How the data lists (films, models, particles...) are sorted: 0 newest, 1 oldest, 2 A-Z, 3 Z-A */
+	public static ValueInt listSortMode;
+	/** Whether the settings sidebar lists its categories alphabetically instead of in their own order */
+	public static ValueBoolean settingsSidebarAlphabetical;
 	public static ValueLanguage language;
 	public static ValueInt primaryColor;
 	public static ValueInt stencilHighlightColor;
 	public static ValueBoolean enableTrackpadIncrements;
 	public static ValueBoolean enableTrackpadScrolling;
 	public static ValueFloat userIntefaceScale;
+	public static ValueBoolean responsiveScale;
+	public static ValueBoolean popupAnimations;
+	public static ValueInt popupAnimationDuration;
+	public static ValueInt popupAnimationCurve;
+	public static ValueInt popupAnimationDirection;
 	public static ValueBoolean pixelArtSmoothing;
 	public static ValueInt taskbarSide;
 	public static ValueFloat fov;
@@ -160,7 +169,6 @@ public class BBSSettings {
 	public static ValueBoolean editorTimelineGrid;
 	public static ValueInt editorPeriodicSave;
 	public static ValueBoolean editorHorizontalFlight;
-	public static ValueBoolean editorFlightFreeLook;
 	public static ValueBoolean editorOrbitMovementRequiresFlight;
 	public static ValueBoolean editorOrbitCenterMarker;
 	public static ValueBoolean editorOrbitGizmo;
@@ -658,7 +666,20 @@ public class BBSSettings {
 		enableTrackpadIncrements = builder.getBoolean("trackpad_increments", false);
 		enableTrackpadScrolling = builder.getBoolean("trackpad_scrolling", false);
 		userIntefaceScale = builder.getFloat("ui_scale", 2F, 0F, 4F).slider(0.25D);
+		responsiveScale = builder.getBoolean("responsive_scale", true);
 		pixelArtSmoothing = builder.getBoolean("pixel_art_smoothing", true);
+		popupAnimations = builder.getBoolean("popup_animations", true);
+		popupAnimationDuration = builder.getInt("popup_animation_duration", 200, 50, 1000).slider(10D);
+		popupAnimationCurve = builder.getInt("popup_animation_curve", 1, 0, 3).modes(
+			IKey.raw("Linear"),
+			IKey.raw("Ease Out"),
+			IKey.raw("Ease In-Out"),
+			IKey.raw("Back Out (Pop)")
+		);
+		popupAnimationDirection = builder.getInt("popup_animation_direction", 0, 0, 1).modes(
+			IKey.raw("Zoom-in (Pop-out)"),
+			IKey.raw("Zoom-out (Pop-in)")
+		);
 		taskbarSide = builder.getInt("taskbar_side", 0);
 		fov = builder.getFloat("fov", 70, 0, 180);
 		colorPickerHsvTab = builder.getBoolean("hsv_color_picker", true);
@@ -694,6 +715,10 @@ public class BBSSettings {
 		builder.register(trackStyles);
 		disabledMorphFormCategories = new ValueStringKeys("disabled_morph_form_categories");
 		builder.register(disabledMorphFormCategories);
+		listSortMode = builder.getInt("list_sort", 0, 0, 3);
+		listSortMode.invisible();
+		settingsSidebarAlphabetical = builder.getBoolean("settings_sidebar_alphabetical", false);
+		settingsSidebarAlphabetical.invisible();
 
 		builder.category("personalization", Icons.COLOR);
 		primaryColor = builder.getInt("primary_color", DEFAULT_PRIMARY_COLOR).color();
@@ -768,7 +793,6 @@ public class BBSSettings {
 		editorCameraSpeed = builder.getFloat("speed", 1F, 0.1F, 100F);
 		editorCameraAngleSpeed = builder.getFloat("angle_speed", 1F, 0.1F, 100F);
 		editorHorizontalFlight = builder.getBoolean("horizontal_flight", false);
-		editorFlightFreeLook = builder.getBoolean("flight_free_look", false);
 		editorCameraSmoothness = builder.getFloat("camera_smoothness", 0.1F, 0F, 0.95F).slider();
 		editorPlayerFollowsCamera = builder.getBoolean("player_follows_camera", false);
 		editorOrbitMovementRequiresFlight = builder.getBoolean("orbit_movement_requires_flight", true);
@@ -894,6 +918,18 @@ public class BBSSettings {
 		videoArguments = builder.getString("arguments", DEFAULT_FFMPEG_ARGUMENTS);
 		videoArgumentsAudio = builder.getString("arguments_audio", DEFAULT_AUDIO_FFMPEG_ARGUMENTS);
 		videoArgumentsMux = builder.getString("arguments_mux", DEFAULT_MUX_FFMPEG_ARGUMENTS);
+		/* What a render looks like belongs to the delivery and is set in the Deliver panel; the
+		 * settings window keeps the encoder, where files go by default and what happens after */
+		videoWidth.invisible();
+		videoHeight.invisible();
+		videoFrameRate.invisible();
+		videoLimitFrameRate.invisible();
+		videoExportFilenameFormat.invisible();
+		videoExportAudio.invisible();
+		videoExportMinecraftSounds.invisible();
+		videoMuteAudioWhileRender.invisible();
+		videoMotionBlur.invisible();
+		videoHeldFrames.invisible();
 
 		builder.category("audio", Icons.SOUND);
 		audioWaveformVisibleInPreview = builder.getBoolean("waveform_visible_preview", true);

@@ -14,9 +14,11 @@
     "item.bbs.structure_wand.tooltip.faces": "Wheel on a face — push it, with Alt — move the box",
     "item.bbs.structure_wand.tooltip.save": "Alt + right click — save, Alt + left — clear",
     "itemGroup.bbs.main": "BBS Mod",
-
     "key.bbs.item_editor": "Item Editor",
     "key.bbs.dashboard": "Dashboard",
+    "key.bbs.free_cam": "World Free-Cam",
+    "bbs.free_cam.on": "Free-Cam on - WASD to fly, wheel changes speed, press the key again to return",
+    "bbs.free_cam.off": "Free-Cam off",
     "key.bbs.demorph": "Demorph",
     "key.bbs.open_replays": "Open Current Replays",
     "key.bbs.open_morphing": "Open Morphing Menu",
@@ -26,12 +28,13 @@
     "key.bbs.replay_radial": "Replay Picker (hold)",
     "key.bbs.replay_next_track": "Next Actor / Take",
     "key.bbs.replay_prev_track": "Previous Actor / Take",
-    "key.bbs.record_video": "Record Video",
     "key.bbs.play_film_and_record": "Play Film and Record",
     "key.bbs.teleport": "Teleport to Current Replay",
     "key.bbs.zoom": "Zoom (BBS Gun)",
     "category.bbs.main": "BBS Mod",
-
     "gamerule.bbsEditing": "BBS Mod Editing Permission",
-    "bbs.ui.film.preview.loading_scene": "Loading Scene"
+    "bbs.ui.film.preview.loading_scene": "Loading Scene",
+    "bbs.multiplayer.replay_busy": "This replay is currently being edited by another player! (%s)",
+    "bbs.multiplayer.film_locked": "This film is being edited by %s right now: your changes were not saved over theirs.",
+    "bbs.multiplayer.no_permission": "You have no permission to edit films here. Ask an operator, or the host to run /gamerule bbsEditing true."
 }

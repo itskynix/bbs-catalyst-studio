@@ -2,9 +2,14 @@ package mchorse.bbs_mod.ui.forms.editors.panels;
 
 import mchorse.bbs_mod.fonts.FontManager;
 import mchorse.bbs_mod.forms.forms.LabelForm;
+import mchorse.bbs_mod.l10n.L10n;
+import mchorse.bbs_mod.settings.values.numeric.ValueInt;
+import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.forms.editors.forms.UIForm;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIButton;
+import mchorse.bbs_mod.ui.framework.elements.UISection;
+import mchorse.bbs_mod.ui.framework.elements.buttons.UICirculate;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIIcon;
 import mchorse.bbs_mod.ui.framework.elements.input.UIColor;
 import mchorse.bbs_mod.ui.framework.elements.input.UITrackpad;
@@ -24,6 +29,24 @@ public class UILabelFormPanel extends UIFormPanel<LabelForm>
     public UIColor color;
     public UIColor shadowColor;
     public UIColor background;
+    public UIColor outlineColor;
+    public UICirculate animationMode;
+    public UICirculate extrudeMode;
+
+    private static IKey key(String name)
+    {
+        return L10n.lang("bbs.ui.forms.editors.label." + name);
+    }
+
+    /** A trackpad for a 0..1-like value, limited to the range its value allows. */
+    private UITrackpad ranged(java.util.function.Supplier<mchorse.bbs_mod.settings.values.numeric.ValueFloat> value, double min, double max, IKey tooltip)
+    {
+        UITrackpad trackpad = UIValues.trackpad(value::get);
+
+        trackpad.limit(min, max).values(0.05F, 0.01F, 0.1F).tooltip(tooltip);
+
+        return trackpad;
+    }
 
     public UILabelFormPanel(UIForm editor)
     {
@@ -67,6 +90,7 @@ public class UILabelFormPanel extends UIFormPanel<LabelForm>
             UI.label(UIKeys.FORMS_EDITORS_LABEL_LABEL),
             UIValues.textbox(10000, () -> this.form.text),
             UIValues.toggle(UIKeys.FORMS_EDITORS_BILLBOARD_TITLE, () -> this.form.billboard),
+            UIValues.toggle(key("depth_occlusion"), () -> this.form.depthOcclusion).tooltip(key("depth_occlusion_tooltip")),
             this.color,
             max
         );
@@ -95,6 +119,82 @@ public class UILabelFormPanel extends UIFormPanel<LabelForm>
             this.background,
             UIValues.trackpad(() -> this.form.offset)
         );
+
+        /* Reveal animation */
+        this.animationMode = new UICirculate((b) -> this.form.animationMode.set(b.getValue()));
+        this.animationMode.addLabel(key("animation.none"));
+        this.animationMode.addLabel(key("animation.character"));
+        this.animationMode.addLabel(key("animation.word"));
+        this.animationMode.addLabel(key("animation.line"));
+        this.animationMode.tooltip(key("animation_mode"));
+        UIValues.resettable(this.animationMode, () -> this.form.animationMode, () -> this.animationMode.setValue(this.form.animationMode.get()));
+        /* Shows what the form holds, not its first label: the circulate starts at 0 whatever the form says */
+        this.animationMode.valueBinding(() -> this.readCirculate(this.animationMode, this.form == null ? null : this.form.animationMode));
+
+        UISection animation = new UISection(key("section.animation"));
+
+        animation.fields.add(
+            UI.labelRow(key("animation_mode"), this.animationMode),
+            UI.label(key("reveal_progress")), this.ranged(() -> this.form.revealProgress, 0, 10, key("reveal_progress_tooltip")),
+            UI.label(key("stagger")), this.ranged(() -> this.form.stagger, 0, 1, key("stagger_tooltip")),
+            UI.label(key("reveal_offset")), this.ranged(() -> this.form.revealOffset, -100, 100, key("reveal_offset_tooltip")),
+            UI.label(key("reveal_overshoot")), this.ranged(() -> this.form.revealOvershoot, 0, 2, key("reveal_overshoot_tooltip"))
+        );
+        animation.setExpanded(false);
+
+        /* Shape */
+        this.extrudeMode = new UICirculate((b) -> this.form.extrudeMode.set(b.getValue()));
+        this.extrudeMode.addLabel(key("extrude_mode.layers"));
+        this.extrudeMode.addLabel(key("extrude_mode.depth"));
+        this.extrudeMode.tooltip(key("extrude_mode_tooltip"));
+        UIValues.resettable(this.extrudeMode, () -> this.form.extrudeMode, () -> this.extrudeMode.setValue(this.form.extrudeMode.get()));
+        /* Shows what the form holds, not its first label: the circulate starts at 0 whatever the form says */
+        this.extrudeMode.valueBinding(() -> this.readCirculate(this.extrudeMode, this.form == null ? null : this.form.extrudeMode));
+
+        /* Depth and bend, each its own section */
+        UISection depth = new UISection(key("section.depth"));
+
+        depth.fields.add(
+            UI.labelRow(key("extrude_mode"), this.extrudeMode),
+            UI.label(key("extrude")), this.ranged(() -> this.form.extrude, 0, 5, key("extrude_tooltip"))
+        );
+        depth.setExpanded(false);
+
+        UISection arc = new UISection(key("section.arc"));
+
+        arc.fields.add(
+            UI.label(key("arc")), this.ranged(() -> this.form.arc, -180, 180, key("arc_tooltip"))
+        );
+        arc.setExpanded(false);
+
+        /* Fill and outline */
+        this.outlineColor = UIValues.color(() -> this.form.outlineColor);
+
+        UISection outline = new UISection(key("section.outline"));
+
+        outline.fields.add(
+            UI.label(key("fill_opacity")), this.ranged(() -> this.form.fillOpacity, 0, 1, key("fill_opacity_tooltip")),
+            UI.label(key("outline_width")), this.ranged(() -> this.form.outlineWidth, 0, 5, key("outline_width_tooltip")),
+            UI.labelRow(key("outline_color"), this.outlineColor),
+            UI.label(key("outline_opacity")), this.ranged(() -> this.form.outlineOpacity, 0, 1, key("outline_opacity_tooltip"))
+        );
+        outline.setExpanded(false);
+
+        /* Dissolve and shatter are in the Effects tab (UILabelEffectsPanel) */
+        this.options.add(animation, depth, arc, outline);
+    }
+
+    /**
+     * Puts the form's value on a circulate. Without it the button stayed on its first label (the
+     * mode with index 0) while the form held another one - its default, or a keyframed value - so
+     * the panel said "Linear" while the perlin dissolve ran.
+     */
+    private void readCirculate(UICirculate circulate, ValueInt value)
+    {
+        if (value != null && circulate.getValue() != value.get())
+        {
+            circulate.setValue(value.get());
+        }
     }
 
     @Override
@@ -105,5 +205,6 @@ public class UILabelFormPanel extends UIFormPanel<LabelForm>
         this.color.picker.removeFromParent();
         this.shadowColor.picker.removeFromParent();
         this.background.picker.removeFromParent();
+        this.outlineColor.picker.removeFromParent();
     }
 }

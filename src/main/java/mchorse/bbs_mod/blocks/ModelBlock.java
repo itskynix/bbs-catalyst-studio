@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.blocks;
 
+import mchorse.bbs_mod.utils.VersionCompat;
 import mchorse.bbs_mod.BBSMod;
 import mchorse.bbs_mod.blocks.entities.ModelBlockEntity;
 import mchorse.bbs_mod.blocks.entities.ModelBody;
@@ -154,6 +155,15 @@ public class ModelBlock extends Block implements BlockEntityProvider, Waterlogga
         return VoxelShapes.empty();
     }
 
+    //? if >=1.21 {
+    /*/^ The world and position no longer come with the question, so a solid model block cannot
+     * be told apart here; its collision shape still keeps walkers out. ^/
+    @Override
+    public boolean canPathfindThrough(BlockState state, NavigationType type)
+    {
+        return true;
+    }
+    *///?} else {
     @Override
     public boolean canPathfindThrough(BlockState state, BlockView world, BlockPos pos, NavigationType type)
     {
@@ -161,6 +171,7 @@ public class ModelBlock extends Block implements BlockEntityProvider, Waterlogga
 
         return model == null || !model.getProperties().getBody().isSolid();
     }
+    //?}
 
     @Override
     public BlockSoundGroup getSoundGroup(BlockState state)
@@ -225,10 +236,7 @@ public class ModelBlock extends Block implements BlockEntityProvider, Waterlogga
         if (entity instanceof ModelBlockEntity modelBlock)
         {
             ItemStack stack = new ItemStack(this);
-            NbtCompound compound = new NbtCompound();
-
-            compound.put("BlockEntityTag", modelBlock.createNbtWithId());
-            stack.setNbt(compound);
+            VersionCompat.setBlockEntityData(stack, VersionCompat.createNbtWithId(modelBlock));
 
             return stack;
         }
@@ -267,6 +275,18 @@ public class ModelBlock extends Block implements BlockEntityProvider, Waterlogga
         return new ModelBlockEntity(pos, state);
     }
 
+    //? if >=1.21 {
+    /*@Override
+    public ActionResult onUse(BlockState state, World world, BlockPos pos, PlayerEntity player, BlockHitResult hit)
+    {
+        if (player instanceof ServerPlayerEntity serverPlayer)
+        {
+            ServerNetwork.sendClickedModelBlock(serverPlayer, pos);
+        }
+
+        return ActionResult.SUCCESS;
+    }
+    *///?} else {
     @Override
     public ActionResult onUse(BlockState state, World world, BlockPos pos, PlayerEntity player, Hand hand, BlockHitResult hit)
     {
@@ -282,6 +302,7 @@ public class ModelBlock extends Block implements BlockEntityProvider, Waterlogga
 
         return super.onUse(state, world, pos, player, hand, hit);
     }
+    //?}
 
     /* Waterloggable implementation */
 
@@ -299,10 +320,7 @@ public class ModelBlock extends Block implements BlockEntityProvider, Waterlogga
             if (be instanceof ModelBlockEntity model)
             {
                 ItemStack stack = new ItemStack(this);
-                NbtCompound wrapper = new NbtCompound();
-
-                wrapper.put("BlockEntityTag", model.createNbtWithId());
-                stack.setNbt(wrapper);
+                VersionCompat.setBlockEntityData(stack, VersionCompat.createNbtWithId(model));
 
                 ItemScatterer.spawn(world, pos, DefaultedList.ofSize(1, stack));
             }

@@ -1,6 +1,10 @@
 package mchorse.bbs_mod.forms.structure;
 
 import com.mojang.logging.LogUtils;
+//? if >=1.21 {
+/*import net.minecraft.component.type.MapIdComponent;
+import net.minecraft.recipe.BrewingRecipeRegistry;
+*///?}
 import net.minecraft.block.BlockState;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.client.MinecraftClient;
@@ -216,6 +220,31 @@ public class StructureWorld extends World
         return null;
     }
 
+    //? if >=1.21 {
+    /*@Nullable
+    @Override
+    public MapState getMapState(MapIdComponent id)
+    {
+        return null;
+    }
+
+    @Override
+    public void putMapState(MapIdComponent id, MapState state)
+    {
+    }
+
+    @Override
+    public MapIdComponent increaseAndGetMapId()
+    {
+        return new MapIdComponent(0);
+    }
+
+    @Override
+    public BrewingRecipeRegistry getBrewingRecipeRegistry()
+    {
+        return this.delegate.getBrewingRecipeRegistry();
+    }
+    *///?} else {
     @Nullable
     @Override
     public MapState getMapState(String id)
@@ -233,6 +262,7 @@ public class StructureWorld extends World
     {
         return 0;
     }
+    //?}
 
     @Override
     public void updateListeners(BlockPos pos, BlockState oldState, BlockState newState, int flags)
@@ -260,7 +290,7 @@ public class StructureWorld extends World
     }
 
     @Override
-    public void emitGameEvent(GameEvent event, Vec3d emitterPos, GameEvent.Emitter emitter)
+    public void emitGameEvent(/*$ ge*/GameEvent/**/ event, Vec3d emitterPos, GameEvent.Emitter emitter)
     {
     }
 

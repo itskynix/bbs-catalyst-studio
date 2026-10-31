@@ -110,6 +110,12 @@ extends UIPovActionClip<MenuPovActionClip> {
     }
 
     @Override
+    public boolean openSubEditor()
+    {
+        return this.openSubEditor(this.editKeyframes);
+    }
+
+    @Override
     public void fillData() {
         super.fillData();
         this.updateMenuTypeButton(((MenuPovActionClip)this.clip).resolveType());

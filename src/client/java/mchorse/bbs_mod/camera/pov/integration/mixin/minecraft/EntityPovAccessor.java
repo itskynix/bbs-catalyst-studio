@@ -14,7 +14,9 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 @Mixin(value={Entity.class})
 public interface EntityPovAccessor {
+    //? if <1.21 {
     @Accessor(value="netherPortalTime")
     public int bbsPov$getNetherPortalTime();
+    //?}
 }
 

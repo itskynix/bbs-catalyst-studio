@@ -72,7 +72,7 @@ implements InGameHudVignettePovAccess {
     }
 
     @Inject(method={"render"}, at={@At(value="HEAD")})
-    private void bbsPov$enterPlaybackF1(DrawContext context, float tickDelta, CallbackInfo info) {
+    private void bbsPov$enterPlaybackF1(DrawContext context, /*$ tdp*/float tickDelta/**/, CallbackInfo info) {
         boolean liveOverlay;
         MinecraftClient client = MinecraftClient.getInstance();
         boolean f4Recording = BBSModClient.getVideoRecorder() != null && BBSModClient.getVideoRecorder().isRecording();
@@ -113,14 +113,14 @@ implements InGameHudVignettePovAccess {
     }
 
     @Inject(method={"renderStatusEffectOverlay"}, at={@At(value="HEAD")}, cancellable=true)
-    private void bbsPov$skipHudStatusEffectOverlay(DrawContext context, CallbackInfo info) {
+    private void bbsPov$skipHudStatusEffectOverlay(DrawContext context/*$ ctr*//*-*//**/, CallbackInfo info) {
         if (InGameHudPovMixin.bbsPov$shouldSuppressScreenEffects()) {
             info.cancel();
         }
     }
 
     @Inject(method={"render"}, at={@At(value="RETURN")})
-    private void bbsPov$leavePlaybackF1(DrawContext context, float tickDelta, CallbackInfo info) {
+    private void bbsPov$leavePlaybackF1(DrawContext context, /*$ tdp*/float tickDelta/**/, CallbackInfo info) {
         if (this.bbsPov$changedHudHidden) {
             MinecraftClient.getInstance().options.hudHidden = this.bbsPov$oldHudHidden;
             this.bbsPov$changedHudHidden = false;
@@ -128,14 +128,14 @@ implements InGameHudVignettePovAccess {
     }
 
     @Inject(method={"renderCrosshair"}, at={@At(value="HEAD")}, cancellable=true)
-    private void bbsPov$hideCrosshair(DrawContext context, CallbackInfo info) {
+    private void bbsPov$hideCrosshair(DrawContext context/*$ ctr*//*-*//**/, CallbackInfo info) {
         if (MinecraftClient.getInstance().currentScreen != null || PovPlaybackContext.getActive() != null) {
             info.cancel();
         }
     }
 
     @Inject(method={"renderStatusEffectOverlay"}, at={@At(value="HEAD")}, cancellable=true)
-    private void bbsPov$hideStatusEffectOverlay(DrawContext context, CallbackInfo info) {
+    private void bbsPov$hideStatusEffectOverlay(DrawContext context/*$ ctr*//*-*//**/, CallbackInfo info) {
         if (PovPlaybackContext.getActive() != null || PovReplaySettings.getFilmPanel() != null) {
             info.cancel();
         }

@@ -21,6 +21,9 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.gui.render.screen;
 
+import mchorse.bbs_mod.utils.EffectCompat;
+import mchorse.bbs_mod.utils.EffectSprites;
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.camera.pov.actions.clip.GuiPovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.GuiPointerHover;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.GuiRenderContext;
@@ -73,7 +76,7 @@ GuiScreenChrome {
     private static void drawChrome(Batcher2D batcher, GuiPovActionClip clip, String guiId, float localTick, float cursorX, float cursorY, GuiPointerHover hover) {
         batcher.flush();
         DrawContext context = batcher.getContext();
-        Identifier texture = new Identifier("minecraft", "textures/gui/container/beacon.png");
+        Identifier texture = Ids.of("minecraft", "textures/gui/container/beacon.png");
         TextRenderer textRenderer = MinecraftClient.getInstance().textRenderer;
         MutableText primaryText = Text.translatable((String)"block.minecraft.beacon.primary");
         MutableText secondaryText = Text.translatable((String)"block.minecraft.beacon.secondary");
@@ -89,12 +92,12 @@ GuiScreenChrome {
         KeyframeChannel<ItemStack> paymentChannel = clip.getGuiSlot(guiId, "payment");
         ItemStack payment = paymentChannel == null || paymentChannel.isEmpty() ? ItemStack.EMPTY : (ItemStack)paymentChannel.interpolate(localTick, ItemStack.EMPTY);
         boolean hasPayment = payment != null && !payment.isEmpty();
-        BeaconGuiRenderer.drawBeaconButton(context, 58, 27, StatusEffects.SPEED, level >= 1, primary == 1, cursorX, cursorY, hover);
-        BeaconGuiRenderer.drawBeaconButton(context, 80, 27, StatusEffects.HASTE, level >= 1, primary == 2, cursorX, cursorY, hover);
-        BeaconGuiRenderer.drawBeaconButton(context, 58, 51, StatusEffects.RESISTANCE, level >= 2, primary == 3, cursorX, cursorY, hover);
-        BeaconGuiRenderer.drawBeaconButton(context, 80, 51, StatusEffects.JUMP_BOOST, level >= 2, primary == 4, cursorX, cursorY, hover);
-        BeaconGuiRenderer.drawBeaconButton(context, 69, 75, StatusEffects.STRENGTH, level >= 3, primary == 5, cursorX, cursorY, hover);
-        BeaconGuiRenderer.drawBeaconButton(context, 144, 47, StatusEffects.REGENERATION, level >= 4, secondary == 1, cursorX, cursorY, hover);
+        BeaconGuiRenderer.drawBeaconButton(context, 58, 27, EffectCompat.value(StatusEffects.SPEED), level >= 1, primary == 1, cursorX, cursorY, hover);
+        BeaconGuiRenderer.drawBeaconButton(context, 80, 27, EffectCompat.value(StatusEffects.HASTE), level >= 1, primary == 2, cursorX, cursorY, hover);
+        BeaconGuiRenderer.drawBeaconButton(context, 58, 51, EffectCompat.value(StatusEffects.RESISTANCE), level >= 2, primary == 3, cursorX, cursorY, hover);
+        BeaconGuiRenderer.drawBeaconButton(context, 80, 51, EffectCompat.value(StatusEffects.JUMP_BOOST), level >= 2, primary == 4, cursorX, cursorY, hover);
+        BeaconGuiRenderer.drawBeaconButton(context, 69, 75, EffectCompat.value(StatusEffects.STRENGTH), level >= 3, primary == 5, cursorX, cursorY, hover);
+        BeaconGuiRenderer.drawBeaconButton(context, 144, 47, EffectCompat.value(StatusEffects.REGENERATION), level >= 4, secondary == 1, cursorX, cursorY, hover);
         StatusEffect primaryEffect = BeaconGuiRenderer.beaconPrimaryEffect(primary);
         if (level >= 4 && primaryEffect != null) {
             BeaconGuiRenderer.drawBeaconButton(context, 168, 47, primaryEffect, true, secondary == 2, cursorX, cursorY, hover);
@@ -102,12 +105,12 @@ GuiScreenChrome {
         boolean confirmHover = GuiTextRenderer.inBounds(cursorX, cursorY, 164, 107, 22, 22);
         boolean cancelHover = GuiTextRenderer.inBounds(cursorX, cursorY, 190, 107, 22, 22);
         String confirmSprite = !hasPayment || primary == 0 ? "container/beacon/button_disabled" : (confirmHover ? "container/beacon/button_highlighted" : "container/beacon/button");
-        mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, new Identifier(confirmSprite), 164, 107, 22, 22);
-        mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, new Identifier(cancelHover ? "container/beacon/button_highlighted" : "container/beacon/button"), 190, 107, 22, 22);
+        mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, Ids.of(confirmSprite), 164, 107, 22, 22);
+        mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, Ids.of(cancelHover ? "container/beacon/button_highlighted" : "container/beacon/button"), 190, 107, 22, 22);
         context.setShaderColor(!hasPayment || primary == 0 ? 0.45f : 1.0f, !hasPayment || primary == 0 ? 0.45f : 1.0f, !hasPayment || primary == 0 ? 0.45f : 1.0f, 1.0f);
-        mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, new Identifier("container/beacon/confirm"), 166, 109, 18, 18);
+        mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, Ids.of("container/beacon/confirm"), 166, 109, 18, 18);
         context.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
-        mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, new Identifier("container/beacon/cancel"), 192, 109, 18, 18);
+        mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, Ids.of("container/beacon/cancel"), 192, 109, 18, 18);
         context.getMatrices().pop();
         context.draw();
         batcher.flush();
@@ -116,9 +119,9 @@ GuiScreenChrome {
     private static void drawBeaconButton(DrawContext context, int x, int y, StatusEffect effect, boolean enabled, boolean selected, float cursorX, float cursorY, GuiPointerHover hover) {
         boolean isHovered = GuiTextRenderer.inBounds(cursorX, cursorY, x, y, 22, 22);
         String buttonSprite = selected ? "container/beacon/button_selected" : (!enabled ? "container/beacon/button_disabled" : (isHovered ? "container/beacon/button_highlighted" : "container/beacon/button"));
-        mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, new Identifier(buttonSprite), x, y, 22, 22);
+        mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(context, Ids.of(buttonSprite), x, y, 22, 22);
         if (effect != null) {
-            Sprite sprite = MinecraftClient.getInstance().getStatusEffectSpriteManager().getSprite(effect);
+            Sprite sprite = EffectSprites.get(MinecraftClient.getInstance().getStatusEffectSpriteManager(), effect);
             if (sprite != null) {
                 context.drawSprite(x + 2, y + 2, 0, 18, 18, sprite);
             }
@@ -130,11 +133,11 @@ GuiScreenChrome {
 
     private static StatusEffect beaconPrimaryEffect(int primary) {
         return switch (primary) {
-            case 1 -> StatusEffects.SPEED;
-            case 2 -> StatusEffects.HASTE;
-            case 3 -> StatusEffects.RESISTANCE;
-            case 4 -> StatusEffects.JUMP_BOOST;
-            case 5 -> StatusEffects.STRENGTH;
+            case 1 -> EffectCompat.value(StatusEffects.SPEED);
+            case 2 -> EffectCompat.value(StatusEffects.HASTE);
+            case 3 -> EffectCompat.value(StatusEffects.RESISTANCE);
+            case 4 -> EffectCompat.value(StatusEffects.JUMP_BOOST);
+            case 5 -> EffectCompat.value(StatusEffects.STRENGTH);
             default -> null;
         };
     }

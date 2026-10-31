@@ -1,5 +1,8 @@
 package mchorse.bbs_mod.ui.framework.elements.layout;
 
+import mchorse.bbs_mod.ui.framework.elements.overlay.OverlayAnimation;
+import mchorse.bbs_mod.ui.framework.elements.overlay.SlideState;
+
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.graphics.window.Window;
 import mchorse.bbs_mod.l10n.keys.IKey;
@@ -86,6 +89,17 @@ public class UIDockLayout extends UIElement
     private static final int[] NO_GUTTER = new int[4];
 
     private final Map<String, UIDockSlot> slotById = new LinkedHashMap<>();
+
+    /**
+     * Panels on the left or right edge sliding in as they are shown and out as they are hidden
+     * (the interface animation settings time them), and the side each one slides on: -1 left,
+     * 1 right. One sliding out keeps being drawn where it was until it is gone.
+     */
+    private final Map<String, SlideState> slides = new HashMap<>();
+    private final Map<String, Integer> slideSides = new HashMap<>();
+
+    /** How close (pixels) to an edge of the dock a panel counts as standing on it */
+    private static final int SLIDE_EDGE = 8;
     private final Map<String, Icon> iconById = new HashMap<>();
     private final Map<String, IKey> labelById = new HashMap<>();
     private final List<UIDraggable> splitterHandles = new ArrayList<>();
@@ -808,7 +822,10 @@ public class UIDockLayout extends UIElement
             boolean isStacked = stackInfo != null && stackInfo.isStacked();
             boolean showHeader = slot.isFramed() && !this.isCorePanel(panelId) && !isStacked;
 
-            slot.setVisible(show && active);
+            boolean leaving = !active && this.isSlidingOut(panelId);
+
+            slot.setVisible(show && (active || leaving));
+            slot.setEnabled(!leaving);
             slot.dragHandle.setVisible(show && active && showHeader);
         }
 
@@ -1618,6 +1635,8 @@ public class UIDockLayout extends UIElement
             return;
         }
 
+        this.slideOut(panelId);
+
         EditorLayoutNode root = this.layoutRoot();
 
         this.pushLayoutUndo(root);
@@ -1648,6 +1667,7 @@ public class UIDockLayout extends UIElement
         this.pushLayoutUndo(this.layoutRoot());
         this.source.setHiddenPanels(hidden);
         this.setupFlex(true);
+        this.slideIn(panelId);
     }
 
     public void togglePanel(String panelId)
@@ -1672,6 +1692,7 @@ public class UIDockLayout extends UIElement
 
         for (String panelId : panelIds)
         {
+            this.slideOut(panelId);
             hidden.add(panelId);
 
             if (panelId.equals(this.maximizedPanelId))
@@ -1708,6 +1729,147 @@ public class UIDockLayout extends UIElement
         this.pushLayoutUndo(this.layoutRoot());
         this.source.setHiddenPanels(hidden);
         this.setupFlex(true);
+
+        for (String panelId : panelIds)
+        {
+            this.slideIn(panelId);
+        }
+    }
+
+    /* Sliding */
+
+    /** Which edge a panel stands on, as laid out right now: -1 left, 1 right, 0 neither (or both). */
+    private int edgeOf(UIDockSlot slot)
+    {
+        boolean left = slot.area.x - this.area.x <= SLIDE_EDGE;
+        boolean right = this.area.ex() - slot.area.ex() <= SLIDE_EDGE;
+
+        return left == right ? 0 : (left ? -1 : 1);
+    }
+
+    /** A panel about to be hidden slides out from where it is, if it stands on a side edge. */
+    private void slideOut(String panelId)
+    {
+        UIDockSlot slot = this.slotById.get(panelId);
+
+        if (slot == null || !this.isPanelActive(panelId) || !OverlayAnimation.isEnabled())
+        {
+            return;
+        }
+
+        SlideState state = this.slides.get(panelId);
+
+        if (state != null)
+        {
+            state.setTarget(0D);
+
+            return;
+        }
+
+        int side = this.edgeOf(slot);
+
+        if (side != 0)
+        {
+            this.slides.put(panelId, SlideState.closing());
+            this.slideSides.put(panelId, side);
+        }
+    }
+
+    /** A panel just shown slides in to where the layout put it, if that is on a side edge. */
+    private void slideIn(String panelId)
+    {
+        UIDockSlot slot = this.slotById.get(panelId);
+
+        if (slot == null || !this.isPanelActive(panelId) || !OverlayAnimation.isEnabled())
+        {
+            this.slides.remove(panelId);
+
+            return;
+        }
+
+        slot.setEnabled(true);
+
+        SlideState state = this.slides.get(panelId);
+
+        if (state != null)
+        {
+            state.setTarget(1D);
+
+            return;
+        }
+
+        int side = this.edgeOf(slot);
+
+        if (side != 0)
+        {
+            this.slides.put(panelId, SlideState.opening());
+            this.slideSides.put(panelId, side);
+        }
+    }
+
+    private boolean isSlidingOut(String panelId)
+    {
+        SlideState state = this.slides.get(panelId);
+
+        return state != null && state.isClosing();
+    }
+
+    /** Moves the slides on; a panel done sliding out is hidden for good. Once a frame. */
+    private void updateSlides()
+    {
+        if (this.slides.isEmpty())
+        {
+            return;
+        }
+
+        java.util.Iterator<Map.Entry<String, SlideState>> iterator = this.slides.entrySet().iterator();
+
+        while (iterator.hasNext())
+        {
+            Map.Entry<String, SlideState> entry = iterator.next();
+            String panelId = entry.getKey();
+            SlideState state = entry.getValue();
+
+            if (!state.update())
+            {
+                continue;
+            }
+
+            iterator.remove();
+            this.slideSides.remove(panelId);
+
+            UIDockSlot slot = this.slotById.get(panelId);
+
+            if (slot != null)
+            {
+                slot.setEnabled(true);
+
+                if (state.isClosing() && !this.isPanelActive(panelId))
+                {
+                    slot.setVisible(false);
+                }
+            }
+        }
+    }
+
+    /**
+     * How far (pixels, right is positive) a panel is drawn off its place this frame: all the way
+     * past its edge of the dock at 0, none at 1. Only the drawing moves; the panel's area, and so
+     * what the mouse hits, stays where it settles, as the pop-up windows do.
+     */
+    public float slideShift(UIDockSlot slot)
+    {
+        SlideState state = this.slides.get(slot.getPanelId());
+        Integer side = this.slideSides.get(slot.getPanelId());
+
+        if (state == null || side == null)
+        {
+            return 0F;
+        }
+
+        float distance = side < 0 ? slot.area.ex() - this.area.x : this.area.ex() - slot.area.x;
+
+        return (float) ((1D - state.shown()) * distance * side);
     }
 
     /**
@@ -1862,6 +2024,7 @@ public class UIDockLayout extends UIElement
         }
 
         this.updateTabDrag(context);
+        this.updateSlides();
 
         super.render(context);
 
@@ -2218,6 +2381,30 @@ public class UIDockLayout extends UIElement
 
         @Override
         public void render(UIContext context)
+        {
+            int shift = Math.round(this.layout.slideShift(this));
+
+            if (shift == 0)
+            {
+                this.renderSlot(context);
+
+                return;
+            }
+
+            /* Through the context, so the scissors of the panels inside and the mouse move along */
+            context.shiftX(-shift);
+
+            try
+            {
+                this.renderSlot(context);
+            }
+            finally
+            {
+                context.shiftX(shift);
+            }
+        }
+
+        private void renderSlot(UIContext context)
         {
             if (this.isFramed())
             {

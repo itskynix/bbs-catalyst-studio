@@ -8,6 +8,7 @@ import mchorse.bbs_mod.ui.utils.context.ContextMenuManager;
 import mchorse.bbs_mod.camera.Camera;
 import mchorse.bbs_mod.film.BaseFilmController;
 import mchorse.bbs_mod.film.FilmMatrices;
+import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.film.UIFilmPanel;
 import mchorse.bbs_mod.ui.utils.Area;
 import mchorse.bbs_mod.ui.utils.Gizmo;
@@ -201,6 +202,52 @@ public class UIReplaysEditorUtils
                 rows.get(track.id()).setParent(rows.get(track.parent()));
             }
         }
+
+        groupMaskAndSlice(sheets);
+    }
+
+    /** The form's own tracks that cut it: the 2D mask's turn, slide and stretch, and the 3D slice plane. */
+    private static final Set<String> MASK_SLICE_TRACKS = Set.of(
+        "mask_rotation_x", "mask_rotation_y", "mask_rotation_z",
+        "mask_pos_x", "mask_pos_y", "mask_scale_x", "mask_scale_y",
+        "slice_pos_x", "slice_pos_y", "slice_pos_z", "slice_yaw", "slice_pitch", "slice_roll", "slice_invert"
+    );
+
+    /**
+     * Folds every form's masking and slicing tracks under one "Mask & Slice" row of their own, so
+     * the dozen rows they make don't spread through the form's other properties. A section is a row
+     * the dope sheet draws above its first member, so the members are gathered right after it.
+     */
+    private static void groupMaskAndSlice(List<UIKeyframeSheet> sheets)
+    {
+        Map<String, UIKeyframeSheet.Section> sections = new HashMap<>();
+        Map<UIKeyframeSheet.Section, List<UIKeyframeSheet>> members = new HashMap<>();
+
+        for (UIKeyframeSheet sheet : sheets)
+        {
+            TrackDescriptor track = sheet.descriptor;
+
+            if (track == null || sheet.parent != null || !track.id().is(TrackKind.PROPERTY) || !MASK_SLICE_TRACKS.contains(track.id().subject()))
+            {
+                continue;
+            }
+
+            String formPath = track.id().formPath();
+            UIKeyframeSheet.Section section = sections.computeIfAbsent(formPath, (path) -> new UIKeyframeSheet.Section(
+                "mask_slice/" + path, UIKeys.FORMS_EDITORS_MASK_SLICE_SECTION, Icons.CUT, 0x8a6cff
+            ));
+
+            sheet.section = section;
+            members.computeIfAbsent(section, (s) -> new ArrayList<>()).add(sheet);
+        }
+
+        for (List<UIKeyframeSheet> group : members.values())
+        {
+            int at = sheets.indexOf(group.get(0));
+
+            sheets.removeAll(group);
+            sheets.addAll(Math.min(at, sheets.size()), group);
+        }
     }
 
     /** Remove links to filtered rows while keeping their surviving children accessible. */
@@ -324,7 +371,8 @@ public class UIReplaysEditorUtils
 
     public static boolean startFilmGizmo(UIFilmPanel panel, UIContext context, int stencilIndex, float gizmoTransition)
     {
-        if (panel.isFlying())
+        /* Another player is recording the picked replay: its transforms and poses are read only */
+        if (panel.isFlying() || panel.getSelectedReplayRecording() != null)
         {
             return false;
         }

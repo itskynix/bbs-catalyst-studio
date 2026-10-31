@@ -15,6 +15,9 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 @Mixin(LivingEntity.class)
 public interface LivingEntityRollAccessor
 {
+    //? if >=1.21
+    /*@Accessor("fallFlyingTicks")*/
+    //? if <1.21
     @Accessor("roll")
     public void bbs$setRoll(int roll);
 }

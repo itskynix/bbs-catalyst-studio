@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.forms.editors.panels.widgets;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.forms.CustomVertexConsumerProvider;
 import mchorse.bbs_mod.forms.FormUtilsClient;
@@ -99,7 +100,7 @@ public class UIMobEditor extends UIElement
     {
         try
         {
-            EntityType<?> type = Registries.ENTITY_TYPE.get(new Identifier(this.mobID));
+            EntityType<?> type = Registries.ENTITY_TYPE.get(Ids.of(this.mobID));
             SpawnEggItem egg = SpawnEggItem.forEntity(type);
 
             return egg == null ? ItemStack.EMPTY : new ItemStack(egg);

@@ -40,7 +40,10 @@ import mchorse.bbs_mod.forms.entities.StubEntity;
 import mchorse.bbs_mod.forms.forms.BodyPart;
 import mchorse.bbs_mod.forms.forms.Form;
 import mchorse.bbs_mod.forms.forms.ModelForm;
+import mchorse.bbs_mod.cubic.render.vao.ModelVAORenderer;
+import mchorse.bbs_mod.forms.forms.utils.FormFxValues;
 import mchorse.bbs_mod.forms.renderers.utils.FormColorBlend;
+import mchorse.bbs_mod.forms.renderers.utils.FormFx;
 import mchorse.bbs_mod.forms.renderers.utils.FormPbr;
 import mchorse.bbs_mod.forms.renderers.utils.FramebufferDebug;
 import mchorse.bbs_mod.forms.renderers.utils.MatrixCache;
@@ -87,6 +90,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITickable
@@ -104,6 +108,9 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
     private IAnimator animator;
     private ModelInstance lastModel;
     private boolean renderingArm;
+
+    /** Set by render3D for the one draw it makes while the form dissolves; renderModel reads it. */
+    private boolean dissolving;
 
     private IEntity entity = new StubEntity();
 
@@ -489,7 +496,22 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
         final boolean ignoreMaterials = model.materials.size() <= 1;
         final Link materialFallback = ignoreMaterials ? resolvedDefault : model.getTexture();
 
-        model.render(newStack, program, finalColor, light, overlay, stencilMap, this.form.shapeKeys.get(), (material) ->
+        /* Dissolve and shatter: only ever the form's own visible draw - not the picking pass, not the
+         * editor's preview, not the first person arm */
+        FormFxValues fx = this.form == null ? null : this.form.fx;
+        boolean shatter = fx != null && fx.isShattering() && stencilMap == null && !ui && !this.renderingArm;
+        boolean dissolve = this.dissolving && fx != null && stencilMap == null && !ui;
+
+        if (dissolve)
+        {
+            float[] range = model.getHeightRange();
+
+            dissolve = FormFx.beginDissolveVao(fx, ModelVAORenderer.captureModelView(newStack), range[0], range[1]);
+        }
+
+        model.shatterFx = shatter ? fx : null;
+
+        Function<String, Link> resolver = (material) ->
         {
             if (ignoreMaterials)
             {
@@ -513,7 +535,21 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
             }
 
             return model.getMaterialTexture(material, materialFallback);
-        });
+        };
+
+        try
+        {
+            model.render(newStack, program, finalColor, light, overlay, stencilMap, this.form.shapeKeys.get(), resolver);
+        }
+        finally
+        {
+            model.shatterFx = null;
+
+            if (dissolve)
+            {
+                FormFx.endDissolve();
+            }
+        }
 
         if (stencilMap == null && !this.renderingArm && this.form != null)
         {
@@ -1107,7 +1143,11 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
                 : renderLayer == Form.LAYER_CUTOUT && irisWorld;
             boolean noBlend = cutout || renderLayer == Form.LAYER_SOLID
                 || (renderLayer == Form.LAYER_CUTOUT && !irisWorld);
-            boolean suspendQueue = irisWorld || renderLayer == Form.LAYER_SOLID || renderLayer == Form.LAYER_CUTOUT;
+            /* A dissolve is the BBS model shader's, so only a draw that goes through it can burn. The
+             * deferred translucent pass would replay it after the dissolve was ended, hence it draws now. */
+            boolean dissolve = !context.isPicking() && this.form.fx.isDissolving() && FormFx.supportsDissolve()
+                && !cutout && !BBSRendering.isIrisWorldShadersEnabled() && model.isVAORendered();
+            boolean suspendQueue = irisWorld || renderLayer == Form.LAYER_SOLID || renderLayer == Form.LAYER_CUTOUT || dissolve;
 
             /* The program, unlike the alpha handling above, does follow whether the pack is
              * shading this very draw: off-screen it has stopped, and our own is the better one. */
@@ -1151,10 +1191,13 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
 
             try
             {
+                this.dissolving = dissolve;
                 this.renderModel(context.entity, shader, context.stack, model, context.light, context.overlay, contextColor, formColor, false, context.stencilMap, context.getTransition(), context.world);
             }
             finally
             {
+                this.dissolving = false;
+
                 RenderSystem.activeTexture(GL13.GL_TEXTURE0);
 
                 if (FramebufferDebug.inside())

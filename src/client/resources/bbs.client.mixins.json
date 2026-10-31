@@ -59,7 +59,8 @@
         "CameraInvoker",
         "ParticleManagerInvoker",
         "ParticleMixin",
-        "TitleScreenMixin"
+        "TitleScreenMixin",
+        "ClientPlayNetworkHandlerPortalMixin"
     ],
     "injectors": {
         "defaultRequire": 1

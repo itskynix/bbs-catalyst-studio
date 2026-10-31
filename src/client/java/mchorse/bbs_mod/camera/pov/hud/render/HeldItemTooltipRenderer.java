@@ -21,6 +21,7 @@
  */
 package mchorse.bbs_mod.camera.pov.hud.render;
 
+import mchorse.bbs_mod.utils.VersionCompat;
 import mchorse.bbs_mod.camera.pov.hud.HudState;
 import mchorse.bbs_mod.camera.pov.integration.access.minecraft.InGameHudHeldItemPovAccess;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -77,8 +78,8 @@ public final class HeldItemTooltipRenderer {
         if (fade <= 0 || stack == null || stack.isEmpty()) {
             return;
         }
-        MutableText name = Text.empty().append(stack.getName()).formatted(stack.getRarity().formatting);
-        if (stack.hasCustomName()) {
+        MutableText name = Text.empty().append(stack.getName()).formatted(VersionCompat.rarityFormatting(stack));
+        if (VersionCompat.hasCustomName(stack)) {
             name = name.formatted(Formatting.ITALIC);
         }
         MinecraftClient client = MinecraftClient.getInstance();

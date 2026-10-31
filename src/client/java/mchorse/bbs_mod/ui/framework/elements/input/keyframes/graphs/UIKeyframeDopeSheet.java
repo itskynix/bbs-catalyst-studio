@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.framework.elements.input.keyframes.graphs;
 
+import mchorse.bbs_mod.utils.Bufs;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.camera.utils.TimeUtils;
@@ -1061,7 +1062,7 @@ public class UIKeyframeDopeSheet implements IUIKeyframeGraph
 
         Area area = this.keyframes.graphArea;
         int rulerBottom = TimelineRulerRenderer.getRulerBottom(area);
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
+        BufferBuilder builder = null;
         Matrix4f matrix = context.batcher.getContext().getMatrices().peek().getPositionMatrix();
 
         context.batcher.clipBox(area.x, rulerBottom, area.ex(), area.ey(), context);
@@ -1270,7 +1271,7 @@ public class UIKeyframeDopeSheet implements IUIKeyframeGraph
             context.batcher.box(area.x, y, area.ex(), y + bh, Colors.setA(sheet.color, 0.12F));
         }
 
-        builder.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
+        builder = Bufs.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
 
         /* Keyframes sorted by tick map to ascending X, so everything left of the view is
          * skipped and the first frame past the right edge ends the loop. The margin covers a
@@ -1351,7 +1352,7 @@ public class UIKeyframeDopeSheet implements IUIKeyframeGraph
 
         RenderSystem.enableBlend();
         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        Bufs.draw(builder);
     }
 
     /** Uniform strip from the midpoint handle to the slow-side key; opacity follows shift intensity. */
@@ -1547,16 +1548,16 @@ public class UIKeyframeDopeSheet implements IUIKeyframeGraph
 
         Area area = this.keyframes.graphArea;
         int rulerBottom = TimelineRulerRenderer.getRulerBottom(area);
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
+        BufferBuilder builder;
         Matrix4f matrix = context.batcher.getContext().getMatrices().peek().getPositionMatrix();
 
         context.batcher.clipBox(area.x, rulerBottom, area.ex(), area.ey(), context);
-        builder.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
+        builder = Bufs.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
         this.renderSectionKeyframes(context, builder, matrix, area);
         this.renderSheetsTopmostKeyframes(context, builder, matrix, area);
         RenderSystem.enableBlend();
         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        Bufs.draw(builder);
         context.batcher.unclip(context);
     }
 

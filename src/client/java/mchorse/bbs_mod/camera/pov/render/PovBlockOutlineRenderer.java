@@ -29,6 +29,7 @@
  */
 package mchorse.bbs_mod.camera.pov.render;
 
+import mchorse.bbs_mod.utils.VertexUtils;
 import mchorse.bbs_mod.camera.pov.camera.clip.PovCameraClip;
 import mchorse.bbs_mod.camera.pov.camera.clip.PovCameraClips;
 import mchorse.bbs_mod.camera.pov.playback.PovPlaybackContext;
@@ -68,7 +69,7 @@ public final class PovBlockOutlineRenderer {
     private static void render(WorldRenderContext context) {
         BlockPos blockPos;
         BlockState state;
-        if (!PovBlockOutlineRenderer.shouldRenderOutline(context.tickDelta())) {
+        if (!PovBlockOutlineRenderer.shouldRenderOutline(context./*$ wtd*/tickDelta()/**/)) {
             return;
         }
         Camera camera = context.camera();
@@ -97,8 +98,8 @@ public final class PovBlockOutlineRenderer {
             float dy = (float)(y2 - y1);
             float dz = (float)(z2 - z1);
             float len = MathHelper.sqrt((float)(dx * dx + dy * dy + dz * dz));
-            vertexConsumer.vertex(entry.getPositionMatrix(), (float)(x1 + offsetX), (float)(y1 + offsetY), (float)(z1 + offsetZ)).color(r, g, b, a).normal(entry.getNormalMatrix(), dx /= len, dy /= len, dz /= len).next();
-            vertexConsumer.vertex(entry.getPositionMatrix(), (float)(x2 + offsetX), (float)(y2 + offsetY), (float)(z2 + offsetZ)).color(r, g, b, a).normal(entry.getNormalMatrix(), dx, dy, dz).next();
+            VertexUtils.normal(vertexConsumer.vertex(entry.getPositionMatrix(), (float)(x1 + offsetX), (float)(y1 + offsetY), (float)(z1 + offsetZ)).color(r, g, b, a), entry, dx /= len, dy /= len, dz /= len)/*$ nx*/.next()/**/;
+            VertexUtils.normal(vertexConsumer.vertex(entry.getPositionMatrix(), (float)(x2 + offsetX), (float)(y2 + offsetY), (float)(z2 + offsetZ)).color(r, g, b, a), entry, dx, dy, dz)/*$ nx*/.next()/**/;
         });
     }
 

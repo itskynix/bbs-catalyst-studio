@@ -11,6 +11,92 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+//? if >=1.21 {
+/*@Mixin(RenderTickCounter.Dynamic.class)
+public class RenderTickCounterMixin
+{
+    @Shadow
+    private float tickDelta;
+
+    @Shadow
+    private float lastFrameDuration;
+
+    @Shadow
+    private long prevTimeMillis;
+
+    private int heldFrames;
+
+    private long lastFrameTime;
+
+    @Inject(method = "beginRenderTick(JZ)I", at = @At("HEAD"), cancellable = true)
+    public void onBeginRenderTick(long timeMillis, boolean tick, CallbackInfoReturnable<Integer> info)
+    {
+        VideoRecorder videoRecorder = BBSModClient.getVideoRecorder();
+
+        if (videoRecorder.isRecording())
+        {
+            if (videoRecorder.getCounter() == 0)
+            {
+                this.tickDelta = 0;
+            }
+
+            if (this.heldFrames == 0)
+            {
+                /^ When frame rate limiting is enabled, throttle the recording to the video
+                 * frame rate in real time, so a powerful machine doesn't render the recording
+                 * faster than wall-clock time. We hold the frame (without advancing the world)
+                 * until enough real time has passed to produce the next frame. ^/
+                if (BBSSettings.videoLimitFrameRate.get())
+                {
+                    long frameInterval = (long) (1000F / BBSRendering.getVideoFrameRate());
+
+                    if (timeMillis - this.lastFrameTime < frameInterval)
+                    {
+                        BBSRendering.canRender = false;
+
+                        info.setReturnValue(0);
+
+                        return;
+                    }
+
+                    this.lastFrameTime = timeMillis;
+                }
+
+                this.lastFrameDuration = 20F / (float) BBSRendering.getVideoFrameRate();
+                this.prevTimeMillis = timeMillis;
+                this.tickDelta += this.lastFrameDuration;
+
+                int i = (int) this.tickDelta;
+
+                this.tickDelta -= (float) i;
+
+                videoRecorder.serverTicks += i;
+                BBSRendering.canRender = true;
+
+                info.setReturnValue(i);
+            }
+            else
+            {
+                BBSRendering.canRender = false;
+
+                info.setReturnValue(0);
+            }
+
+            this.heldFrames += 1;
+
+            if (this.heldFrames >= BBSSettings.videoHeldFrames.get())
+            {
+                this.heldFrames = 0;
+            }
+        }
+        else
+        {
+            this.heldFrames = 0;
+            this.lastFrameTime = 0;
+        }
+    }
+}
+*///?} else {
 @Mixin(RenderTickCounter.class)
 public class RenderTickCounterMixin
 {
@@ -95,3 +181,4 @@ public class RenderTickCounterMixin
         }
     }
 }
+//?}

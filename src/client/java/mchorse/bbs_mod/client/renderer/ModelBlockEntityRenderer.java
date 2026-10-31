@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.client.renderer;
 
+import mchorse.bbs_mod.utils.VertexUtils;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.BBSMod;
 import mchorse.bbs_mod.BBSSettings;
@@ -8,6 +9,7 @@ import mchorse.bbs_mod.blocks.entities.ModelProperties;
 import mchorse.bbs_mod.cubic.ModelInstance;
 import mchorse.bbs_mod.cubic.model.View;
 import mchorse.bbs_mod.entity.ActorEntity;
+import mchorse.bbs_mod.forms.FormPortals;
 import mchorse.bbs_mod.forms.FormUtilsClient;
 import mchorse.bbs_mod.forms.entities.IEntity;
 import mchorse.bbs_mod.forms.forms.Form;
@@ -29,6 +31,9 @@ import mchorse.bbs_mod.utils.MatrixStackUtils;
 import mchorse.bbs_mod.utils.joml.Matrices;
 import mchorse.bbs_mod.utils.pose.Transform;
 import net.minecraft.client.MinecraftClient;
+//? if >=1.21
+/*import net.minecraft.entity.player.BlockBreakingInfo;*/
+//? if <1.21
 import net.minecraft.client.render.BlockBreakingInfo;
 import net.minecraft.client.render.Camera;
 import net.minecraft.client.render.OverlayVertexConsumer;
@@ -110,7 +115,8 @@ public class ModelBlockEntityRenderer implements BlockEntityRenderer<ModelBlockE
     @Override
     public boolean rendersOutsideBoundingBox(ModelBlockEntity blockEntity)
     {
-        return blockEntity.getProperties().isGlobal();
+        /* A portal's window is as large as it is set to be: not culled with the block's own box */
+        return blockEntity.getProperties().isGlobal() || FormPortals.hasPortal(blockEntity.getProperties().getForm());
     }
 
     @Override
@@ -348,10 +354,17 @@ public class ModelBlockEntityRenderer implements BlockEntityRenderer<ModelBlockE
         }
 
         MatrixStack.Entry entry = matrices.peek();
+        //? if >=1.21 {
+        /*VertexConsumer consumer = new OverlayVertexConsumer(
+            mc.getBufferBuilders().getEffectVertexConsumers().getBuffer(ModelLoader.BLOCK_DESTRUCTION_RENDER_LAYERS.get(stage)),
+            entry, 1F
+        );
+        *///?} else {
         VertexConsumer consumer = new OverlayVertexConsumer(
             mc.getBufferBuilders().getEffectVertexConsumers().getBuffer(ModelLoader.BLOCK_DESTRUCTION_RENDER_LAYERS.get(stage)),
             entry.getPositionMatrix(), entry.getNormalMatrix(), 1F
         );
+        //?}
 
         Box box = entity.getShape().getBoundingBox();
         int light = WorldRenderer.getLightmapCoordinates(entity.getWorld(), entity.getPos());
@@ -371,13 +384,12 @@ public class ModelBlockEntityRenderer implements BlockEntityRenderer<ModelBlockE
     {
         for (int i = 0; i < 4; i++)
         {
-            consumer.vertex(entry.getPositionMatrix(), xyz[i * 3], xyz[i * 3 + 1], xyz[i * 3 + 2])
+            VertexUtils.normal(consumer.vertex(entry.getPositionMatrix(), xyz[i * 3], xyz[i * 3 + 1], xyz[i * 3 + 2])
                 .color(255, 255, 255, 255)
                 .texture(0F, 0F)
                 .overlay(OverlayTexture.DEFAULT_UV)
-                .light(light)
-                .normal(entry.getNormalMatrix(), nx, ny, nz)
-                .next();
+                .light(light), entry, nx, ny, nz)
+                /*$ nx*/.next()/**/;
         }
     }
 

@@ -159,6 +159,12 @@ public class UICurveClip extends UIClip<CurveClip>
     }
 
     @Override
+    public boolean openSubEditor()
+    {
+        return this.openSubEditor(this.edit);
+    }
+
+    @Override
     public void fillData()
     {
         super.fillData();

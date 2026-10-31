@@ -63,6 +63,29 @@ public class FormTranslucentQueue
     /** Non-null while a group is being recorded: added commands collect here instead of the queue. */
     private static GroupCommand group;
 
+    /** Set while an on-top group replays: the render layers inside it must not bring the depth test back. */
+    private static boolean noDepth;
+
+    /** Whether replayed render layers have to leave the depth test off - see {@link GroupCommand}. */
+    public static boolean isDepthSuppressed()
+    {
+        return noDepth;
+    }
+
+    /**
+     * Settle how the group being recorded is replayed: on top of everything (no depth test, after all
+     * the other commands), and/or pulled a little toward the camera so it does not flicker against a
+     * surface it lies on.
+     */
+    public static void configureGroup(boolean onTop, boolean bias)
+    {
+        if (group != null)
+        {
+            group.onTop = onTop;
+            group.bias = bias;
+        }
+    }
+
     public static void setSortOrigin(Vector3f origin)
     {
         sortOrigin = origin;
@@ -221,7 +244,8 @@ public class FormTranslucentQueue
             MinecraftClient.getInstance().getFramebuffer().beginWrite(false);
         }
 
-        commands.sort((a, b) -> Float.compare(b.distanceSq, a.distanceSq));
+        /* Far to near - and whatever is meant to be on top of the world after all of it, in the same order */
+        commands.sort((a, b) -> a.isOnTop() != b.isOnTop() ? Boolean.compare(a.isOnTop(), b.isOnTop()) : Float.compare(b.distanceSq, a.distanceSq));
 
         GameRenderer gameRenderer = MinecraftClient.getInstance().gameRenderer;
 
@@ -384,6 +408,12 @@ public class FormTranslucentQueue
             }
         }
 
+        /** Whether this command is drawn with no depth test, after everything else. */
+        public boolean isOnTop()
+        {
+            return false;
+        }
+
         public abstract void draw();
 
         public void release()
@@ -530,6 +560,17 @@ public class FormTranslucentQueue
     {
         private final List<DrawCommand> children = new ArrayList<>();
 
+        /** Drawn with no depth test and after every command that is not - the "always on top" mode. */
+        public boolean onTop;
+        /** Drawn with a polygon offset toward the camera, against flicker on the surface it lies on. */
+        public boolean bias;
+
+        @Override
+        public boolean isOnTop()
+        {
+            return this.onTop;
+        }
+
         public GroupCommand(Vector3f cameraSpaceOrigin, boolean cull)
         {
             /* Depth writes stay on: the parts depend on each other's depth (text over its
@@ -540,11 +581,40 @@ public class FormTranslucentQueue
         @Override
         public void draw()
         {
-            for (DrawCommand child : this.children)
-            {
-                resetBlend();
+            noDepth = this.onTop;
 
-                child.draw();
+            try
+            {
+                if (this.onTop)
+                {
+                    RenderSystem.disableDepthTest();
+                }
+
+                for (DrawCommand child : this.children)
+                {
+                    resetBlend();
+
+                    if (this.bias)
+                    {
+                        RenderSystem.enablePolygonOffset();
+                        RenderSystem.polygonOffset(-1F, -2F);
+                    }
+
+                    child.draw();
+
+                    if (this.onTop)
+                    {
+                        RenderSystem.disableDepthTest();
+                    }
+                }
+            }
+            finally
+            {
+                noDepth = false;
+
+                RenderSystem.disablePolygonOffset();
+                RenderSystem.enableDepthTest();
+                RenderSystem.depthFunc(GL11.GL_LEQUAL);
             }
         }
 
@@ -590,6 +660,12 @@ public class FormTranslucentQueue
 
             /* startDrawing applied the layer's own write mask — re-assert ours. */
             RenderSystem.depthMask(this.depthWrite);
+
+            /* ... and so is its depth test, which an on-top group wants off */
+            if (noDepth)
+            {
+                RenderSystem.disableDepthTest();
+            }
 
             /* After startDrawing, which is where the layer's overlay phase bound vanilla's
              * hurt-flash texture over unit 1: a form's color overlay has to land on top of it. */

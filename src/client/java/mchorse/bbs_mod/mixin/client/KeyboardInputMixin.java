@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.mixin.client;
 
+import mchorse.bbs_mod.camera.WorldFreeCam;
 import mchorse.bbs_mod.graphics.window.Window;
 import mchorse.bbs_mod.ui.dashboard.UIDashboard;
 import mchorse.bbs_mod.ui.film.UIFilmPanel;
@@ -53,6 +54,18 @@ public class KeyboardInputMixin
     @Inject(method = "tick", at = @At("RETURN"))
     public void onTick(boolean slowDown, float slowDownFactor, CallbackInfo info)
     {
+        if (WorldFreeCam.isActive())
+        {
+            /* The player stands still while the free camera flies */
+            KeyboardInput idle = (KeyboardInput) (Object) this;
+
+            idle.pressingForward = idle.pressingBack = idle.pressingLeft = idle.pressingRight = false;
+            idle.movementForward = idle.movementSideways = 0F;
+            idle.jumping = idle.sneaking = false;
+
+            return;
+        }
+
         UIBaseMenu menu = UIScreen.getCurrentMenu();
 
         if (!(menu instanceof UIDashboard dashboard) || !(dashboard.getPanels().panel instanceof UIFilmPanel filmPanel))

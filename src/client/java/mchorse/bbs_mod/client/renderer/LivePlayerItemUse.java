@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.client.renderer;
 
+import mchorse.bbs_mod.utils.VersionCompat;
 import mchorse.bbs_mod.cubic.animation.ItemUsePose;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.LivingEntity;
@@ -109,6 +110,6 @@ public class LivePlayerItemUse
      */
     public static int getTimeLeft()
     {
-        return Math.max(0, getStack().getMaxUseTime() - (int) Math.floor(use.elapsed()) - 1);
+        return Math.max(0, VersionCompat.getMaxUseTime(getStack(), null) - (int) Math.floor(use.elapsed()) - 1);
     }
 }

@@ -289,6 +289,11 @@ public abstract class UIItems<T> extends UIElement
             return true;
         }
 
+        if (this.hasOwnScroll() && this.scroll.startAutoscroll(context))
+        {
+            return true;
+        }
+
         if (!this.area.isInside(context) || context.mouseButton != 0)
         {
             return false;

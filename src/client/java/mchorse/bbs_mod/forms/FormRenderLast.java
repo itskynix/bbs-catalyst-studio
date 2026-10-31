@@ -37,7 +37,7 @@ import java.util.List;
  */
 public class FormRenderLast
 {
-    private static final List<Postponed> postponed = new ArrayList<>();
+    private static final List<Frame> postponed = new ArrayList<>();
     private static boolean active;
 
     /**
@@ -109,7 +109,7 @@ public class FormRenderLast
             return false;
         }
 
-        postponed.add(new Postponed(form, context));
+        postponed.add(new Frame(form, context));
 
         return true;
     }
@@ -123,14 +123,14 @@ public class FormRenderLast
 
         /* Drained before drawing: the scope is closed, so the replay draws straight away and
          * nothing postpones again mid-flush — the list must simply be empty for the next pass. */
-        List<Postponed> forms = new ArrayList<>(postponed);
+        List<Frame> forms = new ArrayList<>(postponed);
 
         postponed.clear();
 
         RenderSystem.enableDepthTest();
         RenderSystem.enableBlend();
 
-        for (Postponed form : forms)
+        for (Frame form : forms)
         {
             form.render();
         }
@@ -140,7 +140,7 @@ public class FormRenderLast
     }
 
     /** A form's frame at the moment it was skipped — enough to run its renderer later. */
-    private static class Postponed
+    static class Frame
     {
         private final Form form;
         private final FormRenderType type;
@@ -155,7 +155,7 @@ public class FormRenderLast
         private final float transition;
         private final Camera camera = new Camera();
 
-        private Postponed(Form form, FormRenderingContext context)
+        Frame(Form form, FormRenderingContext context)
         {
             MatrixStack.Entry entry = context.stack.peek();
             MatrixStack.Entry world = context.world == null ? null : context.world.peek();
@@ -174,7 +174,7 @@ public class FormRenderLast
             this.camera.copy(context.camera);
         }
 
-        private void render()
+        void render()
         {
             MatrixStack stack = new MatrixStack();
 

@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class ShadowMatricesMixin
 {
     @Inject(method = "createBaselineModelViewMatrix", at = @At("RETURN"), remap = false)
-    private static void rotateSunHorizontally(MatrixStack matrices, float shadowAngle, float sunPathRotation, CallbackInfo info)
+    private static void rotateSunHorizontally(MatrixStack matrices, float shadowAngle, float sunPathRotation/*$ smf*//*-*//**/, CallbackInfo info)
     {
         float rotation = BBSRendering.getSunHorizontalRotation();
 

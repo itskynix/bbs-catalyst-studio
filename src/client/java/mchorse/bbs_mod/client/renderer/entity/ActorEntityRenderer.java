@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.client.renderer.entity;
 
+import mchorse.bbs_mod.utils.Ids;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.client.renderer.DeathPose;
@@ -48,7 +49,7 @@ public class ActorEntityRenderer extends EntityRenderer<ActorEntity>
     @Override
     public Identifier getTexture(ActorEntity entity)
     {
-        return new Identifier("minecraft:textures/entity/player/wide/steve.png");
+        return Ids.of("minecraft:textures/entity/player/wide/steve.png");
     }
 
     @Override

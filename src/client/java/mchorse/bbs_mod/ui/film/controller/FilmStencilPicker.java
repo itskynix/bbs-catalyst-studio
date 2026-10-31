@@ -1,5 +1,8 @@
 package mchorse.bbs_mod.ui.film.controller;
 
+import mchorse.bbs_mod.utils.GlStateGuard;
+import mchorse.bbs_mod.utils.GuiState;
+import mchorse.bbs_mod.utils.InverseViewRotation;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.systems.VertexSorter;
 import mchorse.bbs_mod.BBSSettings;
@@ -173,6 +176,24 @@ public class FilmStencilPicker
      */
     public void renderPreview(UIContext context, Area area)
     {
+        /* The pass draws a scene into a buffer of its own in the middle of the interface; whatever
+         * it binds, sets or leaves (framebuffer, viewport, scissor, masks, program, vertex array)
+         * is put back before the panels after the preview are drawn. */
+        GlStateGuard guard = GlStateGuard.capture();
+
+        try
+        {
+            this.renderPickPass(context, area);
+        }
+        finally
+        {
+            guard.restore();
+            GuiState.restoreInMenu();
+        }
+    }
+
+    private void renderPickPass(UIContext context, Area area)
+    {
         if (this.controller.panel.isFlying() || this.controller.worldRenderContext() == null)
         {
             return;
@@ -186,7 +207,7 @@ public class FilmStencilPicker
         MatrixStackUtils.cacheMatrices();
 
         RenderSystem.setProjectionMatrix(this.controller.panel.lastProjection, VertexSorter.BY_Z);
-        RenderSystem.setInverseViewRotationMatrix(new Matrix3f(this.controller.panel.lastView).invert());
+        InverseViewRotation.setOverride(new Matrix3f(this.controller.panel.lastView).invert());
 
         /* Render the stencil */
         MatrixStack worldStack = this.controller.worldRenderContext().matrixStack();
@@ -316,7 +337,7 @@ public class FilmStencilPicker
 
                 FilmEntityRenderer.renderEntity(FilmControllerContext.instance
                     .setup(this.controller.getEntities(), replayEntity, replay, renderContext)
-                    .transition(isPlaying ? renderContext.tickDelta() : 0)
+                    .transition(isPlaying ? renderContext./*$ wtd*/tickDelta()/**/ : 0)
                     .stencil(this.stencilMap)
                     .relative(replay.relative.get()));
             }
@@ -341,7 +362,7 @@ public class FilmStencilPicker
 
                 FilmControllerContext filmContext = FilmControllerContext.instance
                     .setup(this.controller.getEntities(), replayEntity, replay, renderContext)
-                    .transition(isPlaying ? renderContext.tickDelta() : 0)
+                    .transition(isPlaying ? renderContext./*$ wtd*/tickDelta()/**/ : 0)
                     .stencil(this.stencilMap)
                     .relative(replay.relative.get());
 
@@ -371,7 +392,7 @@ public class FilmStencilPicker
 
             FilmEntityRenderer.renderEntity(FilmControllerContext.instance
                 .setup(this.controller.getEntities(), entity, replay, renderContext)
-                .transition(isPlaying ? renderContext.tickDelta() : 0)
+                .transition(isPlaying ? renderContext./*$ wtd*/tickDelta()/**/ : 0)
                 .stencil(this.stencilMap)
                 .relative(replay.relative.get())
                 .gizmoTarget(this.controller.getEditTarget())

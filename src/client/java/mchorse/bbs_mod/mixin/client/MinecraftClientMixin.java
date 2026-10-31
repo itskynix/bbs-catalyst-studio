@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.mixin.client;
 
+import mchorse.bbs_mod.camera.WorldFreeCam;
 import mchorse.bbs_mod.forms.structure.StructureWand;
 import net.minecraft.client.MinecraftClient;
 import org.spongepowered.asm.mixin.Mixin;
@@ -29,6 +30,34 @@ public class MinecraftClientMixin
     public void wandUse(CallbackInfo ci)
     {
         if (StructureWand.onUse())
+        {
+            ci.cancel();
+        }
+    }
+
+    /* The player stands still while the free camera flies: its clicks do not reach the world */
+    @Inject(method = "doAttack", at = @At("HEAD"), cancellable = true)
+    public void freeCamAttack(CallbackInfoReturnable<Boolean> cir)
+    {
+        if (WorldFreeCam.isActive())
+        {
+            cir.setReturnValue(false);
+        }
+    }
+
+    @Inject(method = "doItemUse", at = @At("HEAD"), cancellable = true)
+    public void freeCamUse(CallbackInfo ci)
+    {
+        if (WorldFreeCam.isActive())
+        {
+            ci.cancel();
+        }
+    }
+
+    @Inject(method = "handleBlockBreaking", at = @At("HEAD"), cancellable = true)
+    public void freeCamBreak(boolean breaking, CallbackInfo ci)
+    {
+        if (WorldFreeCam.isActive())
         {
             ci.cancel();
         }

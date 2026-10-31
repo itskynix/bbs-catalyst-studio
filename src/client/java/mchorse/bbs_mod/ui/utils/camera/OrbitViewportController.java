@@ -300,7 +300,7 @@ public abstract class OrbitViewportController implements ICameraController
             return;
         }
 
-        float dt = MinecraftClient.getInstance().getLastFrameDuration();
+        float dt = MinecraftClient.getInstance()./*$ gfd*/getLastFrameDuration()/**/;
         float factor = MathUtils.clamp(1F - (float) Math.pow(Math.min(smoothness, 0.99F), dt), 0F, 1F);
 
         this.rotation.lerp(this.targetRotation, factor);

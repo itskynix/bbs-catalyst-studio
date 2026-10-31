@@ -15,6 +15,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.gui.render.common;
 
+import mchorse.bbs_mod.utils.VersionCompat;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.GuiPointerHover;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.GuiRenderContext;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.common.GuiItemRenderer;
@@ -83,8 +84,7 @@ public final class GuiCursorRenderer {
         if (stack.hasEnchantments()) {
             return true;
         }
-        NbtCompound nbt = stack.getNbt();
-        return nbt != null && nbt.contains("StoredEnchantments", 9) && !nbt.getList("StoredEnchantments", 10).isEmpty();
+        return VersionCompat.hasStoredEnchantments(stack);
     }
 }
 

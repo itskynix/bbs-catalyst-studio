@@ -1,0 +1,171 @@
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by net.rubygrapefruit.platform.internal.NativeLibraryLoader in an unnamed module (file:/C:/Users/Kynix/.gradle/wrapper/dists/gradle-9.2.0-bin/11i5gvueggl8a5cioxuftxrik/gradle-9.2.0/lib/native-platform-0.22-milestone-29.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.2.0/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+
+> Configure project :
+Running Stonecutter 0.4.5
+
+> Configure project :1.20.1
+Fabric Loom: 1.15.5
+
+> Configure project :1.20.4
+Fabric Loom: 1.15.5
+
+> Task :1.20.1:setupChiseledBuild
+[Stonecutter] Switched to 1.20.1 in 6995ms (35/2360 modified)
+
+> Task :1.20.4:setupChiseledBuild
+[Stonecutter] Switched to 1.20.4 in 7234ms (2/2360 modified)
+
+> Task :chiseledStonecutter
+> Task :chiseledBuild
+> Task :1.20.4:compileJava UP-TO-DATE
+> Task :1.20.1:compileJava UP-TO-DATE
+> Task :1.20.4:processResources UP-TO-DATE
+> Task :1.20.1:processResources UP-TO-DATE
+> Task :1.20.1:classes UP-TO-DATE
+> Task :1.20.4:classes UP-TO-DATE
+
+> Task :1.20.1:compileClientJava
+C:\Users\Kynix\.gemini\antigravity\scratch\BBS\bbs-cs\versions\1.20.1\build\chiseledSrc\client\java\mchorse\bbs_mod\utils\VideoRecorder.java:14: warning: Unsafe is internal proprietary API and may be removed in a future release
+import sun.misc.Unsafe;
+               ^
+C:\Users\Kynix\.gemini\antigravity\scratch\BBS\bbs-cs\versions\1.20.1\build\chiseledSrc\client\java\mchorse\bbs_mod\ui\dashboard\panels\UICatalystPanel.java:76: warning: Unsafe is internal proprietary API and may be removed in a future release
+import sun.misc.Unsafe;
+               ^
+C:\Users\Kynix\.gemini\antigravity\scratch\BBS\bbs-cs\versions\1.20.1\build\chiseledSrc\client\java\mchorse\bbs_mod\utils\VideoRecorder.java:361: warning: Unsafe is internal proprietary API and may be removed in a future release
+            Unsafe unsafe = UnsafeUtils.getUnsafe();
+            ^
+C:\Users\Kynix\.gemini\antigravity\scratch\BBS\bbs-cs\versions\1.20.1\build\chiseledSrc\client\java\mchorse\bbs_mod\ui\dashboard\panels\UICatalystPanel.java:5206: warning: Unsafe is internal proprietary API and may be removed in a future release
+            Unsafe unsafe = UnsafeUtils.getUnsafe();
+            ^
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+4 warnings
+
+> Task :1.20.4:compileClientJava
+C:\Users\Kynix\.gemini\antigravity\scratch\BBS\bbs-cs\versions\1.20.4\build\chiseledSrc\client\java\mchorse\bbs_mod\utils\VideoRecorder.java:14: warning: Unsafe is internal proprietary API and may be removed in a future release
+import sun.misc.Unsafe;
+               ^
+C:\Users\Kynix\.gemini\antigravity\scratch\BBS\bbs-cs\versions\1.20.4\build\chiseledSrc\client\java\mchorse\bbs_mod\ui\dashboard\panels\UICatalystPanel.java:76: warning: Unsafe is internal proprietary API and may be removed in a future release
+import sun.misc.Unsafe;
+               ^
+C:\Users\Kynix\.gemini\antigravity\scratch\BBS\bbs-cs\versions\1.20.4\build\chiseledSrc\client\java\mchorse\bbs_mod\utils\VideoRecorder.java:361: warning: Unsafe is internal proprietary API and may be removed in a future release
+            Unsafe unsafe = UnsafeUtils.getUnsafe();
+            ^
+C:\Users\Kynix\.gemini\antigravity\scratch\BBS\bbs-cs\versions\1.20.4\build\chiseledSrc\client\java\mchorse\bbs_mod\ui\dashboard\panels\UICatalystPanel.java:5206: warning: Unsafe is internal proprietary API and may be removed in a future release
+            Unsafe unsafe = UnsafeUtils.getUnsafe();
+            ^
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+4 warnings
+
+> Task :1.20.1:processClientResources UP-TO-DATE
+> Task :1.20.4:processClientResources
+> Task :1.20.1:jar
+> Task :1.20.1:processIncludeJars UP-TO-DATE
+> Task :1.20.4:jar
+> Task :1.20.4:processIncludeJars UP-TO-DATE
+
+> Task :1.20.1:remapJar
+Cannot remap field_17671 because it does not exist in any of the targets [net/minecraft/client/gui/screen/ingame/StonecutterScreen] or their parents.
+Cannot remap field_3086 because it does not exist in any of the targets [net/minecraft/client/gui/screen/recipebook/RecipeBookWidget] or their parents.
+Cannot remap field_33679 because it does not exist in any of the targets [net/minecraft/client/gui/screen/recipebook/RecipeBookWidget] or their parents.
+Cannot remap field_3089 because it does not exist in any of the targets [net/minecraft/client/gui/screen/recipebook/RecipeBookWidget] or their parents.
+Cannot remap field_3098 because it does not exist in any of the targets [net/minecraft/client/gui/screen/recipebook/RecipeBookWidget] or their parents.
+Cannot remap field_3094 because it does not exist in any of the targets [net/minecraft/client/gui/screen/recipebook/RecipeBookWidget] or their parents.
+Cannot remap field_3092 because it does not exist in any of the targets [net/minecraft/client/gui/screen/recipebook/RecipeBookWidget] or their parents.
+Cannot remap field_3096 because it does not exist in any of the targets [net/minecraft/client/gui/screen/recipebook/RecipeBookWidget] or their parents.
+Cannot remap field_3095 because it does not exist in any of the targets [net/minecraft/client/gui/screen/recipebook/RecipeBookWidget] or their parents.
+Cannot remap field_3135 because it does not exist in any of the targets [net/minecraft/client/gui/screen/recipebook/RecipeBookResults] or their parents.
+Cannot remap field_14351 because it does not exist in any of the targets [net/minecraft/server/PlayerManager] or their parents.
+Cannot remap field_39190 because it does not exist in any of the targets [net/minecraft/client/gui/screen/ingame/LoomScreen] or their parents.
+Cannot remap field_2013 because it does not exist in any of the targets [net/minecraft/client/gui/hud/InGameHud] or their parents.
+Cannot remap field_27959 because it does not exist in any of the targets [net/minecraft/client/gui/hud/InGameHud] or their parents.
+Cannot remap method_1735 because it does not exist in any of the targets [net/minecraft/client/gui/hud/InGameHud] or their parents.
+Cannot remap field_47130 because it does not exist in any of the targets [net/minecraft/client/render/GameRenderer] or their parents.
+Cannot remap field_4015 because it does not exist in any of the targets [net/minecraft/client/render/GameRenderer] or their parents.
+Cannot remap field_20948 because it does not exist in any of the targets [net/minecraft/client/render/GameRenderer] or their parents.
+Cannot remap field_4028 because it does not exist in any of the targets [net/minecraft/client/render/GameRenderer] or their parents.
+Cannot remap field_4012 because it does not exist in any of the targets [net/minecraft/client/render/GameRenderer] or their parents.
+Cannot remap field_10860 because it does not exist in any of the targets [net/minecraft/command/EntitySelectorReader] or their parents.
+Cannot remap field_10876 because it does not exist in any of the targets [net/minecraft/command/EntitySelectorReader] or their parents.
+Cannot remap field_2904 because it does not exist in any of the targets [net/minecraft/client/gui/screen/ingame/EnchantmentScreen] or their parents.
+Cannot remap field_2905 because it does not exist in any of the targets [net/minecraft/client/gui/screen/ingame/EnchantmentScreen] or their parents.
+Cannot remap field_2896 because it does not exist in any of the targets [net/minecraft/client/gui/screen/ingame/CreativeInventoryScreen] or their parents.
+Cannot remap field_2890 because it does not exist in any of the targets [net/minecraft/client/gui/screen/ingame/CreativeInventoryScreen] or their parents.
+Cannot remap field_2894 because it does not exist in any of the targets [net/minecraft/client/gui/screen/ingame/CreativeInventoryScreen] or their parents.
+Cannot remap field_3725 because it does not exist in any of the targets [net/minecraft/client/network/ClientCommandSource] or their parents.
+Cannot remap field_21597 because it does not exist in any of the targets [net/minecraft/client/gui/screen/ChatInputSuggestor] or their parents.
+Cannot remap field_21611 because it does not exist in any of the targets [net/minecraft/client/gui/screen/ChatInputSuggestor] or their parents.
+Cannot remap field_4034 because it does not exist in any of the targets [net/minecraft/client/render/BackgroundRenderer] or their parents.
+Cannot remap field_4033 because it does not exist in any of the targets [net/minecraft/client/render/BackgroundRenderer] or their parents.
+Cannot remap field_4032 because it does not exist in any of the targets [net/minecraft/client/render/BackgroundRenderer] or their parents.
+Cannot remap field_2821 because it does not exist in any of the targets [net/minecraft/client/gui/screen/ingame/AnvilScreen] or their parents.
+
+Lmchorse/bbs_mod/forms/renderers/ModelFormRenderer;renderModel is not fully qualified.
+Lmchorse/bbs_mod/cubic/ModelInstance;render is not fully qualified.
+Lmchorse/bbs_mod/forms/renderers/ModelFormRenderer;renderModel is not fully qualified.
+Lmchorse/bbs_mod/forms/renderers/ModelFormRenderer;renderModel is not fully qualified.
+Lmchorse/bbs_mod/cubic/ModelInstance;render is not fully qualified.
+Lmchorse/bbs_mod/forms/renderers/ModelFormRenderer;renderModel is not fully qualified.
+Lmchorse/bbs_mod/forms/renderers/ModelFormRenderer;renderModel is not fully qualified.
+Lmchorse/bbs_mod/forms/renderers/ModelFormRenderer;renderModel is not fully qualified.
+
+> Task :1.20.4:remapJar
+Cannot remap field_17671 because it does not exist in any of the targets [net/minecraft/client/gui/screen/ingame/StonecutterScreen] or their parents.
+Cannot remap field_3086 because it does not exist in any of the targets [net/minecraft/client/gui/screen/recipebook/RecipeBookWidget] or their parents.
+Cannot remap field_33679 because it does not exist in any of the targets [net/minecraft/client/gui/screen/recipebook/RecipeBookWidget] or their parents.
+Cannot remap field_3089 because it does not exist in any of the targets [net/minecraft/client/gui/screen/recipebook/RecipeBookWidget] or their parents.
+Cannot remap field_3098 because it does not exist in any of the targets [net/minecraft/client/gui/screen/recipebook/RecipeBookWidget] or their parents.
+Cannot remap field_3094 because it does not exist in any of the targets [net/minecraft/client/gui/screen/recipebook/RecipeBookWidget] or their parents.
+Cannot remap field_3092 because it does not exist in any of the targets [net/minecraft/client/gui/screen/recipebook/RecipeBookWidget] or their parents.
+Cannot remap field_3096 because it does not exist in any of the targets [net/minecraft/client/gui/screen/recipebook/RecipeBookWidget] or their parents.
+Cannot remap field_3095 because it does not exist in any of the targets [net/minecraft/client/gui/screen/recipebook/RecipeBookWidget] or their parents.
+Cannot remap field_3135 because it does not exist in any of the targets [net/minecraft/client/gui/screen/recipebook/RecipeBookResults] or their parents.
+Cannot remap field_45356 because it does not exist in any of the targets [net/minecraft/client/gui/widget/TexturedButtonWidget] or their parents.
+Cannot remap field_14351 because it does not exist in any of the targets [net/minecraft/server/PlayerManager] or their parents.
+Cannot remap field_39190 because it does not exist in any of the targets [net/minecraft/client/gui/screen/ingame/LoomScreen] or their parents.
+Cannot remap field_2013 because it does not exist in any of the targets [net/minecraft/client/gui/hud/InGameHud] or their parents.
+Cannot remap field_27959 because it does not exist in any of the targets [net/minecraft/client/gui/hud/InGameHud] or their parents.
+Cannot remap method_1735 because it does not exist in any of the targets [net/minecraft/client/gui/hud/InGameHud] or their parents.
+Cannot remap field_47130 because it does not exist in any of the targets [net/minecraft/client/render/GameRenderer] or their parents.
+Cannot remap field_4015 because it does not exist in any of the targets [net/minecraft/client/render/GameRenderer] or their parents.
+Cannot remap field_20948 because it does not exist in any of the targets [net/minecraft/client/render/GameRenderer] or their parents.
+Cannot remap field_4028 because it does not exist in any of the targets [net/minecraft/client/render/GameRenderer] or their parents.
+Cannot remap field_4012 because it does not exist in any of the targets [net/minecraft/client/render/GameRenderer] or their parents.
+Cannot remap field_10860 because it does not exist in any of the targets [net/minecraft/command/EntitySelectorReader] or their parents.
+Cannot remap field_10876 because it does not exist in any of the targets [net/minecraft/command/EntitySelectorReader] or their parents.
+Cannot remap field_2904 because it does not exist in any of the targets [net/minecraft/client/gui/screen/ingame/EnchantmentScreen] or their parents.
+Cannot remap field_2905 because it does not exist in any of the targets [net/minecraft/client/gui/screen/ingame/EnchantmentScreen] or their parents.
+Cannot remap field_2896 because it does not exist in any of the targets [net/minecraft/client/gui/screen/ingame/CreativeInventoryScreen] or their parents.
+Cannot remap field_2890 because it does not exist in any of the targets [net/minecraft/client/gui/screen/ingame/CreativeInventoryScreen] or their parents.
+Cannot remap field_2894 because it does not exist in any of the targets [net/minecraft/client/gui/screen/ingame/CreativeInventoryScreen] or their parents.
+Cannot remap field_3725 because it does not exist in any of the targets [net/minecraft/client/network/ClientCommandSource] or their parents.
+Cannot remap field_21597 because it does not exist in any of the targets [net/minecraft/client/gui/screen/ChatInputSuggestor] or their parents.
+Cannot remap field_21611 because it does not exist in any of the targets [net/minecraft/client/gui/screen/ChatInputSuggestor] or their parents.
+Cannot remap field_4034 because it does not exist in any of the targets [net/minecraft/client/render/BackgroundRenderer] or their parents.
+Cannot remap field_4033 because it does not exist in any of the targets [net/minecraft/client/render/BackgroundRenderer] or their parents.
+Cannot remap field_4032 because it does not exist in any of the targets [net/minecraft/client/render/BackgroundRenderer] or their parents.
+Cannot remap field_2821 because it does not exist in any of the targets [net/minecraft/client/gui/screen/ingame/AnvilScreen] or their parents.
+Cannot remap method_2639 because it does not exist in any of the targets [net/minecraft/client/gui/screen/recipebook/AnimatedResultButton] or their parents.
+
+Lmchorse/bbs_mod/actions/ActionPlayer;applyFilmPlayerSettingsTo is not fully qualified.
+Lmchorse/bbs_mod/actions/ActionPlayer;applyFilmPlayerSettingsTo is not fully qualified.
+Lmchorse/bbs_mod/film/Recorder;renderCameraPreview is not fully qualified.
+Lmchorse/bbs_mod/film/Recorder;renderCameraPreview is not fully qualified.
+
+[Incubating] Problems report is available at: file:///C:/Users/Kynix/.gemini/antigravity/scratch/BBS/bbs-cs/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.2.0/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 43s
+16 actionable tasks: 9 executed, 7 up-to-date

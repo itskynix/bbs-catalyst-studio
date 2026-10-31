@@ -37,6 +37,16 @@ public class FluidVertexConsumer implements VertexConsumer
         this.overlay = overlay;
     }
 
+    //? if >=1.21 {
+    /*@Override
+    public VertexConsumer vertex(float x, float y, float z)
+    {
+        this.position.transformPosition((float) x, (float) y, (float) z, this.temporary);
+        this.consumer.vertex(this.temporary.x, this.temporary.y, this.temporary.z);
+
+        return this;
+    }
+    *///?} else {
     @Override
     public VertexConsumer vertex(double x, double y, double z)
     {
@@ -45,6 +55,7 @@ public class FluidVertexConsumer implements VertexConsumer
 
         return this;
     }
+    //?}
 
     @Override
     public VertexConsumer color(int red, int green, int blue, int alpha)
@@ -86,6 +97,7 @@ public class FluidVertexConsumer implements VertexConsumer
         return this;
     }
 
+    //? if <1.21 {
     @Override
     public void next()
     {
@@ -103,4 +115,5 @@ public class FluidVertexConsumer implements VertexConsumer
     {
         this.consumer.unfixColor();
     }
+    //?}
 }

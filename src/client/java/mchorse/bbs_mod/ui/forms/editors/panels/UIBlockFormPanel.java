@@ -19,6 +19,12 @@ public class UIBlockFormPanel extends UIFormPanel<BlockForm>
     }
 
     @Override
+    public void finishEdit()
+    {
+        super.finishEdit();
+    }
+
+    @Override
     public void startEdit(BlockForm form)
     {
         super.startEdit(form);

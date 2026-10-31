@@ -1,6 +1,9 @@
 package mchorse.bbs_mod.audio;
 
+import mchorse.bbs_mod.BBSMod;
 import mchorse.bbs_mod.audio.MinecraftSoundCapture.CapturedSound;
+import mchorse.bbs_mod.audio.MinecraftSoundCapture.ExternalFrame;
+import mchorse.bbs_mod.audio.MinecraftSoundCapture.ExternalTrack;
 import mchorse.bbs_mod.audio.MinecraftSoundCapture.ListenerFrame;
 import mchorse.bbs_mod.audio.MinecraftSoundCapture.LoopFrame;
 import mchorse.bbs_mod.audio.ogg.VorbisReader;
@@ -54,6 +57,15 @@ public class MinecraftSoundMixer
      */
     public static boolean mixToFile(File file, List<CapturedSound> sounds, List<ListenerFrame> frames, Wave filmAudio, int sampleRate, double frameRate, int totalFrames)
     {
+        return mixToFile(file, sounds, frames, null, filmAudio, sampleRate, frameRate, totalFrames);
+    }
+
+    /**
+     * Same as above, plus the externally played sounds (AudioForm) that bypass
+     * vanilla's sound engine and were reported per frame as ready-made state.
+     */
+    public static boolean mixToFile(File file, List<CapturedSound> sounds, List<ListenerFrame> frames, List<ExternalTrack> externals, Wave filmAudio, int sampleRate, double frameRate, int totalFrames)
+    {
         if (totalFrames <= 0 || frameRate <= 0D)
         {
             return false;
@@ -84,8 +96,9 @@ public class MinecraftSoundMixer
         }
 
         List<SoundCursor> cursors = createCursors(sounds, frames, sampleRate, frameRate, totalSamples);
+        List<ExternalCursor> externalCursors = createExternalCursors(externals, sampleRate, frameRate);
 
-        if (cursors.isEmpty() && filmAudio == null)
+        if (cursors.isEmpty() && externalCursors.isEmpty() && filmAudio == null)
         {
             return false;
         }
@@ -106,6 +119,18 @@ public class MinecraftSoundMixer
                 java.util.Arrays.fill(right, 0, length, 0F);
 
                 for (SoundCursor cursor : cursors)
+                {
+                    try
+                    {
+                        cursor.mix(left, right, windowStart, length);
+                    }
+                    catch (Exception e)
+                    {
+                        e.printStackTrace();
+                    }
+                }
+
+                for (ExternalCursor cursor : externalCursors)
                 {
                     try
                     {
@@ -161,6 +186,67 @@ public class MinecraftSoundMixer
                 if (wave != null)
                 {
                     cursors.add(new SoundCursor(sound, wave, frames, sampleRate, frameRate, totalSamples));
+                }
+            }
+            catch (Exception e)
+            {
+                e.printStackTrace();
+            }
+        }
+
+        return cursors;
+    }
+
+    /**
+     * Decode every distinct BBS asset reported by external sources (AudioForm) once
+     * and pair each track with its wave.
+     */
+    private static List<ExternalCursor> createExternalCursors(List<ExternalTrack> externals, int sampleRate, double frameRate)
+    {
+        List<ExternalCursor> cursors = new ArrayList<>();
+
+        if (externals == null || externals.isEmpty())
+        {
+            return cursors;
+        }
+
+        Map<Link, Wave> waves = new HashMap<>();
+
+        for (ExternalTrack track : externals)
+        {
+            try
+            {
+                if (track.frames.isEmpty())
+                {
+                    continue;
+                }
+
+                Wave wave;
+
+                if (waves.containsKey(track.link))
+                {
+                    wave = waves.get(track.link);
+                }
+                else
+                {
+                    wave = AudioReader.read(BBSMod.getProvider(), track.link);
+
+                    if (wave != null)
+                    {
+                        wave = wave.normalize();
+                    }
+
+                    if (wave != null && (wave.bitsPerSample != 16 || wave.data.length == 0 || wave.numChannels < 1))
+                    {
+                        wave = null;
+                    }
+
+                    waves.put(track.link, wave);
+                }
+
+                if (wave != null)
+                {
+                    cursors.add(new ExternalCursor(track, wave, sampleRate, frameRate));
                 }
             }
             catch (Exception e)
@@ -282,19 +368,231 @@ public class MinecraftSoundMixer
         return (a + (b - a) * frac) / 32768F;
     }
 
-    /** Pack a window into interleaved little-endian 16-bit stereo, hard-limited per sample. */
+    /** Soft-knee limiter: perfectly linear below 0.70, smoothly saturates peaks up to +/-1.0 without clipping. */
+    private static float softLimit(float x)
+    {
+        if (x > 0.7F)
+        {
+            float excess = x - 0.7F;
+            return Math.min(0.999F, 0.7F + excess / (1.0F + excess));
+        }
+        else if (x < -0.7F)
+        {
+            float excess = -x - 0.7F;
+            return Math.max(-0.999F, -(0.7F + excess / (1.0F + excess)));
+        }
+
+        return MathUtils.clamp(x, -0.999F, 0.999F);
+    }
+
+    /** Pack a window into interleaved little-endian 16-bit stereo, soft-limited per sample. */
     private static void pack(float[] left, float[] right, byte[] packed, int length)
     {
         for (int i = 0; i < length; i++)
         {
-            short l = (short) (MathUtils.clamp(left[i], -0.999F, 0.999F) * Short.MAX_VALUE);
-            short r = (short) (MathUtils.clamp(right[i], -0.999F, 0.999F) * Short.MAX_VALUE);
+            short l = (short) (softLimit(left[i]) * Short.MAX_VALUE);
+            short r = (short) (softLimit(right[i]) * Short.MAX_VALUE);
             int offset = i * 4;
 
             packed[offset] = (byte) (l & 0xFF);
             packed[offset + 1] = (byte) ((l >> 8) & 0xFF);
             packed[offset + 2] = (byte) (r & 0xFF);
             packed[offset + 3] = (byte) ((r >> 8) & 0xFF);
+        }
+    }
+
+    /**
+     * One external (AudioForm) track being mixed. Its playback position continuously
+     * advances with sample-accurate linear interpolation between source file sample rate
+     * and output mix sample rate (preventing aliasing/bitcrush), softly syncing with
+     * per-frame reported timeline/world timestamps.
+     */
+    private static class ExternalCursor
+    {
+        private final ExternalTrack track;
+        private final Wave wave;
+        private final int channels;
+        private final int srcSamples;
+        private final double duration;
+        private final int sampleRate;
+        private final double frameRate;
+        private final double framesPerSample;
+        private final float smoothing;
+        private final int fadeInSamples;
+
+        private float gainL;
+        private float gainR;
+        private float lowPass = 1F;
+        private float lpL;
+        private float lpR;
+        private boolean started;
+        private boolean filterWarmed;
+        private int fadeInProgress;
+        private double srcPos;
+        private boolean hasSrcPos;
+
+        public ExternalCursor(ExternalTrack track, Wave wave, int sampleRate, double frameRate)
+        {
+            this.track = track;
+            this.wave = wave;
+            this.channels = wave.numChannels;
+            this.srcSamples = wave.data.length / (2 * this.channels);
+            this.duration = this.srcSamples / (double) wave.sampleRate;
+            this.sampleRate = sampleRate;
+            this.frameRate = frameRate;
+            this.framesPerSample = frameRate / sampleRate;
+            this.smoothing = (float) (1D - Math.exp(-1D / (GAIN_SMOOTHING * sampleRate)));
+            /* ~8 ms micro fade-in ramp (approx 350-400 samples at 44.1/48 kHz) to prevent initial step/pop artifact */
+            this.fadeInSamples = Math.max(1, (int) Math.round(0.008D * sampleRate));
+        }
+
+        public void mix(float[] left, float[] right, long windowStart, int length)
+        {
+            if (this.srcSamples <= 0)
+            {
+                return;
+            }
+
+            /* Skip windows entirely outside the reported span (plus a frame of fade-out) */
+            long first = (long) Math.floor(this.track.minFrame / this.framesPerSample);
+            long last = (long) Math.ceil((this.track.maxFrame + 2) / this.framesPerSample);
+
+            if (windowStart + length <= first || windowStart > last)
+            {
+                return;
+            }
+
+            int lastFrame = Integer.MIN_VALUE;
+            ExternalFrame state = null;
+
+            for (int index = 0; index < length; index++)
+            {
+                long sample = windowStart + index;
+                int frameIndex = (int) (sample * this.framesPerSample);
+
+                if (frameIndex != lastFrame)
+                {
+                    state = this.track.frames.get(frameIndex);
+                    lastFrame = frameIndex;
+
+                    if (state != null)
+                    {
+                        double targetPos = state.sourceSec * this.wave.sampleRate;
+
+                        if (!this.hasSrcPos || Math.abs(targetPos - this.srcPos) > 0.15D * this.wave.sampleRate)
+                        {
+                            /* Initial start or major seek/loop jump: snap immediately */
+                            this.srcPos = targetPos;
+                            this.hasSrcPos = true;
+                        }
+                        else
+                        {
+                            /* Softly nudge cursor toward reported frame time to eliminate clock drift without aliasing */
+                            this.srcPos += (targetPos - this.srcPos) * 0.04D;
+                        }
+                    }
+                }
+
+                float targetL = state == null ? 0F : state.gainL;
+                float targetR = state == null ? 0F : state.gainR;
+                float targetLp = state == null ? this.lowPass : MathUtils.clamp(state.lowPass, 0.02F, 1F);
+
+                if (!this.started && state != null)
+                {
+                    /* Start at the target instead of ramping up from silence */
+                    this.gainL = targetL;
+                    this.gainR = targetR;
+                    this.lowPass = targetLp;
+                    this.started = true;
+                }
+
+                this.gainL += (targetL - this.gainL) * this.smoothing;
+                this.gainR += (targetR - this.gainR) * this.smoothing;
+                this.lowPass += (targetLp - this.lowPass) * this.smoothing;
+
+                if (state == null)
+                {
+                    if (this.gainL < 0.001F && this.gainR < 0.001F)
+                    {
+                        this.filterWarmed = false;
+                        this.fadeInProgress = 0;
+                        this.hasSrcPos = false;
+                    }
+
+                    continue;
+                }
+
+                if (this.track.loop && this.duration > 0D)
+                {
+                    while (this.srcPos >= this.srcSamples)
+                    {
+                        this.srcPos -= this.srcSamples;
+                    }
+                    while (this.srcPos < 0D)
+                    {
+                        this.srcPos += this.srcSamples;
+                    }
+                }
+                else if (this.srcPos < 0D || this.srcPos >= this.srcSamples)
+                {
+                    this.srcPos += (state.pitch * this.wave.sampleRate) / (double) this.sampleRate;
+                    continue;
+                }
+
+                int s0 = MathUtils.clamp((int) this.srcPos, 0, this.srcSamples - 1);
+                float frac = (float) (this.srcPos - s0);
+                int s1 = s0 + 1;
+
+                if (s1 >= this.srcSamples)
+                {
+                    s1 = this.track.loop ? 0 : s0;
+                }
+
+                float valueL;
+                float valueR;
+
+                if (this.channels >= 2)
+                {
+                    int b0 = s0 * this.channels * 2;
+                    int b1 = s1 * this.channels * 2;
+
+                    valueL = lerpSample(this.wave.data, b0, b1, frac);
+                    valueR = lerpSample(this.wave.data, b0 + 2, b1 + 2, frac);
+                }
+                else
+                {
+                    valueL = valueR = lerpSample(this.wave.data, s0 * 2, s1 * 2, frac);
+                }
+
+                /* One-pole low-pass filter with warmup to prevent initial DC offset / step response spike */
+                if (!this.filterWarmed)
+                {
+                    this.lpL = valueL;
+                    this.lpR = valueR;
+                    this.filterWarmed = true;
+                }
+                else
+                {
+                    this.lpL += (valueL - this.lpL) * this.lowPass;
+                    this.lpR += (valueR - this.lpR) * this.lowPass;
+                }
+
+                /* Smooth micro fade-in ramp (smoothstep curve) */
+                float fadeFactor = 1.0F;
+
+                if (this.fadeInProgress < this.fadeInSamples)
+                {
+                    float t = (float) this.fadeInProgress / this.fadeInSamples;
+                    fadeFactor = t * t * (3.0F - 2.0F * t);
+                    this.fadeInProgress++;
+                }
+
+                left[index] += this.lpL * this.gainL * fadeFactor;
+                right[index] += this.lpR * this.gainR * fadeFactor;
+
+                /* Continuous linear resampling advancement */
+                this.srcPos += (state.pitch * this.wave.sampleRate) / (double) this.sampleRate;
+            }
         }
     }
 

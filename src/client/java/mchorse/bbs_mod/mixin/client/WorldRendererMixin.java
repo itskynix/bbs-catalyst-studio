@@ -3,6 +3,7 @@ package mchorse.bbs_mod.mixin.client;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.client.BBSRendering;
+import mchorse.bbs_mod.forms.FormPortals;
 import mchorse.bbs_mod.forms.FormTranslucentQueue;
 import mchorse.bbs_mod.forms.renderers.utils.FramebufferDebug;
 import mchorse.bbs_mod.utils.colors.Color;
@@ -34,6 +35,7 @@ public class WorldRendererMixin
     public void onRenderWorldStart(CallbackInfo info)
     {
         FormTranslucentQueue.begin();
+        FormPortals.beginFrame();
         FramebufferDebug.newFrame();
     }
 
@@ -43,12 +45,18 @@ public class WorldRendererMixin
         FormTranslucentQueue.flush();
     }
 
+    //? if >=1.21
+    /*@ModifyConstant(method = "renderSky(Lorg/joml/Matrix4f;Lorg/joml/Matrix4f;FLnet/minecraft/client/render/Camera;ZLjava/lang/Runnable;)V", constant = @Constant(floatValue = -90F))*/
+    //? if <1.21
     @ModifyConstant(method = "renderSky(Lnet/minecraft/client/util/math/MatrixStack;Lorg/joml/Matrix4f;FLnet/minecraft/client/render/Camera;ZLjava/lang/Runnable;)V", constant = @Constant(floatValue = -90F))
     private float rotateSunHorizontally(float rotation)
     {
         return rotation + BBSRendering.getSunHorizontalRotation();
     }
 
+    //? if >=1.21
+    /*@Inject(method = "renderSky(Lorg/joml/Matrix4f;Lorg/joml/Matrix4f;FLnet/minecraft/client/render/Camera;ZLjava/lang/Runnable;)V", at = @At("HEAD"), cancellable = true)*/
+    //? if <1.21
     @Inject(method = "renderSky(Lnet/minecraft/client/util/math/MatrixStack;Lorg/joml/Matrix4f;FLnet/minecraft/client/render/Camera;ZLjava/lang/Runnable;)V", at = @At("HEAD"), cancellable = true)
     public void onRenderSky(CallbackInfo info)
     {
@@ -66,9 +74,18 @@ public class WorldRendererMixin
         }
     }
 
+    //? if >=1.21 {
+    /*@Inject(method = "renderLayer", at = @At("HEAD"), cancellable = true)
+    public void onRenderLayer(RenderLayer renderLayer, double cameraX, double cameraY, double cameraZ, Matrix4f viewMatrix, Matrix4f positionMatrix, CallbackInfo info)
+    {
+        MatrixStack matrices = new MatrixStack();
+
+        matrices.peek().getPositionMatrix().set(viewMatrix);
+    *///?} else {
     @Inject(method = "renderLayer", at = @At("HEAD"), cancellable = true)
     public void onRenderLayer(RenderLayer renderLayer, MatrixStack matrices, double cameraX, double cameraY, double cameraZ, Matrix4f positionMatrix, CallbackInfo info)
     {
+    //?}
         /* Iris' shadow pass re-runs renderLayer into the shadow map early in the frame — its
          * translucent layer must not fire the flush, or the queue deactivates before the main
          * pass has even rendered the forms. */
@@ -85,6 +102,20 @@ public class WorldRendererMixin
         }
     }
 
+    //? if >=1.21 {
+    /*@Inject(method = "renderLayer", at = @At("TAIL"))
+    public void onRenderChunkLayer(RenderLayer layer, double x, double y, double z, Matrix4f viewMatrix, Matrix4f positionMatrix, CallbackInfo info)
+    {
+        if (layer == RenderLayer.getSolid())
+        {
+            MatrixStack stack = new MatrixStack();
+
+            stack.peek().getPositionMatrix().set(viewMatrix);
+
+            BBSRendering.onRenderChunkLayer(stack);
+        }
+    }
+    *///?} else {
     @Inject(method = "renderLayer", at = @At("TAIL"))
     public void onRenderChunkLayer(RenderLayer layer, MatrixStack stack, double x, double y, double z, Matrix4f positionMatrix, CallbackInfo info)
     {
@@ -93,6 +124,7 @@ public class WorldRendererMixin
             BBSRendering.onRenderChunkLayer(stack);
         }
     }
+    //?}
 
     @Inject(at = @At("RETURN"), method = "loadEntityOutlinePostProcessor")
     private void onLoadEntityOutlineShader(CallbackInfo info)

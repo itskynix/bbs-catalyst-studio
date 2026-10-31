@@ -14,6 +14,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.gui.render.common;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.camera.pov.actions.clip.GuiPovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.common.GuiSlotRenderer;
 import java.util.List;
@@ -28,10 +29,10 @@ import net.minecraft.screen.PlayerScreenHandler;
 import net.minecraft.util.Identifier;
 
 public final class GuiEquipmentRenderer {
-    private static final Identifier HORSE_SADDLE_SLOT = new Identifier("container/horse/saddle_slot");
-    private static final Identifier HORSE_ARMOR_SLOT = new Identifier("container/horse/armor_slot");
-    private static final Identifier HORSE_CHEST_SLOTS = new Identifier("container/horse/chest_slots");
-    private static final List<Identifier> SMITHING_TEMPLATE_PLACEHOLDERS = List.of(new Identifier("item/empty_slot_smithing_template_armor_trim"), new Identifier("item/empty_slot_smithing_template_netherite_upgrade"));
+    private static final Identifier HORSE_SADDLE_SLOT = Ids.of("container/horse/saddle_slot");
+    private static final Identifier HORSE_ARMOR_SLOT = Ids.of("container/horse/armor_slot");
+    private static final Identifier HORSE_CHEST_SLOTS = Ids.of("container/horse/chest_slots");
+    private static final List<Identifier> SMITHING_TEMPLATE_PLACEHOLDERS = List.of(Ids.of("item/empty_slot_smithing_template_armor_trim"), Ids.of("item/empty_slot_smithing_template_netherite_upgrade"));
 
     private GuiEquipmentRenderer() {
     }
@@ -87,7 +88,7 @@ public final class GuiEquipmentRenderer {
                 GuiSlotRenderer.drawCyclingSlotPlaceholder(batcher, clip, guiId, "addition", tick, template.getEmptyAdditionsSlotTextures(), 44, 48, opacity);
             }
         } else if ("enchanting_table".equals(guiId) && GuiSlotRenderer.isSlotEmpty(clip, guiId, "lapis", tick)) {
-            GuiSlotRenderer.drawBlockAtlasPlaceholder(batcher, new Identifier("item/empty_slot_lapis_lazuli"), 35, 47, opacity);
+            GuiSlotRenderer.drawBlockAtlasPlaceholder(batcher, Ids.of("item/empty_slot_lapis_lazuli"), 35, 47, opacity);
         } else if ("horse".equals(guiId)) {
             batcher.drawGuiTexture(HORSE_SADDLE_SLOT, 7, 17, 18, 18);
             batcher.drawGuiTexture(HORSE_ARMOR_SLOT, 7, 35, 18, 18);

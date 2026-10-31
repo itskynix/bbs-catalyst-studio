@@ -2,6 +2,7 @@ package mchorse.bbs_mod.cubic.render;
 
 import mchorse.bbs_mod.cubic.data.model.Model;
 import mchorse.bbs_mod.cubic.data.model.ModelGroup;
+import mchorse.bbs_mod.forms.renderers.utils.ShatterField;
 import mchorse.bbs_mod.utils.joml.Matrices;
 import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.client.util.math.MatrixStack;
@@ -43,6 +44,13 @@ public class CubicRenderer
     {
         stack.push();
         renderProcessor.applyGroupTransformations(stack, group);
+
+        ShatterField shatter = renderProcessor.getShatter();
+
+        if (shatter != null)
+        {
+            shatter.applyBone(stack, group);
+        }
 
         if (group.isVisible())
         {

@@ -11,6 +11,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.screeneffect;
 
+import mchorse.bbs_mod.utils.Ids;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemConvertible;
 import net.minecraft.item.ItemStack;
@@ -38,7 +39,7 @@ public final class ScreenEffectPresetEntry {
     public ItemStack createIconStack() {
         if (this.iconItemId != null && !this.iconItemId.isEmpty()) {
             try {
-                Item item = (Item)Registries.ITEM.get(new Identifier(this.iconItemId));
+                Item item = (Item)Registries.ITEM.get(Ids.of(this.iconItemId));
                 if (item != null && item != Items.AIR) {
                     return new ItemStack((ItemConvertible)item);
                 }

@@ -29,7 +29,6 @@ import mchorse.bbs_mod.ui.model_blocks.UIModelBlockPanel;
 import mchorse.bbs_mod.ui.morphing.UIMorphingPanel;
 import mchorse.bbs_mod.utils.DataPath;
 import mchorse.bbs_mod.utils.repos.RepositoryOperation;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.client.MinecraftClient;
@@ -69,26 +68,87 @@ public class ClientNetwork
 
     public static void setup()
     {
-        ClientPlayNetworking.registerGlobalReceiver(ServerNetwork.CLIENT_CLICKED_MODEL_BLOCK_PACKET, (client, handler, buf, responseSender) -> handleClientModelBlockPacket(client, buf));
-        ClientPlayNetworking.registerGlobalReceiver(ServerNetwork.CLIENT_PLAYER_FORM_PACKET, (client, handler, buf, responseSender) -> handlePlayerFormPacket(client, buf));
-        ClientPlayNetworking.registerGlobalReceiver(ServerNetwork.CLIENT_PLAY_FILM_PACKET, (client, handler, buf, responseSender) -> handlePlayFilmPacket(client, buf));
-        ClientPlayNetworking.registerGlobalReceiver(ServerNetwork.CLIENT_MANAGER_DATA_PACKET, (client, handler, buf, responseSender) -> handleManagerDataPacket(client, buf));
-        ClientPlayNetworking.registerGlobalReceiver(ServerNetwork.CLIENT_STOP_FILM_PACKET, (client, handler, buf, responseSender) -> handleStopFilmPacket(client, buf));
-        ClientPlayNetworking.registerGlobalReceiver(ServerNetwork.CLIENT_HANDSHAKE, (client, handler, buf, responseSender) -> handleHandshakePacket(client, buf));
-        ClientPlayNetworking.registerGlobalReceiver(ServerNetwork.CLIENT_RECORDED_ACTIONS, (client, handler, buf, responseSender) -> handleRecordedActionsPacket(client, buf));
-        ClientPlayNetworking.registerGlobalReceiver(ServerNetwork.CLIENT_ANIMATION_STATE_TRIGGER, (client, handler, buf, responseSender) -> handleFormTriggerPacket(client, buf));
-        ClientPlayNetworking.registerGlobalReceiver(ServerNetwork.CLIENT_CHEATS_PERMISSION, (client, handler, buf, responseSender) -> handleCheatsPermissionPacket(client, buf));
-        ClientPlayNetworking.registerGlobalReceiver(ServerNetwork.CLIENT_SHARED_FORM, (client, handler, buf, responseSender) -> handleShareFormPacket(client, buf));
-        ClientPlayNetworking.registerGlobalReceiver(ServerNetwork.CLIENT_ENTITY_FORM, (client, handler, buf, responseSender) -> handleEntityFormPacket(client, buf));
-        ClientPlayNetworking.registerGlobalReceiver(ServerNetwork.CLIENT_ACTORS, (client, handler, buf, responseSender) -> handleActorsPacket(client, buf));
-        ClientPlayNetworking.registerGlobalReceiver(ServerNetwork.CLIENT_GUN_PROPERTIES, (client, handler, buf, responseSender) -> handleGunPropertiesPacket(client, buf));
-        ClientPlayNetworking.registerGlobalReceiver(ServerNetwork.CLIENT_PAUSE_FILM, (client, handler, buf, responseSender) -> handlePauseFilmPacket(client, buf));
-        ClientPlayNetworking.registerGlobalReceiver(ServerNetwork.CLIENT_SELECTED_SLOT, (client, handler, buf, responseSender) -> handleSelectedSlotPacket(client, buf));
-        ClientPlayNetworking.registerGlobalReceiver(ServerNetwork.CLIENT_ANIMATION_STATE_MODEL_BLOCK_TRIGGER, (client, handler, buf, responseSender) -> handleAnimationStateModelBlockPacket(client, buf));
-        ClientPlayNetworking.registerGlobalReceiver(ServerNetwork.CLIENT_REFRESH_MODEL_BLOCKS, (client, handler, buf, responseSender) -> handleRefreshModelBlocksPacket(client, buf));
-        ClientPlayNetworking.registerGlobalReceiver(ServerNetwork.CLIENT_REQUEST_FILM_RESYNC, (client, handler, buf, responseSender) -> handleRequestFilmResync(client, buf));
-        ClientPlayNetworking.registerGlobalReceiver(ServerNetwork.CLIENT_STRUCTURE_SAVED, (client, handler, buf, responseSender) -> handleStructureSaved(client, buf));
-        ClientPlayNetworking.registerGlobalReceiver(ServerNetwork.CLIENT_STRUCTURE_CUT, (client, handler, buf, responseSender) -> handleStructureCut(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_CLICKED_MODEL_BLOCK_PACKET, (client, buf) -> handleClientModelBlockPacket(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_PLAYER_FORM_PACKET, (client, buf) -> handlePlayerFormPacket(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_PLAY_FILM_PACKET, (client, buf) -> handlePlayFilmPacket(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_MANAGER_DATA_PACKET, (client, buf) -> handleManagerDataPacket(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_STOP_FILM_PACKET, (client, buf) -> handleStopFilmPacket(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_HANDSHAKE, (client, buf) -> handleHandshakePacket(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_RECORDED_ACTIONS, (client, buf) -> handleRecordedActionsPacket(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_ANIMATION_STATE_TRIGGER, (client, buf) -> handleFormTriggerPacket(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_CHEATS_PERMISSION, (client, buf) -> handleCheatsPermissionPacket(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_SHARED_FORM, (client, buf) -> handleShareFormPacket(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_ENTITY_FORM, (client, buf) -> handleEntityFormPacket(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_ACTORS, (client, buf) -> handleActorsPacket(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_GUN_PROPERTIES, (client, buf) -> handleGunPropertiesPacket(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_PAUSE_FILM, (client, buf) -> handlePauseFilmPacket(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_SELECTED_SLOT, (client, buf) -> handleSelectedSlotPacket(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_ANIMATION_STATE_MODEL_BLOCK_TRIGGER, (client, buf) -> handleAnimationStateModelBlockPacket(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_REFRESH_MODEL_BLOCKS, (client, buf) -> handleRefreshModelBlocksPacket(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_REQUEST_FILM_RESYNC, (client, buf) -> handleRequestFilmResync(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_STRUCTURE_SAVED, (client, buf) -> handleStructureSaved(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_STRUCTURE_CUT, (client, buf) -> handleStructureCut(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_STUDIO_LOCKS, (client, buf) -> handleStudioLocks(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_RECORDING_DENIED, (client, buf) -> handleRecordingDenied(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_REPLAY_SYNC, (client, buf) -> handleReplaySync(client, buf));
+    }
+
+    /** Another player changed a replay (index) or the list of replays (-1) of a film: an open one takes it in */
+    private static void handleReplaySync(MinecraftClient client, PacketByteBuf buf)
+    {
+        crusher.receive(buf, (bytes, packetByteBuf) ->
+        {
+            String filmId = packetByteBuf.readString();
+            int index = packetByteBuf.readInt();
+            BaseType data = DataStorageUtils.readFromBytes(bytes);
+
+            client.execute(() ->
+            {
+                UIDashboard dashboard = BBSModClient.getDashboardIfCreated();
+                UIFilmPanel panel = dashboard == null ? null : dashboard.getPanel(UIFilmPanel.class);
+
+                if (panel != null)
+                {
+                    panel.receiveReplaySync(filmId, index, data);
+                }
+            });
+        });
+    }
+
+    /** Hand the server a replay (index) or the whole list of replays (-1) of a film. */
+    public static void sendReplaySync(String filmId, int index, BaseType data)
+    {
+        crusher.send(MinecraftClient.getInstance().player, ServerNetwork.SERVER_REPLAY_SYNC, data, (packetByteBuf) ->
+        {
+            packetByteBuf.writeString(filmId);
+            packetByteBuf.writeInt(index);
+        });
+    }
+
+    /** The server's editing holds, as they stand now */
+    private static void handleStudioLocks(MinecraftClient client, PacketByteBuf buf)
+    {
+        StudioLocks.read(buf);
+    }
+
+    /** The server refused a live take someone else has: the take this client started is dropped */
+    private static void handleRecordingDenied(MinecraftClient client, PacketByteBuf buf)
+    {
+        String film = buf.readString();
+        int replay = buf.readInt();
+        String name = buf.readString();
+
+        client.execute(() -> BBSModClient.getFilms().cancelRecording(film));
+    }
+
+    public static void sendReplayEditing(String film, int replay)
+    {
+        PacketByteBuf buf = PacketByteBufs.create();
+
+        buf.writeString(film);
+        buf.writeInt(replay);
+
+        BBSClientNetworking.send(ServerNetwork.SERVER_REPLAY_EDITING, buf);
     }
 
     /* Handlers */
@@ -224,6 +284,9 @@ public class ClientNetwork
     private static void handleHandshakePacket(MinecraftClient client, PacketByteBuf buf)
     {
         isBBSModOnServer = true;
+
+        /* A new server: what was known of the last one's editing holds is stale */
+        StudioLocks.reset();
     }
 
     private static void handleRecordedActionsPacket(MinecraftClient client, PacketByteBuf buf)
@@ -506,7 +569,7 @@ public class ClientNetwork
         buf.writeInt(countdown);
         buf.writeBoolean(state);
 
-        ClientPlayNetworking.send(ServerNetwork.SERVER_ACTION_RECORDING, buf);
+        BBSClientNetworking.send(ServerNetwork.SERVER_ACTION_RECORDING, buf);
     }
 
     public static void sendToggleFilm(String filmId, boolean withCamera)
@@ -516,7 +579,7 @@ public class ClientNetwork
         buf.writeString(filmId);
         buf.writeBoolean(withCamera);
 
-        ClientPlayNetworking.send(ServerNetwork.SERVER_TOGGLE_FILM, buf);
+        BBSClientNetworking.send(ServerNetwork.SERVER_TOGGLE_FILM, buf);
     }
 
     public static void sendActionState(String filmId, ActionState state, int tick)
@@ -527,7 +590,7 @@ public class ClientNetwork
         buf.writeByte(state.ordinal());
         buf.writeInt(tick);
 
-        ClientPlayNetworking.send(ServerNetwork.SERVER_ACTION_CONTROL, buf);
+        BBSClientNetworking.send(ServerNetwork.SERVER_ACTION_CONTROL, buf);
     }
 
     public static void sendSyncData(String filmId, BaseValue data)
@@ -556,7 +619,7 @@ public class ClientNetwork
         buf.writeBlockPos(from);
         buf.writeBlockPos(to);
 
-        ClientPlayNetworking.send(ServerNetwork.SERVER_CUT_STRUCTURE, buf);
+        BBSClientNetworking.send(ServerNetwork.SERVER_CUT_STRUCTURE, buf);
     }
 
     public static void sendSaveStructure(String name, BlockPos from, BlockPos to)
@@ -567,7 +630,7 @@ public class ClientNetwork
         buf.writeBlockPos(from);
         buf.writeBlockPos(to);
 
-        ClientPlayNetworking.send(ServerNetwork.SERVER_SAVE_STRUCTURE, buf);
+        BBSClientNetworking.send(ServerNetwork.SERVER_SAVE_STRUCTURE, buf);
     }
 
     public static void sendTeleport(PlayerEntity entity, double x, double y, double z)
@@ -586,7 +649,7 @@ public class ClientNetwork
         buf.writeFloat(bodyYaw);
         buf.writeFloat(pitch);
 
-        ClientPlayNetworking.send(ServerNetwork.SERVER_PLAYER_TP, buf);
+        BBSClientNetworking.send(ServerNetwork.SERVER_PLAYER_TP, buf);
     }
 
     public static void sendFormTrigger(String triggerId, int type)
@@ -596,7 +659,7 @@ public class ClientNetwork
         buf.writeString(triggerId);
         buf.writeInt(type);
 
-        ClientPlayNetworking.send(ServerNetwork.SERVER_ANIMATION_STATE_TRIGGER, buf);
+        BBSClientNetworking.send(ServerNetwork.SERVER_ANIMATION_STATE_TRIGGER, buf);
     }
 
     public static void sendSharedForm(Form form, UUID uuid)
@@ -615,7 +678,7 @@ public class ClientNetwork
 
         buf.writeBoolean(zoom);
 
-        ClientPlayNetworking.send(ServerNetwork.SERVER_ZOOM, buf);
+        BBSClientNetworking.send(ServerNetwork.SERVER_ZOOM, buf);
     }
 
     public static void sendPauseFilm(String filmId)
@@ -624,7 +687,7 @@ public class ClientNetwork
 
         buf.writeString(filmId);
 
-        ClientPlayNetworking.send(ServerNetwork.SERVER_PAUSE_FILM, buf);
+        BBSClientNetworking.send(ServerNetwork.SERVER_PAUSE_FILM, buf);
     }
 
     /**
@@ -654,6 +717,6 @@ public class ClientNetwork
             buf.writeBytes(dressBytes);
         }
 
-        ClientPlayNetworking.send(ServerNetwork.SERVER_APPLY_FILM_PLAYER_SETTINGS, buf);
+        BBSClientNetworking.send(ServerNetwork.SERVER_APPLY_FILM_PLAYER_SETTINGS, buf);
     }
 }

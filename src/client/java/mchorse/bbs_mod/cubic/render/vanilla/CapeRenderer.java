@@ -1,5 +1,7 @@
 package mchorse.bbs_mod.cubic.render.vanilla;
 
+import mchorse.bbs_mod.utils.ModelRender;
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.forms.entities.IEntity;
 import mchorse.bbs_mod.forms.entities.MCEntity;
@@ -32,7 +34,7 @@ import java.util.WeakHashMap;
  */
 public class CapeRenderer
 {
-    public static final Identifier DEFAULT_CAPE = new Identifier("bbs", "textures/default_cape.png");
+    public static final Identifier DEFAULT_CAPE = Ids.of("bbs", "textures/default_cape.png");
 
     private final ModelPart cape;
     private final Map<Object, CapePhysicsState> states = new WeakHashMap<>();
@@ -70,11 +72,11 @@ public class CapeRenderer
 
         if (source == null || source.isEmpty() || source.equals(Link.ASSETS))
         {
-            id = new Identifier(path);
+            id = Ids.of(path);
         }
         else
         {
-            id = new Identifier(source, path);
+            id = Ids.of(source, path);
         }
 
         Texture texture = BBSModClient.getTextures().getTexture(link);
@@ -494,7 +496,7 @@ public class CapeRenderer
         matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(180.0F - sideSwing / 2.0F));
 
         VertexConsumer vertexConsumer = vertexConsumers.getBuffer(RenderLayer.getEntitySolid(capeTexture));
-        this.cape.render(matrices, vertexConsumer, light, OverlayTexture.DEFAULT_UV, 1F, 1F, 1F, 1F);
+        ModelRender.part(this.cape, matrices, vertexConsumer, light, OverlayTexture.DEFAULT_UV, 1F, 1F, 1F, 1F);
 
         matrices.pop();
     }

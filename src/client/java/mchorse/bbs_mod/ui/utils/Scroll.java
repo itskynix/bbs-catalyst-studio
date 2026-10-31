@@ -3,6 +3,7 @@ package mchorse.bbs_mod.ui.utils;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D;
+import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.utils.MathUtils;
 import mchorse.bbs_mod.utils.colors.Colors;
 import mchorse.bbs_mod.utils.interps.Lerps;
@@ -20,6 +21,23 @@ import java.util.function.IntSupplier;
 public class Scroll
 {
     private static Area temporary = new Area();
+
+    /** How much wider than it looks the scrollbar is to the mouse, on the content side */
+    private static final int GRAB_TOLERANCE = 3;
+
+    /** Middle click autoscroll: no movement within this many pixels of where it started */
+    private static final int AUTOSCROLL_DEAD_ZONE = 6;
+    private static final double AUTOSCROLL_SPEED = 6D;
+    private static final double AUTOSCROLL_EXPONENT = 1.25D;
+    /** How long (ns) an autoscroll its area stopped updating still holds the next click */
+    private static final long AUTOSCROLL_ALIVE = 250_000_000L;
+
+    /** The one scroll area being autoscrolled, if any: there is one mouse, so there is one at most */
+    private static Scroll autoscrolling;
+
+    private int autoscrollX;
+    private int autoscrollY;
+    private long autoscrollTime;
 
     /**
      * Size of an element/item in the scroll area
@@ -399,6 +417,31 @@ public class Scroll
         return temporary;
     }
 
+    /**
+     * The scroll area as the mouse sees it: a few pixels wider on the side of the content, so a
+     * thin bar is not a pixel hunt.
+     */
+    private Area getGrabArea()
+    {
+        Area area = this.getScrollArea();
+
+        if (area.w <= 0 || area.h <= 0)
+        {
+            return area;
+        }
+
+        if (this.direction == ScrollDirection.VERTICAL)
+        {
+            area.set(this.opposite ? area.x : area.x - GRAB_TOLERANCE, area.y, area.w + GRAB_TOLERANCE, area.h);
+        }
+        else
+        {
+            area.set(area.x, this.opposite ? area.y : area.y - GRAB_TOLERANCE, area.w, area.h + GRAB_TOLERANCE);
+        }
+
+        return area;
+    }
+
     public Area getScrollbarArea()
     {
         int maxSize = this.direction.getSide(this.area);
@@ -431,6 +474,81 @@ public class Scroll
         return temporary;
     }
 
+    /* Middle click autoscroll */
+
+    /**
+     * Middle click in a scroll area that has somewhere to go starts the autoscroll: the farther the
+     * mouse goes from where it was clicked, the faster the area scrolls that way. Any click, or
+     * escape, ends it (see {@link #stopAutoscroll()}, called by the menu before anything else gets
+     * the input).
+     */
+    public boolean startAutoscroll(UIContext context)
+    {
+        if (context.mouseButton != 2 || !this.area.isInside(context) || !this.hasScrollbar())
+        {
+            return false;
+        }
+
+        autoscrolling = this;
+        this.autoscrollX = context.mouseX;
+        this.autoscrollY = context.mouseY;
+        this.autoscrollTime = System.nanoTime();
+
+        return true;
+    }
+
+    public boolean isAutoscrolling()
+    {
+        return autoscrolling == this;
+    }
+
+    /**
+     * Ends the autoscroll in progress; whether there was one, i.e. whether the input is spent. Only
+     * one that was still moving a moment ago counts: an area taken off screen mid-scroll (its panel
+     * switched away, its menu closed) stops being updated, and without this its leftover would have
+     * swallowed the first click anywhere, whenever that came.
+     */
+    public static boolean stopAutoscroll()
+    {
+        boolean was = autoscrolling != null && System.nanoTime() - autoscrolling.autoscrollTime < AUTOSCROLL_ALIVE;
+
+        autoscrolling = null;
+
+        return was;
+    }
+
+    private void updateAutoscroll(int x, int y)
+    {
+        long now = System.nanoTime();
+        double seconds = Math.min((now - this.autoscrollTime) / 1_000_000_000D, 0.1D);
+
+        this.autoscrollTime = now;
+
+        float delta = this.direction.getMouse(x, y) - this.direction.getMouse(this.autoscrollX, this.autoscrollY);
+        float distance = Math.abs(delta) - AUTOSCROLL_DEAD_ZONE;
+
+        if (distance <= 0)
+        {
+            return;
+        }
+
+        double speed = Math.pow(distance, AUTOSCROLL_EXPONENT) * AUTOSCROLL_SPEED;
+
+        this.scrollTo((float) (this.targetScroll + Math.copySign(speed * seconds, delta)));
+    }
+
+    private void renderAutoscroll(Batcher2D batcher)
+    {
+        int x = this.autoscrollX;
+        int y = this.autoscrollY;
+        int r = 9;
+
+        batcher.box(x - r + 2, y - r, x + r - 2, y + r, Colors.A75);
+        batcher.box(x - r, y - r + 2, x + r, y + r - 2, Colors.A75);
+        batcher.box(x - r + 1, y - r + 1, x + r - 1, y + r - 1, Colors.A75);
+        batcher.icon(Icons.ALL_DIRECTIONS, Colors.WHITE, x, y, 0.5F, 0.5F);
+    }
+
     /* GUI code for easier manipulations */
 
     public boolean mouseClicked(UIContext context)
@@ -448,7 +566,7 @@ public class Scroll
             return false;
         }
 
-        boolean isInside = this.hasScrollbar() && this.getScrollArea().isInside(x, y);
+        boolean isInside = this.hasScrollbar() && this.getGrabArea().isInside(x, y);
 
         if (isInside)
         {
@@ -543,7 +661,7 @@ public class Scroll
 
         if (smoothing > 0F && (this.smoothScrolling == null || this.smoothScrolling.getAsBoolean()))
         {
-            float delta = MinecraftClient.getInstance().getLastFrameDuration();
+            float delta = MinecraftClient.getInstance()./*$ gfd*/getLastFrameDuration()/**/;
 
             /* The higher the FPS, the smaller the lerp factor is,
              * the lower the FPS, the bigger the factor is */
@@ -552,6 +670,11 @@ public class Scroll
         else
         {
             this.scroll = this.targetScroll;
+        }
+
+        if (autoscrolling == this)
+        {
+            this.updateAutoscroll(x, y);
         }
 
         if (this.dragging)
@@ -570,6 +693,11 @@ public class Scroll
      */
     public void renderScrollbar(Batcher2D batcher)
     {
+        if (autoscrolling == this)
+        {
+            this.renderAutoscroll(batcher);
+        }
+
         if (!this.hasScrollbar())
         {
             return;

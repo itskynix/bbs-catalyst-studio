@@ -27,9 +27,9 @@ public class TriangleKeyframeShapeRenderer implements IKeyframeShapeRenderer
     {
         float fOffset = offset * 1.75F;
 
-        builder.vertex(matrix, x, y - fOffset, 0).color(c).next();
-        builder.vertex(matrix, x - fOffset, y + fOffset, 0).color(c).next();
-        builder.vertex(matrix, x + fOffset, y + fOffset, 0).color(c).next();
-        builder.vertex(matrix, x + fOffset, y + fOffset, 0).color(c).next();
+        builder.vertex(matrix, x, y - fOffset, 0).color(c)/*$ nx*/.next()/**/;
+        builder.vertex(matrix, x - fOffset, y + fOffset, 0).color(c)/*$ nx*/.next()/**/;
+        builder.vertex(matrix, x + fOffset, y + fOffset, 0).color(c)/*$ nx*/.next()/**/;
+        builder.vertex(matrix, x + fOffset, y + fOffset, 0).color(c)/*$ nx*/.next()/**/;
     }
 }

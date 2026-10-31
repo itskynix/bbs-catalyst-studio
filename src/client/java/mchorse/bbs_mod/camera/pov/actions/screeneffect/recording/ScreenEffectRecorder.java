@@ -502,9 +502,15 @@ public final class ScreenEffectRecorder {
             case "darkness": {
                 StatusEffectInstance statusInst;
                 float darkFactor = 1.0f;
+                //? if >=1.21 {
+                /*if (player.hasStatusEffect(StatusEffects.DARKNESS) && (statusInst = player.getStatusEffect(StatusEffects.DARKNESS)) != null) {
+                    darkFactor = statusInst.getFadeFactor((LivingEntity)player, 1.0f);
+                }
+                *///?} else {
                 if (player.hasStatusEffect(StatusEffects.DARKNESS) && (statusInst = player.getStatusEffect(StatusEffects.DARKNESS)) != null && statusInst.getFactorCalculationData().isPresent()) {
                     darkFactor = ((StatusEffectInstance.FactorCalculationData)statusInst.getFactorCalculationData().get()).lerp((LivingEntity)player, 1.0f);
                 }
+                //?}
                 this.recordFloatChannel(clip.darknessOpacity, "darknessOpacity", localTick, darkFactor, 0.0f, 0.02f, isNewlyStarted);
                 this.recordFloatChannel(clip.darknessRadius, "darknessRadius", localTick, 15.0f, 15.0f, 0.1f, isNewlyStarted);
                 break;

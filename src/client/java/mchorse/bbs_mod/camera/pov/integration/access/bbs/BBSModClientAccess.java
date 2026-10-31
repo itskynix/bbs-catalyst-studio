@@ -16,9 +16,5 @@ public final class BBSModClientAccess {
     public static KeyBinding bbsPov$getKeyPlayFilm() {
         return BBSModClientAccessor.bbsPov$getKeyPlayFilm();
     }
-
-    public static KeyBinding bbsPov$getKeyRecordVideo() {
-        return BBSModClientAccessor.bbsPov$getKeyRecordVideo();
-    }
 }
 

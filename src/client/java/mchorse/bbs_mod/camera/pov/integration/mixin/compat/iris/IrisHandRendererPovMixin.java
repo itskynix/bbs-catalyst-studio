@@ -46,11 +46,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(targets={"net.irisshaders.iris.pathways.HandRenderer"}, remap=false)
 public class IrisHandRendererPovMixin {
     @Inject(method={"setupGlState"}, at={@At(value="TAIL")})
+    //? if >=1.21
+    /*private void bbsPov$fixedHandProjection(GameRenderer irisRenderer, net.minecraft.client.render.Camera irisCamera, Matrix4fc irisMatrix, float irisTickDelta, CallbackInfoReturnable<net.minecraft.client.util.math.MatrixStack> info) {*/
+    //? if <1.21
     private void bbsPov$fixedHandProjection(CallbackInfo info) {
         HandState state;
         int height;
         MinecraftClient client = MinecraftClient.getInstance();
-        float tickDelta = client.getTickDelta();
+        float tickDelta = client./*$ gtd*/getTickDelta()/**/;
         if (!PovHandPlayback.isHandActive(tickDelta)) {
             return;
         }
@@ -75,7 +78,7 @@ public class IrisHandRendererPovMixin {
     @Inject(method={"canRender"}, at={@At(value="HEAD")}, cancellable=true)
     private void bbsPov$forceCanRenderInFilm(CallbackInfoReturnable<Boolean> info) {
         MinecraftClient client = MinecraftClient.getInstance();
-        float tickDelta = client.getTickDelta();
+        float tickDelta = client./*$ gtd*/getTickDelta()/**/;
         if (UIPovHandEditor.isActive()) {
             info.setReturnValue(false);
             return;
@@ -106,7 +109,7 @@ public class IrisHandRendererPovMixin {
     @Inject(method={"renderSolid"}, at={@At(value="HEAD")})
     private void bbsPov$beginSolidHand(CallbackInfo info) {
         MinecraftClient client = MinecraftClient.getInstance();
-        float tickDelta = client.getTickDelta();
+        float tickDelta = client./*$ gtd*/getTickDelta()/**/;
         if (PovHandPlayback.isHandActive(tickDelta) && !PovHandPlayback.isActive()) {
             PovHandPlayback.begin(tickDelta);
         }
@@ -126,7 +129,7 @@ public class IrisHandRendererPovMixin {
     @Inject(method={"renderTranslucent"}, at={@At(value="HEAD")})
     private void bbsPov$beginTranslucentHand(CallbackInfo info) {
         MinecraftClient client = MinecraftClient.getInstance();
-        float tickDelta = client.getTickDelta();
+        float tickDelta = client./*$ gtd*/getTickDelta()/**/;
         if (PovHandPlayback.isHandActive(tickDelta) && !PovHandPlayback.isActive()) {
             PovHandPlayback.begin(tickDelta);
         }

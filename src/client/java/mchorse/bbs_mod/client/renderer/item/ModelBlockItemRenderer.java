@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.client.renderer.item;
 
+import mchorse.bbs_mod.utils.VersionCompat;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.BBSMod;
 import mchorse.bbs_mod.blocks.entities.ModelBlockEntity;
@@ -70,7 +71,7 @@ public class ModelBlockItemRenderer implements BuiltinItemRendererRegistry.Dynam
 
                 RenderSystem.enableDepthTest();
                 FormUtilsClient.render(form, new FormRenderingContext()
-                    .set(FormRenderType.fromModelMode(mode), item.formEntity, matrices, light, overlay, MinecraftClient.getInstance().getTickDelta())
+                    .set(FormRenderType.fromModelMode(mode), item.formEntity, matrices, light, overlay, MinecraftClient.getInstance()./*$ gtd*/getTickDelta()/**/)
                     .camera(MinecraftClient.getInstance().gameRenderer.getCamera()));
                 RenderSystem.disableDepthTest();
 
@@ -91,7 +92,7 @@ public class ModelBlockItemRenderer implements BuiltinItemRendererRegistry.Dynam
             return this.map.get(stack);
         }
 
-        NbtCompound nbt = stack.getNbt();
+        NbtCompound nbt = VersionCompat.getBlockEntityData(stack);
         ModelBlockEntity entity = new ModelBlockEntity(BlockPos.ORIGIN, BBSMod.MODEL_BLOCK.getDefaultState());
         Item item = new Item(entity);
 
@@ -102,7 +103,11 @@ public class ModelBlockItemRenderer implements BuiltinItemRendererRegistry.Dynam
             return item;
         }
 
-        entity.readNbt(nbt.getCompound("BlockEntityTag"));
+        //? if >=1.21 {
+        /*entity.readNbt(nbt, VersionCompat.lookup(null));
+        *///?} else {
+        entity.readNbt(nbt);
+        //?}
 
         return item;
     }

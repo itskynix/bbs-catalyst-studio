@@ -630,13 +630,13 @@ public class BBSRendering
         ModelSetupQueue.drain();
 
         BBSModClient.getVideos().startFrame();
-        BBSModClient.getFilms().startRenderFrame(mc.getTickDelta());
+        BBSModClient.getFilms().startRenderFrame(mc./*$ gtd*/getTickDelta()/**/);
 
         UIBaseMenu menu = UIScreen.getCurrentMenu();
 
         if (menu != null)
         {
-            menu.startRenderFrame(mc.getTickDelta());
+            menu.startRenderFrame(mc./*$ gtd*/getTickDelta()/**/);
         }
 
         renderingWorld = true;
@@ -844,11 +844,20 @@ public class BBSRendering
         WorldRenderContextImpl worldRenderContext = new WorldRenderContextImpl();
         MinecraftClient mc = MinecraftClient.getInstance();
 
+        //? if >=1.21 {
+        /*worldRenderContext.prepare(
+            mc.worldRenderer, mc.getRenderTickCounter(), false,
+            mc.gameRenderer.getCamera(), mc.gameRenderer, mc.gameRenderer.getLightmapTextureManager(),
+            RenderSystem.getProjectionMatrix(), new Matrix4f(stack.peek().getPositionMatrix()), mc.getBufferBuilders().getEntityVertexConsumers(), null, false, mc.world
+        );
+        worldRenderContext.setMatrixStack(stack);
+        *///?} else {
         worldRenderContext.prepare(
             mc.worldRenderer, stack, mc.getTickDelta(), mc.getRenderTime(), false,
             mc.gameRenderer.getCamera(), mc.gameRenderer, mc.gameRenderer.getLightmapTextureManager(),
             RenderSystem.getProjectionMatrix(), mc.getBufferBuilders().getEntityVertexConsumers(), null, false, mc.world
         );
+        //?}
 
         if (isIrisShadersEnabled())
         {
@@ -890,7 +899,7 @@ public class BBSRendering
 
             label = UIKeys.FILM_VIDEO_RECORDING.format(
                 count,
-                BBSModClient.getKeyRecordVideo().getBoundKeyLocalizedText().getString()
+                BBSModClient.getKeyPlayFilmAndRecord().getBoundKeyLocalizedText().getString()
             ).get();
         }
         else

@@ -99,6 +99,12 @@ public class UIScrollView extends UIElement implements IViewport
         IUIElement result = super.childrenMouseClicked(context);
         this.unapply(context);
 
+        /* A middle click nobody inside wanted scrolls the view */
+        if (result == null && this.scroll.startAutoscroll(context))
+        {
+            return this;
+        }
+
         return result;
     }
 

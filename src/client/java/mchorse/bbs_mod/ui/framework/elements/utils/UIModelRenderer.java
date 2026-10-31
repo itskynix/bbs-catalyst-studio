@@ -1,5 +1,8 @@
 package mchorse.bbs_mod.ui.framework.elements.utils;
 
+import mchorse.bbs_mod.utils.LightingCompat;
+import mchorse.bbs_mod.utils.InverseViewRotation;
+import mchorse.bbs_mod.utils.Bufs;
 import mchorse.bbs_mod.ui.framework.elements.input.drag.TransformSpace;
 
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -258,7 +261,7 @@ public abstract class UIModelRenderer extends UIElement
             return;
         }
 
-        float dt = MinecraftClient.getInstance().getLastFrameDuration();
+        float dt = MinecraftClient.getInstance()./*$ gfd*/getLastFrameDuration()/**/;
         float factor = MathUtils.clamp(1F - (float) Math.pow(Math.min(smoothness, 0.99F), dt), 0F, 1F);
 
         this.camera.rotation.x = Lerps.lerp(this.camera.rotation.x, this.targetRotation.x, factor);
@@ -313,7 +316,7 @@ public abstract class UIModelRenderer extends UIElement
         MatrixStackUtils.cacheMatrices();
 
         RenderSystem.setProjectionMatrix(this.camera.projection, VertexSorter.BY_Z);
-        RenderSystem.setInverseViewRotationMatrix(new Matrix3f(this.camera.view).invert());
+        InverseViewRotation.setOverride(new Matrix3f(this.camera.view).invert());
 
         /* Rendering begins... */
         stack.push();
@@ -321,7 +324,7 @@ public abstract class UIModelRenderer extends UIElement
         stack.translate(-this.camera.position.x, -this.camera.position.y, -this.camera.position.z);
         MatrixStackUtils.multiply(stack, this.transform);
 
-        RenderSystem.setupLevelDiffuseLighting(
+        LightingCompat.setupLevel(
             new Vector3f(0, 0.85F, -1).normalize(),
             new Vector3f(0, 0.85F, 1).normalize(),
             this.camera.view
@@ -439,22 +442,22 @@ public abstract class UIModelRenderer extends UIElement
     protected void renderGrid(UIContext context)
     {
         Matrix4f matrix4f = context.batcher.getContext().getMatrices().peek().getPositionMatrix();
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
+        BufferBuilder builder;
 
         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
-        builder.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
+        builder = Bufs.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
 
         for (int x = 0; x <= 10; x ++)
         {
             if (x == 0)
             {
-                builder.vertex(matrix4f, x - 5, 0, -5).color(0F, 0F, 1F, 1F).next();
-                builder.vertex(matrix4f, x - 5, 0, 5).color(0F, 0F, 1F, 1F).next();
+                builder.vertex(matrix4f, x - 5, 0, -5).color(0F, 0F, 1F, 1F)/*$ nx*/.next()/**/;
+                builder.vertex(matrix4f, x - 5, 0, 5).color(0F, 0F, 1F, 1F)/*$ nx*/.next()/**/;
             }
             else
             {
-                builder.vertex(matrix4f, x - 5, 0, -5).color(0.25F, 0.25F, 0.25F, 1F).next();
-                builder.vertex(matrix4f, x - 5, 0, 5).color(0.25F, 0.25F, 0.25F, 1F).next();
+                builder.vertex(matrix4f, x - 5, 0, -5).color(0.25F, 0.25F, 0.25F, 1F)/*$ nx*/.next()/**/;
+                builder.vertex(matrix4f, x - 5, 0, 5).color(0.25F, 0.25F, 0.25F, 1F)/*$ nx*/.next()/**/;
             }
         }
 
@@ -462,16 +465,16 @@ public abstract class UIModelRenderer extends UIElement
         {
             if (x == 0)
             {
-                builder.vertex(matrix4f, -5, 0, x - 5).color(1F, 0F, 0F, 1F).next();
-                builder.vertex(matrix4f, 5, 0, x - 5).color(1F, 0F, 0F, 1F).next();
+                builder.vertex(matrix4f, -5, 0, x - 5).color(1F, 0F, 0F, 1F)/*$ nx*/.next()/**/;
+                builder.vertex(matrix4f, 5, 0, x - 5).color(1F, 0F, 0F, 1F)/*$ nx*/.next()/**/;
             }
             else
             {
-                builder.vertex(matrix4f, -5, 0, x - 5).color(0.25F, 0.25F, 0.25F, 1F).next();
-                builder.vertex(matrix4f, 5, 0, x - 5).color(0.25F, 0.25F, 0.25F, 1F).next();
+                builder.vertex(matrix4f, -5, 0, x - 5).color(0.25F, 0.25F, 0.25F, 1F)/*$ nx*/.next()/**/;
+                builder.vertex(matrix4f, 5, 0, x - 5).color(0.25F, 0.25F, 0.25F, 1F)/*$ nx*/.next()/**/;
             }
         }
 
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        Bufs.draw(builder);
     }
 }

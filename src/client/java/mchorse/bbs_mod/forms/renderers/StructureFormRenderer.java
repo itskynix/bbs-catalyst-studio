@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.forms.renderers;
 
+import mchorse.bbs_mod.utils.VersionCompat;
 import mchorse.bbs_mod.api.client.events.StructureRenderEvents;
 
 import com.mojang.blaze3d.platform.GlStateManager;
@@ -233,7 +234,7 @@ public class StructureFormRenderer extends FormRenderer<StructureForm>
             {
                 try
                 {
-                    BlockEntity blockEntity = BlockEntity.createFromNbt(e.getKey(), this.data.getBlockState(e.getKey()), e.getValue());
+                    BlockEntity blockEntity = VersionCompat.createBlockEntity(MinecraftClient.getInstance().world, e.getKey(), this.data.getBlockState(e.getKey()), e.getValue());
 
                     if (blockEntity != null)
                     {

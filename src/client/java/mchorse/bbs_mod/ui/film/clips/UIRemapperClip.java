@@ -55,6 +55,12 @@ public class UIRemapperClip extends UIClip<RemapperClip>
     }
 
     @Override
+    public boolean openSubEditor()
+    {
+        return this.openSubEditor(this.edit);
+    }
+
+    @Override
     public void fillData()
     {
         super.fillData();

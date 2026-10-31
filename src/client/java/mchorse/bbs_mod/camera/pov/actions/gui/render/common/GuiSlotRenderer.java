@@ -15,6 +15,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.gui.render.common;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.camera.pov.actions.clip.GuiPovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.gui.GuiSlotSchema;
 import mchorse.bbs_mod.camera.pov.actions.gui.recording.GuiSlotDragPreview;
@@ -55,7 +56,7 @@ public final class GuiSlotRenderer {
 
     public static void drawGuiSlotPlaceholder(Batcher2D batcher, GuiPovActionClip clip, String guiId, String slotId, float tick, String spriteId, int x, int y, int size) {
         if (GuiSlotRenderer.isSlotEmpty(clip, guiId, slotId, tick)) {
-            batcher.drawGuiTexture(new Identifier(spriteId), x, y, size, size);
+            batcher.drawGuiTexture(Ids.of(spriteId), x, y, size, size);
         }
     }
 

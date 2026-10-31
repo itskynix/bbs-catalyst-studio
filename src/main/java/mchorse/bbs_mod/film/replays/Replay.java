@@ -56,6 +56,13 @@ public class Replay extends ValueGroup
     public final ValueBoolean relative = new ValueBoolean("relative", false);
     public final ValuePoint relativeOffset = new ValuePoint("relativeOffset", new Point(0, 0, 0));
 
+    /** What the actor looks at: 0 nothing, 1 another replay, 2 the camera, 3 a point. Weighted by the look_at_weight track. */
+    public final ValueInt lookAtMode = new ValueInt("look_at_mode", 0);
+    /** Id of the replay looked at, in mode 1 */
+    public final ValueString lookAtTarget = new ValueString("look_at_target", "");
+    /** The point looked at in mode 3, unless the look_at_x/y/z tracks have keys */
+    public final ValuePoint lookAtPoint = new ValuePoint("look_at_point", new Point(0, 0, 0));
+
     public final ValueBoolean axesPreview = new ValueBoolean("axes_preview", false);
     public final ValueString axesPreviewBone = new ValueString("axes_preview_bone", "");
 
@@ -83,6 +90,10 @@ public class Replay extends ValueGroup
         this.add(this.fp);
         this.add(this.relative);
         this.add(this.relativeOffset);
+
+        this.add(this.lookAtMode);
+        this.add(this.lookAtTarget);
+        this.add(this.lookAtPoint);
 
         this.add(this.axesPreview);
         this.add(this.axesPreviewBone);

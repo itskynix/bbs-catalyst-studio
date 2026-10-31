@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.film;
 
+import mchorse.bbs_mod.utils.Bufs;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.logging.LogUtils;
 import mchorse.bbs_mod.BBSSettings;
@@ -102,10 +103,10 @@ public class Recorder extends WorldFilmController
             .rotateY(MathUtils.toRad(position.angle.yaw + 180))
             .rotateX(MathUtils.toRad(-position.angle.pitch));
 
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
+        BufferBuilder builder;
 
         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
-        builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+        builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
 
         transformFrustum(vector, matrix, 1F, 1F);
         Draw.fillBoxTo(builder, stack, x, y, z, x + vector.x, y + vector.y, z + vector.z, thickness, 1F, 1F, 1F, 1F);
@@ -122,7 +123,7 @@ public class Recorder extends WorldFilmController
         transformFrustum(vector, matrix, 0F, 0F);
         Draw.fillBoxTo(builder, stack, x, y, z, x + vector.x, y + vector.y, z + vector.z, thickness, 0F, 0.5F, 1F, 1F);
 
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        Bufs.draw(builder);
 
         RenderSystem.disableDepthTest();
     }

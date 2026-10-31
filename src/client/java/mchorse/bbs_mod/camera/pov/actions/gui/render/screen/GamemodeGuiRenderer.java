@@ -20,6 +20,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.gui.render.screen;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.camera.pov.actions.clip.GuiPovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.GuiRenderContext;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.GuiRenderer;
@@ -46,8 +47,8 @@ public final class GamemodeGuiRenderer
 implements GuiRenderer,
 GuiScreenChrome {
     public static final GamemodeGuiRenderer INSTANCE = new GamemodeGuiRenderer();
-    private static final Identifier GAMEMODE_SLOT_TEXTURE = new Identifier("gamemode_switcher/slot");
-    private static final Identifier GAMEMODE_SELECTION_TEXTURE = new Identifier("gamemode_switcher/selection");
+    private static final Identifier GAMEMODE_SLOT_TEXTURE = Ids.of("gamemode_switcher/slot");
+    private static final Identifier GAMEMODE_SELECTION_TEXTURE = Ids.of("gamemode_switcher/selection");
     private static final ItemStack GRASS_BLOCK_STACK = new ItemStack((ItemConvertible)Items.GRASS_BLOCK);
     private static final ItemStack IRON_SWORD_STACK = new ItemStack((ItemConvertible)Items.IRON_SWORD);
     private static final ItemStack MAP_STACK = new ItemStack((ItemConvertible)Items.MAP);

@@ -6,6 +6,7 @@ import mchorse.bbs_mod.cubic.animation.ActionsConfig;
 import mchorse.bbs_mod.cubic.constraints.BoneConstraintsIO;
 import mchorse.bbs_mod.cubic.ik.BoneIKIO;
 import mchorse.bbs_mod.forms.forms.utils.FormBone;
+import mchorse.bbs_mod.forms.forms.utils.FormFxValues;
 import mchorse.bbs_mod.cubic.physics.BonePhysicsIO;
 import mchorse.bbs_mod.cubic.physics.WindControl;
 import mchorse.bbs_mod.data.types.BaseType;
@@ -69,6 +70,9 @@ public class ModelForm extends Form implements IPosedForm
 
     public final ValueBoolean hasCape = new ValueBoolean("has_cape", false);
     public final ValueLink capeTexture = new ValueLink("cape_texture", Link.bbs("textures/default_cape.png"));
+
+    /** Dissolve and shatter: the model burning away or breaking apart bone by bone. */
+    public final FormFxValues fx = new FormFxValues(this);
 
     /**
      * Runtime per-material texture overrides driven by the per-material animation tracks

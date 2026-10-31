@@ -1,0 +1,39 @@
+stonecutter.swap("nx", "/*-*/")
+stonecutter.swap("tdp", "net.minecraft.client.render.RenderTickCounter tickCounter")
+stonecutter.swap("ctr", ", net.minecraft.client.render.RenderTickCounter tickCounter")
+stonecutter.swap("hudp", "RenderTickCounter tickCounter, boolean tick")
+stonecutter.swap("smf", ", float first, float second")
+stonecutter.swap("ge", "RegistryEntry<GameEvent>")
+stonecutter.swap("pel", ", false")
+stonecutter.swap("nst", "NbtSizeTracker")
+stonecutter.swap("dpt", "SimpleParticleType")
+stonecutter.swap("amt", "RegistryEntry<ArmorMaterial>")
+stonecutter.swap("sek", "RegistryEntry<StatusEffect>")
+stonecutter.swap("pct", "POSITION_TEXTURE_COLOR")
+stonecutter.swap("pctp", "getPositionTexColorProgram")
+stonecutter.swap("ptl", "BBSShaders::getBillboardFlat")
+stonecutter.swap("gtd", "getRenderTickCounter().getTickDelta(true)")
+stonecutter.swap("gfd", "getRenderTickCounter().getLastFrameDuration()")
+stonecutter.swap("wtd", "tickCounter().getTickDelta(true)")
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+	modCompileOnly "maven.modrinth:sodium:mc1.21.1-0.6.13-fabric"
+	modCompileOnly "maven.modrinth:iris:1.8.8+1.21.1-fabric"
+
+	if (project.hasProperty('devMods')) {
+		modLocalRuntime "maven.modrinth:sodium:mc1.21.1-0.6.13-fabric"
+		modLocalRuntime "maven.modrinth:iris:1.8.8+1.21.1-fabric"
+	}
+	modCompileOnly "maven.modrinth:distanthorizons:2.3.0-b-1.21.1"
+}
+
+/* Mixins that target classes of Sodium and Iris that no longer exist in the versions for 1.21.1 */
+sourceSets.client.java {
+	exclude 'mchorse/bbs_mod/mixin/client/sodium/SodiumBufferBuilderAccessor.java'
+	exclude 'mchorse/bbs_mod/mixin/client/iris/EntityVertexMixin.java'
+}

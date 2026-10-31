@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.morphing;
 
+import mchorse.bbs_mod.utils.Bufs;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.forms.FormUtilsClient;
@@ -100,10 +101,10 @@ public class UIMorphPodiumRenderer extends UIModelRenderer
     protected void renderGrid(UIContext context)
     {
         Matrix4f matrix4f = context.batcher.getContext().getMatrices().peek().getPositionMatrix();
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
+        BufferBuilder builder;
 
         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
-        builder.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
+        builder = Bufs.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
 
         int primary = BBSSettings.primaryColor.get();
         float r = ((primary >> 16) & 0xFF) / 255F;
@@ -124,26 +125,26 @@ public class UIMorphPodiumRenderer extends UIModelRenderer
             float x1_2 = (float) (Math.cos(a2) * r1);
             float z1_2 = (float) (Math.sin(a2) * r1);
 
-            builder.vertex(matrix4f, x1_1, 0, z1_1).color(r, g, b, 0.70F).next();
-            builder.vertex(matrix4f, x1_2, 0, z1_2).color(r, g, b, 0.70F).next();
+            builder.vertex(matrix4f, x1_1, 0, z1_1).color(r, g, b, 0.70F)/*$ nx*/.next()/**/;
+            builder.vertex(matrix4f, x1_2, 0, z1_2).color(r, g, b, 0.70F)/*$ nx*/.next()/**/;
 
             float x2_1 = (float) (Math.cos(a1) * r2);
             float z2_1 = (float) (Math.sin(a1) * r2);
             float x2_2 = (float) (Math.cos(a2) * r2);
             float z2_2 = (float) (Math.sin(a2) * r2);
 
-            builder.vertex(matrix4f, x2_1, 0, z2_1).color(r, g, b, 0.28F).next();
-            builder.vertex(matrix4f, x2_2, 0, z2_2).color(r, g, b, 0.28F).next();
+            builder.vertex(matrix4f, x2_1, 0, z2_1).color(r, g, b, 0.28F)/*$ nx*/.next()/**/;
+            builder.vertex(matrix4f, x2_2, 0, z2_2).color(r, g, b, 0.28F)/*$ nx*/.next()/**/;
 
             /* Radyal bağ çizgileri (8 yönde) */
             if (i % 4 == 0)
             {
-                builder.vertex(matrix4f, x1_1, 0, z1_1).color(r, g, b, 0.50F).next();
-                builder.vertex(matrix4f, x2_1, 0, z2_1).color(r, g, b, 0.15F).next();
+                builder.vertex(matrix4f, x1_1, 0, z1_1).color(r, g, b, 0.50F)/*$ nx*/.next()/**/;
+                builder.vertex(matrix4f, x2_1, 0, z2_1).color(r, g, b, 0.15F)/*$ nx*/.next()/**/;
             }
         }
 
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        Bufs.draw(builder);
     }
 
     @Override

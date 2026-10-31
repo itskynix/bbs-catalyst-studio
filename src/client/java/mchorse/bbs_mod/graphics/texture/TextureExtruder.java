@@ -18,6 +18,9 @@ public class TextureExtruder
 {
     private Map<Link, ModelVAO> extruded = new HashMap<>();
 
+    /** The vertices each extrusion was built from, kept for the ones that break it apart on the CPU. */
+    private Map<Link, ModelVAOData> sources = new HashMap<>();
+
     /**
      * Fill a quad for {@link net.minecraft.client.render.VertexFormats#POSITION_TEXTURE_COLOR_NORMAL}. Points should
      * be supplied in this order:
@@ -91,6 +94,8 @@ public class TextureExtruder
 
     public void delete(Link key)
     {
+        this.sources.remove(key);
+
         ModelVAO remove = this.extruded.remove(key);
 
         if (remove != null)
@@ -107,6 +112,7 @@ public class TextureExtruder
         }
 
         this.extruded.clear();
+        this.sources.clear();
     }
 
     public ModelVAO get(Link key)
@@ -134,7 +140,7 @@ public class TextureExtruder
             return null;
         }
 
-        ModelVAO buffer = this.generate(pixels);
+        ModelVAO buffer = this.generate(key, pixels);
 
         pixels.delete();
         this.extruded.put(key, buffer);
@@ -142,7 +148,15 @@ public class TextureExtruder
         return buffer;
     }
 
-    private ModelVAO generate(Pixels pixels)
+    /** The vertices the extrusion of a texture was built from, or null when it has none. */
+    public ModelVAOData getSource(Link key)
+    {
+        this.get(key);
+
+        return this.sources.get(key);
+    }
+
+    private ModelVAO generate(Link key, Pixels pixels)
     {
         List<Float> vertices = new ArrayList<>();
         List<Float> normals = new ArrayList<>();
@@ -204,7 +218,11 @@ public class TextureExtruder
             float[] u = CollectionUtils.toArray(uvs);
             float[] t = BBSRendering.calculateTangents(v, n, u);
 
-            return new ModelVAO(new ModelVAOData(v, n, t, u));
+            ModelVAOData data = new ModelVAOData(v, n, t, u);
+
+            this.sources.put(key, data);
+
+            return new ModelVAO(data);
         }
 
         return null;

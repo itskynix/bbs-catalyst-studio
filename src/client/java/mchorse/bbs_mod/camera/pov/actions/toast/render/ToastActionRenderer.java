@@ -29,6 +29,8 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.toast.render;
 
+import mchorse.bbs_mod.utils.Bufs;
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.camera.pov.actions.PovActionType;
 import mchorse.bbs_mod.camera.pov.actions.RecordedPovActions;
 import mchorse.bbs_mod.camera.pov.actions.clip.PovActionClip;
@@ -59,10 +61,10 @@ import net.minecraft.util.math.MathHelper;
 import org.joml.Matrix4f;
 
 public final class ToastActionRenderer {
-    private static final Identifier ADVANCEMENT_TEXTURE = new Identifier("toast/advancement");
-    private static final Identifier RECIPE_TEXTURE = new Identifier("toast/recipe");
-    private static final Identifier SYSTEM_TEXTURE = new Identifier("toast/system");
-    private static final Identifier TUTORIAL_TEXTURE = new Identifier("toast/tutorial");
+    private static final Identifier ADVANCEMENT_TEXTURE = Ids.of("toast/advancement");
+    private static final Identifier RECIPE_TEXTURE = Ids.of("toast/recipe");
+    private static final Identifier SYSTEM_TEXTURE = Ids.of("toast/system");
+    private static final Identifier TUTORIAL_TEXTURE = Ids.of("toast/tutorial");
 
     private ToastActionRenderer() {
     }
@@ -135,13 +137,13 @@ public final class ToastActionRenderer {
                 RenderSystem.setShaderTexture((int)0, (int)tex.id);
                 RenderSystem.setShader(GameRenderer::getPositionTexProgram);
                 Matrix4f matrix = context.getMatrices().peek().getPositionMatrix();
-                BufferBuilder builder = Tessellator.getInstance().getBuffer();
-                builder.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE);
-                builder.vertex(matrix, (float)(x + 8), (float)(y + 8 + 16), 0.0f).texture(0.0f, 1.0f).next();
-                builder.vertex(matrix, (float)(x + 8 + 16), (float)(y + 8 + 16), 0.0f).texture(1.0f, 1.0f).next();
-                builder.vertex(matrix, (float)(x + 8 + 16), (float)(y + 8), 0.0f).texture(1.0f, 0.0f).next();
-                builder.vertex(matrix, (float)(x + 8), (float)(y + 8), 0.0f).texture(0.0f, 0.0f).next();
-                BufferRenderer.drawWithGlobalProgram((BufferBuilder.BuiltBuffer)builder.end());
+                BufferBuilder builder;
+                builder = Bufs.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE);
+                builder.vertex(matrix, (float)(x + 8), (float)(y + 8 + 16), 0.0f).texture(0.0f, 1.0f)/*$ nx*/.next()/**/;
+                builder.vertex(matrix, (float)(x + 8 + 16), (float)(y + 8 + 16), 0.0f).texture(1.0f, 1.0f)/*$ nx*/.next()/**/;
+                builder.vertex(matrix, (float)(x + 8 + 16), (float)(y + 8), 0.0f).texture(1.0f, 0.0f)/*$ nx*/.next()/**/;
+                builder.vertex(matrix, (float)(x + 8), (float)(y + 8), 0.0f).texture(0.0f, 0.0f)/*$ nx*/.next()/**/;
+                Bufs.draw(builder);
             }
         } else {
             String iconId = clip.getEffectiveIcon();
@@ -206,7 +208,7 @@ public final class ToastActionRenderer {
     private static ItemStack createItemStack(String iconId) {
         if (iconId != null && !iconId.isEmpty()) {
             try {
-                Item item = (Item)Registries.ITEM.get(new Identifier(iconId));
+                Item item = (Item)Registries.ITEM.get(Ids.of(iconId));
                 if (item != null && item != Items.AIR) {
                     return new ItemStack((ItemConvertible)item);
                 }

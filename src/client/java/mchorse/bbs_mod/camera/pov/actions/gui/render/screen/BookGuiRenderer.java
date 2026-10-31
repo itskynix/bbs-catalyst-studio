@@ -19,6 +19,8 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.gui.render.screen;
 
+import mchorse.bbs_mod.utils.VersionCompat;
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.camera.pov.actions.clip.GuiPovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.gui.data.BookSnapshot;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.GuiRenderContext;
@@ -46,12 +48,12 @@ public final class BookGuiRenderer
 implements GuiRenderer,
 GuiScreenChrome {
     public static final BookGuiRenderer INSTANCE = new BookGuiRenderer();
-    private static final Identifier PAGE_FORWARD = new Identifier("widget/page_forward");
-    private static final Identifier PAGE_FORWARD_HIGHLIGHTED = new Identifier("widget/page_forward_highlighted");
-    private static final Identifier PAGE_BACKWARD = new Identifier("widget/page_backward");
-    private static final Identifier PAGE_BACKWARD_HIGHLIGHTED = new Identifier("widget/page_backward_highlighted");
-    private static final Identifier WIDGET_BUTTON = new Identifier("widget/button");
-    private static final Identifier WIDGET_BUTTON_HIGHLIGHTED = new Identifier("widget/button_highlighted");
+    private static final Identifier PAGE_FORWARD = Ids.of("widget/page_forward");
+    private static final Identifier PAGE_FORWARD_HIGHLIGHTED = Ids.of("widget/page_forward_highlighted");
+    private static final Identifier PAGE_BACKWARD = Ids.of("widget/page_backward");
+    private static final Identifier PAGE_BACKWARD_HIGHLIGHTED = Ids.of("widget/page_backward_highlighted");
+    private static final Identifier WIDGET_BUTTON = Ids.of("widget/button");
+    private static final Identifier WIDGET_BUTTON_HIGHLIGHTED = Ids.of("widget/button_highlighted");
 
     private BookGuiRenderer() {
     }
@@ -127,7 +129,9 @@ GuiScreenChrome {
             return StringVisitable.EMPTY;
         }
         try {
-            //? if >=1.20.4 {
+            //? if >=1.21 {
+            /*MutableText parsed = Text.Serialization.fromJson((String)page, VersionCompat.lookup(MinecraftClient.getInstance().world));
+            *///?} else if >=1.20.4 {
             MutableText parsed = Text.Serialization.fromJson((String)page);
             //?} else {
             /*MutableText parsed = Text.Serializer.fromJson((String)page);

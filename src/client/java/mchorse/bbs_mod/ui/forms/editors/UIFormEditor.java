@@ -8,6 +8,7 @@ import mchorse.bbs_mod.cubic.ModelInstance;
 import mchorse.bbs_mod.data.types.MapType;
 import mchorse.bbs_mod.forms.FormUtils;
 import mchorse.bbs_mod.forms.forms.AnchorForm;
+import mchorse.bbs_mod.forms.forms.PortalForm;
 import mchorse.bbs_mod.forms.forms.BillboardForm;
 import mchorse.bbs_mod.forms.forms.BlockForm;
 import mchorse.bbs_mod.forms.forms.BodyPart;
@@ -37,7 +38,10 @@ import mchorse.bbs_mod.ui.film.replays.UIReplaysEditorUtils;
 import mchorse.bbs_mod.ui.forms.IUIFormList;
 import mchorse.bbs_mod.ui.forms.UIFormList;
 import mchorse.bbs_mod.ui.forms.UIFormPalette;
+import mchorse.bbs_mod.forms.forms.AudioForm;
 import mchorse.bbs_mod.ui.forms.editors.forms.UIAnchorForm;
+import mchorse.bbs_mod.ui.forms.editors.forms.UIAudioForm;
+import mchorse.bbs_mod.ui.forms.editors.forms.UIPortalForm;
 import mchorse.bbs_mod.ui.forms.editors.forms.UIBillboardForm;
 import mchorse.bbs_mod.ui.forms.editors.forms.UIBlockForm;
 import mchorse.bbs_mod.ui.forms.editors.forms.UIExtrudedForm;
@@ -170,11 +174,13 @@ public class UIFormEditor extends UIElement implements IUIFormList, ICursor, IBo
         register(BlockForm.class, UIBlockForm::new);
         register(ItemForm.class, UIItemForm::new);
         register(AnchorForm.class, UIAnchorForm::new);
+        register(PortalForm.class, UIPortalForm::new);
         register(MobForm.class, UIMobForm::new);
         register(VanillaParticleForm.class, UIVanillaParticleForm::new);
         register(TrailForm.class, UITrailForm::new);
         register(FramebufferForm.class, UIFramebufferForm::new);
         register(StructureForm.class, UIStructureForm::new);
+        register(AudioForm.class, UIAudioForm::new);
     }
 
     public static void register(Class clazz, Supplier<UIForm> supplier)

@@ -174,6 +174,25 @@ public class KeyframeChannel <T> extends ValueList<Keyframe<T>>
         return this.interpolate(ticks, orDefault);
     }
 
+    /**
+     * Numeric channels read as a primitive: no default value is boxed per call and the caller
+     * does not unbox a result, which adds up when every actor reads a dozen channels per tick.
+     * Anything that is not a number reads as 0.
+     */
+    public double interpolateDouble(float ticks)
+    {
+        KeyframeSegment<T> segment = this.findSegment(ticks);
+
+        if (segment == null)
+        {
+            return 0D;
+        }
+
+        segment.setup(ticks);
+
+        return segment.createInterpolated() instanceof Number number ? number.doubleValue() : 0D;
+    }
+
     public T interpolate(float ticks, T orDefault)
     {
         KeyframeSegment<T> segment = this.findSegment(ticks);

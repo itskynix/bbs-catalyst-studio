@@ -13,6 +13,8 @@ import mchorse.bbs_mod.ui.framework.elements.buttons.UIButton;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIToggle;
 import mchorse.bbs_mod.ui.framework.elements.input.UITrackpad;
 import mchorse.bbs_mod.ui.framework.elements.input.keyframes.factories.UIAnchorKeyframeFactory;
+import mchorse.bbs_mod.settings.values.numeric.ValueFloat;
+import mchorse.bbs_mod.ui.utils.UI;
 
 public class UIPovCameraClip extends UIClip<PovCameraClip> {
    public UIButton selector;
@@ -28,6 +30,8 @@ public class UIPovCameraClip extends UIClip<PovCameraClip> {
    public UIToggle blockOutline;
    public UIButton perspective;
    public UITrackpad fov;
+   public UIElement backOffsets;
+   public UIElement frontOffsets;
 
    public UIPovCameraClip(PovCameraClip clip, IUIClipsDelegate editor) {
       super(clip, editor);
@@ -99,6 +103,8 @@ public class UIPovCameraClip extends UIClip<PovCameraClip> {
          if (this.perspective != null) {
             this.perspective.setEnabled(toggle.getValue());
          }
+
+         this.updateOffsetFields();
       });
       this.headLook.tooltip(L10n.lang("bbs.pov.clip.head_look.tooltip", "Use the replay's recorded head position and look direction for the camera"));
       this.hardcoreLook = new UIToggle(
@@ -116,6 +122,7 @@ public class UIPovCameraClip extends UIClip<PovCameraClip> {
          this.editor.editMultiple(((PovCameraClip)this.clip).hands, value -> value.set(firstPerson));
          this.editor.editMultiple(((PovCameraClip)this.clip).crosshair, value -> value.set(firstPerson));
          this.updatePerspectiveButton();
+         this.updateOffsetFields();
          this.hands.setValue(firstPerson);
          this.crosshair.setValue(firstPerson);
       });
@@ -123,6 +130,52 @@ public class UIPovCameraClip extends UIClip<PovCameraClip> {
       this.fov = new UITrackpad(value -> this.editor.editMultiple(((PovCameraClip)this.clip).fov, field -> field.set(value.floatValue())));
       this.fov.limit(1.0, 180.0);
       this.fov.tooltip(L10n.lang("bbs.pov.clip.fov.tooltip", "Camera field of view"));
+      this.backOffsets = this.createOffsets(L10n.lang("bbs.pov.clip.offset.back", "Back Camera Offset"), this.clip.backOffsetX, this.clip.backOffsetY, this.clip.backOffsetZ);
+      this.frontOffsets = this.createOffsets(L10n.lang("bbs.pov.clip.offset.front", "Front Camera Offset"), this.clip.frontOffsetX, this.clip.frontOffsetY, this.clip.frontOffsetZ);
+   }
+
+   private UIElement createOffsets(IKey title, ValueFloat x, ValueFloat y, ValueFloat z) {
+      UIElement box = new UIElement();
+
+      box.column(5).vertical().stretch();
+      box.add(UI.label(title));
+      box.add(this.createOffsetRow(L10n.lang("bbs.pov.clip.offset.x", "X (right)"), x));
+      box.add(this.createOffsetRow(L10n.lang("bbs.pov.clip.offset.y", "Y (up)"), y));
+      box.add(this.createOffsetRow(L10n.lang("bbs.pov.clip.offset.z", "Z (forward)"), z));
+
+      return box;
+   }
+
+   private UIElement createOffsetRow(IKey label, ValueFloat value) {
+      UITrackpad trackpad = this.trackpad(value);
+
+      trackpad.limit(-PovCameraClip.OFFSET_LIMIT, PovCameraClip.OFFSET_LIMIT);
+      trackpad.tooltip(L10n.lang("bbs.pov.clip.offset.tooltip", "Moves the third-person camera relative to the actor, in blocks"));
+
+      return UI.column(2, UI.label(label), trackpad);
+   }
+
+   /** Show only the offset set of the selected view: none for first person, back for back, front for front. */
+   private void updateOffsetFields() {
+      if (this.backOffsets == null || this.frontOffsets == null) {
+         return;
+      }
+
+      int view = ((Integer)this.clip.perspective.get()).intValue();
+      boolean headLook = ((Boolean)this.clip.headLook.get()).booleanValue();
+      boolean back = headLook && view == PovCameraClip.VIEW_THIRD_PERSON_BACK;
+      boolean front = headLook && view == PovCameraClip.VIEW_THIRD_PERSON_FRONT;
+
+      if (this.backOffsets.isVisible() == back && this.frontOffsets.isVisible() == front) {
+         return;
+      }
+
+      this.backOffsets.setVisible(back);
+      this.frontOffsets.setVisible(front);
+
+      if (this.panels != null && this.panels.getParent() != null) {
+         this.panels.resize();
+      }
    }
 
    private void updatePerspectiveButton() {
@@ -141,7 +194,7 @@ public class UIPovCameraClip extends UIClip<PovCameraClip> {
                new UIElement[]{this.hands, this.hud, this.crosshair, this.actions, this.screenEffects, this.cursor, this.cameraShake}
             )
          );
-      this.panels.add(this.section(L10n.lang("bbs.pov.clip.section.camera", "Camera"), new UIElement[]{this.headLook, this.hardcoreLook, this.blockOutline, this.perspective, this.fov}));
+      this.panels.add(this.section(L10n.lang("bbs.pov.clip.section.camera", "Camera"), new UIElement[]{this.headLook, this.hardcoreLook, this.blockOutline, this.perspective, this.backOffsets, this.frontOffsets, this.fov}));
    }
 
    public void fillData() {
@@ -162,5 +215,6 @@ public class UIPovCameraClip extends UIClip<PovCameraClip> {
       this.perspective.setEnabled((Boolean)((PovCameraClip)this.clip).headLook.get());
       this.fov.setValue((double)((Float)((PovCameraClip)this.clip).fov.get()).floatValue());
       this.fov.setEnabled((Boolean)((PovCameraClip)this.clip).headLook.get());
+      this.updateOffsetFields();
    }
 }

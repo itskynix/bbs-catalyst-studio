@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.forms.renderers.utils;
 
+import mchorse.bbs_mod.utils.ModelViewStack;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.systems.VertexSorter;
@@ -316,7 +317,7 @@ public class FramebufferDebug
     {
         Matrix4f stack = context.stack.peek().getPositionMatrix();
         Matrix4f applied = RenderSystem.getModelViewMatrix();
-        Matrix4f top = RenderSystem.getModelViewStack().peek().getPositionMatrix();
+        Matrix4f top = ModelViewStack.top();
         Matrix4f projection = RenderSystem.getProjectionMatrix();
         VertexSorter sorter = RenderSystem.getVertexSorting();
         boolean identity = applied.equals(new Matrix4f(), 1e-5F);

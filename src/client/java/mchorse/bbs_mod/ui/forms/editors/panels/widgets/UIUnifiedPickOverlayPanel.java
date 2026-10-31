@@ -1,5 +1,7 @@
 package mchorse.bbs_mod.ui.forms.editors.panels.widgets;
 
+import mchorse.bbs_mod.utils.VersionCompat;
+import mchorse.bbs_mod.utils.Ids;
 import com.mojang.brigadier.StringReader;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.forms.CustomVertexConsumerProvider;
@@ -123,7 +125,7 @@ public class UIUnifiedPickOverlayPanel extends UIOverlayPanel
         {
             try
             {
-                Item item = Registries.ITEM.get(new Identifier(id));
+                Item item = Registries.ITEM.get(Ids.of(id));
 
                 return new ItemStack(item).getName().getString();
             }
@@ -142,7 +144,7 @@ public class UIUnifiedPickOverlayPanel extends UIOverlayPanel
         {
             try
             {
-                return Registries.BLOCK.get(new Identifier(id)).getName().getString();
+                return Registries.BLOCK.get(Ids.of(id)).getName().getString();
             }
             catch (Exception e)
             {
@@ -160,7 +162,7 @@ public class UIUnifiedPickOverlayPanel extends UIOverlayPanel
         {
             try
             {
-                return Registries.ENTITY_TYPE.get(new Identifier(id)).getName().getString();
+                return Registries.ENTITY_TYPE.get(Ids.of(id)).getName().getString();
             }
             catch (Exception e)
             {
@@ -175,7 +177,7 @@ public class UIUnifiedPickOverlayPanel extends UIOverlayPanel
         {
             try
             {
-                Identifier rid = new Identifier(id);
+                Identifier rid = Ids.of(id);
 
                 if (mode == PickerMode.ITEM)
                 {
@@ -310,7 +312,7 @@ public class UIUnifiedPickOverlayPanel extends UIOverlayPanel
                 return;
             }
 
-            this.itemStack.setCustomName(value.isEmpty() ? null : Text.literal(value));
+            VersionCompat.setCustomName(this.itemStack, value.isEmpty() ? null : Text.literal(value));
             this.acceptItem(this.itemStack.copy());
             this.updateItemNbt();
         });
@@ -336,7 +338,7 @@ public class UIUnifiedPickOverlayPanel extends UIOverlayPanel
             try
             {
                 NbtCompound nbt = new StringNbtReader(new StringReader(v.toString())).parseCompound();
-                ItemStack parsed = ItemStack.fromNbt(nbt);
+                ItemStack parsed = VersionCompat.stackFromNbt(nbt);
 
                 this.acceptItem(parsed);
 
@@ -464,7 +466,7 @@ public class UIUnifiedPickOverlayPanel extends UIOverlayPanel
 
         if (this.mode == PickerMode.ITEM)
         {
-            Item item = Registries.ITEM.get(new Identifier(id));
+            Item item = Registries.ITEM.get(Ids.of(id));
             ItemStack selected;
 
             if (this.itemStack != null && !this.itemStack.isEmpty() && this.itemStack.getItem() == item)
@@ -477,9 +479,9 @@ public class UIUnifiedPickOverlayPanel extends UIOverlayPanel
 
                 selected.setCount(Math.max(1, this.itemStack.getCount()));
 
-                if (this.itemStack.hasCustomName())
+                if (VersionCompat.hasCustomName(this.itemStack))
                 {
-                    selected.setCustomName(this.itemStack.getName());
+                    VersionCompat.setCustomName(selected, this.itemStack.getName());
                 }
             }
 
@@ -494,7 +496,7 @@ public class UIUnifiedPickOverlayPanel extends UIOverlayPanel
         }
         else
         {
-            Block block = Registries.BLOCK.get(new Identifier(id));
+            Block block = Registries.BLOCK.get(Ids.of(id));
             BlockState selectedState = block.getDefaultState();
 
             if (this.blockState != null && this.blockState.getBlock() == block)
@@ -540,7 +542,7 @@ public class UIUnifiedPickOverlayPanel extends UIOverlayPanel
 
     private void updateItemNbt()
     {
-        this.itemNbt.setText(ItemStack.CODEC.encodeStart(NbtOps.INSTANCE, this.itemStack).result().map(Object::toString).orElse("{}"));
+        this.itemNbt.setText(java.util.Optional.ofNullable(VersionCompat.stackToNbt(this.itemStack)).map(Object::toString).orElse("{}"));
     }
 
     private void fillBlockProperties(BlockState state)

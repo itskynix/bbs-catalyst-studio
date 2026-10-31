@@ -15,6 +15,7 @@
  */
 package mchorse.bbs_mod.camera.pov.render;
 
+import mchorse.bbs_mod.utils.ModelViewStack;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.common.GuiSlotRenderer;
 import mchorse.bbs_mod.camera.pov.config.PovSettings;
 import mchorse.bbs_mod.camera.pov.hud.HudState;
@@ -49,10 +50,9 @@ public final class PovCursorRenderer {
         ItemStack cursorStack = state.cursorItem;
         if (cursorStack != null && !cursorStack.isEmpty()) {
             MatrixStack guiMatrices = batcher.getContext().getMatrices();
-            MatrixStack modelView = RenderSystem.getModelViewStack();
             Matrix4f previousProjection = new Matrix4f((Matrix4fc)RenderSystem.getProjectionMatrix());
             guiMatrices.push();
-            modelView.push();
+            ModelViewStack.push();
             try {
                 RenderSystem.enableDepthTest();
                 RenderSystem.depthFunc((int)515);
@@ -65,7 +65,7 @@ public final class PovCursorRenderer {
             }
             finally {
                 DiffuseLighting.disableGuiDepthLighting();
-                modelView.pop();
+                ModelViewStack.pop();
                 RenderSystem.applyModelViewMatrix();
                 guiMatrices.pop();
                 RenderSystem.setProjectionMatrix((Matrix4f)previousProjection, (VertexSorter)VertexSorter.BY_Z);

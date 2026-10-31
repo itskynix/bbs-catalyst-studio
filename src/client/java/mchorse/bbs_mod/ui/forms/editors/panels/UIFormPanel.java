@@ -6,7 +6,9 @@ import mchorse.bbs_mod.ui.forms.editors.UIFormEditor;
 import mchorse.bbs_mod.ui.utils.BoneSelection;
 import mchorse.bbs_mod.ui.utils.IBoneSelectionHost;
 import mchorse.bbs_mod.ui.forms.editors.forms.UIForm;
+import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
+import mchorse.bbs_mod.ui.framework.elements.UIPanelBase;
 import mchorse.bbs_mod.ui.framework.elements.UIScrollView;
 import mchorse.bbs_mod.ui.framework.elements.UISection;
 import mchorse.bbs_mod.ui.framework.elements.utils.UISplitter;
@@ -84,6 +86,37 @@ public abstract class UIFormPanel <T extends Form> extends UIElement
 
     public void finishEdit()
     {}
+
+    /**
+     * Drawn moved while the tab is sliding in (see {@link UIPanelBase#viewShift}): through the
+     * context, so the scissors inside and the mouse move along, and cut to its own place so it does
+     * not cover the tab strip on the way.
+     */
+    @Override
+    public void render(UIContext context)
+    {
+        int shift = this.getParent() instanceof UIPanelBase<?> base ? base.viewShift(this) : 0;
+
+        if (shift == 0)
+        {
+            super.render(context);
+
+            return;
+        }
+
+        context.batcher.clip(this.area, context);
+        context.shiftX(-shift);
+
+        try
+        {
+            super.render(context);
+        }
+        finally
+        {
+            context.shiftX(shift);
+            context.batcher.unclip(context);
+        }
+    }
 
     public void pickBone(String bone)
     {}

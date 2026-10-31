@@ -14,7 +14,7 @@ public class MatrixStackUtils
 
     private static Matrix4f oldProjection = new Matrix4f();
     private static Matrix4f oldMV = new Matrix4f();
-    private static Matrix3f oldInverse = new Matrix3f();
+    private static Matrix3f oldInverse;
 
     public static void scaleStack(MatrixStack stack, float x, float y, float z)
     {
@@ -40,12 +40,10 @@ public class MatrixStackUtils
         /* Cache the global stuff */
         oldProjection.set(RenderSystem.getProjectionMatrix());
         oldMV.set(RenderSystem.getModelViewMatrix());
-        oldInverse.set(RenderSystem.getInverseViewRotationMatrix());
+        oldInverse = InverseViewRotation.getOverride();
 
-        MatrixStack renderStack = RenderSystem.getModelViewStack();
-
-        renderStack.push();
-        renderStack.loadIdentity();
+        ModelViewStack.push();
+        ModelViewStack.loadIdentity();
         RenderSystem.applyModelViewMatrix();
     }
 
@@ -53,19 +51,17 @@ public class MatrixStackUtils
     {
         /* Return back to orthographic projection */
         RenderSystem.setProjectionMatrix(oldProjection, VertexSorter.BY_Z);
-        RenderSystem.setInverseViewRotationMatrix(oldInverse);
+        InverseViewRotation.setOverride(oldInverse);
 
-        MatrixStack renderStack = RenderSystem.getModelViewStack();
-
-        renderStack.pop();
+        ModelViewStack.pop();
 
         /* The UI's applied matrix isn't necessarily the stack's top (the UI sets it on its own), so
          * it goes back through a temporary level rather than a plain apply of the top. */
-        renderStack.push();
-        renderStack.loadIdentity();
-        MatrixStackUtils.multiply(renderStack, oldMV);
+        ModelViewStack.push();
+        ModelViewStack.loadIdentity();
+        ModelViewStack.multiply(oldMV);
         RenderSystem.applyModelViewMatrix();
-        renderStack.pop();
+        ModelViewStack.pop();
     }
 
     public static void applyTransform(MatrixStack stack, Transform transform)

@@ -1,5 +1,7 @@
 package mchorse.bbs_mod.entity;
 
+import net.minecraft.server.world.ServerWorld;
+import net.minecraft.entity.data.DataTracker;
 import mchorse.bbs_mod.forms.FormUtils;
 import mchorse.bbs_mod.forms.entities.IEntity;
 import mchorse.bbs_mod.forms.entities.MCEntity;
@@ -90,9 +92,15 @@ public class GunProjectileEntity extends ProjectileEntity implements IEntityForm
         }
     }
 
+    //? if >=1.21 {
+    /*@Override
+    protected void initDataTracker(DataTracker.Builder builder)
+    {}
+    *///?} else {
     @Override
     protected void initDataTracker()
     {}
+    //?}
 
     public GunProperties getProperties()
     {
@@ -329,7 +337,9 @@ public class GunProjectileEntity extends ProjectileEntity implements IEntityForm
         DamageSource source = this.getDamageSources().magic();
 
         int fireTicks = entity.getFireTicks();
-        //? if >=1.20.4 {
+        //? if >=1.21 {
+        /*boolean deflectsArrows = entity.getType().isIn(EntityTypeTags.DEFLECTS_PROJECTILES);
+        *///?} else if >=1.20.4 {
         boolean deflectsArrows = entity.getType().isIn(EntityTypeTags.DEFLECTS_ARROWS);
         //?} else {
         /*boolean deflectsArrows = false;
@@ -357,8 +367,15 @@ public class GunProjectileEntity extends ProjectileEntity implements IEntityForm
 
                 if (owner instanceof LivingEntity)
                 {
+                    //? if >=1.21 {
+                    /*if (this.getWorld() instanceof ServerWorld serverWorld)
+                    {
+                        EnchantmentHelper.onTargetDamaged(serverWorld, livingEntity, source);
+                    }
+                    *///?} else {
                     EnchantmentHelper.onUserDamaged(livingEntity, owner);
                     EnchantmentHelper.onTargetDamaged((LivingEntity)owner, livingEntity);
+                    //?}
                 }
 
                 this.onHit(livingEntity);

@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.utils;
 
+import mchorse.bbs_mod.utils.Bufs;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.ui.framework.elements.input.drag.DragStrategy;
@@ -130,7 +131,7 @@ public class GizmoPie
         float b = Colors.getB(color);
         float a = 0.25F;
 
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
+        BufferBuilder builder;
         Matrix4f mat = stack.peek().getPositionMatrix();
 
         RenderSystem.enableBlend();
@@ -139,7 +140,7 @@ public class GizmoPie
         RenderSystem.depthFunc(GL11.GL_ALWAYS);
         RenderSystem.disableCull();
 
-        builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+        builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
 
         int segments = Math.max(12, (int) (Math.abs(sweepDeg) / 360F * 64F));
         float step = sweepDeg / segments;
@@ -154,24 +155,24 @@ public class GizmoPie
             float x2 = (float) Math.cos(a2) * radius;
             float z2 = (float) Math.sin(a2) * radius;
 
-            builder.vertex(mat, 0, 0, 0).color(r, g, b, a).next();
+            builder.vertex(mat, 0, 0, 0).color(r, g, b, a)/*$ nx*/.next()/**/;
 
             if (sweepDeg > 0)
             {
-                builder.vertex(mat, x1, 0, z1).color(r, g, b, a).next();
-                builder.vertex(mat, x2, 0, z2).color(r, g, b, a).next();
+                builder.vertex(mat, x1, 0, z1).color(r, g, b, a)/*$ nx*/.next()/**/;
+                builder.vertex(mat, x2, 0, z2).color(r, g, b, a)/*$ nx*/.next()/**/;
             }
             else
             {
-                builder.vertex(mat, x2, 0, z2).color(r, g, b, a).next();
-                builder.vertex(mat, x1, 0, z1).color(r, g, b, a).next();
+                builder.vertex(mat, x2, 0, z2).color(r, g, b, a)/*$ nx*/.next()/**/;
+                builder.vertex(mat, x1, 0, z1).color(r, g, b, a)/*$ nx*/.next()/**/;
             }
         }
 
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        Bufs.draw(builder);
 
         float lineThickness = 0.005F * scale;
-        builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+        builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
 
         float endDeg = startDeg + sweepDeg;
 
@@ -182,24 +183,24 @@ public class GizmoPie
 
         Vector3f p1 = new Vector3f(-sz, 0, sx).normalize().mul(lineThickness);
 
-        builder.vertex(mat, p1.x, 0, p1.z).color(r, g, b, 1F).next();
-        builder.vertex(mat, -p1.x, 0, -p1.z).color(r, g, b, 1F).next();
-        builder.vertex(mat, sx - p1.x, 0, sz - p1.z).color(r, g, b, 1F).next();
+        builder.vertex(mat, p1.x, 0, p1.z).color(r, g, b, 1F)/*$ nx*/.next()/**/;
+        builder.vertex(mat, -p1.x, 0, -p1.z).color(r, g, b, 1F)/*$ nx*/.next()/**/;
+        builder.vertex(mat, sx - p1.x, 0, sz - p1.z).color(r, g, b, 1F)/*$ nx*/.next()/**/;
 
-        builder.vertex(mat, p1.x, 0, p1.z).color(r, g, b, 1F).next();
-        builder.vertex(mat, sx - p1.x, 0, sz - p1.z).color(r, g, b, 1F).next();
-        builder.vertex(mat, sx + p1.x, 0, sz + p1.z).color(r, g, b, 1F).next();
+        builder.vertex(mat, p1.x, 0, p1.z).color(r, g, b, 1F)/*$ nx*/.next()/**/;
+        builder.vertex(mat, sx - p1.x, 0, sz - p1.z).color(r, g, b, 1F)/*$ nx*/.next()/**/;
+        builder.vertex(mat, sx + p1.x, 0, sz + p1.z).color(r, g, b, 1F)/*$ nx*/.next()/**/;
 
         Vector3f p2 = new Vector3f(-ez, 0, ex).normalize().mul(lineThickness);
-        builder.vertex(mat, p2.x, 0, p2.z).color(r, g, b, 1F).next();
-        builder.vertex(mat, -p2.x, 0, -p2.z).color(r, g, b, 1F).next();
-        builder.vertex(mat, ex - p2.x, 0, ez - p2.z).color(r, g, b, 1F).next();
+        builder.vertex(mat, p2.x, 0, p2.z).color(r, g, b, 1F)/*$ nx*/.next()/**/;
+        builder.vertex(mat, -p2.x, 0, -p2.z).color(r, g, b, 1F)/*$ nx*/.next()/**/;
+        builder.vertex(mat, ex - p2.x, 0, ez - p2.z).color(r, g, b, 1F)/*$ nx*/.next()/**/;
 
-        builder.vertex(mat, p2.x, 0, p2.z).color(r, g, b, 1F).next();
-        builder.vertex(mat, ex - p2.x, 0, ez - p2.z).color(r, g, b, 1F).next();
-        builder.vertex(mat, ex + p2.x, 0, ez + p2.z).color(r, g, b, 1F).next();
+        builder.vertex(mat, p2.x, 0, p2.z).color(r, g, b, 1F)/*$ nx*/.next()/**/;
+        builder.vertex(mat, ex - p2.x, 0, ez - p2.z).color(r, g, b, 1F)/*$ nx*/.next()/**/;
+        builder.vertex(mat, ex + p2.x, 0, ez + p2.z).color(r, g, b, 1F)/*$ nx*/.next()/**/;
 
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        Bufs.draw(builder);
 
         RenderSystem.enableCull();
         RenderSystem.depthFunc(GL11.GL_LEQUAL);

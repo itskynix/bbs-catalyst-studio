@@ -8,8 +8,16 @@ import mchorse.bbs_mod.utils.StringUtils;
 import mchorse.bbs_mod.utils.colors.Color;
 import mchorse.bbs_mod.utils.resources.Pixels;
 import net.irisshaders.iris.targets.backed.NativeImageBackedSingleColorTexture;
+//? if >=1.21 {
+/*import net.irisshaders.iris.pbr.texture.PBRType;
+*///?} else {
 import net.irisshaders.iris.texture.pbr.PBRType;
+//?}
+//? if >=1.21 {
+/*import net.irisshaders.iris.pbr.loader.PBRTextureLoader;
+*///?} else {
 import net.irisshaders.iris.texture.pbr.loader.PBRTextureLoader;
+//?}
 import net.minecraft.client.texture.AbstractTexture;
 import net.minecraft.resource.ResourceManager;
 

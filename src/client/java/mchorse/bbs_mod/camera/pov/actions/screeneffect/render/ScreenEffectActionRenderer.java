@@ -46,6 +46,8 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.screeneffect.render;
 
+import mchorse.bbs_mod.utils.Bufs;
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.camera.pov.actions.RecordedPovActions;
 import mchorse.bbs_mod.camera.pov.actions.clip.PovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.clip.ScreenEffectPovActionClip;
@@ -69,6 +71,9 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.render.BackgroundRenderer;
 import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.client.render.BufferRenderer;
+//? if >=1.21
+/*import net.minecraft.block.enums.CameraSubmersionType;*/
+//? if <1.21
 import net.minecraft.client.render.CameraSubmersionType;
 import net.minecraft.client.render.DiffuseLighting;
 import net.minecraft.client.render.GameRenderer;
@@ -95,11 +100,11 @@ import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
 
 public final class ScreenEffectActionRenderer {
-    private static final Identifier VIGNETTE_TEX = new Identifier("textures/misc/vignette.png");
-    private static final Identifier SPYGLASS_TEX = new Identifier("textures/misc/spyglass_scope.png");
-    private static final Identifier FROST_TEX = new Identifier("textures/misc/powder_snow_outline.png");
-    private static final Identifier PUMPKIN_TEX = new Identifier("textures/misc/pumpkinblur.png");
-    private static final Identifier UNDERWATER_TEX = new Identifier("textures/misc/underwater.png");
+    private static final Identifier VIGNETTE_TEX = Ids.of("textures/misc/vignette.png");
+    private static final Identifier SPYGLASS_TEX = Ids.of("textures/misc/spyglass_scope.png");
+    private static final Identifier FROST_TEX = Ids.of("textures/misc/powder_snow_outline.png");
+    private static final Identifier PUMPKIN_TEX = Ids.of("textures/misc/pumpkinblur.png");
+    private static final Identifier UNDERWATER_TEX = Ids.of("textures/misc/underwater.png");
 
     private ScreenEffectActionRenderer() {
     }
@@ -389,7 +394,7 @@ public final class ScreenEffectActionRenderer {
         RenderSystem.setProjectionMatrix((Matrix4f)fireProjection, (VertexSorter)VertexSorter.BY_Z);
         MatrixStack fireMatrices = new MatrixStack();
         fireMatrices.loadIdentity();
-        RenderSystem.setShader(GameRenderer::getPositionColorTexProgram);
+        RenderSystem.setShader(GameRenderer::/*$ pctp*/getPositionColorTexProgram/**/);
         RenderSystem.depthFunc((int)519);
         RenderSystem.depthMask((boolean)false);
         RenderSystem.enableBlend();
@@ -406,7 +411,7 @@ public final class ScreenEffectActionRenderer {
         float n = MathHelper.lerp((float)l, (float)g, (float)h);
         float o = MathHelper.lerp((float)l, (float)i, (float)k);
         float p = MathHelper.lerp((float)l, (float)j, (float)k);
-        BufferBuilder bufferBuilder = Tessellator.getInstance().getBuffer();
+        BufferBuilder bufferBuilder;
         float alpha = 0.9f;
         for (int r = 0; r < 2; ++r) {
             fireMatrices.push();
@@ -416,12 +421,12 @@ public final class ScreenEffectActionRenderer {
             fireMatrices.translate(s, t, u);
             fireMatrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees((float)(r * 2 - 1) * 10.0f));
             Matrix4f matrix4f = fireMatrices.peek().getPositionMatrix();
-            bufferBuilder.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR_TEXTURE);
-            bufferBuilder.vertex(matrix4f, -0.5f, -0.5f, -0.5f).color(tr, tg, tb, alpha).texture(n, p).next();
-            bufferBuilder.vertex(matrix4f, 0.5f, -0.5f, -0.5f).color(tr, tg, tb, alpha).texture(m, p).next();
-            bufferBuilder.vertex(matrix4f, 0.5f, 0.5f, -0.5f).color(tr, tg, tb, alpha).texture(m, o).next();
-            bufferBuilder.vertex(matrix4f, -0.5f, 0.5f, -0.5f).color(tr, tg, tb, alpha).texture(n, o).next();
-            BufferRenderer.drawWithGlobalProgram((BufferBuilder.BuiltBuffer)bufferBuilder.end());
+            bufferBuilder = Bufs.begin(VertexFormat.DrawMode.QUADS, VertexFormats./*$ pct*/POSITION_COLOR_TEXTURE/**/);
+            bufferBuilder.vertex(matrix4f, -0.5f, -0.5f, -0.5f).color(tr, tg, tb, alpha).texture(n, p)/*$ nx*/.next()/**/;
+            bufferBuilder.vertex(matrix4f, 0.5f, -0.5f, -0.5f).color(tr, tg, tb, alpha).texture(m, p)/*$ nx*/.next()/**/;
+            bufferBuilder.vertex(matrix4f, 0.5f, 0.5f, -0.5f).color(tr, tg, tb, alpha).texture(m, o)/*$ nx*/.next()/**/;
+            bufferBuilder.vertex(matrix4f, -0.5f, 0.5f, -0.5f).color(tr, tg, tb, alpha).texture(n, o)/*$ nx*/.next()/**/;
+            Bufs.draw(bufferBuilder);
             fireMatrices.pop();
         }
         RenderSystem.depthMask((boolean)true);
@@ -485,7 +490,7 @@ public final class ScreenEffectActionRenderer {
         RenderSystem.depthMask((boolean)false);
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
-        RenderSystem.setShader(GameRenderer::getPositionColorTexProgram);
+        RenderSystem.setShader(GameRenderer::/*$ pctp*/getPositionColorTexProgram/**/);
         RenderSystem.setShaderTexture((int)0, (Identifier)sprite.getAtlasId());
         float l = sprite.getMinU();
         float m = sprite.getMaxU();
@@ -496,13 +501,13 @@ public final class ScreenEffectActionRenderer {
         float b = 0.1f;
         float a = 1.0f;
         Matrix4f matrix4f = suffocationMatrices.peek().getPositionMatrix();
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
-        builder.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR_TEXTURE);
-        builder.vertex(matrix4f, -1.0f, -1.0f, -0.5f).color(r, g, b, a).texture(m, o).next();
-        builder.vertex(matrix4f, 1.0f, -1.0f, -0.5f).color(r, g, b, a).texture(l, o).next();
-        builder.vertex(matrix4f, 1.0f, 1.0f, -0.5f).color(r, g, b, a).texture(l, n).next();
-        builder.vertex(matrix4f, -1.0f, 1.0f, -0.5f).color(r, g, b, a).texture(m, n).next();
-        BufferRenderer.drawWithGlobalProgram((BufferBuilder.BuiltBuffer)builder.end());
+        BufferBuilder builder;
+        builder = Bufs.begin(VertexFormat.DrawMode.QUADS, VertexFormats./*$ pct*/POSITION_COLOR_TEXTURE/**/);
+        builder.vertex(matrix4f, -1.0f, -1.0f, -0.5f).color(r, g, b, a).texture(m, o)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f, 1.0f, -1.0f, -0.5f).color(r, g, b, a).texture(l, o)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f, 1.0f, 1.0f, -0.5f).color(r, g, b, a).texture(l, n)/*$ nx*/.next()/**/;
+        builder.vertex(matrix4f, -1.0f, 1.0f, -0.5f).color(r, g, b, a).texture(m, n)/*$ nx*/.next()/**/;
+        Bufs.draw(builder);
         RenderSystem.depthMask((boolean)true);
         RenderSystem.enableDepthTest();
         RenderSystem.setShaderColor((float)1.0f, (float)1.0f, (float)1.0f, (float)1.0f);
@@ -589,7 +594,7 @@ public final class ScreenEffectActionRenderer {
 
     public static boolean isFirstPerson() {
         MinecraftClient client = MinecraftClient.getInstance();
-        PovPlaybackContext.Frame playback = PovPlaybackContext.getActive(client.getTickDelta());
+        PovPlaybackContext.Frame playback = PovPlaybackContext.getActive(client./*$ gtd*/getTickDelta()/**/);
         if (playback != null) {
             if (playback.clip() != null) {
                 return playback.clip().isFirstPerson();
@@ -605,7 +610,7 @@ public final class ScreenEffectActionRenderer {
             if (povMode == 4 || povMode == 5 || povMode == 1 || povMode == 2) {
                 return false;
             }
-            float filmTick = panel.getRunner() != null && panel.getRunner().isRunning() ? (float)panel.getRunner().ticks + client.getTickDelta() : (float)panel.getCursor();
+            float filmTick = panel.getRunner() != null && panel.getRunner().isRunning() ? (float)panel.getRunner().ticks + client./*$ gtd*/getTickDelta()/**/ : (float)panel.getCursor();
             PovCameraClip clip = PovCameraClips.resolve((Film)panel.getData(), filmTick);
             if (clip != null) {
                 return clip.isFirstPerson();
@@ -617,7 +622,7 @@ public final class ScreenEffectActionRenderer {
     private static ItemStack createItemStack(String iconId) {
         if (iconId != null && !iconId.isEmpty()) {
             try {
-                Item item = (Item)Registries.ITEM.get(new Identifier(iconId));
+                Item item = (Item)Registries.ITEM.get(Ids.of(iconId));
                 if (item != null && item != Items.AIR) {
                     return new ItemStack((ItemConvertible)item);
                 }

@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.forms.forms.utils;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.data.IMapSerializable;
 import mchorse.bbs_mod.data.types.MapType;
 import net.minecraft.util.Identifier;
@@ -19,7 +20,7 @@ public class ParticleSettings implements IMapSerializable
     @Override
     public void fromData(MapType data)
     {
-        this.particle = new Identifier(data.getString("particle"));
+        this.particle = Ids.of(data.getString("particle"));
         this.arguments = data.getString("args");
     }
 }

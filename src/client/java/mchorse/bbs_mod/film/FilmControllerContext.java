@@ -77,7 +77,7 @@ public class FilmControllerContext
         this.camera = context.camera();
         this.stack = context.matrixStack();
         this.consumers = context.consumers();
-        this.transition = context.tickDelta();
+        this.transition = context./*$ wtd*/tickDelta()/**/;
 
         return this;
     }

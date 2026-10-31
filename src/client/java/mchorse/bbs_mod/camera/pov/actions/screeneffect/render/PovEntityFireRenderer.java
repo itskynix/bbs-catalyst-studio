@@ -20,6 +20,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.screeneffect.render;
 
+import mchorse.bbs_mod.utils.VertexUtils;
 import mchorse.bbs_mod.camera.pov.actions.RecordedPovActions;
 import mchorse.bbs_mod.camera.pov.actions.clip.ScreenEffectPovActionClip;
 import mchorse.bbs_mod.camera.pov.integration.access.bbs.ReplayKeyframesPovAccess;
@@ -129,7 +130,7 @@ public final class PovEntityFireRenderer {
     }
 
     private static void drawFireVertex(MatrixStack.Entry entry, VertexConsumer vertices, float x, float y, float z, float u, float v, float alpha) {
-        vertices.vertex(entry.getPositionMatrix(), x, y, z).color(1.0f, 1.0f, 1.0f, alpha).texture(u, v).overlay(OverlayTexture.DEFAULT_UV).light(0xF000F0).normal(entry.getNormalMatrix(), 0.0f, 1.0f, 0.0f).next();
+        VertexUtils.normal(vertices.vertex(entry.getPositionMatrix(), x, y, z).color(1.0f, 1.0f, 1.0f, alpha).texture(u, v).overlay(OverlayTexture.DEFAULT_UV).light(0xF000F0), entry, 0.0f, 1.0f, 0.0f)/*$ nx*/.next()/**/;
     }
 }
 

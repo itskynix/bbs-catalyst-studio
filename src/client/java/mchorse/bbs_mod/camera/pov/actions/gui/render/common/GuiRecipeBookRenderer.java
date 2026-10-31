@@ -29,6 +29,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.gui.render.common;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.camera.pov.actions.clip.GuiPovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.gui.GuiRecipeBook;
 import mchorse.bbs_mod.camera.pov.actions.gui.GuiSlotSchema;
@@ -73,19 +74,19 @@ public final class GuiRecipeBookRenderer {
     public static final int RECIPE_BOOK_WIDTH = 147;
     public static final int RECIPE_BOOK_HEIGHT = 166;
     public static final int RECIPE_OPEN_SHIFT = 77;
-    private static final Identifier RECIPE_BUTTON = new Identifier("recipe_book/button");
-    private static final Identifier RECIPE_BUTTON_HIGHLIGHTED = new Identifier("recipe_book/button_highlighted");
-    private static final Identifier RECIPE_BOOK_TEXTURE = new Identifier("textures/gui/recipe_book.png");
-    private static final Identifier RECIPE_FILTER_ON = new Identifier("recipe_book/filter_enabled");
-    private static final Identifier RECIPE_FILTER_OFF = new Identifier("recipe_book/filter_disabled");
-    private static final Identifier RECIPE_FILTER_ON_HOVER = new Identifier("recipe_book/filter_enabled_highlighted");
-    private static final Identifier RECIPE_FILTER_OFF_HOVER = new Identifier("recipe_book/filter_disabled_highlighted");
-    private static final Identifier RECIPE_TAB = new Identifier("recipe_book/tab");
-    private static final Identifier RECIPE_TAB_SELECTED = new Identifier("recipe_book/tab_selected");
-    private static final Identifier RECIPE_SLOT_CRAFTABLE = new Identifier("recipe_book/slot_craftable");
-    private static final Identifier RECIPE_SLOT_UNCRAFTABLE = new Identifier("recipe_book/slot_uncraftable");
-    private static final Identifier RECIPE_PAGE_FORWARD = new Identifier("recipe_book/page_forward");
-    private static final Identifier RECIPE_PAGE_BACKWARD = new Identifier("recipe_book/page_backward");
+    private static final Identifier RECIPE_BUTTON = Ids.of("recipe_book/button");
+    private static final Identifier RECIPE_BUTTON_HIGHLIGHTED = Ids.of("recipe_book/button_highlighted");
+    private static final Identifier RECIPE_BOOK_TEXTURE = Ids.of("textures/gui/recipe_book.png");
+    private static final Identifier RECIPE_FILTER_ON = Ids.of("recipe_book/filter_enabled");
+    private static final Identifier RECIPE_FILTER_OFF = Ids.of("recipe_book/filter_disabled");
+    private static final Identifier RECIPE_FILTER_ON_HOVER = Ids.of("recipe_book/filter_enabled_highlighted");
+    private static final Identifier RECIPE_FILTER_OFF_HOVER = Ids.of("recipe_book/filter_disabled_highlighted");
+    private static final Identifier RECIPE_TAB = Ids.of("recipe_book/tab");
+    private static final Identifier RECIPE_TAB_SELECTED = Ids.of("recipe_book/tab_selected");
+    private static final Identifier RECIPE_SLOT_CRAFTABLE = Ids.of("recipe_book/slot_craftable");
+    private static final Identifier RECIPE_SLOT_UNCRAFTABLE = Ids.of("recipe_book/slot_uncraftable");
+    private static final Identifier RECIPE_PAGE_FORWARD = Ids.of("recipe_book/page_forward");
+    private static final Identifier RECIPE_PAGE_BACKWARD = Ids.of("recipe_book/page_backward");
     private static String cachedRecipeKey = null;
     private static List<RecipeIcon> cachedRecipeIcons = List.of();
     private static String cachedRecipeSearchQuery = null;
@@ -254,6 +255,9 @@ public final class GuiRecipeBookRenderer {
             }
         }
         RecipeGridAligner aligner = (inputs, handlerIndex, amount, gridX, gridY) -> {
+            //? if >=1.21
+            /*Ingredient ingredient = (Ingredient)inputs;*/
+            //? if <1.21
             Ingredient ingredient = (Ingredient)inputs.next();
             if (ingredient.isEmpty()) {
                 return;
@@ -380,6 +384,9 @@ public final class GuiRecipeBookRenderer {
             return cachedRecipeSearchHits;
         }
         try {
+            //? if >=1.21
+            /*SearchProvider provider = client.getNetworkHandler().getSearchManager().getRecipeOutputReloadFuture();*/
+            //? if <1.21
             SearchProvider provider = client.getSearchProvider(SearchManager.RECIPE_OUTPUT);
             if (provider != null) {
                 HashSet<RecipeResultCollection> hits = new HashSet<RecipeResultCollection>(provider.findAll(query));

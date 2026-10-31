@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.forms.editors.utils;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.forms.forms.utils.ParticleSettings;
 import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
@@ -27,7 +28,7 @@ public class UIParticleSettings extends UIElement
     {
         this.particle = new UIButton(UIKeys.FORMS_EDITORS_VANILLA_PARTICLE_EDITOR_PICK, (b) ->
         {
-            UIListOverlayPanel overlayPanel = new UIListOverlayPanel(UIKeys.FORMS_EDITORS_VANILLA_PARTICLE_EDITOR_TITLE, (l) -> this.setParticle(new Identifier(l)), UIVanillaParticleList::new);
+            UIListOverlayPanel overlayPanel = new UIListOverlayPanel(UIKeys.FORMS_EDITORS_VANILLA_PARTICLE_EDITOR_TITLE, (l) -> this.setParticle(Ids.of(l)), UIVanillaParticleList::new);
             List<String> strings = new ArrayList<>();
 
             for (RegistryKey<ParticleType<?>> key : Registries.PARTICLE_TYPE.getKeys())

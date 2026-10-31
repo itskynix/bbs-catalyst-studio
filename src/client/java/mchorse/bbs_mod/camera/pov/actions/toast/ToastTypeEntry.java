@@ -12,6 +12,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.toast;
 
+import mchorse.bbs_mod.utils.Ids;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemConvertible;
 import net.minecraft.item.ItemStack;
@@ -64,7 +65,7 @@ public class ToastTypeEntry {
     public ItemStack createIconStack() {
         if (this.iconItemId != null && !this.iconItemId.isEmpty()) {
             try {
-                Item item = (Item)Registries.ITEM.get(new Identifier(this.iconItemId));
+                Item item = (Item)Registries.ITEM.get(Ids.of(this.iconItemId));
                 if (item != null && item != Items.AIR) {
                     return new ItemStack((ItemConvertible)item);
                 }

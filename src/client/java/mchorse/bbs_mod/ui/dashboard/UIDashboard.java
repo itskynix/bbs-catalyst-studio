@@ -214,7 +214,7 @@ public class UIDashboard extends UIBaseMenu
 
     public void openSettings()
     {
-        UIOverlay.addOverlay(this.context, this.settingsPanel, 430, 400);
+        UIOverlay.addOverlay(this.context, this.settingsPanel, 780, 520);
     }
 
     public void copyCurrentEntityCamera()

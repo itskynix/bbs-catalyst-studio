@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.dashboard.panels.overlay;
 
+import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.data.types.MapType;
 import mchorse.bbs_mod.graphics.window.Window;
 import mchorse.bbs_mod.l10n.keys.IKey;
@@ -12,6 +13,7 @@ import mchorse.bbs_mod.ui.framework.elements.overlay.UIConfirmOverlayPanel;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UIOverlay;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UIOverlayPanel;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UIPromptOverlayPanel;
+import mchorse.bbs_mod.ui.utils.icons.Icon;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.utils.DataPath;
 
@@ -55,6 +57,7 @@ public abstract class UICRUDOverlayPanel extends UIOverlayPanel
         this.names.full(this.content).x(6).w(1F, -12);
         this.namesList = (UIDataPathList) this.names.list;
         this.names.label(UIKeys.GENERAL_SEARCH);
+        this.names.searchButton(this.createSortButton());
         this.content.add(this.names);
 
         if (this.canCreate())
@@ -66,6 +69,32 @@ public abstract class UICRUDOverlayPanel extends UIOverlayPanel
         {
             this.icons.add(this.dupe, this.rename, this.remove);
         }
+    }
+
+    /** The ⇅ button next to the search bar: the order the documents are listed in. */
+    private UIIcon createSortButton()
+    {
+        UIIcon sort = new UIIcon(Icons.FILTER, (b) -> b.getContext().replaceContextMenu((menu) ->
+        {
+            IKey[] labels = {UIKeys.LIST_SORT_NEWEST, UIKeys.LIST_SORT_OLDEST, UIKeys.LIST_SORT_A_Z, UIKeys.LIST_SORT_Z_A};
+            Icon[] icons = {Icons.TIME, Icons.TIME, Icons.ARROW_DOWN, Icons.ARROW_UP};
+
+            for (int i = 0; i < labels.length; i++)
+            {
+                int mode = i;
+                boolean current = BBSSettings.listSortMode.get() == mode;
+
+                menu.action(icons[i], labels[i], current, () ->
+                {
+                    BBSSettings.listSortMode.set(mode);
+                    this.namesList.resort();
+                });
+            }
+        }));
+
+        sort.tooltip(UIKeys.LIST_SORT);
+
+        return sort;
     }
 
     /**

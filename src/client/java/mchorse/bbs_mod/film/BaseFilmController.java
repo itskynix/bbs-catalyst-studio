@@ -20,6 +20,7 @@ import mchorse.bbs_mod.film.replays.tracks.AnchorResolver;
 import mchorse.bbs_mod.film.replays.tracks.TrackBehaviour;
 import mchorse.bbs_mod.film.replays.tracks.TrackBehaviours;
 import mchorse.bbs_mod.film.replays.tracks.TrackContext;
+import mchorse.bbs_mod.forms.FormPortals;
 import mchorse.bbs_mod.forms.FormUtils;
 import mchorse.bbs_mod.forms.entities.EntityState;
 import mchorse.bbs_mod.forms.entities.IEntity;
@@ -350,6 +351,7 @@ public abstract class BaseFilmController
     protected void applyReplay(Replay replay, int ticks, IEntity entity)
     {
         replay.keyframes.apply(ticks, entity);
+        ReplayLookAt.apply(replay, this.film, ticks, entity);
         replay.applyClientActions(ticks, entity, this.film);
     }
 
@@ -512,7 +514,7 @@ public abstract class BaseFilmController
         BBSProfiler.begin(BBSProfiler.Timer.WORLD_FORMS);
 
         List<Replay> replays = this.replays();
-        Frustum frustum = BBSSettings.frustumCulling.get() && !BBSRendering.isIrisShadowPass() ? context.frustum() : null;
+        Frustum frustum = BBSSettings.frustumCulling.get() && !BBSRendering.isIrisShadowPass() && !FormPortals.isPassActive() ? context.frustum() : null;
 
         for (int i = 0; i < replays.size(); i++)
         {
@@ -555,6 +557,12 @@ public abstract class BaseFilmController
     private boolean isCulled(Frustum frustum, Replay replay, IEntity entity)
     {
         Form form = entity.getForm();
+
+        /* A portal is as large as it is set to be, and its window may be on screen with its entity far off it */
+        if (FormPortals.hasPortal(form))
+        {
+            return false;
+        }
 
         if (form == null || form.anchor.get().hasTarget())
         {
@@ -628,7 +636,7 @@ public abstract class BaseFilmController
     {
         FilmControllerContext filmContext = getFilmControllerContext(context, replay, entity);
 
-        filmContext.transition = getTransition(entity, context.tickDelta());
+        filmContext.transition = getTransition(entity, context./*$ wtd*/tickDelta()/**/);
 
         FilmEntityRenderer.renderEntity(filmContext);
     }

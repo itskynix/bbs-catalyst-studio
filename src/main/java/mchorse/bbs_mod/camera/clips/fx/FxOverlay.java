@@ -21,6 +21,9 @@ public class FxOverlay
     public static final int LETTERBOX = 12;
     public static final int GRAIN = 13;
     public static final int EYE = 14;
+    public static final int MOTION_BLUR = 15;
+    public static final int LENS_DISTORTION = 16;
+    public static final int SCREEN_SHAKE = 17;
 
     public static final int PARAMS = 24;
 

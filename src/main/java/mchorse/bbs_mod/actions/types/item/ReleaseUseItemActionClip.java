@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.actions.types.item;
 
+import mchorse.bbs_mod.utils.VersionCompat;
 import mchorse.bbs_mod.actions.SuperFakePlayer;
 import mchorse.bbs_mod.film.Film;
 import mchorse.bbs_mod.film.replays.Replay;
@@ -79,7 +80,7 @@ public class ReleaseUseItemActionClip extends ItemActionClip
         }
 
         player.setCurrentHand(hand);
-        stack.onStoppedUsing(player.getWorld(), player, Math.max(0, stack.getMaxUseTime() - this.charge.get()));
+        stack.onStoppedUsing(player.getWorld(), player, Math.max(0, VersionCompat.getMaxUseTime(stack, player) - this.charge.get()));
         player.clearActiveItem();
         player.setStackInHand(hand, ItemStack.EMPTY);
         player.setStackInHand(other, ItemStack.EMPTY);
@@ -98,10 +99,8 @@ public class ReleaseUseItemActionClip extends ItemActionClip
      */
     private void applyRiptide(LivingEntity actor, SuperFakePlayer player, ItemStack stack)
     {
-        int level = EnchantmentHelper.getRiptide(stack);
-        SoundEvent sound = level >= 3
-            ? SoundEvents.ITEM_TRIDENT_RIPTIDE_3
-            : (level == 2 ? SoundEvents.ITEM_TRIDENT_RIPTIDE_2 : SoundEvents.ITEM_TRIDENT_RIPTIDE_1);
+        int level = VersionCompat.getRiptideLevel(stack, actor == null ? player : actor);
+        SoundEvent sound = VersionCompat.getRiptideSound(level);
 
         /* The spin is tracked data, so this is what makes every client show
          * the body whirling - the animator poses it from the same flag.
@@ -110,7 +109,11 @@ public class ReleaseUseItemActionClip extends ItemActionClip
          * own tick counts the spin down and clears the flag from there. */
         if (actor instanceof PlayerEntity playerActor)
         {
+            //? if >=1.21 {
+            /*playerActor.useRiptide(20, 0F, stack);
+            *///?} else {
             playerActor.useRiptide(20);
+            //?}
         }
         else if (actor != null)
         {

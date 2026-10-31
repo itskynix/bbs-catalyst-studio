@@ -39,6 +39,8 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.gui.recording;
 
+import mchorse.bbs_mod.utils.EffectCompat;
+import mchorse.bbs_mod.utils.VersionCompat;
 import mchorse.bbs_mod.camera.pov.actions.clip.GuiPovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.gui.CreativeInventoryTabs;
 import mchorse.bbs_mod.camera.pov.actions.gui.GuiRecipeBook;
@@ -268,9 +270,9 @@ public final class GuiSnapshotCapture {
 
     private static BeaconSnapshot captureBeacon(Screen screen, String guiType) {
         if ("beacon".equals(guiType) && screen instanceof HandledScreen<?> handled && handled.getScreenHandler() instanceof BeaconScreenHandler beacon) {
-            StatusEffect primary = handled instanceof BeaconScreenPovAccess accessor ? accessor.bbsPov$getPrimaryEffect() : beacon.getPrimaryEffect();
-            StatusEffect secondary = handled instanceof BeaconScreenPovAccess accessorx ? accessorx.bbsPov$getSecondaryEffect() : beacon.getSecondaryEffect();
-            int secondaryIndex = secondary == StatusEffects.REGENERATION ? 1 : (secondary != null && secondary == primary ? 2 : 0);
+            StatusEffect primary = handled instanceof BeaconScreenPovAccess accessor ? EffectCompat.value(accessor.bbsPov$getPrimaryEffect()) : EffectCompat.value(beacon.getPrimaryEffect());
+            StatusEffect secondary = handled instanceof BeaconScreenPovAccess accessorx ? EffectCompat.value(accessorx.bbsPov$getSecondaryEffect()) : EffectCompat.value(beacon.getSecondaryEffect());
+            int secondaryIndex = secondary == EffectCompat.value(StatusEffects.REGENERATION) ? 1 : (secondary != null && secondary == primary ? 2 : 0);
             return new BeaconSnapshot(GuiSnapshotCapture.beaconPrimaryIndex(primary), secondaryIndex, beacon.getProperties());
         }
         return null;
@@ -320,7 +322,9 @@ public final class GuiSnapshotCapture {
                 StringVisitable visitable = contents.getPage(i);
                 if (visitable instanceof Text) {
                     Text text = (Text)visitable;
-                    //? if >=1.20.4 {
+                    //? if >=1.21 {
+                    /*pages.add(Text.Serialization.toJsonString((Text)text, VersionCompat.lookup(MinecraftClient.getInstance().world)));
+                    *///?} else if >=1.20.4 {
                     pages.add(Text.Serialization.toJsonString((Text)text));
                     //?} else {
                     /*pages.add(Text.Serializer.toJson((Text)text));
@@ -413,19 +417,19 @@ public final class GuiSnapshotCapture {
     }
 
     private static int beaconPrimaryIndex(StatusEffect effect) {
-        if (effect == StatusEffects.SPEED) {
+        if (effect == EffectCompat.value(StatusEffects.SPEED)) {
             return 1;
         }
-        if (effect == StatusEffects.HASTE) {
+        if (effect == EffectCompat.value(StatusEffects.HASTE)) {
             return 2;
         }
-        if (effect == StatusEffects.RESISTANCE) {
+        if (effect == EffectCompat.value(StatusEffects.RESISTANCE)) {
             return 3;
         }
-        if (effect == StatusEffects.JUMP_BOOST) {
+        if (effect == EffectCompat.value(StatusEffects.JUMP_BOOST)) {
             return 4;
         }
-        if (effect == StatusEffects.STRENGTH) {
+        if (effect == EffectCompat.value(StatusEffects.STRENGTH)) {
             return 5;
         }
         return 0;

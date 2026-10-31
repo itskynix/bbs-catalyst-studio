@@ -23,6 +23,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.gui.render.screen;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.camera.pov.actions.clip.GuiPovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.gui.CreativeInventoryTabs;
 import mchorse.bbs_mod.camera.pov.actions.gui.GuiSlotSchema;
@@ -84,6 +85,9 @@ GuiScreenChrome {
         int page = MathHelper.clamp((int)((Integer)ctx.clip.creativePage.interpolate(ctx.localTick, 0)), (int)0, (int)CreativeInventoryTabs.maxPage());
         CreativeGuiRenderer.drawTabBackgrounds(ctx.batcher, group, page, false);
         ctx.batcher.flush();
+        //? if >=1.21 {
+        /*Identifier texture = group != null && group.getTexture() != null ? group.getTexture() : Ids.of("minecraft", "textures/gui/container/creative_inventory/tab_items.png");
+        *///?} else {
         Object tabName = "tab_items.png";
         if (group != null) {
             if (group.getType() == ItemGroup.Type.INVENTORY) {
@@ -100,7 +104,8 @@ GuiScreenChrome {
         if (!((String)tabName).endsWith(".png")) {
             tabName = (String)tabName + ".png";
         }
-        Identifier texture = new Identifier("minecraft", "textures/gui/container/creative_inventory/" + (String)tabName);
+        Identifier texture = Ids.of("minecraft", "textures/gui/container/creative_inventory/" + (String)tabName);
+        //?}
         ctx.batcher.getContext().drawTexture(texture, 0, 0, 0.0f, 0.0f, 195, 136, 256, 256);
         ctx.batcher.getContext().draw();
         CreativeGuiRenderer.drawTabBackgrounds(ctx.batcher, group, page, true);
@@ -147,12 +152,12 @@ GuiScreenChrome {
             Element focused;
             boolean prevHover = GuiTextRenderer.inBounds(cursorX, cursorY, 0, -50, 20, 20);
             int prevTextColor = prevHover ? -96 : -1;
-            batcher.drawGuiTexture(prevHover ? new Identifier("widget/button_highlighted") : new Identifier("widget/button"), 0, -50, 20, 20);
+            batcher.drawGuiTexture(prevHover ? Ids.of("widget/button_highlighted") : Ids.of("widget/button"), 0, -50, 20, 20);
             int prevW = MinecraftClient.getInstance().textRenderer.getWidth("<");
             batcher.getContext().drawTextWithShadow(MinecraftClient.getInstance().textRenderer, (Text)Text.literal((String)"<"), 0 + (20 - prevW) / 2, -44, prevTextColor);
             boolean nextHover = GuiTextRenderer.inBounds(cursorX, cursorY, 175, -50, 20, 20);
             int nextTextColor = nextHover ? -96 : -1;
-            batcher.drawGuiTexture(nextHover ? new Identifier("widget/button_highlighted") : new Identifier("widget/button"), 175, -50, 20, 20);
+            batcher.drawGuiTexture(nextHover ? Ids.of("widget/button_highlighted") : Ids.of("widget/button"), 175, -50, 20, 20);
             int nextW = MinecraftClient.getInstance().textRenderer.getWidth(">");
             batcher.getContext().drawTextWithShadow(MinecraftClient.getInstance().textRenderer, (Text)Text.literal((String)">"), 175 + (20 - nextW) / 2, -44, nextTextColor);
             String pageStr = page + 1 + " / " + (maxPage + 1);
@@ -267,7 +272,7 @@ GuiScreenChrome {
             if (selected.hasScrollbar()) {
                 float scroll = maxFirstRow == 0 ? 0.0f : (float)firstRow / (float)maxFirstRow;
                 int scrollY = 18 + Math.round(scroll * 95.0f);
-                batcher.drawGuiTexture(new Identifier("container/creative_inventory/scroller"), 175, scrollY, 12, 15);
+                batcher.drawGuiTexture(Ids.of("container/creative_inventory/scroller"), 175, scrollY, 12, 15);
             }
         } else {
             GuiEquipmentRenderer.renderEmptyEquipmentSlots(batcher, clip, "creative_inventory", localTick);
@@ -340,7 +345,7 @@ GuiScreenChrome {
             int tabX = CreativeInventoryTabs.isSpecial(group, page) ? 195 - 27 * (7 - column) + 1 : 27 * column;
             int tabY = top ? -28 : 132;
             String sprite = "container/creative_inventory/tab_" + (top ? "top_" : "bottom_") + (active ? "selected_" : "unselected_") + (column + 1);
-            batcher.drawGuiTexture(new Identifier(sprite), tabX, tabY, 26, 32);
+            batcher.drawGuiTexture(Ids.of(sprite), tabX, tabY, 26, 32);
         }
     }
 
@@ -370,9 +375,15 @@ GuiScreenChrome {
         List<ItemStack> results = null;
         try {
             if (lowered.startsWith("#")) {
+                //? if >=1.21
+                /*SearchProvider<ItemStack> tags = client.getNetworkHandler().getSearchManager().getItemTagReloadFuture();*/
+                //? if <1.21
                 SearchProvider<ItemStack> tags = client.getSearchProvider(SearchManager.ITEM_TAG);
                 results = tags == null ? List.of() : new ArrayList<ItemStack>(tags.findAll(lowered.substring(1)));
             } else {
+                //? if >=1.21
+                /*SearchProvider<ItemStack> tooltips = client.getNetworkHandler().getSearchManager().getItemTooltipReloadFuture();*/
+                //? if <1.21
                 SearchProvider<ItemStack> tooltips = client.getSearchProvider(SearchManager.ITEM_TOOLTIP);
                 if (tooltips != null) {
                     results = new ArrayList<ItemStack>(tooltips.findAll(lowered));

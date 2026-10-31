@@ -25,6 +25,8 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.gui.render.screen;
 
+import mchorse.bbs_mod.utils.ModelRender;
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.camera.pov.actions.clip.GuiPovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.gui.data.EnchantmentSnapshot;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.GuiPointerHover;
@@ -61,12 +63,12 @@ public final class EnchantingGuiRenderer
 implements GuiRenderer,
 GuiScreenChrome {
     public static final EnchantingGuiRenderer INSTANCE = new EnchantingGuiRenderer();
-    private static final Identifier ENCHANTING_BOOK_TEXTURE = new Identifier("textures/entity/enchanting_table_book.png");
-    private static final Identifier ENCHANTMENT_SLOT = new Identifier("container/enchanting_table/enchantment_slot");
-    private static final Identifier ENCHANTMENT_SLOT_HIGHLIGHTED = new Identifier("container/enchanting_table/enchantment_slot_highlighted");
-    private static final Identifier ENCHANTMENT_SLOT_DISABLED = new Identifier("container/enchanting_table/enchantment_slot_disabled");
-    private static final Identifier[] ENCHANTMENT_LEVELS = new Identifier[]{new Identifier("container/enchanting_table/level_1"), new Identifier("container/enchanting_table/level_2"), new Identifier("container/enchanting_table/level_3")};
-    private static final Identifier[] ENCHANTMENT_LEVELS_DISABLED = new Identifier[]{new Identifier("container/enchanting_table/level_1_disabled"), new Identifier("container/enchanting_table/level_2_disabled"), new Identifier("container/enchanting_table/level_3_disabled")};
+    private static final Identifier ENCHANTING_BOOK_TEXTURE = Ids.of("textures/entity/enchanting_table_book.png");
+    private static final Identifier ENCHANTMENT_SLOT = Ids.of("container/enchanting_table/enchantment_slot");
+    private static final Identifier ENCHANTMENT_SLOT_HIGHLIGHTED = Ids.of("container/enchanting_table/enchantment_slot_highlighted");
+    private static final Identifier ENCHANTMENT_SLOT_DISABLED = Ids.of("container/enchanting_table/enchantment_slot_disabled");
+    private static final Identifier[] ENCHANTMENT_LEVELS = new Identifier[]{Ids.of("container/enchanting_table/level_1"), Ids.of("container/enchanting_table/level_2"), Ids.of("container/enchanting_table/level_3")};
+    private static final Identifier[] ENCHANTMENT_LEVELS_DISABLED = new Identifier[]{Ids.of("container/enchanting_table/level_1_disabled"), Ids.of("container/enchanting_table/level_2_disabled"), Ids.of("container/enchanting_table/level_3_disabled")};
     private static BookModel enchantingBook;
 
     private EnchantingGuiRenderer() {
@@ -109,7 +111,7 @@ GuiScreenChrome {
         float rightPage = MathHelper.clamp((float)(MathHelper.fractionalPart((float)(page + 0.75f)) * 1.6f - 0.3f), (float)0.0f, (float)1.0f);
         enchantingBook.setPageAngles(0.0f, leftPage, rightPage, open);
         VertexConsumer vertexConsumer = batcher.getContext().getVertexConsumers().getBuffer(enchantingBook.getLayer(ENCHANTING_BOOK_TEXTURE));
-        enchantingBook.render(matrices, vertexConsumer, 0xF000F0, OverlayTexture.DEFAULT_UV, 1.0f, 1.0f, 1.0f, opacity);
+        ModelRender.model(enchantingBook, matrices, vertexConsumer, 0xF000F0, OverlayTexture.DEFAULT_UV, 1.0f, 1.0f, 1.0f, opacity);
         batcher.getContext().draw();
         matrices.pop();
         RenderSystem.clear((int)256, (boolean)MinecraftClient.IS_SYSTEM_MAC);
@@ -181,12 +183,20 @@ GuiScreenChrome {
     }
 
     private static List<Text> enchantmentClueTooltip(int enchantmentId, int enchantmentLevel, int power, int lapisCost, int lapisCount, int playerLevel, boolean creative) {
+        //? if >=1.21 {
+        /*net.minecraft.registry.entry.RegistryEntry<Enchantment> enchantment = MinecraftClient.getInstance().world == null ? null : MinecraftClient.getInstance().world.getRegistryManager().get(net.minecraft.registry.RegistryKeys.ENCHANTMENT).getEntry(enchantmentId).orElse(null);
+        *///?} else {
         Enchantment enchantment = Enchantment.byRawId((int)enchantmentId);
+        //?}
         if (enchantment == null || enchantmentLevel < 0 || power <= 0) {
             return List.of();
         }
         ArrayList<Text> lines = new ArrayList<Text>();
+        //? if >=1.21 {
+        /*lines.add((Text)Text.translatable((String)"container.enchant.clue", (Object[])new Object[]{Enchantment.getName(enchantment, enchantmentLevel)}).formatted(Formatting.WHITE));
+        *///?} else {
         lines.add((Text)Text.translatable((String)"container.enchant.clue", (Object[])new Object[]{enchantment.getName(enchantmentLevel)}).formatted(Formatting.WHITE));
+        //?}
         if (creative) {
             return lines;
         }

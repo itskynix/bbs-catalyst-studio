@@ -25,11 +25,19 @@ public class MobPickerVertexConsumer implements VertexConsumer
         this.consumer = consumer;
     }
 
+    //? if >=1.21 {
+    /*@Override
+    public VertexConsumer vertex(float x, float y, float z)
+    {
+        return this.consumer.vertex(x, y, z);
+    }
+    *///?} else {
     @Override
     public VertexConsumer vertex(double x, double y, double z)
     {
         return this.consumer.vertex(x, y, z);
     }
+    //?}
 
     @Override
     public VertexConsumer color(int red, int green, int blue, int alpha)
@@ -61,6 +69,7 @@ public class MobPickerVertexConsumer implements VertexConsumer
         return this.consumer.normal(x, y, z);
     }
 
+    //? if <1.21 {
     @Override
     public void next()
     {
@@ -78,4 +87,5 @@ public class MobPickerVertexConsumer implements VertexConsumer
     {
         this.consumer.unfixColor();
     }
+    //?}
 }

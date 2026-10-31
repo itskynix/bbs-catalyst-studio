@@ -22,6 +22,7 @@
  */
 package mchorse.bbs_mod.camera.pov.hand.playback;
 
+import mchorse.bbs_mod.utils.VersionCompat;
 import mchorse.bbs_mod.camera.pov.bodypart.PovBodyPartPlayback;
 import mchorse.bbs_mod.camera.pov.editor.UIPovHandEditor;
 import mchorse.bbs_mod.camera.pov.hand.HandState;
@@ -202,7 +203,7 @@ public final class HandPlaybackSession {
             this.living.bbsPov$setLivingFlag(1, isUsing);
             this.living.bbsPov$setLivingFlag(2, this.state.activeHand == Hand.OFF_HAND);
             this.living.bbsPov$setActiveItemStack(activeStack);
-            int maxUse = activeStack.getMaxUseTime() > 0 ? activeStack.getMaxUseTime() : 32;
+            int maxUse = VersionCompat.getMaxUseTime(activeStack, null) > 0 ? VersionCompat.getMaxUseTime(activeStack, null) : 32;
             int remaining = Math.max(1, (int)Math.floor((float)maxUse - this.state.useTime));
             this.living.bbsPov$setItemUseTimeLeft(isUsing ? remaining : 0);
             this.player.horizontalSpeed = 0.0f;
@@ -255,7 +256,7 @@ public final class HandPlaybackSession {
         }
         ItemStack handStack = this.state.activeHand == Hand.OFF_HAND ? this.state.offHand : this.state.mainHand;
         ItemStack activeStack = this.state.activeItem.isEmpty() ? handStack : this.state.activeItem;
-        int maxUse = activeStack.getMaxUseTime() > 0 ? activeStack.getMaxUseTime() : 32;
+        int maxUse = VersionCompat.getMaxUseTime(activeStack, null) > 0 ? VersionCompat.getMaxUseTime(activeStack, null) : 32;
         float desiredRemaining = Math.max(1.0f, (float)maxUse - this.state.useTime);
         int storedRemaining = Math.max(1, (int)Math.floor(desiredRemaining));
         return Math.max(0.0f, Math.min(1.0f, (float)storedRemaining + 1.0f - desiredRemaining));

@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.BBSSettings;
+import mchorse.bbs_mod.forms.FormPortals;
 import mchorse.bbs_mod.audio.AudioRenderer;
 import mchorse.bbs_mod.camera.clips.misc.AudioClip;
 import mchorse.bbs_mod.camera.controller.ICameraController;
@@ -230,6 +231,16 @@ public class Films
      */
     public void startRecording(Film film, int replayId, int tick, boolean onMark)
     {
+        /* Another player is recording this replay or working on it: no take is started at all */
+        mchorse.bbs_mod.network.StudioLocks.Entry busy = mchorse.bbs_mod.network.StudioLocks.busy(film.getId(), replayId);
+
+        if (busy != null)
+        {
+            mchorse.bbs_mod.network.StudioLocks.notifyBusy(busy);
+
+            return;
+        }
+
         Morph morph = Morph.getMorph(MinecraftClient.getInstance().player);
         Replay replay = CollectionUtils.getSafe(film.replays.getList(), replayId);
 
@@ -283,6 +294,25 @@ public class Films
         }
 
         return multiRecorder;
+    }
+
+    /**
+     * The server would not have this take (someone else has the replay): the recording stops and
+     * is thrown away - nothing of it reaches the film, and the server is not told to stop what it
+     * never started.
+     */
+    public void cancelRecording(String filmId)
+    {
+        Recorder recorder = this.recorder;
+
+        if (recorder == null || recorder.film == null || !recorder.film.getId().equals(filmId))
+        {
+            return;
+        }
+
+        this.recorder = null;
+        MultiTrackReplaySession.reset();
+        recorder.shutdown();
     }
 
     public Recorder stopRecording()
@@ -476,6 +506,8 @@ public class Films
 
     public void render(WorldRenderContext context)
     {
+        FormPortals.setContext(context);
+
         RenderSystem.enableDepthTest();
 
         for (BaseFilmController controller : this.controllers)

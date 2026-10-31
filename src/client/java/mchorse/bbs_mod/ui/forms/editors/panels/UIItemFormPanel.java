@@ -43,6 +43,12 @@ public class UIItemFormPanel extends UIFormPanel<ItemForm>
         this.options.add(UIValues.color(() -> this.form.color).withAlpha(), UI.labelRow(UIKeys.FORMS_EDITORS_ITEM_TRANSFORMS, this.modelTransform), this.itemStackEditor);
     }
 
+    @Override
+    public void finishEdit()
+    {
+        super.finishEdit();
+    }
+
     private void setModelTransform(ModelTransformationMode value)
     {
         this.form.modelTransform.set(value);

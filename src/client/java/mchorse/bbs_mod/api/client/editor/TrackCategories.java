@@ -17,7 +17,7 @@ public final class TrackCategories
 {
     private record Entry(TrackCategory category, BiPredicate<TrackId, Boolean> matches) {}
     private static final List<TrackCategory> categories = new ArrayList<>(List.of(
-        TrackCategory.REPLAY, TrackCategory.FORM, TrackCategory.POSE, TrackCategory.IK, TrackCategory.PHYSICS));
+        TrackCategory.REPLAY, TrackCategory.FORM, TrackCategory.POSE, TrackCategory.IK, TrackCategory.PHYSICS, TrackCategory.AUDIO));
     private static final List<Entry> addons = new ArrayList<>();
     private static final List<KeyCombo> shortcuts = new ArrayList<>();
     private static boolean frozen;
@@ -74,8 +74,25 @@ public final class TrackCategories
             return TrackCategory.REPLAY;
         }
 
+        String prop = StringUtils.fileName(id);
 
-        return FormUtils.isPoseProperty(StringUtils.fileName(id)) ? TrackCategory.POSE : TrackCategory.FORM;
+        if (isAudioProperty(prop))
+        {
+            return TrackCategory.AUDIO;
+        }
+
+        return FormUtils.isPoseProperty(prop) ? TrackCategory.POSE : TrackCategory.FORM;
+    }
+
+    public static boolean isAudioProperty(String name)
+    {
+        return "volume".equals(name)
+            || "pitch".equals(name)
+            || "radius".equals(name)
+            || "pan".equals(name)
+            || "offset".equals(name)
+            || "occlusionFactor".equals(name)
+            || "occlusion".equals(name);
     }
 
     /** Called once after category registration, before loading keybind settings. */

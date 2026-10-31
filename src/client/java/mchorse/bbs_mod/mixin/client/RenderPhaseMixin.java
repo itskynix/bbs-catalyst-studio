@@ -47,7 +47,7 @@ public abstract class RenderPhaseMixin
             recordingGlintAnchor = timeMs;
         }
 
-        double ticks = videoRecorder.serverTicks + MinecraftClient.getInstance().getTickDelta();
+        double ticks = videoRecorder.serverTicks + MinecraftClient.getInstance()./*$ gtd*/getTickDelta()/**/;
 
         return recordingGlintAnchor + (long) (ticks * 50D);
     }

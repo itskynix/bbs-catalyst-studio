@@ -8,6 +8,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.gui.render.screen;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.camera.pov.actions.clip.GuiPovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.GuiRenderContext;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.GuiRenderer;
@@ -23,12 +24,12 @@ public final class FurnaceGuiRenderer
 implements GuiRenderer,
 GuiScreenChrome {
     public static final FurnaceGuiRenderer INSTANCE = new FurnaceGuiRenderer();
-    private static final Identifier FURNACE_LIT = new Identifier("container/furnace/lit_progress");
-    private static final Identifier FURNACE_COOK = new Identifier("container/furnace/burn_progress");
-    private static final Identifier BLAST_FURNACE_LIT = new Identifier("container/blast_furnace/lit_progress");
-    private static final Identifier BLAST_FURNACE_COOK = new Identifier("container/blast_furnace/burn_progress");
-    private static final Identifier SMOKER_LIT = new Identifier("container/smoker/lit_progress");
-    private static final Identifier SMOKER_COOK = new Identifier("container/smoker/burn_progress");
+    private static final Identifier FURNACE_LIT = Ids.of("container/furnace/lit_progress");
+    private static final Identifier FURNACE_COOK = Ids.of("container/furnace/burn_progress");
+    private static final Identifier BLAST_FURNACE_LIT = Ids.of("container/blast_furnace/lit_progress");
+    private static final Identifier BLAST_FURNACE_COOK = Ids.of("container/blast_furnace/burn_progress");
+    private static final Identifier SMOKER_LIT = Ids.of("container/smoker/lit_progress");
+    private static final Identifier SMOKER_COOK = Ids.of("container/smoker/burn_progress");
 
     private FurnaceGuiRenderer() {
     }

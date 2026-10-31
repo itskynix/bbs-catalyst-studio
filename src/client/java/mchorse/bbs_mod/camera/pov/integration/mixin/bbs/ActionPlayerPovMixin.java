@@ -34,15 +34,15 @@ public abstract class ActionPlayerPovMixin {
     @Unique
     private boolean bbsPov$protectedPlayer;
 
-    @Redirect(method={"<init>"}, at=@At(value="INVOKE", target="Lmchorse/bbs_mod/actions/ActionPlayer;applyFilmPlayerSettingsTo"))
+    @Redirect(method={"init"}, at=@At(value="INVOKE", target="Lmchorse/bbs_mod/actions/ActionPlayer;applyFilmPlayerSettingsTo"))
     private void bbsPov$preserveRealHealth(ServerPlayerEntity player, float filmHealth, float filmHunger, int filmXpLevel, float filmXpProgress) {
         float safeHealth = Math.max(1.0f, player.getHealth());
         ActionPlayer.applyFilmPlayerSettingsTo((ServerPlayerEntity)player, (float)safeHealth, (float)filmHunger, (int)filmXpLevel, (float)filmXpProgress);
     }
 
-    @Inject(method={"<init>"}, at={@At(value="RETURN")})
+    @Inject(method={"init"}, at={@At(value="RETURN")})
     private void bbsPov$protectBorrowedPlayer(CallbackInfo info) {
-        if (this.borrowedEquipment && this.serverPlayer != null) {
+        if (!this.bbsPov$protectedPlayer && this.borrowedEquipment && this.serverPlayer != null) {
             this.serverPlayer.hurtTime = 0;
             this.serverPlayer.maxHurtTime = 0;
             PovPlayerProtection.acquire(this.serverPlayer);

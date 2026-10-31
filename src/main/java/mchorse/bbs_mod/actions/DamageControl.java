@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.actions;
 
+import mchorse.bbs_mod.utils.VersionCompat;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.entity.ActorEntity;
 import net.minecraft.block.BlockState;
@@ -103,7 +104,7 @@ public class DamageControl
          * the capture get a copy of their own. */
         BlockPos key = new BlockPos(pos);
 
-        this.blocks.put(key, new BlockCapture(key, state, entity == null ? null : entity.createNbtWithId()));
+        this.blocks.put(key, new BlockCapture(key, state, entity == null ? null : VersionCompat.createNbtWithId(entity)));
     }
 
     /**
@@ -200,7 +201,7 @@ public class DamageControl
 
             if (block.blockEntity != null)
             {
-                BlockEntity blockEntity = BlockEntity.createFromNbt(block.pos, block.lastState, block.blockEntity);
+                BlockEntity blockEntity = VersionCompat.createBlockEntity(this.world, block.pos, block.lastState, block.blockEntity);
 
                 /* Null when the block entity's type is gone - a mod removed since the take was
                  * captured. The block itself is already back, which is the most that can be

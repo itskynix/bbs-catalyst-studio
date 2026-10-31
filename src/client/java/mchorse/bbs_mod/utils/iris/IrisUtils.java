@@ -23,9 +23,21 @@ import net.irisshaders.iris.shaderpack.option.menu.OptionMenuElementScreen;
 import net.irisshaders.iris.shaderpack.option.menu.OptionMenuLinkElement;
 import net.irisshaders.iris.shaderpack.option.menu.OptionMenuOptionElement;
 import net.irisshaders.iris.shaderpack.properties.ShaderProperties;
+//? if >=1.21 {
+/*import net.irisshaders.iris.pbr.TextureTracker;
+*///?} else {
 import net.irisshaders.iris.texture.TextureTracker;
+//?}
+//? if >=1.21 {
+/*import net.irisshaders.iris.pbr.texture.PBRTextureManager;
+*///?} else {
 import net.irisshaders.iris.texture.pbr.PBRTextureManager;
+//?}
+//? if >=1.21 {
+/*import net.irisshaders.iris.pbr.loader.PBRTextureLoaderRegistry;
+*///?} else {
 import net.irisshaders.iris.texture.pbr.loader.PBRTextureLoaderRegistry;
+//?}
 import net.irisshaders.iris.uniforms.custom.cached.CachedUniform;
 import net.irisshaders.iris.uniforms.custom.cached.FloatCachedUniform;
 import net.irisshaders.iris.uniforms.custom.cached.IntCachedUniform;
@@ -220,6 +232,9 @@ public class IrisUtils
 
         if (pipeline != null)
         {
+            //? if >=1.21
+            /*pipeline.setIsMainBound(bound);*/
+            //? if <1.21
             pipeline.getRenderTargetStateListener().setIsMainBound(bound);
         }
     }
@@ -259,7 +274,10 @@ public class IrisUtils
         {
             if (override)
             {
-                pipeline.getRenderTargetStateListener().setIsMainBound(false);
+                //? if >=1.21
+            /*pipeline.setIsMainBound(false);*/
+            //? if <1.21
+            pipeline.getRenderTargetStateListener().setIsMainBound(false);
             }
 
             offscreenDepth += 1;
@@ -280,7 +298,10 @@ public class IrisUtils
 
             if (override)
             {
-                pipeline.getRenderTargetStateListener().setIsMainBound(true);
+                //? if >=1.21
+            /*pipeline.setIsMainBound(true);*/
+            //? if <1.21
+            pipeline.getRenderTargetStateListener().setIsMainBound(true);
             }
 
             if (FramebufferDebug.logging)

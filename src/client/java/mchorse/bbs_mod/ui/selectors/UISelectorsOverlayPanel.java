@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.selectors;
 
+import mchorse.bbs_mod.utils.Ids;
 import com.mojang.brigadier.StringReader;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.BBSModClient;
@@ -70,7 +71,7 @@ public class UISelectorsOverlayPanel extends UIOverlayPanel
 
             try
             {
-                this.current.entity = id.isEmpty() ? null : new Identifier(id);
+                this.current.entity = id.isEmpty() ? null : Ids.of(id);
             }
             catch (Exception e)
             {

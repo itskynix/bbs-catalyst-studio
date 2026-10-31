@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.camera.export;
 
+import mchorse.bbs_mod.l10n.L10n;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.utils.OS;
 import org.lwjgl.opengl.GL11;
@@ -37,9 +38,10 @@ public enum HardwareEncoder
         return this.id;
     }
 
+    /** The label in the current language; the English one written above is the fallback. */
     public IKey getLabel()
     {
-        return this.label;
+        return L10n.lang("bbs.ui.deliver.hardware." + this.name().toLowerCase(), this.label.get());
     }
 
     /**

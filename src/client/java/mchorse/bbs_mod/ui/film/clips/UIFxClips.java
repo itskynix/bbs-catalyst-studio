@@ -4,7 +4,10 @@ import mchorse.bbs_mod.camera.clips.fx.CinematicEffectsClip;
 import mchorse.bbs_mod.camera.clips.fx.ColorGradeClip;
 import mchorse.bbs_mod.camera.clips.fx.EyeClip;
 import mchorse.bbs_mod.camera.clips.fx.GrainClip;
+import mchorse.bbs_mod.camera.clips.fx.LensDistortionClip;
 import mchorse.bbs_mod.camera.clips.fx.LetterboxClip;
+import mchorse.bbs_mod.camera.clips.fx.ScreenShakeClip;
+import mchorse.bbs_mod.camera.clips.fx.MotionBlurClip;
 import mchorse.bbs_mod.camera.clips.fx.ScreenShaderGraphClip;
 import mchorse.bbs_mod.camera.clips.fx.VignetteClip;
 import mchorse.bbs_mod.l10n.L10n;
@@ -63,6 +66,59 @@ public class UIFxClips
         public UIGrainClip(GrainClip clip, IUIClipsDelegate editor)
         {
             super(clip, editor);
+        }
+    }
+
+    public static class UILensDistortionClip extends UIFxClip<LensDistortionClip>
+    {
+        public UILensDistortionClip(LensDistortionClip clip, IUIClipsDelegate editor)
+        {
+            super(clip, editor);
+        }
+    }
+
+    public static class UIScreenShakeClip extends UIFxClip<ScreenShakeClip>
+    {
+        public UIScreenShakeClip(ScreenShakeClip clip, IUIClipsDelegate editor)
+        {
+            super(clip, editor);
+        }
+    }
+
+    public static class UIMotionBlurClip extends UIFxClip<MotionBlurClip>
+    {
+        public UITrackpad shutter;
+        public UITrackpad rotationalMultiplier;
+        public UITrackpad baseBlur;
+        public UITrackpad whipPanMultiplier;
+        public UITrackpad snapThreshold;
+
+        public UIMotionBlurClip(MotionBlurClip clip, IUIClipsDelegate editor)
+        {
+            super(clip, editor);
+        }
+
+        @Override
+        protected void registerUI()
+        {
+            super.registerUI();
+
+            this.shutter = this.trackpad(this.clip.shutter);
+            this.shutter.limit(this.clip.shutter).tooltip(key("shutter"));
+            this.rotationalMultiplier = this.trackpad(this.clip.rotationalMultiplier);
+            this.rotationalMultiplier.limit(this.clip.rotationalMultiplier).tooltip(key("rotational_multiplier"));
+            this.baseBlur = this.trackpad(this.clip.baseBlur);
+            this.baseBlur.limit(this.clip.baseBlur).tooltip(key("base_blur"));
+            this.whipPanMultiplier = this.trackpad(this.clip.whipPanMultiplier);
+            this.whipPanMultiplier.limit(this.clip.whipPanMultiplier).tooltip(key("whip_pan_multiplier"));
+            this.snapThreshold = this.trackpad(this.clip.snapThreshold);
+            this.snapThreshold.limit(this.clip.snapThreshold).tooltip(key("snap_threshold"));
+        }
+
+        @Override
+        protected void addFxPanels()
+        {
+            this.panels.add(this.section(key("motion_blur"), this.shutter, this.rotationalMultiplier, this.baseBlur, this.whipPanMultiplier, this.snapThreshold));
         }
     }
 

@@ -20,10 +20,5 @@ public interface BBSModClientAccessor {
     public static KeyBinding bbsPov$getKeyPlayFilm() {
         throw new AssertionError();
     }
-
-    @Accessor(value="keyRecordVideo")
-    public static KeyBinding bbsPov$getKeyRecordVideo() {
-        throw new AssertionError();
-    }
 }
 

@@ -74,6 +74,7 @@ import mchorse.bbs_mod.ui.forms.editors.panels.widgets.UIItemStack;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.UIScrollView;
 import mchorse.bbs_mod.ui.framework.elements.UISection;
+import mchorse.bbs_mod.ui.framework.elements.buttons.UIButton;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIToggle;
 import mchorse.bbs_mod.ui.framework.elements.utils.ScrollMemory;
 import mchorse.bbs_mod.ui.framework.elements.input.UIColor;
@@ -138,12 +139,16 @@ public abstract class UIClip <T extends Clip> extends UIElement
         register(ImageClip.class, UIImageClip::new);
         register(CurveClientClip.class, UICurveClip::new);
         register(DollyZoomClip.class, UIDollyZoomClip::new);
+        register(mchorse.bbs_mod.camera.clips.modifiers.FovPunchClip.class, UIFovPunchClip::new);
+        register(mchorse.bbs_mod.camera.clips.fx.MotionBlurClip.class, UIFxClips.UIMotionBlurClip::new);
         register(mchorse.bbs_mod.camera.clips.fx.ColorGradeClip.class, UIFxClips.UIColorGradeClip::new);
         register(mchorse.bbs_mod.camera.clips.fx.CinematicEffectsClip.class, UIFxClips.UICinematicEffectsClip::new);
         register(mchorse.bbs_mod.camera.clips.fx.VignetteClip.class, UIFxClips.UIVignetteClip::new);
         register(mchorse.bbs_mod.camera.clips.fx.LetterboxClip.class, UIFxClips.UILetterboxClip::new);
         register(mchorse.bbs_mod.camera.clips.fx.GrainClip.class, UIFxClips.UIGrainClip::new);
         register(mchorse.bbs_mod.camera.clips.fx.EyeClip.class, UIFxClips.UIEyeClip::new);
+        register(mchorse.bbs_mod.camera.clips.fx.LensDistortionClip.class, UIFxClips.UILensDistortionClip::new);
+        register(mchorse.bbs_mod.camera.clips.fx.ScreenShakeClip.class, UIFxClips.UIScreenShakeClip::new);
         register(mchorse.bbs_mod.camera.clips.fx.ScreenShaderGraphClip.class, UIFxClips.UIScreenShaderGraphClip::new);
 
         register(ChatActionClip.class, UIChatActionClip::new);
@@ -373,6 +378,31 @@ public abstract class UIClip <T extends Clip> extends UIElement
     public void editClip(Position position)
     {
         this.fillData();
+    }
+
+    /**
+     * Open the clip's own sub-editor - the keyframe editor behind its "Edit Keyframes" button -
+     * in place of the timeline. Only clips that have one say yes; every other clip has nothing
+     * to open, so a double click on it does nothing.
+     *
+     * @return whether an editor was opened
+     */
+    public boolean openSubEditor()
+    {
+        return false;
+    }
+
+    /** Press the clip's editor button, the same way a click on it would. */
+    protected boolean openSubEditor(UIButton button)
+    {
+        if (button == null || this.editor == null)
+        {
+            return false;
+        }
+
+        button.clickItself();
+
+        return true;
     }
 
     public void fillData()

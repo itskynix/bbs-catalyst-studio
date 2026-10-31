@@ -13,6 +13,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class RenderLayerMixin
 {
     @Inject(method = "draw", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/RenderLayer;startDrawing()V", ordinal = 0, shift = At.Shift.AFTER))
+    //? if >=1.21
+    /*public void onDraw(net.minecraft.client.render.BuiltBuffer buffer, CallbackInfo info)*/
+    //? if <1.21
     public void onDraw(BufferBuilder buffer, VertexSorter sorter, CallbackInfo info)
     {
         CustomVertexConsumerProvider.drawLayer((RenderLayer) (Object) this);

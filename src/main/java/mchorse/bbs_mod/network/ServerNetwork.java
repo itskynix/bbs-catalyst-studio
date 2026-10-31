@@ -1,5 +1,8 @@
 package mchorse.bbs_mod.network;
 
+import net.minecraft.nbt.NbtCompound;
+import mchorse.bbs_mod.utils.VersionCompat;
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.BBSMod;
 import mchorse.bbs_mod.actions.ActionManager;
 import mchorse.bbs_mod.actions.ActionPlayer;
@@ -32,7 +35,6 @@ import mchorse.bbs_mod.utils.repos.RepositoryOperation;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.fabricmc.fabric.api.networking.v1.PacketSender;
 import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.LivingEntity;
@@ -58,43 +60,53 @@ public class ServerNetwork
     public static final int STATE_TRIGGER_MAIN_HAND_ITEM = 1;
     public static final int STATE_TRIGGER_OFF_HAND_ITEM = 2;
 
-    public static final Identifier CLIENT_CLICKED_MODEL_BLOCK_PACKET = new Identifier(BBSMod.MOD_ID, "c1");
-    public static final Identifier CLIENT_PLAYER_FORM_PACKET = new Identifier(BBSMod.MOD_ID, "c2");
-    public static final Identifier CLIENT_PLAY_FILM_PACKET = new Identifier(BBSMod.MOD_ID, "c3");
-    public static final Identifier CLIENT_MANAGER_DATA_PACKET = new Identifier(BBSMod.MOD_ID, "c4");
-    public static final Identifier CLIENT_STOP_FILM_PACKET = new Identifier(BBSMod.MOD_ID, "c5");
-    public static final Identifier CLIENT_HANDSHAKE = new Identifier(BBSMod.MOD_ID, "c6");
-    public static final Identifier CLIENT_RECORDED_ACTIONS = new Identifier(BBSMod.MOD_ID, "c7");
-    public static final Identifier CLIENT_ANIMATION_STATE_TRIGGER = new Identifier(BBSMod.MOD_ID, "c8");
-    public static final Identifier CLIENT_CHEATS_PERMISSION = new Identifier(BBSMod.MOD_ID, "c9");
-    public static final Identifier CLIENT_SHARED_FORM = new Identifier(BBSMod.MOD_ID, "c10");
-    public static final Identifier CLIENT_ENTITY_FORM = new Identifier(BBSMod.MOD_ID, "c11");
-    public static final Identifier CLIENT_ACTORS = new Identifier(BBSMod.MOD_ID, "c12");
-    public static final Identifier CLIENT_GUN_PROPERTIES = new Identifier(BBSMod.MOD_ID, "c13");
-    public static final Identifier CLIENT_PAUSE_FILM = new Identifier(BBSMod.MOD_ID, "c14");
-    public static final Identifier CLIENT_SELECTED_SLOT = new Identifier(BBSMod.MOD_ID, "c15");
-    public static final Identifier CLIENT_ANIMATION_STATE_MODEL_BLOCK_TRIGGER = new Identifier(BBSMod.MOD_ID, "c16");
-    public static final Identifier CLIENT_REFRESH_MODEL_BLOCKS = new Identifier(BBSMod.MOD_ID, "c17");
-    public static final Identifier CLIENT_REQUEST_FILM_RESYNC = new Identifier(BBSMod.MOD_ID, "c18");
-    public static final Identifier CLIENT_STRUCTURE_SAVED = new Identifier(BBSMod.MOD_ID, "c19");
-    public static final Identifier CLIENT_STRUCTURE_CUT = new Identifier(BBSMod.MOD_ID, "c20");
+    public static final Identifier CLIENT_CLICKED_MODEL_BLOCK_PACKET = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c1"));
+    public static final Identifier CLIENT_PLAYER_FORM_PACKET = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c2"));
+    public static final Identifier CLIENT_PLAY_FILM_PACKET = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c3"));
+    public static final Identifier CLIENT_MANAGER_DATA_PACKET = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c4"));
+    public static final Identifier CLIENT_STOP_FILM_PACKET = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c5"));
+    public static final Identifier CLIENT_HANDSHAKE = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c6"));
+    public static final Identifier CLIENT_RECORDED_ACTIONS = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c7"));
+    public static final Identifier CLIENT_ANIMATION_STATE_TRIGGER = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c8"));
+    public static final Identifier CLIENT_CHEATS_PERMISSION = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c9"));
+    public static final Identifier CLIENT_SHARED_FORM = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c10"));
+    public static final Identifier CLIENT_ENTITY_FORM = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c11"));
+    public static final Identifier CLIENT_ACTORS = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c12"));
+    public static final Identifier CLIENT_GUN_PROPERTIES = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c13"));
+    public static final Identifier CLIENT_PAUSE_FILM = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c14"));
+    public static final Identifier CLIENT_SELECTED_SLOT = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c15"));
+    public static final Identifier CLIENT_ANIMATION_STATE_MODEL_BLOCK_TRIGGER = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c16"));
+    public static final Identifier CLIENT_REFRESH_MODEL_BLOCKS = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c17"));
+    public static final Identifier CLIENT_REQUEST_FILM_RESYNC = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c18"));
+    public static final Identifier CLIENT_STRUCTURE_SAVED = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c19"));
+    public static final Identifier CLIENT_STRUCTURE_CUT = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c20"));
+    /** Every editing hold on the server (films, picked replays, live recordings), mirrored by the clients */
+    public static final Identifier CLIENT_STUDIO_LOCKS = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c21"));
+    /** A live recording the server would not start: someone else has that replay */
+    public static final Identifier CLIENT_RECORDING_DENIED = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c22"));
+    /** A replay (index), or the whole list of replays (-1), of a film changed by another player */
+    public static final Identifier CLIENT_REPLAY_SYNC = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c23"));
 
-    public static final Identifier SERVER_MODEL_BLOCK_FORM_PACKET = new Identifier(BBSMod.MOD_ID, "s1");
-    public static final Identifier SERVER_MODEL_BLOCK_TRANSFORMS_PACKET = new Identifier(BBSMod.MOD_ID, "s2");
-    public static final Identifier SERVER_PLAYER_FORM_PACKET = new Identifier(BBSMod.MOD_ID, "s3");
-    public static final Identifier SERVER_MANAGER_DATA_PACKET = new Identifier(BBSMod.MOD_ID, "s4");
-    public static final Identifier SERVER_ACTION_RECORDING = new Identifier(BBSMod.MOD_ID, "s5");
-    public static final Identifier SERVER_TOGGLE_FILM = new Identifier(BBSMod.MOD_ID, "s6");
-    public static final Identifier SERVER_ACTION_CONTROL = new Identifier(BBSMod.MOD_ID, "s7");
-    public static final Identifier SERVER_FILM_DATA_SYNC = new Identifier(BBSMod.MOD_ID, "s8");
-    public static final Identifier SERVER_PLAYER_TP = new Identifier(BBSMod.MOD_ID, "s9");
-    public static final Identifier SERVER_ANIMATION_STATE_TRIGGER = new Identifier(BBSMod.MOD_ID, "s10");
-    public static final Identifier SERVER_SHARED_FORM = new Identifier(BBSMod.MOD_ID, "s11");
-    public static final Identifier SERVER_ZOOM = new Identifier(BBSMod.MOD_ID, "s12");
-    public static final Identifier SERVER_PAUSE_FILM = new Identifier(BBSMod.MOD_ID, "s13");
-    public static final Identifier SERVER_APPLY_FILM_PLAYER_SETTINGS = new Identifier(BBSMod.MOD_ID, "s14");
-    public static final Identifier SERVER_SAVE_STRUCTURE = new Identifier(BBSMod.MOD_ID, "s15");
-    public static final Identifier SERVER_CUT_STRUCTURE = new Identifier(BBSMod.MOD_ID, "s16");
+    public static final Identifier SERVER_MODEL_BLOCK_FORM_PACKET = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s1"));
+    public static final Identifier SERVER_MODEL_BLOCK_TRANSFORMS_PACKET = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s2"));
+    public static final Identifier SERVER_PLAYER_FORM_PACKET = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s3"));
+    public static final Identifier SERVER_MANAGER_DATA_PACKET = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s4"));
+    public static final Identifier SERVER_ACTION_RECORDING = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s5"));
+    public static final Identifier SERVER_TOGGLE_FILM = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s6"));
+    public static final Identifier SERVER_ACTION_CONTROL = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s7"));
+    public static final Identifier SERVER_FILM_DATA_SYNC = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s8"));
+    public static final Identifier SERVER_PLAYER_TP = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s9"));
+    public static final Identifier SERVER_ANIMATION_STATE_TRIGGER = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s10"));
+    public static final Identifier SERVER_SHARED_FORM = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s11"));
+    public static final Identifier SERVER_ZOOM = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s12"));
+    public static final Identifier SERVER_PAUSE_FILM = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s13"));
+    public static final Identifier SERVER_APPLY_FILM_PLAYER_SETTINGS = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s14"));
+    public static final Identifier SERVER_SAVE_STRUCTURE = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s15"));
+    public static final Identifier SERVER_CUT_STRUCTURE = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s16"));
+    /** What a player works on in their film editor: film id and replay index (-1 none, empty film: editor closed) */
+    public static final Identifier SERVER_REPLAY_EDITING = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s17"));
+    /** A replay (index) a player changed - a take recorded into it - or the whole list of replays (-1) after one was added, removed or duplicated */
+    public static final Identifier SERVER_REPLAY_SYNC = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s18"));
 
     /* Outgoing (server -> client) chunk numbering only ever needs to be unique per logical
      * message, never per player, so one shared instance is fine here - the risk this class used
@@ -151,22 +163,168 @@ public class ServerNetwork
 
     public static void setup()
     {
-        ServerPlayNetworking.registerGlobalReceiver(SERVER_MODEL_BLOCK_FORM_PACKET, (server, player, handler, buf, responder) -> handleModelBlockFormPacket(server, player, buf));
-        ServerPlayNetworking.registerGlobalReceiver(SERVER_MODEL_BLOCK_TRANSFORMS_PACKET, (server, player, handler, buf, responder) -> handleModelBlockTransformsPacket(server, player, buf));
-        ServerPlayNetworking.registerGlobalReceiver(SERVER_PLAYER_FORM_PACKET, (server, player, handler, buf, responder) -> handlePlayerFormPacket(server, player, buf));
-        ServerPlayNetworking.registerGlobalReceiver(SERVER_MANAGER_DATA_PACKET, (server, player, handler, buf, responder) -> handleManagerDataPacket(server, player, buf));
-        ServerPlayNetworking.registerGlobalReceiver(SERVER_ACTION_RECORDING, (server, player, handler, buf, responder) -> handleActionRecording(server, player, buf));
-        ServerPlayNetworking.registerGlobalReceiver(SERVER_TOGGLE_FILM, (server, player, handler, buf, responder) -> handleToggleFilm(server, player, buf));
-        ServerPlayNetworking.registerGlobalReceiver(SERVER_ACTION_CONTROL, (server, player, handler, buf, responder) -> handleActionControl(server, player, buf));
-        ServerPlayNetworking.registerGlobalReceiver(SERVER_FILM_DATA_SYNC, (server, player, handler, buf, responder) -> handleSyncData(server, player, buf));
-        ServerPlayNetworking.registerGlobalReceiver(SERVER_PLAYER_TP, (server, player, handler, buf, responder) -> handleTeleportPlayer(server, player, buf));
-        ServerPlayNetworking.registerGlobalReceiver(SERVER_ANIMATION_STATE_TRIGGER, (server, player, handler, buf, responder) -> handleAnimationStateTriggerPacket(server, player, buf));
-        ServerPlayNetworking.registerGlobalReceiver(SERVER_SHARED_FORM, (server, player, handler, buf, responder) -> handleSharedFormPacket(server, player, buf));
-        ServerPlayNetworking.registerGlobalReceiver(SERVER_ZOOM, (server, player, handler, buf, responder) -> handleZoomPacket(server, player, buf));
-        ServerPlayNetworking.registerGlobalReceiver(SERVER_PAUSE_FILM, (server, player, handler, buf, responder) -> handlePauseFilmPacket(server, player, buf));
-        ServerPlayNetworking.registerGlobalReceiver(SERVER_APPLY_FILM_PLAYER_SETTINGS, (server, player, handler, buf, responder) -> handleApplyFilmPlayerSettings(server, player, buf));
-        ServerPlayNetworking.registerGlobalReceiver(SERVER_SAVE_STRUCTURE, (server, player, handler, buf, responder) -> handleSaveStructure(server, player, buf));
-        ServerPlayNetworking.registerGlobalReceiver(SERVER_CUT_STRUCTURE, (server, player, handler, buf, responder) -> handleCutStructure(server, player, buf));
+        BBSNetworking.registerServerReceiver(SERVER_MODEL_BLOCK_FORM_PACKET, (server, player, buf) -> handleModelBlockFormPacket(server, player, buf));
+        BBSNetworking.registerServerReceiver(SERVER_MODEL_BLOCK_TRANSFORMS_PACKET, (server, player, buf) -> handleModelBlockTransformsPacket(server, player, buf));
+        BBSNetworking.registerServerReceiver(SERVER_PLAYER_FORM_PACKET, (server, player, buf) -> handlePlayerFormPacket(server, player, buf));
+        BBSNetworking.registerServerReceiver(SERVER_MANAGER_DATA_PACKET, (server, player, buf) -> handleManagerDataPacket(server, player, buf));
+        BBSNetworking.registerServerReceiver(SERVER_ACTION_RECORDING, (server, player, buf) -> handleActionRecording(server, player, buf));
+        BBSNetworking.registerServerReceiver(SERVER_TOGGLE_FILM, (server, player, buf) -> handleToggleFilm(server, player, buf));
+        BBSNetworking.registerServerReceiver(SERVER_ACTION_CONTROL, (server, player, buf) -> handleActionControl(server, player, buf));
+        BBSNetworking.registerServerReceiver(SERVER_FILM_DATA_SYNC, (server, player, buf) -> handleSyncData(server, player, buf));
+        BBSNetworking.registerServerReceiver(SERVER_PLAYER_TP, (server, player, buf) -> handleTeleportPlayer(server, player, buf));
+        BBSNetworking.registerServerReceiver(SERVER_ANIMATION_STATE_TRIGGER, (server, player, buf) -> handleAnimationStateTriggerPacket(server, player, buf));
+        BBSNetworking.registerServerReceiver(SERVER_SHARED_FORM, (server, player, buf) -> handleSharedFormPacket(server, player, buf));
+        BBSNetworking.registerServerReceiver(SERVER_ZOOM, (server, player, buf) -> handleZoomPacket(server, player, buf));
+        BBSNetworking.registerServerReceiver(SERVER_PAUSE_FILM, (server, player, buf) -> handlePauseFilmPacket(server, player, buf));
+        BBSNetworking.registerServerReceiver(SERVER_APPLY_FILM_PLAYER_SETTINGS, (server, player, buf) -> handleApplyFilmPlayerSettings(server, player, buf));
+        BBSNetworking.registerServerReceiver(SERVER_SAVE_STRUCTURE, (server, player, buf) -> handleSaveStructure(server, player, buf));
+        BBSNetworking.registerServerReceiver(SERVER_CUT_STRUCTURE, (server, player, buf) -> handleCutStructure(server, player, buf));
+        BBSNetworking.registerServerReceiver(SERVER_REPLAY_EDITING, (server, player, buf) -> handleReplayEditing(server, player, buf));
+        BBSNetworking.registerServerReceiver(SERVER_REPLAY_SYNC, (server, player, buf) -> handleReplaySync(server, player, buf));
+    }
+
+    /* What each player was last told, and when: the same word is not said again within a few
+     * seconds, however many requests it answers (a take retried every tick, autosaves) */
+    private static final Map<UUID, String> toldKey = new java.util.HashMap<>();
+    private static final Map<UUID, Long> toldTime = new java.util.HashMap<>();
+    private static final long TELL_INTERVAL = 4000L;
+
+    /** Tell the player something, unless they were told the very same thing a moment ago. */
+    public static void tell(ServerPlayerEntity player, String key, Object... args)
+    {
+        long now = System.currentTimeMillis();
+        String said = key + java.util.Arrays.toString(args);
+
+        if (said.equals(toldKey.get(player.getUuid())) && now - toldTime.getOrDefault(player.getUuid(), 0L) < TELL_INTERVAL)
+        {
+            return;
+        }
+
+        toldKey.put(player.getUuid(), said);
+        toldTime.put(player.getUuid(), now);
+        player.sendMessage(net.minecraft.text.Text.translatable(key, args), false);
+    }
+
+    /**
+     * A replay, or the list of replays, changed by a player: written into the film on disk, and
+     * handed to every other player, whose open film takes it in at once. A replay someone else is
+     * recording is not overwritten, and neither is the list while anyone else records in that film
+     * (the indices of the takes would move under them).
+     */
+    private static void handleReplaySync(MinecraftServer server, ServerPlayerEntity player, PacketByteBuf buf)
+    {
+        if (!PermissionUtils.arePanelsAllowed(server, player))
+        {
+            return;
+        }
+
+        getIncomingCrusher(player).receive(buf, (bytes, packetByteBuf) ->
+        {
+            String filmId = packetByteBuf.readString();
+            int index = packetByteBuf.readInt();
+            BaseType data = DataStorageUtils.readFromBytes(bytes);
+
+            server.execute(() ->
+            {
+                if (!EditSessions.isShared(server) || data == null)
+                {
+                    return;
+                }
+
+                EditSessions.Lock held = EditSessions.recordedByOther(player, filmId, index);
+
+                if (held != null)
+                {
+                    tell(player, "bbs.multiplayer.replay_busy", held.playerName);
+
+                    return;
+                }
+
+                FilmManager films = BBSMod.getFilms();
+                Film film = films.load(filmId);
+
+                if (film == null)
+                {
+                    return;
+                }
+
+                if (index < 0)
+                {
+                    if (!data.isList())
+                    {
+                        return;
+                    }
+
+                    film.replays.fromData(data);
+                }
+                else
+                {
+                    if (!data.isMap() || index >= film.replays.getList().size())
+                    {
+                        return;
+                    }
+
+                    film.replays.getList().get(index).fromData(data);
+                }
+
+                films.save(filmId, film.toData().asMap());
+
+                for (ServerPlayerEntity other : server.getPlayerManager().getPlayerList())
+                {
+                    if (other != player)
+                    {
+                        outgoingCrusher.send(other, CLIENT_REPLAY_SYNC, data, (packet) ->
+                        {
+                            packet.writeString(filmId);
+                            packet.writeInt(index);
+                        });
+                    }
+                }
+            });
+        });
+    }
+
+    /* Multiplayer studio */
+
+    /** Send every player the editing holds as they stand now. Only where more than one player can be. */
+    public static void broadcastLocks(MinecraftServer server)
+    {
+        if (!EditSessions.isShared(server))
+        {
+            return;
+        }
+
+        for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList())
+        {
+            sendLocks(player);
+        }
+    }
+
+    public static void sendLocks(ServerPlayerEntity player)
+    {
+        PacketByteBuf buf = PacketByteBufs.create();
+
+        /* First, whether this player may write films at all: without it the client is read only */
+        buf.writeBoolean(player.getServer() != null && PermissionUtils.arePanelsAllowed(player.getServer(), player));
+        EditSessions.write(buf);
+        BBSNetworking.send(player, CLIENT_STUDIO_LOCKS, buf);
+    }
+
+    private static void handleReplayEditing(MinecraftServer server, ServerPlayerEntity player, PacketByteBuf buf)
+    {
+        String film = buf.readString();
+        int replay = buf.readInt();
+
+        server.execute(() ->
+        {
+            if (!EditSessions.isShared(server))
+            {
+                return;
+            }
+
+            EditSessions.setEditing(player, film, replay);
+            broadcastLocks(server);
+        });
     }
 
     /* Handlers */
@@ -194,7 +352,7 @@ public class ServerNetwork
             reply.writeBoolean(false);
             reply.writeString(name);
 
-            ServerPlayNetworking.send(player, CLIENT_STRUCTURE_CUT, reply);
+            BBSNetworking.send(player, CLIENT_STRUCTURE_CUT, reply);
 
             return;
         }
@@ -214,7 +372,7 @@ public class ServerNetwork
             reply.writeBoolean(saved);
             reply.writeString(name);
 
-            ServerPlayNetworking.send(player, CLIENT_STRUCTURE_CUT, reply);
+            BBSNetworking.send(player, CLIENT_STRUCTURE_CUT, reply);
         });
     }
 
@@ -241,7 +399,7 @@ public class ServerNetwork
             reply.writeBoolean(false);
             reply.writeString(name);
 
-            ServerPlayNetworking.send(player, CLIENT_STRUCTURE_SAVED, reply);
+            BBSNetworking.send(player, CLIENT_STRUCTURE_SAVED, reply);
 
             return;
         }
@@ -254,7 +412,7 @@ public class ServerNetwork
             reply.writeBoolean(saved);
             reply.writeString(name);
 
-            ServerPlayNetworking.send(player, CLIENT_STRUCTURE_SAVED, reply);
+            BBSNetworking.send(player, CLIENT_STRUCTURE_SAVED, reply);
         });
     }
 
@@ -308,8 +466,25 @@ public class ServerNetwork
                 {
                     ItemStack stack = player.getEquippedStack(EquipmentSlot.MAINHAND).copy();
 
-                    if (stack.getItem() == BBSMod.MODEL_BLOCK_ITEM) stack.getNbt().getCompound("BlockEntityTag").put("Properties", DataStorageUtils.toNbt(data));
-                    else if (stack.getItem() == BBSMod.GUN_ITEM) stack.getOrCreateNbt().put("GunData", DataStorageUtils.toNbt(data));
+                    if (stack.getItem() == BBSMod.MODEL_BLOCK_ITEM)
+                    {
+                        NbtCompound tag = VersionCompat.getBlockEntityData(stack);
+
+                        if (tag == null)
+                        {
+                            tag = new NbtCompound();
+                        }
+
+                        tag.put("Properties", DataStorageUtils.toNbt(data));
+                        VersionCompat.setBlockEntityData(stack, tag);
+                    }
+                    else if (stack.getItem() == BBSMod.GUN_ITEM)
+                    {
+                        NbtCompound tag = VersionCompat.getOrCreateStackData(stack);
+
+                        tag.put("GunData", DataStorageUtils.toNbt(data));
+                        VersionCompat.setStackData(stack, tag);
+                    }
 
                     player.equipStack(EquipmentSlot.MAINHAND, stack);
                 });
@@ -355,13 +530,49 @@ public class ServerNetwork
         });
     }
 
-    private static void handleManagerDataPacket(MinecraftServer server, ServerPlayerEntity player, PacketByteBuf buf)
+    /** Tell a player the film they tried to write is another player's to edit right now. */
+    private static void tellLocked(ServerPlayerEntity player, EditSessions.Lock held)
     {
-        if (!PermissionUtils.arePanelsAllowed(server, player))
+        tell(player, "bbs.multiplayer.film_locked", held.playerName);
+    }
+
+    /**
+     * Whether the player may look at the films (list, open, backups) without editing them: anyone
+     * allowed to edit, and the guests of a world opened to LAN - the host invited them, and the
+     * films are theirs to watch and study. On a dedicated server it takes the editing permission.
+     */
+    private static boolean canReadFilms(MinecraftServer server, ServerPlayerEntity player)
+    {
+        return PermissionUtils.arePanelsAllowed(server, player) || (!server.isDedicated() && server.isRemote());
+    }
+
+    /**
+     * A request the player has no permission for is still answered - with nothing - so the client's
+     * callback runs: unanswered, a film being opened stayed a black panel and the list stayed empty
+     * with no word why. The player is told what is missing.
+     */
+    private static void denyManagerData(ServerPlayerEntity player, int callbackId, RepositoryOperation op)
+    {
+        tell(player, "bbs.multiplayer.no_permission");
+
+        if (callbackId < 0)
         {
             return;
         }
 
+        if (op == RepositoryOperation.KEYS || op == RepositoryOperation.BACKUPS)
+        {
+            sendManagerData(player, callbackId, op, new ListType());
+        }
+        else
+        {
+            sendManagerData(player, callbackId, op, new ByteType(false));
+        }
+    }
+
+    private static void handleManagerDataPacket(MinecraftServer server, ServerPlayerEntity player, PacketByteBuf buf)
+    {
+        /* The permission is checked per operation inside: reading and writing are not the same */
         getIncomingCrusher(player).receive(buf, (bytes, packetByteBuf) ->
         {
             BaseType rawData = DataStorageUtils.readFromBytes(bytes);
@@ -382,25 +593,82 @@ public class ServerNetwork
 
             RepositoryOperation op = operations[opOrdinal];
             FilmManager films = BBSMod.getFilms();
+            boolean reading = op == RepositoryOperation.LOAD || op == RepositoryOperation.KEYS || op == RepositoryOperation.BACKUPS;
+
+            if (reading ? !canReadFilms(server, player) : !PermissionUtils.arePanelsAllowed(server, player))
+            {
+                denyManagerData(player, callbackId, op);
+
+                return;
+            }
 
             if (op == RepositoryOperation.LOAD)
             {
                 String id = data.getString("id");
                 Film film = films.load(id);
 
+                /* Opening a film for editing takes it for this player's session, unless someone
+                 * else already has it: they still get the film, only their writes are refused */
+                EditSessions.Lock held = film == null ? null : EditSessions.acquire(EditSessions.film(id), player);
+
+                if (held != null)
+                {
+                    tellLocked(player, held);
+                }
+                else
+                {
+                    broadcastLocks(server);
+                }
+
                 sendManagerData(player, callbackId, op, film == null ? new ByteType(false) : film.toData());
             }
             else if (op == RepositoryOperation.SAVE)
             {
-                films.save(data.getString("id"), data.getMap("data"));
+                String id = data.getString("id");
+                EditSessions.Lock held = EditSessions.acquire(EditSessions.film(id), player);
+
+                /* Another player's session has this film open: their work is not overwritten */
+                if (held != null)
+                {
+                    tellLocked(player, held);
+
+                    return;
+                }
+
+                films.save(id, data.getMap("data"));
             }
             else if (op == RepositoryOperation.RENAME)
             {
-                films.rename(data.getString("from"), data.getString("to"));
+                String from = data.getString("from");
+                String to = data.getString("to");
+                EditSessions.Lock held = EditSessions.holder(EditSessions.film(from));
+
+                if (held != null && !held.session.equals(EditSessions.session(player)))
+                {
+                    tellLocked(player, held);
+
+                    return;
+                }
+
+                films.rename(from, to);
+                EditSessions.move(EditSessions.film(from), EditSessions.film(to));
+                broadcastLocks(server);
             }
             else if (op == RepositoryOperation.DELETE)
             {
-                films.delete(data.getString("id"));
+                String id = data.getString("id");
+                EditSessions.Lock held = EditSessions.holder(EditSessions.film(id));
+
+                if (held != null && !held.session.equals(EditSessions.session(player)))
+                {
+                    tellLocked(player, held);
+
+                    return;
+                }
+
+                films.delete(id);
+                EditSessions.release(EditSessions.film(id), player);
+                broadcastLocks(server);
             }
             else if (op == RepositoryOperation.KEYS)
             {
@@ -444,6 +712,29 @@ public class ServerNetwork
         {
             if (recording)
             {
+                /* Someone else is recording this replay, or working on it: the take is refused
+                 * and the player told who has it; their client drops the take it started */
+                if (EditSessions.isShared(server))
+                {
+                    EditSessions.Lock held = EditSessions.startRecording(player, filmId, replayId);
+
+                    if (held != null)
+                    {
+                        tell(player, "bbs.multiplayer.replay_busy", held.playerName);
+
+                        PacketByteBuf denied = PacketByteBufs.create();
+
+                        denied.writeString(filmId);
+                        denied.writeInt(replayId);
+                        denied.writeString(held.playerName);
+                        BBSNetworking.send(player, CLIENT_RECORDING_DENIED, denied);
+
+                        return;
+                    }
+
+                    broadcastLocks(server);
+                }
+
                 Film film = BBSMod.getFilms().load(filmId);
 
                 if (film != null)
@@ -453,6 +744,11 @@ public class ServerNetwork
             }
             else
             {
+                if (EditSessions.isShared(server) && EditSessions.stopRecording(player))
+                {
+                    broadcastLocks(server);
+                }
+
                 ActionRecorder recorder = BBSMod.getActions().stopRecording(player);
 
                 /* Nothing was being recorded - a stop that arrived twice, or after the player
@@ -600,6 +896,14 @@ public class ServerNetwork
         getIncomingCrusher(player).receive(buf, (bytes, packetByteBuf) ->
         {
             String filmId = packetByteBuf.readString();
+            EditSessions.Lock held = EditSessions.holder(EditSessions.film(filmId));
+
+            /* Another player has this film open: live edits from here would land on theirs */
+            if (held != null && !held.session.equals(EditSessions.session(player)))
+            {
+                return;
+            }
+
             List<String> path = new ArrayList<>();
 
             for (int i = 0, c = buf.readInt(); i < c; i++)
@@ -643,12 +947,13 @@ public class ServerNetwork
 
         server.execute(() ->
         {
-            player.requestTeleport(x, y, z);
-
+            /* The angles go first: the position packet sent back carries the ones the player has by then */
             player.setYaw(yaw);
             player.setHeadYaw(yaw);
             player.setBodyYaw(bodyYaw);
             player.setPitch(pitch);
+
+            player.requestTeleport(x, y, z);
         });
     }
 
@@ -669,7 +974,7 @@ public class ServerNetwork
 
         for (ServerPlayerEntity otherPlayer : PlayerLookup.tracking(player))
         {
-            ServerPlayNetworking.send(otherPlayer, CLIENT_ANIMATION_STATE_TRIGGER, newBuf);
+            BBSNetworking.send(otherPlayer, CLIENT_ANIMATION_STATE_TRIGGER, newBuf);
         }
 
         server.execute(() ->
@@ -823,7 +1128,7 @@ public class ServerNetwork
 
         buf.writeBlockPos(pos);
 
-        ServerPlayNetworking.send(player, CLIENT_CLICKED_MODEL_BLOCK_PACKET, buf);
+        BBSNetworking.send(player, CLIENT_CLICKED_MODEL_BLOCK_PACKET, buf);
     }
 
     public static void sendPlayFilm(ServerPlayerEntity player, ServerWorld world, String filmId, boolean withCamera)
@@ -880,7 +1185,7 @@ public class ServerNetwork
 
         buf.writeString(filmId);
 
-        ServerPlayNetworking.send(player, CLIENT_STOP_FILM_PACKET, buf);
+        BBSNetworking.send(player, CLIENT_STOP_FILM_PACKET, buf);
     }
 
     /**
@@ -893,7 +1198,7 @@ public class ServerNetwork
 
         buf.writeString(filmId);
 
-        ServerPlayNetworking.send(player, CLIENT_REQUEST_FILM_RESYNC, buf);
+        BBSNetworking.send(player, CLIENT_REQUEST_FILM_RESYNC, buf);
     }
 
     public static void sendManagerData(ServerPlayerEntity player, int callbackId, RepositoryOperation op, BaseType data)
@@ -917,12 +1222,16 @@ public class ServerNetwork
 
     public static void sendHandshake(MinecraftServer server, PacketSender packetSender)
     {
+        //? if >=1.21 {
+        /*packetSender.sendPacket(BBSNetworking.payload(CLIENT_HANDSHAKE, createHandshakeBuf(server)));
+        *///?} else {
         packetSender.sendPacket(ServerNetwork.CLIENT_HANDSHAKE, createHandshakeBuf(server));
+        //?}
     }
 
     public static void sendHandshake(MinecraftServer server, ServerPlayerEntity player)
     {
-        ServerPlayNetworking.send(player, ServerNetwork.CLIENT_HANDSHAKE, createHandshakeBuf(server));
+        BBSNetworking.send(player, ServerNetwork.CLIENT_HANDSHAKE, createHandshakeBuf(server));
     }
 
     private static PacketByteBuf createHandshakeBuf(MinecraftServer server)
@@ -947,7 +1256,7 @@ public class ServerNetwork
 
         buf.writeBoolean(cheats);
 
-        ServerPlayNetworking.send(player, ServerNetwork.CLIENT_CHEATS_PERMISSION, buf);
+        BBSNetworking.send(player, ServerNetwork.CLIENT_CHEATS_PERMISSION, buf);
     }
 
     public static void sendSharedForm(ServerPlayerEntity player, MapType data)
@@ -978,7 +1287,7 @@ public class ServerNetwork
             buf.writeInt(entry.getValue().getId());
         }
 
-        ServerPlayNetworking.send(player, CLIENT_ACTORS, buf);
+        BBSNetworking.send(player, CLIENT_ACTORS, buf);
     }
 
     /**
@@ -996,7 +1305,7 @@ public class ServerNetwork
         buf.writeString(replayId);
         buf.writeInt(entityId);
 
-        ServerPlayNetworking.send(player, CLIENT_ACTORS, buf);
+        BBSNetworking.send(player, CLIENT_ACTORS, buf);
     }
 
     public static void sendGunProperties(ServerPlayerEntity player, GunProjectileEntity projectile)
@@ -1007,7 +1316,7 @@ public class ServerNetwork
         buf.writeInt(projectile.getEntityId());
         properties.toNetwork(buf);
 
-        ServerPlayNetworking.send(player, CLIENT_GUN_PROPERTIES, buf);
+        BBSNetworking.send(player, CLIENT_GUN_PROPERTIES, buf);
     }
 
     public static void sendPauseFilm(ServerPlayerEntity player, String filmId)
@@ -1016,7 +1325,7 @@ public class ServerNetwork
 
         buf.writeString(filmId);
 
-        ServerPlayNetworking.send(player, CLIENT_PAUSE_FILM, buf);
+        BBSNetworking.send(player, CLIENT_PAUSE_FILM, buf);
     }
 
     public static void sendSelectedSlot(ServerPlayerEntity player, int slot)
@@ -1027,7 +1336,7 @@ public class ServerNetwork
 
         buf.writeInt(slot);
 
-        ServerPlayNetworking.send(player, CLIENT_SELECTED_SLOT, buf);
+        BBSNetworking.send(player, CLIENT_SELECTED_SLOT, buf);
     }
 
     public static void sendModelBlockState(ServerPlayerEntity player, BlockPos pos, String trigger)
@@ -1037,7 +1346,7 @@ public class ServerNetwork
         buf.writeBlockPos(pos);
         buf.writeString(trigger);
 
-        ServerPlayNetworking.send(player, CLIENT_ANIMATION_STATE_MODEL_BLOCK_TRIGGER, buf);
+        BBSNetworking.send(player, CLIENT_ANIMATION_STATE_MODEL_BLOCK_TRIGGER, buf);
     }
 
     public static void sendReloadModelBlocks(ServerPlayerEntity player, int tickRandom)
@@ -1046,6 +1355,6 @@ public class ServerNetwork
 
         buf.writeInt(tickRandom);
 
-        ServerPlayNetworking.send(player, CLIENT_REFRESH_MODEL_BLOCKS, buf);
+        BBSNetworking.send(player, CLIENT_REFRESH_MODEL_BLOCKS, buf);
     }
 }

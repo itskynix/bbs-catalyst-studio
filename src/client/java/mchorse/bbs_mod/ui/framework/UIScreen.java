@@ -11,6 +11,7 @@ import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.utils.IFileDropListener;
 import mchorse.bbs_mod.ui.utils.UIUtils;
 import mchorse.bbs_mod.utils.FFMpegUtils;
+import mchorse.bbs_mod.utils.GuiState;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
@@ -134,6 +135,19 @@ public class UIScreen extends Screen implements IFileDropListener
     @Override
     public void resize(MinecraftClient client, int width, int height)
     {
+        /* onDisplayed() rescales the window, and the client resizes the current screen for that
+         * before it has initialized this one. Since 1.21 the resize reaches setInitialFocus(),
+         * which needs the screen's client, so only the menu is sized here; init() follows. */
+        if (this.client == null)
+        {
+            this.width = width;
+            this.height = height;
+
+            this.menu.resize(width, height);
+
+            return;
+        }
+
         super.resize(client, width, height);
 
         this.menu.resize(width, height);
@@ -241,19 +255,59 @@ public class UIScreen extends Screen implements IFileDropListener
          * world's text, so the pixel art ones are only allowed for the span
          * where BBS's UI is what's being drawn */
         PixelArt.setDrawingUI(true);
+        GuiState.captureBase();
+        restoreGuiState();
+        this.dropStaleClips();
 
         try
         {
             super.render(context, mouseX, mouseY, delta);
 
-            this.menu.context.setTransition(this.client.getTickDelta());
+            this.menu.context.setTransition(this.client./*$ gtd*/getTickDelta()/**/);
             this.menu.renderMenu(this.context, mouseX, mouseY);
             this.menu.context.render.executeRunnables();
         }
         finally
         {
+            /* Whatever still sits in the screen's vertex consumers goes out before the state is
+             * handed back, so text and icons can't land in somebody else's draw */
+            this.context.batcher.getContext().draw();
+
+            restoreGuiState();
             PixelArt.setDrawingUI(false);
         }
+    }
+
+    /**
+     * The state the interface is drawn in. The world pass, the blur and other mods' hooks leave
+     * blending, the shader tint or the depth test in an arbitrary condition, and since 1.21 the
+     * interface relies on it being the plain one.
+     */
+    /**
+     * The screen keeps one draw context for as long as it is open, so a clip that was opened and
+     * never closed (a failed draw in between) would stay on its scissor stack and keep shrinking
+     * what every later frame may paint. Nothing is clipped when a frame starts: pop whatever is left.
+     */
+    private void dropStaleClips()
+    {
+        DrawContext drawContext = this.context.batcher.getContext();
+
+        for (int i = 0; i < 64; i++)
+        {
+            try
+            {
+                drawContext.disableScissor();
+            }
+            catch (IllegalStateException e)
+            {
+                return;
+            }
+        }
+    }
+
+    private static void restoreGuiState()
+    {
+        GuiState.restore();
     }
 
     @Override

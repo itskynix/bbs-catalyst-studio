@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.particles.emitter;
 
+import mchorse.bbs_mod.utils.Bufs;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.camera.Camera;
@@ -454,9 +455,9 @@ public class ParticleEmitter
             this.setParticleVariables(this.uiParticle, transition);
 
             Matrix4f matrix = stack.peek().getPositionMatrix();
-            BufferBuilder builder = Tessellator.getInstance().getBuffer();
+            BufferBuilder builder;
 
-            builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_TEXTURE_COLOR);
+            builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_TEXTURE_COLOR);
 
             for (IComponentParticleRender render : list)
             {
@@ -465,7 +466,7 @@ public class ParticleEmitter
 
             RenderSystem.setShader(GameRenderer::getPositionTexColorProgram);
             RenderSystem.disableCull();
-            BufferRenderer.drawWithGlobalProgram(builder.end());
+            Bufs.draw(builder);
             RenderSystem.enableCull();
         }
     }
@@ -490,10 +491,10 @@ public class ParticleEmitter
         if (!this.particles.isEmpty())
         {
             Matrix4f matrix = stack.peek().getPositionMatrix();
-            BufferBuilder builder = Tessellator.getInstance().getBuffer();
+            BufferBuilder builder;
 
             this.bindTexture();
-            builder.begin(VertexFormat.DrawMode.TRIANGLES, format);
+            builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, format);
 
             for (Particle particle : this.particles)
             {
@@ -523,7 +524,7 @@ public class ParticleEmitter
             }
 
             RenderSystem.disableCull();
-            BufferRenderer.drawWithGlobalProgram(builder.end());
+            Bufs.draw(builder);
             RenderSystem.enableCull();
         }
 

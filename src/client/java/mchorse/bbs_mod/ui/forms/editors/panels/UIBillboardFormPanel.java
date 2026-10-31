@@ -62,4 +62,10 @@ public class UIBillboardFormPanel extends UIFormPanel<BillboardForm>
             UIValues.toggle(UIKeys.FORMS_EDITORS_BILLBOARD_SHADING, () -> this.form.shading)
         );
     }
+
+    @Override
+    public void finishEdit()
+    {
+        super.finishEdit();
+    }
 }

@@ -18,6 +18,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.gui.render.screen;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.camera.pov.actions.clip.GuiPovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.GuiPointerHover;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.GuiRenderContext;
@@ -48,11 +49,11 @@ public final class StonecutterGuiRenderer
 implements GuiRenderer,
 GuiScreenChrome {
     public static final StonecutterGuiRenderer INSTANCE = new StonecutterGuiRenderer();
-    private static final Identifier STONECUTTER_SCROLLER = new Identifier("container/stonecutter/scroller");
-    private static final Identifier STONECUTTER_SCROLLER_DISABLED = new Identifier("container/stonecutter/scroller_disabled");
-    private static final Identifier STONECUTTER_RECIPE = new Identifier("container/stonecutter/recipe");
-    private static final Identifier STONECUTTER_RECIPE_SELECTED = new Identifier("container/stonecutter/recipe_selected");
-    private static final Identifier STONECUTTER_RECIPE_HOVER = new Identifier("container/stonecutter/recipe_highlighted");
+    private static final Identifier STONECUTTER_SCROLLER = Ids.of("container/stonecutter/scroller");
+    private static final Identifier STONECUTTER_SCROLLER_DISABLED = Ids.of("container/stonecutter/scroller_disabled");
+    private static final Identifier STONECUTTER_RECIPE = Ids.of("container/stonecutter/recipe");
+    private static final Identifier STONECUTTER_RECIPE_SELECTED = Ids.of("container/stonecutter/recipe_selected");
+    private static final Identifier STONECUTTER_RECIPE_HOVER = Ids.of("container/stonecutter/recipe_highlighted");
 
     private StonecutterGuiRenderer() {
     }
@@ -123,7 +124,13 @@ GuiScreenChrome {
         }
         DynamicRegistryManager registries = client.world.getRegistryManager();
         SimpleInventory inventory = new SimpleInventory(new ItemStack[]{input.copy()});
-        //? if >=1.20.4 {
+        //? if >=1.21 {
+        /*for (RecipeEntry<StonecuttingRecipe> entry : client.world.getRecipeManager().getAllMatches(RecipeType.STONECUTTING, new net.minecraft.recipe.input.SingleStackRecipeInput(input.copy()), (World)client.world)) {
+            ItemStack result = entry.value().getResult(registries);
+            if (result == null || result.isEmpty()) continue;
+            recipes.add(result.copy());
+        }
+        *///?} else if >=1.20.4 {
         for (RecipeEntry entry : client.world.getRecipeManager().getAllMatches(RecipeType.STONECUTTING, (Inventory)inventory, (World)client.world)) {
             ItemStack result = ((StonecuttingRecipe)entry.value()).getResult(registries);
             if (result == null || result.isEmpty()) continue;

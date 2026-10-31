@@ -13,6 +13,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.gui.render.screen;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.camera.pov.actions.clip.GuiPovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.GuiRenderContext;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.GuiRenderer;
@@ -31,10 +32,10 @@ public final class CartographyGuiRenderer
 implements GuiRenderer,
 GuiScreenChrome {
     public static final CartographyGuiRenderer INSTANCE = new CartographyGuiRenderer();
-    private static final Identifier SCALED_MAP_TEXTURE = new Identifier("container/cartography_table/scaled_map");
-    private static final Identifier DUPLICATED_MAP_TEXTURE = new Identifier("container/cartography_table/duplicated_map");
-    private static final Identifier MAP_TEXTURE = new Identifier("container/cartography_table/map");
-    private static final Identifier LOCKED_TEXTURE = new Identifier("container/cartography_table/locked");
+    private static final Identifier SCALED_MAP_TEXTURE = Ids.of("container/cartography_table/scaled_map");
+    private static final Identifier DUPLICATED_MAP_TEXTURE = Ids.of("container/cartography_table/duplicated_map");
+    private static final Identifier MAP_TEXTURE = Ids.of("container/cartography_table/map");
+    private static final Identifier LOCKED_TEXTURE = Ids.of("container/cartography_table/locked");
 
     private CartographyGuiRenderer() {
     }

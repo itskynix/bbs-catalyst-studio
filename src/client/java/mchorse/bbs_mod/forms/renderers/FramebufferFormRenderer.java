@@ -1,5 +1,9 @@
 package mchorse.bbs_mod.forms.renderers;
 
+import mchorse.bbs_mod.utils.VertexUtils;
+import mchorse.bbs_mod.client.BBSShaders;
+import mchorse.bbs_mod.utils.ModelViewStack;
+import mchorse.bbs_mod.utils.Bufs;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.systems.VertexSorter;
 import mchorse.bbs_mod.BBSModClient;
@@ -209,9 +213,8 @@ public class FramebufferFormRenderer extends FormRenderer<FramebufferForm>
          * MINECRAFT_AMBIENT_LIGHT alone - 40% - while a one-sided model next to it stayed lit. */
         RenderSystem.setShaderLights(new Vector3f(0F, 0F, 1F), new Vector3f(0F, 0F, -1F));
         RenderSystem.setProjectionMatrix(new Matrix4f().setOrtho(-1F, 1F, 1F, -1F, -500F, 500F), VertexSorter.BY_Z);
-        RenderSystem.getModelViewStack().push();
-        RenderSystem.getModelViewStack().peek().getPositionMatrix().identity();
-        RenderSystem.getModelViewStack().peek().getNormalMatrix().identity();
+        ModelViewStack.push();
+        ModelViewStack.identityTop();
 
         /* Pushing the identity is not enough - the programs read the APPLIED matrix, and in the
          * interface that is the GUI's translate(0, 0, -11000): with our ortho reaching only
@@ -303,7 +306,7 @@ public class FramebufferFormRenderer extends FormRenderer<FramebufferForm>
         }
 
         RenderSystem.setShaderLights(light0, light1);
-        RenderSystem.getModelViewStack().pop();
+        ModelViewStack.pop();
         RenderSystem.applyModelViewMatrix();
 
         /* As they were, not as they usually are: the world sorts by distance from the camera,
@@ -313,7 +316,7 @@ public class FramebufferFormRenderer extends FormRenderer<FramebufferForm>
 
         boolean shading = !context.isPicking();
         VertexFormat format = shading ? VertexFormats.POSITION_COLOR_TEXTURE_OVERLAY_LIGHT_NORMAL : VertexFormats.POSITION_TEXTURE_LIGHT_COLOR;
-        Supplier<ShaderProgram> shader = shading ? GameRenderer::getRenderTypeEntityTranslucentProgram : GameRenderer::getPositionTexLightmapColorProgram;
+        Supplier<ShaderProgram> shader = shading ? GameRenderer::getRenderTypeEntityTranslucentProgram : /*$ ptl*/GameRenderer::getPositionTexLightmapColorProgram/**/;
 
         if (FramebufferDebug.logging)
         {
@@ -369,7 +372,7 @@ public class FramebufferFormRenderer extends FormRenderer<FramebufferForm>
 
     private void renderQuad(VertexFormat format, Texture texture, Supplier<ShaderProgram> shader, MatrixStack matrices, int overlay, int light, int overlayColor, float transition, boolean defer)
     {
-        BufferBuilder builder = Tessellator.getInstance().getBuffer();
+        BufferBuilder builder;
         Color color = Color.white();
         Matrix4f matrix = matrices.peek().getPositionMatrix();
         Matrix3f normal = matrices.peek().getNormalMatrix();
@@ -386,25 +389,25 @@ public class FramebufferFormRenderer extends FormRenderer<FramebufferForm>
 
         /* No raw bind here: the draw binds its own samplers, and a bind on whatever unit is
          * active would land behind GlStateManager's back - see BillboardFormRenderer. */
-        builder.begin(VertexFormat.DrawMode.TRIANGLES, format);
+        builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, format);
 
         /* Front */
-        this.fill(format, builder, matrix, quad.p3.x, quad.p3.y, color, uvQuad.p3.x, uvQuad.p3.y, overlay, light, normal, 1F).next();
-        this.fill(format, builder, matrix, quad.p2.x, quad.p2.y, color, uvQuad.p2.x, uvQuad.p2.y, overlay, light, normal, 1F).next();
-        this.fill(format, builder, matrix, quad.p1.x, quad.p1.y, color, uvQuad.p1.x, uvQuad.p1.y, overlay, light, normal, 1F).next();
+        this.fill(format, builder, matrix, quad.p3.x, quad.p3.y, color, uvQuad.p3.x, uvQuad.p3.y, overlay, light, normal, 1F)/*$ nx*/.next()/**/;
+        this.fill(format, builder, matrix, quad.p2.x, quad.p2.y, color, uvQuad.p2.x, uvQuad.p2.y, overlay, light, normal, 1F)/*$ nx*/.next()/**/;
+        this.fill(format, builder, matrix, quad.p1.x, quad.p1.y, color, uvQuad.p1.x, uvQuad.p1.y, overlay, light, normal, 1F)/*$ nx*/.next()/**/;
 
-        this.fill(format, builder, matrix, quad.p3.x, quad.p3.y, color, uvQuad.p3.x, uvQuad.p3.y, overlay, light, normal, 1F).next();
-        this.fill(format, builder, matrix, quad.p4.x, quad.p4.y, color, uvQuad.p4.x, uvQuad.p4.y, overlay, light, normal, 1F).next();
-        this.fill(format, builder, matrix, quad.p2.x, quad.p2.y, color, uvQuad.p2.x, uvQuad.p2.y, overlay, light, normal, 1F).next();
+        this.fill(format, builder, matrix, quad.p3.x, quad.p3.y, color, uvQuad.p3.x, uvQuad.p3.y, overlay, light, normal, 1F)/*$ nx*/.next()/**/;
+        this.fill(format, builder, matrix, quad.p4.x, quad.p4.y, color, uvQuad.p4.x, uvQuad.p4.y, overlay, light, normal, 1F)/*$ nx*/.next()/**/;
+        this.fill(format, builder, matrix, quad.p2.x, quad.p2.y, color, uvQuad.p2.x, uvQuad.p2.y, overlay, light, normal, 1F)/*$ nx*/.next()/**/;
 
         /* Back */
-        this.fill(format, builder, matrix, quad.p1.x, quad.p1.y, color, uvQuad.p1.x, uvQuad.p1.y, overlay, light, normal, -1F).next();
-        this.fill(format, builder, matrix, quad.p2.x, quad.p2.y, color, uvQuad.p2.x, uvQuad.p2.y, overlay, light, normal, -1F).next();
-        this.fill(format, builder, matrix, quad.p3.x, quad.p3.y, color, uvQuad.p3.x, uvQuad.p3.y, overlay, light, normal, -1F).next();
+        this.fill(format, builder, matrix, quad.p1.x, quad.p1.y, color, uvQuad.p1.x, uvQuad.p1.y, overlay, light, normal, -1F)/*$ nx*/.next()/**/;
+        this.fill(format, builder, matrix, quad.p2.x, quad.p2.y, color, uvQuad.p2.x, uvQuad.p2.y, overlay, light, normal, -1F)/*$ nx*/.next()/**/;
+        this.fill(format, builder, matrix, quad.p3.x, quad.p3.y, color, uvQuad.p3.x, uvQuad.p3.y, overlay, light, normal, -1F)/*$ nx*/.next()/**/;
 
-        this.fill(format, builder, matrix, quad.p2.x, quad.p2.y, color, uvQuad.p2.x, uvQuad.p2.y, overlay, light, normal, -1F).next();
-        this.fill(format, builder, matrix, quad.p4.x, quad.p4.y, color, uvQuad.p4.x, uvQuad.p4.y, overlay, light, normal, -1F).next();
-        this.fill(format, builder, matrix, quad.p3.x, quad.p3.y, color, uvQuad.p3.x, uvQuad.p3.y, overlay, light, normal, -1F).next();
+        this.fill(format, builder, matrix, quad.p2.x, quad.p2.y, color, uvQuad.p2.x, uvQuad.p2.y, overlay, light, normal, -1F)/*$ nx*/.next()/**/;
+        this.fill(format, builder, matrix, quad.p4.x, quad.p4.y, color, uvQuad.p4.x, uvQuad.p4.y, overlay, light, normal, -1F)/*$ nx*/.next()/**/;
+        this.fill(format, builder, matrix, quad.p3.x, quad.p3.y, color, uvQuad.p3.x, uvQuad.p3.y, overlay, light, normal, -1F)/*$ nx*/.next()/**/;
 
         RenderSystem.defaultBlendFunc();
         RenderSystem.enableBlend();
@@ -420,7 +423,7 @@ public class FramebufferFormRenderer extends FormRenderer<FramebufferForm>
             VertexBuffer buffer = new VertexBuffer(VertexBuffer.Usage.STATIC);
 
             buffer.bind();
-            buffer.upload(builder.end());
+            Bufs.upload(buffer, builder);
             VertexBuffer.unbind();
 
             Matrix4f modelView = new Matrix4f(RenderSystem.getModelViewMatrix());
@@ -451,7 +454,7 @@ public class FramebufferFormRenderer extends FormRenderer<FramebufferForm>
         }
         else
         {
-            BufferRenderer.drawWithGlobalProgram(builder.end());
+            Bufs.draw(builder);
         }
 
         gameRenderer.getLightmapTextureManager().disable();
@@ -465,7 +468,7 @@ public class FramebufferFormRenderer extends FormRenderer<FramebufferForm>
             return consumer.vertex(matrix, x, y, 0F).texture(u, v).light(light).color(color.r, color.g, color.b, color.a);
         }
 
-        return consumer.vertex(matrix, x, y, 0F).color(color.r, color.g, color.b, color.a).texture(u, v).overlay(overlay).light(light).normal(normal, 0F, 0F, nz);
+        return VertexUtils.normal(consumer.vertex(matrix, x, y, 0F).color(color.r, color.g, color.b, color.a).texture(u, v).overlay(overlay).light(light), normal, 0F, 0F, nz);
     }
 
     @Override

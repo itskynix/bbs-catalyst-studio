@@ -13,6 +13,7 @@ import mchorse.bbs_mod.ui.framework.elements.utils.IViewportStack;
 import mchorse.bbs_mod.ui.utils.Area;
 import mchorse.bbs_mod.ui.utils.Gizmo;
 import mchorse.bbs_mod.ui.utils.InterfaceBlur;
+import mchorse.bbs_mod.ui.utils.Scroll;
 import mchorse.bbs_mod.ui.utils.renderers.InputRenderer;
 import mchorse.bbs_mod.utils.MathUtils;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
@@ -178,6 +179,11 @@ public abstract class UIBaseMenu
     {
         boolean result = false;
 
+        if (Scroll.stopAutoscroll())
+        {
+            return true;
+        }
+
         this.context.setMouse(mouseX, mouseY, mouseButton);
 
         IUIElement owner = this.getPointerOwner();
@@ -316,6 +322,11 @@ public abstract class UIBaseMenu
         }
 
         this.context.setKeyEvent(key, scanCode, action);
+
+        if (action == GLFW.GLFW_PRESS && key == GLFW.GLFW_KEY_ESCAPE && Scroll.stopAutoscroll())
+        {
+            return true;
+        }
 
         IUIElement element = this.root.keyPressed(this.context);
 

@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.cubic.animation;
 
+import mchorse.bbs_mod.utils.VersionCompat;
 import mchorse.bbs_mod.forms.entities.IEntity;
 import mchorse.bbs_mod.forms.entities.MCEntity;
 import net.minecraft.entity.LivingEntity;
@@ -81,6 +82,6 @@ public class ItemUsePose
         ItemStack stack = living.getActiveItem();
         UseAction action = stack.getUseAction();
 
-        return action == UseAction.NONE ? null : new Use(action, living.getItemUseTime(), stack, stack.getMaxUseTime());
+        return action == UseAction.NONE ? null : new Use(action, living.getItemUseTime(), stack, VersionCompat.getMaxUseTime(stack, living));
     }
 }

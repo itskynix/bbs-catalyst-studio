@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.selectors;
 
+import mchorse.bbs_mod.utils.Ids;
 import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import mchorse.bbs_mod.data.IMapSerializable;
@@ -88,7 +89,7 @@ public class EntitySelector implements IMapSerializable
 
         if (data.has("enabled")) this.enabled = data.getBool("enabled");
         if (data.has("form")) this.form = FormUtils.fromData(data.getMap("form"));
-        if (data.has("entity")) this.entity = new Identifier(data.getString("entity"));
+        if (data.has("entity")) this.entity = Ids.of(data.getString("entity"));
         if (data.has("name")) this.name = data.getString("name");
         if (data.has("nbt"))
         {

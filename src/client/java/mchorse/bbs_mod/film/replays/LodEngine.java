@@ -16,7 +16,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.WeakHashMap;
 
 /**
  * Caps how many of a scene's forms get drawn per frame with focus-distance support.
@@ -26,34 +28,26 @@ import java.util.Set;
  * Tracks both position and rotation with a sensitive deadband for smooth, responsive movement.
  * The model of a selected replay obeys LOD and focus culling rules, while its transform gizmo
  * remains visible in the editor.</p>
+ *
+ * <p>Every film controller owns its own {@link State}, so concurrent films and previews never
+ * overwrite each other's culling data.</p>
  */
 public class LodEngine
 {
-    /** Forms whose visible runtimeValue was set to false this frame, restored on RENDER_AFTER. */
-    private static final Set<Form> touched = Collections.newSetFromMap(new IdentityHashMap<>());
-
-    /** Forms determined by the latest ranking to be outside the render limit / focus window. */
-    private static final Set<Form> culled = Collections.newSetFromMap(new IdentityHashMap<>());
-
-    private static final List<Candidate> candidates = new ArrayList<>();
-
-    private static BaseFilmController lastController;
-    private static double lastCamX = Double.NaN;
-    private static double lastCamY = Double.NaN;
-    private static double lastCamZ = Double.NaN;
-    private static float lastYaw = Float.NaN;
-    private static float lastPitch = Float.NaN;
-    private static double lastFocus = -1D;
-    private static int lastLimit = -1;
-    private static boolean lastEnabled = false;
-    private static int lastEntityCount = -1;
-    private static boolean budgetValid = false;
+    private static final Map<BaseFilmController, State> states = new WeakHashMap<>();
 
     /** Movement deadband: ~0.1 blocks. */
     private static final double MOVE_THRESHOLD_SQ = 0.01D;
 
     /** Rotation deadband: 0.5 degrees. */
     private static final float ROTATION_THRESHOLD = 0.5F;
+
+    /**
+     * The actors move on their own while the camera stands still (a locked-off shot of a film
+     * playing), and the ranking is by their distance: it is redone at least this often (frames)
+     * whatever the camera does, or an actor walking up to a still camera stayed hidden.
+     */
+    private static final int RERANK_FRAMES = 10;
 
     public static void register()
     {
@@ -69,7 +63,7 @@ public class LodEngine
     private static void before(Form form, FormRenderingContext context)
     {
         /* Never cull in UI previews, when LOD is disabled, or during video recording/export */
-        if (context.ui || !budgetValid || BBSSettings.replayLod == null || !BBSSettings.replayLod.get() || !form.visible.get())
+        if (context.ui || BBSSettings.replayLod == null || !BBSSettings.replayLod.get() || !form.visible.get())
         {
             return;
         }
@@ -79,10 +73,15 @@ public class LodEngine
             return;
         }
 
-        if (culled.contains(form))
+        for (State state : states.values())
         {
-            form.visible.setRuntimeValue(Boolean.FALSE);
-            touched.add(form);
+            if (state.budgetValid && state.culled.contains(form))
+            {
+                form.visible.setRuntimeValue(Boolean.FALSE);
+                state.touched.add(form);
+
+                return;
+            }
         }
     }
 
@@ -91,31 +90,27 @@ public class LodEngine
      */
     private static void onRenderAfter(BaseFilmController controller, WorldRenderContext context)
     {
-        clearOverrides(controller);
+        State state = states.computeIfAbsent(controller, (c) -> new State());
+
+        state.restore();
 
         boolean enabled = BBSSettings.replayLod != null && BBSSettings.replayLod.get();
         int limit = BBSSettings.replayLodLimit != null ? BBSSettings.replayLodLimit.get() : 100;
 
-        if (controller != lastController)
-        {
-            lastController = controller;
-            reset();
-        }
-
         /* If video recorder is active, never cull */
         if (BBSModClient.getVideoRecorder() != null && BBSModClient.getVideoRecorder().isRecording())
         {
-            budgetValid = false;
-            culled.clear();
+            state.reset();
 
             return;
         }
 
-        budgetValid = enabled && limit > 0;
+        state.budgetValid = enabled && limit > 0;
 
-        if (!budgetValid)
+        if (!state.budgetValid)
         {
-            culled.clear();
+            /* LOD went off: every form it hid gets its default visibility back before the sets go */
+            state.reset();
 
             return;
         }
@@ -133,33 +128,38 @@ public class LodEngine
         double focus = BBSSettings.replayLodFocus != null ? BBSSettings.replayLodFocus.get() : 0D;
         int entityCount = controller.getEntities().size();
 
-        double dx = camPos.x - lastCamX;
-        double dy = camPos.y - lastCamY;
-        double dz = camPos.z - lastCamZ;
+        double dx = camPos.x - state.lastCamX;
+        double dy = camPos.y - state.lastCamY;
+        double dz = camPos.z - state.lastCamZ;
         double distSq = dx * dx + dy * dy + dz * dz;
 
-        float dYaw = Math.abs(yaw - lastYaw);
-        float dPitch = Math.abs(pitch - lastPitch);
+        float dYaw = Math.abs(yaw - state.lastYaw);
+        float dPitch = Math.abs(pitch - state.lastPitch);
 
-        boolean settingsChanged = enabled != lastEnabled || limit != lastLimit || focus != lastFocus || entityCount != lastEntityCount;
+        boolean settingsChanged = enabled != state.lastEnabled || limit != state.lastLimit || focus != state.lastFocus || entityCount != state.lastEntityCount;
         boolean camMoved = distSq >= MOVE_THRESHOLD_SQ;
         boolean camRotated = dYaw >= ROTATION_THRESHOLD || dPitch >= ROTATION_THRESHOLD;
 
-        /* Skip re-ranking only when camera is completely stationary and settings are unchanged */
-        if (!settingsChanged && !camMoved && !camRotated && !candidates.isEmpty())
+        state.framesSinceRank++;
+
+        /* Skip re-ranking only when camera is completely stationary, settings are unchanged and
+         * the last ranking is recent enough to still hold for actors that moved */
+        if (!settingsChanged && !camMoved && !camRotated && !state.candidates.isEmpty() && state.framesSinceRank < RERANK_FRAMES)
         {
             return;
         }
 
-        lastCamX = camPos.x;
-        lastCamY = camPos.y;
-        lastCamZ = camPos.z;
-        lastYaw = yaw;
-        lastPitch = pitch;
-        lastFocus = focus;
-        lastLimit = limit;
-        lastEnabled = enabled;
-        lastEntityCount = entityCount;
+        state.framesSinceRank = 0;
+
+        state.lastCamX = camPos.x;
+        state.lastCamY = camPos.y;
+        state.lastCamZ = camPos.z;
+        state.lastYaw = yaw;
+        state.lastPitch = pitch;
+        state.lastFocus = focus;
+        state.lastLimit = limit;
+        state.lastEnabled = enabled;
+        state.lastEntityCount = entityCount;
 
         /* Compute forward gaze direction from camera yaw and pitch */
         float yawRad = (float) Math.toRadians(yaw);
@@ -202,68 +202,101 @@ public class LodEngine
                 score = err + (1.0D - dot) * 0.5D;
             }
 
-            if (count < candidates.size())
+            if (count < state.candidates.size())
             {
-                candidates.get(count).set(form, score);
+                state.candidates.get(count).set(form, score);
             }
             else
             {
-                candidates.add(new Candidate(form, score));
+                state.candidates.add(new Candidate(form, score));
             }
 
             count++;
         }
 
-        while (candidates.size() > count)
+        while (state.candidates.size() > count)
         {
-            candidates.remove(candidates.size() - 1);
+            state.candidates.remove(state.candidates.size() - 1);
         }
 
-        candidates.sort(null);
+        state.candidates.sort(null);
 
-        /* Update culled set for next frame's BEFORE pass */
-        culled.clear();
+        /* Update state.culled set for next frame's BEFORE pass */
+        state.culled.clear();
         int effectiveLimit = Math.min(limit, count);
 
         for (int i = effectiveLimit; i < count; i++)
         {
-            culled.add(candidates.get(i).form);
+            state.culled.add(state.candidates.get(i).form);
         }
     }
 
     private static void onShutdown(BaseFilmController controller)
     {
-        clearOverrides(controller);
-        lastController = null;
-        reset();
-    }
+        State state = states.remove(controller);
 
-    private static void reset()
-    {
-        lastCamX = Double.NaN;
-        lastCamY = Double.NaN;
-        lastCamZ = Double.NaN;
-        lastYaw = Float.NaN;
-        lastPitch = Float.NaN;
-        lastFocus = -1D;
-        lastLimit = -1;
-        lastEntityCount = -1;
-        lastEnabled = false;
-        budgetValid = false;
-        culled.clear();
-    }
-
-    /**
-     * Clears every runtime override the controller's root forms carry.
-     */
-    private static void clearOverrides(BaseFilmController controller)
-    {
-        for (Form form : touched)
+        if (state != null)
         {
-            form.visible.setRuntimeValue(null);
+            state.reset();
+        }
+    }
+
+    /** Per-controller LOD state. */
+    private static class State
+    {
+        /** Forms whose visible runtimeValue was set to false this frame, restored on RENDER_AFTER. */
+        final Set<Form> touched = Collections.newSetFromMap(new IdentityHashMap<>());
+
+        /** Forms determined by the latest ranking to be outside the render limit / focus window. */
+        final Set<Form> culled = Collections.newSetFromMap(new IdentityHashMap<>());
+
+        final List<Candidate> candidates = new ArrayList<>();
+
+        double lastCamX = Double.NaN;
+        double lastCamY = Double.NaN;
+        double lastCamZ = Double.NaN;
+        float lastYaw = Float.NaN;
+        float lastPitch = Float.NaN;
+        double lastFocus = -1D;
+        int lastLimit = -1;
+        boolean lastEnabled = false;
+        int lastEntityCount = -1;
+        int framesSinceRank;
+        boolean budgetValid = false;
+
+        /** Gives every form this state hid its default visibility back. */
+        void restore()
+        {
+            for (Form form : this.touched)
+            {
+                form.visible.setRuntimeValue(null);
+            }
+
+            for (Form form : this.culled)
+            {
+                form.visible.setRuntimeValue(null);
+            }
+
+            this.touched.clear();
         }
 
-        touched.clear();
+        void reset()
+        {
+            this.restore();
+
+            this.lastCamX = Double.NaN;
+            this.lastCamY = Double.NaN;
+            this.lastCamZ = Double.NaN;
+            this.lastYaw = Float.NaN;
+            this.lastPitch = Float.NaN;
+            this.lastFocus = -1D;
+            this.lastLimit = -1;
+            this.lastEntityCount = -1;
+            this.lastEnabled = false;
+            this.budgetValid = false;
+            this.culled.clear();
+            this.candidates.clear();
+        }
     }
 
     private static class Candidate implements Comparable<Candidate>

@@ -3,6 +3,8 @@ package mchorse.bbs_mod.forms.sections;
 import mchorse.bbs_mod.forms.FormCategories;
 import mchorse.bbs_mod.forms.categories.FormCategory;
 import mchorse.bbs_mod.forms.forms.AnchorForm;
+import mchorse.bbs_mod.forms.forms.AudioForm;
+import mchorse.bbs_mod.forms.forms.PortalForm;
 import mchorse.bbs_mod.forms.forms.BillboardForm;
 import mchorse.bbs_mod.forms.forms.BlockForm;
 import mchorse.bbs_mod.forms.forms.ExtrudedForm;
@@ -64,6 +66,7 @@ public class ExtraFormSection extends FormSection
         item.stack.set(new ItemStack(Items.STICK));
 
         extra.addForm(anchor);
+        extra.addForm(new PortalForm());
         extra.addForm(billboard);
         extra.addForm(label);
         extra.addForm(extruded);
@@ -74,6 +77,7 @@ public class ExtraFormSection extends FormSection
         extra.addForm(trail);
         extra.addForm(video);
         extra.addForm(new FramebufferForm());
+        extra.addForm(new AudioForm());
 
         this.mobsAnimals = new FormCategory(UIKeys.FORMS_CATEGORIES_MOBS_ANIMALS, this.parent.preferences.visible("mobs_animals")).icon(Icons.CHICKEN);
         this.mobsNeutral = new FormCategory(UIKeys.FORMS_CATEGORIES_MOBS_NEUTRAL, this.parent.preferences.visible("mobs_neutral")).icon(Icons.PLAYER);

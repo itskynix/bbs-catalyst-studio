@@ -61,10 +61,6 @@ public final class PovPlaybackInput {
             if (playFilm != null && playFilm.matchesKey(key, scancode)) {
                 return true;
             }
-            KeyBinding recordVideo = BBSModClientAccess.bbsPov$getKeyRecordVideo();
-            if (recordVideo != null && recordVideo.matchesKey(key, scancode)) {
-                return true;
-            }
             MinecraftClient mc = MinecraftClient.getInstance();
             if (mc != null && mc.options != null && mc.options.togglePerspectiveKey != null && mc.options.togglePerspectiveKey.matchesKey(key, scancode)) {
                 return true;

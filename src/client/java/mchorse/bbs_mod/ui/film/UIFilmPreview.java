@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.film;
 
+import mchorse.bbs_mod.utils.ModelViewStack;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.BBSSettings;
@@ -43,6 +44,7 @@ import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.ui.utils.keys.KeyCodes;
 import mchorse.bbs_mod.utils.Direction;
 import mchorse.bbs_mod.utils.FFMpegUtils;
+import mchorse.bbs_mod.utils.GuiState;
 import mchorse.bbs_mod.utils.ScreenshotRecorder;
 import mchorse.bbs_mod.utils.StringUtils;
 import mchorse.bbs_mod.utils.clips.Clip;
@@ -53,6 +55,7 @@ import mchorse.bbs_mod.utils.joml.Vectors;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.util.math.RotationAxis;
+import org.joml.Matrix4f;
 import org.joml.Vector2i;
 
 import java.io.File;
@@ -773,6 +776,22 @@ public class UIFilmPreview extends UIElement
     @Override
     public void render(UIContext context)
     {
+        /* What the preview shows was drawn by the world pass; the panels that follow it are the
+         * interface's, so they get the interface's state whatever the pass left behind */
+        GuiState.restoreInMenu();
+
+        try
+        {
+            this.renderPreview(context);
+        }
+        finally
+        {
+            GuiState.restoreInMenu();
+        }
+    }
+
+    private void renderPreview(UIContext context)
+    {
         Framebuffer fb = BBSRendering.getFramebuffer();
         Texture texture = BBSRendering.getTexture();
         Area area = this.getViewport();
@@ -995,19 +1014,20 @@ public class UIFilmPreview extends UIElement
     private void renderCursor(UIContext context)
     {
         net.minecraft.client.render.Camera /* NECESSARY */ mcCamera = MinecraftClient.getInstance().gameRenderer.getCamera();
-        MatrixStack stack = RenderSystem.getModelViewStack();
+        ModelViewStack.push();
 
-        stack.push();
+        ModelViewStack.multiply(context.batcher.getContext().getMatrices().peek().getPositionMatrix());
 
-        stack.multiplyPositionMatrix(context.batcher.getContext().getMatrices().peek().getPositionMatrix());
-        stack.translate(this.navBlock.mx(), this.navBlock.my(), 0F);
-        stack.multiply(RotationAxis.NEGATIVE_X.rotationDegrees(mcCamera.getPitch()));
-        stack.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(mcCamera.getYaw()));
-        stack.scale(-1F, -1F, -1F);
+        Matrix4f top = ModelViewStack.top();
+
+        top.translate(this.navBlock.mx(), this.navBlock.my(), 0F);
+        top.rotate(RotationAxis.NEGATIVE_X.rotationDegrees(mcCamera.getPitch()));
+        top.rotate(RotationAxis.POSITIVE_Y.rotationDegrees(mcCamera.getYaw()));
+        top.scale(-1F, -1F, -1F);
         RenderSystem.applyModelViewMatrix();
         RenderSystem.renderCrosshair(10);
 
-        stack.pop();
+        ModelViewStack.pop();
         RenderSystem.applyModelViewMatrix();
     }
 }

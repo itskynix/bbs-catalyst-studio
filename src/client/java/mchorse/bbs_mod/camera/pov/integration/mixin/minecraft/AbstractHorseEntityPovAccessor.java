@@ -25,6 +25,9 @@ extends AbstractHorseEntityPovAccess {
     public SimpleInventory bbsPov$getItems();
 
     @Override
+    //? if >=1.21
+    /*@Invoker(value="updateSaddledFlag")*/
+    //? if <1.21
     @Invoker(value="updateSaddle")
     public void bbsPov$updateSaddle();
 

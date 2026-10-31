@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.cubic;
 
+import mchorse.bbs_mod.utils.Bufs;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.bobj.BOBJBone;
@@ -31,6 +32,8 @@ import mchorse.bbs_mod.data.types.MapType;
 import mchorse.bbs_mod.forms.FormTranslucentQueue;
 import mchorse.bbs_mod.forms.forms.Form;
 import mchorse.bbs_mod.forms.forms.ModelForm;
+import mchorse.bbs_mod.forms.forms.utils.FormFxValues;
+import mchorse.bbs_mod.forms.renderers.utils.ShatterField;
 import mchorse.bbs_mod.forms.renderers.utils.FormOverlay;
 import mchorse.bbs_mod.forms.renderers.utils.FormPbr;
 import mchorse.bbs_mod.graphics.texture.Texture;
@@ -79,6 +82,55 @@ public class ModelInstance implements IModelInstance
 
     /** Live procedural OptiFine CEM animation, when this model was loaded from a .jem; null otherwise. */
     public CemAnimation cemAnimation;
+
+    /**
+     * Set by the form renderer around a single draw to break the model apart bone by bone; null the
+     * rest of the time. Like the channels token it lives here because the instance is shared, and is
+     * only ever read inside the draw that set it. Welded and BOBJ models draw their own way and ignore it.
+     */
+    public FormFxValues shatterFx;
+
+    private float[] heightRange;
+
+    /**
+     * Where the model stands in its own frame, as the lowest point and the height, in blocks - what a
+     * dissolve running bottom to top is measured against. Worked out from the rest geometry once.
+     */
+    public float[] getHeightRange()
+    {
+        if (this.heightRange == null)
+        {
+            float min = 0F;
+            float height = 2F;
+
+            if (this.model instanceof Model cubic)
+            {
+                Vector3f lo = new Vector3f(Float.POSITIVE_INFINITY);
+                Vector3f hi = new Vector3f(Float.NEGATIVE_INFINITY);
+                Vector3f a = new Vector3f();
+                Vector3f b = new Vector3f();
+
+                for (ModelGroup group : cubic.getAllGroups())
+                {
+                    if (group.getGeometryBounds(a, b))
+                    {
+                        lo.min(a);
+                        hi.max(b);
+                    }
+                }
+
+                if (hi.y > lo.y)
+                {
+                    min = lo.y / 16F;
+                    height = (hi.y - lo.y) / 16F;
+                }
+            }
+
+            this.heightRange = new float[] {min, height};
+        }
+
+        return this.heightRange;
+    }
 
     /* The channels token: which (form, entity, transition, frame, pose version) the asset's
      * pose currently holds. The instance is one globally cached asset per model id, so the
@@ -678,8 +730,7 @@ public class ModelInstance implements IModelInstance
                 bake.setCpuGroups(cpuGroups);
                 bake.setHybridPasses(false, true);
 
-                builder = Tessellator.getInstance().getBuffer();
-                builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR_TEXTURE_OVERLAY_LIGHT_NORMAL);
+                builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR_TEXTURE_OVERLAY_LIGHT_NORMAL);
                 CubicRenderer.processRenderModel(bake, builder, ROOT, model);
                 bake.finish(builder);
             }
@@ -698,7 +749,7 @@ public class ModelInstance implements IModelInstance
                     if (builder != null)
                     {
                         entry.vbo.bind();
-                        entry.vbo.upload(builder.end());
+                        Bufs.upload(entry.vbo, builder);
                         VertexBuffer.unbind();
                         builder = null;
                     }
@@ -825,7 +876,7 @@ public class ModelInstance implements IModelInstance
         {
             buffer = new VertexBuffer(VertexBuffer.Usage.STATIC);
             buffer.bind();
-            buffer.upload(builder.end());
+            Bufs.upload(buffer, builder);
         }
         else
         {
@@ -942,6 +993,7 @@ public class ModelInstance implements IModelInstance
                 CubicVAORenderer renderProcessor = new CubicVAORenderer(shader, this, light, overlay, stencilMap, keys, textureResolver);
 
                 renderProcessor.setColor(color.r, color.g, color.b, color.a);
+                renderProcessor.setShatter(this.shatterFx == null ? null : ShatterField.forBones(this.shatterFx, stack.peek().getPositionMatrix()));
                 CubicRenderer.processRenderModel(renderProcessor, null, stack, model);
             }
             else
@@ -952,11 +1004,12 @@ public class ModelInstance implements IModelInstance
 
                 renderProcessor.setCpuOverlayActive(cpuOverlay != null);
                 renderProcessor.setColor(color.r, color.g, color.b, color.a);
+                renderProcessor.setShatter(this.shatterFx == null ? null : ShatterField.forBones(this.shatterFx, stack.peek().getPositionMatrix()));
                 RenderSystem.setShader(() -> shader);
 
-                BufferBuilder builder = Tessellator.getInstance().getBuffer();
+                BufferBuilder builder;
 
-                builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR_TEXTURE_OVERLAY_LIGHT_NORMAL);
+                builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR_TEXTURE_OVERLAY_LIGHT_NORMAL);
                 CubicRenderer.processRenderModel(renderProcessor, builder, stack, model);
 
                 int previousOverlay = cpuOverlay != null ? FormOverlay.bind(cpuOverlay) : 0;

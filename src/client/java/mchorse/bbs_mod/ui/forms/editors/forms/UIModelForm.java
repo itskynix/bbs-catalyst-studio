@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.forms.editors.forms;
 
+import mchorse.bbs_mod.ui.forms.editors.panels.UIFormEffectsPanel;
 import mchorse.bbs_mod.cubic.ModelInstance;
 import mchorse.bbs_mod.cubic.ik.ModelIKRuntime;
 import mchorse.bbs_mod.data.DataStorageUtils;
@@ -46,6 +47,8 @@ public class UIModelForm extends UIForm<ModelForm>
         this.registerPanel(new UIModelConstraintsFormPanel(this), UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_TITLE, Icons.LOCKED);
         this.registerPanel(new UIActionsFormPanel(this), UIKeys.FORMS_EDITORS_ACTIONS_TITLE, Icons.MORE);
         this.registerDefaultPanels();
+        this.registerMaskPanel();
+        this.registerPanel(new UIFormEffectsPanel<ModelForm>(this, (f) -> f.fx), UIKeys.FORMS_EDITORS_EFFECTS, Icons.SHAPES);
 
         this.defaultPanel.keys().register(Keys.FORMS_PICK_TEXTURE, () ->
         {

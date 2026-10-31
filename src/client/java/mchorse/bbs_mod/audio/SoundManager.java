@@ -428,6 +428,8 @@ public class SoundManager implements IWatchDogListener
 
     public void update()
     {
+        mchorse.bbs_mod.forms.renderers.AudioFormRenderer.updateActiveRenderers();
+
         long now = System.currentTimeMillis();
         Iterator<SoundPlayer> it = this.sounds.iterator();
 
@@ -451,6 +453,8 @@ public class SoundManager implements IWatchDogListener
 
     public void deleteSounds()
     {
+        mchorse.bbs_mod.forms.renderers.AudioFormRenderer.stopAll();
+
         for (SoundPlayer player : this.sounds)
         {
             if (player != null)

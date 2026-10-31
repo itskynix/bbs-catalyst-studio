@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.blocks.entities;
 
+import net.minecraft.registry.RegistryWrapper;
 import mchorse.bbs_mod.BBSMod;
 import mchorse.bbs_mod.blocks.ModelBlock;
 import mchorse.bbs_mod.data.DataStorageUtils;
@@ -101,9 +102,27 @@ public class ModelBlockEntity extends BlockEntity
 
         this.properties.getEquipment().apply(this.entity);
 
+        mchorse.bbs_mod.utils.pose.Transform transform = this.properties.getTransform();
+        double x = pos.getX() + 0.5D + transform.translate.x;
+        double y = pos.getY() + transform.translate.y;
+        double z = pos.getZ() + 0.5D + transform.translate.z;
+
+        this.entity.setPrevX(x);
+        this.entity.setPrevY(y);
+        this.entity.setPrevZ(z);
+        this.entity.setPosition(x, y, z);
+
         this.entity.update();
         this.entity.setWorld(world);
         this.properties.update(this.entity);
+    }
+
+    @Override
+    public void markRemoved()
+    {
+        super.markRemoved();
+
+        this.entity.setWorld(null);
     }
 
     /**
@@ -122,6 +141,18 @@ public class ModelBlockEntity extends BlockEntity
         return BlockEntityUpdateS2CPacket.create(this);
     }
 
+    //? if >=1.21 {
+    /*@Override
+    public NbtCompound toInitialChunkDataNbt(RegistryWrapper.WrapperLookup registryLookup)
+    {
+        return createNbt(registryLookup);
+    }
+
+    @Override
+    protected void writeNbt(NbtCompound nbt, RegistryWrapper.WrapperLookup registryLookup)
+    {
+        super.writeNbt(nbt, registryLookup);
+    *///?} else {
     @Override
     public NbtCompound toInitialChunkDataNbt()
     {
@@ -132,16 +163,24 @@ public class ModelBlockEntity extends BlockEntity
     protected void writeNbt(NbtCompound nbt)
     {
         super.writeNbt(nbt);
+    //?}
 
         MapType data = this.properties.toData();
 
         DataStorageUtils.writeToNbtCompound(nbt, "Properties", data);
     }
 
+    //? if >=1.21 {
+    /*@Override
+    public void readNbt(NbtCompound nbt, RegistryWrapper.WrapperLookup registryLookup)
+    {
+        super.readNbt(nbt, registryLookup);
+    *///?} else {
     @Override
     public void readNbt(NbtCompound nbt)
     {
         super.readNbt(nbt);
+    //?}
 
         BaseType baseType = DataStorageUtils.readFromNbtCompound(nbt, "Properties");
 

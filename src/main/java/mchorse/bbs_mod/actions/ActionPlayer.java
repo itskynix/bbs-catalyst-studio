@@ -45,6 +45,13 @@ public class ActionPlayer
     public boolean syncing;
     private boolean pendingResync;
 
+    /** Scrubs longer than this many ticks skip the ticks in between. */
+    private static final int SEEK_WALK_LIMIT = 20;
+    /** Server ticks between two scans for actors the world took away (2 seconds). */
+    private static final int REVIVE_INTERVAL = 40;
+    private int reviveCounter;
+    private boolean initialized;
+
     private ServerPlayerEntity serverPlayer;
     private ServerWorld world;
     private int duration;
@@ -80,10 +87,26 @@ public class ActionPlayer
 
         this.serverPlayer = serverPlayer;
         this.duration = film.calculateDuration();
+    }
+
+    /**
+     * Puts the cast into the world and does the first person set-up. Not part of the constructor:
+     * the instance has to be fully built, and registered, before it spawns entities and sends
+     * packets. The manager calls it right after creating the playback; the entry points below
+     * call it as well, so a playback that was never initialised still gets there first.
+     */
+    public void init()
+    {
+        if (this.initialized)
+        {
+            return;
+        }
+
+        this.initialized = true;
 
         this.updateReplayEntities();
 
-        Replay fpReplay = film.getFirstPersonReplay();
+        Replay fpReplay = this.film.getFirstPersonReplay();
 
         if (this.type == PlayerType.NORMAL && this.serverPlayer != null && fpReplay != null)
         {
@@ -353,15 +376,15 @@ public class ActionPlayer
          * the drawn one played its loop. */
         tick = replay.getTick((int) tick);
 
-        double x = replay.keyframes.x.interpolate(tick);
-        double y = replay.keyframes.y.interpolate(tick);
-        double z = replay.keyframes.z.interpolate(tick);
-        float yawHead = replay.keyframes.headYaw.interpolate(tick).floatValue();
-        float yawBody = replay.keyframes.bodyYaw.interpolate(tick).floatValue();
-        float pitch = replay.keyframes.pitch.interpolate(tick).floatValue();
+        double x = replay.keyframes.x.interpolateDouble(tick);
+        double y = replay.keyframes.y.interpolateDouble(tick);
+        double z = replay.keyframes.z.interpolateDouble(tick);
+        float yawHead = (float) replay.keyframes.headYaw.interpolateDouble(tick);
+        float yawBody = (float) replay.keyframes.bodyYaw.interpolateDouble(tick);
+        float pitch = (float) replay.keyframes.pitch.interpolateDouble(tick);
 
         Vec3d pos = actor.getPos();
-        boolean grounded = replay.keyframes.grounded.interpolate(tick) > 0;
+        boolean grounded = EntityState.isOn(replay.keyframes.grounded.interpolateDouble(tick));
 
         if (ticking)
         {
@@ -377,9 +400,9 @@ public class ActionPlayer
         actor.setHeadYaw(yawHead);
         actor.setPitch(pitch);
         actor.setBodyYaw(yawBody);
-        boolean sneaking = EntityState.isOn(replay.keyframes.state(EntityState.SNEAKING).interpolate(tick));
-        boolean swimming = EntityState.isOn(replay.keyframes.state(EntityState.SWIMMING).interpolate(tick));
-        boolean gliding = EntityState.isOn(replay.keyframes.state(EntityState.GLIDING).interpolate(tick));
+        boolean sneaking = EntityState.isOn(replay.keyframes.state(EntityState.SNEAKING).interpolateDouble(tick));
+        boolean swimming = EntityState.isOn(replay.keyframes.state(EntityState.SWIMMING).interpolateDouble(tick));
+        boolean gliding = EntityState.isOn(replay.keyframes.state(EntityState.GLIDING).interpolateDouble(tick));
 
         actor.setSneaking(sneaking);
         actor.setOnGround(grounded);
@@ -388,14 +411,14 @@ public class ActionPlayer
          * client spawn vanilla's sprinting particles for this actor. Swimming and gliding are
          * the same kind of thing: the flag is what spreads the elytra's wings and lays the body
          * flat on every client watching, and neither would happen from the frame alone. */
-        actor.setSprinting(EntityState.isOn(replay.keyframes.state(EntityState.SPRINTING).interpolate(tick)));
+        actor.setSprinting(EntityState.isOn(replay.keyframes.state(EntityState.SPRINTING).interpolateDouble(tick)));
         actor.setSwimming(swimming);
         ((EntityInvoker) actor).bbs$setFlag(EntityState.FALL_FLYING_FLAG, gliding);
         actor.setPose(EntityState.pose(gliding, swimming, sneaking));
 
         /* Vanilla counts the roll up while flying, and an actor is placed rather than flown, so
          * the recorded count is handed over - it's what ramps the elytra's dive. */
-        ((LivingEntityRollAccessor) actor).bbs$setRoll(replay.keyframes.roll.interpolate(tick).intValue());
+        ((LivingEntityRollAccessor) actor).bbs$setRoll((int) replay.keyframes.roll.interpolateDouble(tick));
 
         /* Riding and creative flight are recorded but not written here: a replay doesn't mount
          * anyone, and flight is a permission on a real player. Both only pick an animation. */
@@ -421,18 +444,20 @@ public class ActionPlayer
             actor.equipStack(EquipmentSlot.FEET, replay.keyframes.armorFeet.interpolate(tick, ItemStack.EMPTY));
         }
 
-        double vx = x - replay.keyframes.x.interpolate(tick - 1);
-        double vy = y - replay.keyframes.y.interpolate(tick - 1);
-        double vz = z - replay.keyframes.z.interpolate(tick - 1);
+        double vx = x - replay.keyframes.x.interpolateDouble(tick - 1F);
+        double vy = y - replay.keyframes.y.interpolateDouble(tick - 1F);
+        double vz = z - replay.keyframes.z.interpolateDouble(tick - 1F);
 
-        if (vy == 0D)
+        /* Gravity only pulls an actor that is in the air: one standing still on the ground keeps
+         * a zero vertical speed, otherwise it is pushed into the floor every tick. */
+        if (vy == 0D && !grounded)
         {
             vy = -ReplayKeyframes.GRAVITY_PROBE;
         }
 
         actor.setVelocity(vx, vy, vz);
 
-        actor.fallDistance = replay.keyframes.fall.interpolate(tick).floatValue();
+        actor.fallDistance = (float) replay.keyframes.fall.interpolateDouble(tick);
     }
 
     /**
@@ -456,6 +481,8 @@ public class ActionPlayer
 
     public boolean tick()
     {
+        this.init();
+
         if (this.countdown > 0)
         {
             this.countdown -= 1;
@@ -463,7 +490,13 @@ public class ActionPlayer
             return false;
         }
 
-        this.reviveLostActors();
+        /* Not every tick: the scan walks the whole cast, and a lost body only needs to be back
+         * within a couple of seconds. */
+        if (++this.reviveCounter >= REVIVE_INTERVAL)
+        {
+            this.reviveCounter = 0;
+            this.reviveLostActors();
+        }
 
         for (Map.Entry<String, LivingEntity> entry : this.actors.entrySet())
         {
@@ -523,6 +556,8 @@ public class ActionPlayer
 
     public void syncData(DataPath key, BaseType data)
     {
+        this.init();
+
         /* findRecursively (not getRecursively) so an unresolvable path doesn't
          * throw and abort the whole server task. */
         BaseValue baseValue = this.film.findRecursively(key);
@@ -577,15 +612,28 @@ public class ActionPlayer
 
     public void goTo(int from, int tick)
     {
+        this.init();
+
         if (from != tick)
         {
             this.tick = from;
 
-            while (this.tick != tick)
+            if (Math.abs(tick - from) > SEEK_WALK_LIMIT)
             {
-                this.tick += this.tick > tick ? -1 : 1;
-
+                /* A long scrub: the ticks in between are skipped and only the destination's state is
+                 * applied (including the ranges that hold a state, like an open chest), instead of
+                 * running every clip of every tick on the main thread. */
+                this.tick = tick;
                 this.applyAction();
+            }
+            else
+            {
+                while (this.tick != tick)
+                {
+                    this.tick += this.tick > tick ? -1 : 1;
+
+                    this.applyAction();
+                }
             }
         }
         else

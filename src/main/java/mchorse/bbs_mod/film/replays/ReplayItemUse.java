@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.film.replays;
 
+import mchorse.bbs_mod.utils.VersionCompat;
 import mchorse.bbs_mod.actions.types.ActionClip;
 import mchorse.bbs_mod.actions.types.item.UseItemActionClip;
 import mchorse.bbs_mod.cubic.animation.ItemUsePose;
@@ -96,9 +97,9 @@ public class ReplayItemUse
         {
             case EAT:
             case DRINK:
-                return stack.getMaxUseTime() > 0 ? stack.getMaxUseTime() : 32F;
+                return VersionCompat.getMaxUseTime(stack, null) > 0 ? VersionCompat.getMaxUseTime(stack, null) : 32F;
             case CROSSBOW:
-                return Math.max(1, CrossbowItem.getPullTime(stack));
+                return Math.max(1, VersionCompat.getPullTime(stack, null));
             case SPEAR:
                 return 10F;
             default:

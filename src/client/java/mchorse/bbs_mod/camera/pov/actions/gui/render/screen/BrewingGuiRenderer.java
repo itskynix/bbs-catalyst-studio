@@ -8,6 +8,7 @@
  */
 package mchorse.bbs_mod.camera.pov.actions.gui.render.screen;
 
+import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.camera.pov.actions.clip.GuiPovActionClip;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.GuiRenderContext;
 import mchorse.bbs_mod.camera.pov.actions.gui.render.GuiRenderer;
@@ -22,9 +23,9 @@ public final class BrewingGuiRenderer
 implements GuiRenderer,
 GuiScreenChrome {
     public static final BrewingGuiRenderer INSTANCE = new BrewingGuiRenderer();
-    private static final Identifier BREWING_FUEL = new Identifier("container/brewing_stand/fuel_length");
-    private static final Identifier BREWING_ARROW = new Identifier("container/brewing_stand/brew_progress");
-    private static final Identifier BREWING_BUBBLES = new Identifier("container/brewing_stand/bubbles");
+    private static final Identifier BREWING_FUEL = Ids.of("container/brewing_stand/fuel_length");
+    private static final Identifier BREWING_ARROW = Ids.of("container/brewing_stand/brew_progress");
+    private static final Identifier BREWING_BUBBLES = Ids.of("container/brewing_stand/bubbles");
     private static final int[] BREWING_BUBBLE_FRAMES = new int[]{0, 6, 11, 16, 20, 24, 29};
 
     private BrewingGuiRenderer() {

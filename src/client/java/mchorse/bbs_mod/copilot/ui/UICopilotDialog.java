@@ -156,6 +156,10 @@ public class UICopilotDialog extends UIOverlayPanel {
 
         this.content.add(this.sidebar, this.chatArea);
 
+        /* Work in progress: shown as it is, but nothing in it takes input until it is rebuilt (the
+         * window's own close button is outside the content and still works) */
+        this.content.setEnabled(false);
+
         this.keys().register(Keys.CONFIRM, this::send);
 
         this.rebuildSessions();
