@@ -503,7 +503,8 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
 
         if (distance > 0.001D) {
             float invDist = 1.0F / (float) distance;
-            localX = (float) (dx * camRight.x + dy * camRight.y + dz * camRight.z) * invDist;
+            /* Invert dot product polarity so +localX is strictly right ear and -localX is strictly left ear */
+            localX = -(float) (dx * camRight.x + dy * camRight.y + dz * camRight.z) * invDist;
             localY = (float) (dx * camUp.x + dy * camUp.y + dz * camUp.z) * invDist;
             localZForward = (float) (dx * camForward.x + dy * camForward.y + dz * camForward.z) * invDist;
         } else {
