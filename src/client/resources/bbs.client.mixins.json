@@ -60,7 +60,9 @@
         "ParticleManagerInvoker",
         "ParticleMixin",
         "TitleScreenMixin",
-        "ClientPlayNetworkHandlerPortalMixin"
+        "ClientPlayNetworkHandlerPortalMixin",
+        "SoundEngineMixin",
+        "SoundSystemMixin"
     ],
     "injectors": {
         "defaultRequire": 1

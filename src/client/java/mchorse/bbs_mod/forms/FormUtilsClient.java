@@ -6,6 +6,8 @@ import mchorse.bbs_mod.forms.forms.AnchorForm;
 import mchorse.bbs_mod.forms.forms.PortalForm;
 import mchorse.bbs_mod.forms.forms.BillboardForm;
 import mchorse.bbs_mod.forms.forms.BlockForm;
+import mchorse.bbs_mod.forms.forms.DecalForm;
+import mchorse.bbs_mod.forms.forms.HeightFogForm;
 import mchorse.bbs_mod.forms.forms.ExtrudedForm;
 import mchorse.bbs_mod.cubic.IBoneHierarchy;
 import mchorse.bbs_mod.forms.forms.Form;
@@ -26,6 +28,8 @@ import mchorse.bbs_mod.forms.renderers.AudioFormRenderer;
 import mchorse.bbs_mod.forms.renderers.PortalFormRenderer;
 import mchorse.bbs_mod.forms.renderers.BillboardFormRenderer;
 import mchorse.bbs_mod.forms.renderers.BlockFormRenderer;
+import mchorse.bbs_mod.forms.renderers.DecalFormRenderer;
+import mchorse.bbs_mod.forms.renderers.HeightFogFormRenderer;
 import mchorse.bbs_mod.forms.renderers.ExtrudedFormRenderer;
 import mchorse.bbs_mod.forms.renderers.FormRenderer;
 import mchorse.bbs_mod.utils.profiler.BBSProfiler;
@@ -163,6 +167,8 @@ public class FormUtilsClient
         register(FramebufferForm.class, FramebufferFormRenderer::new);
         register(StructureForm.class, StructureFormRenderer::new);
         register(AudioForm.class, AudioFormRenderer::new);
+        register(DecalForm.class, DecalFormRenderer::new);
+        register(HeightFogForm.class, HeightFogFormRenderer::new);
     }
 
     //? if >=1.21 {

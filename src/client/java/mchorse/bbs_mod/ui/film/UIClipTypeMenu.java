@@ -42,7 +42,7 @@ public class UIClipTypeMenu extends UIContextMenu
     private static final String[][] CATEGORIES = {
         {"idle", "dolly", "path", "keyframe", "pro_camera", "ai_camera", "pov"},
         {"audio", "video", "image"},
-        {"color_grade", "cinematic_effects", "motion_blur", "vignette", "letterbox", "grain", "lens_distortion", "screen_shake", "screen_shader_graph", "eye"},
+        {"color_grade", "compound_fx", "cinematic_effects", "motion_blur", "vignette", "letterbox", "grain", "lens_distortion", "screen_shake", "world_wobble", "debris", "screen_shader_graph", "eye"},
         {"translate", "angle", "drag", "shake", "math", "look", "orbit", "remapper", "tracker", "dolly_zoom", "fov_punch"},
         {}
     };
@@ -62,6 +62,25 @@ public class UIClipTypeMenu extends UIContextMenu
     public static boolean applies(IFactory<Clip, ClipFactoryData> factory)
     {
         return factory.getKeys().contains(Link.bbs("keyframe"));
+    }
+
+    /** The "Post-Production and Overlay" tab's clips, in the tab's own order: what everything that lists effects is fed from. */
+    public static List<Link> effectTypes(IFactory<Clip, ClipFactoryData> factory)
+    {
+        List<Link> types = new ArrayList<>();
+
+        for (String id : CATEGORIES[2])
+        {
+            for (Link type : factory.getKeys())
+            {
+                if (type.path.equals(id) && !excluded(type))
+                {
+                    types.add(type);
+                }
+            }
+        }
+
+        return types;
     }
 
     private static boolean excluded(Link type)

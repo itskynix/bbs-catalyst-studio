@@ -78,7 +78,19 @@ public class UIPoseEditor extends UIElement
         this.expand();
         this.groups.list.context(() ->
         {
-            UIDataContextMenu menu = new UIDataContextMenu(PoseManager.INSTANCE, this.group, () -> this.pose.toData(), this::pastePose);
+            if (this.pose == null)
+            {
+                return null;
+            }
+
+            String targetGroup = this.group;
+
+            if (targetGroup == null || targetGroup.isEmpty())
+            {
+                targetGroup = "player/steve";
+            }
+
+            UIDataContextMenu menu = new UIDataContextMenu(PoseManager.INSTANCE, targetGroup, () -> this.pose.toData(), this::pastePose);
 
             menu.bar.register(new MenuIcon(Icons.CONVERT, UIKeys.POSE_CONTEXT_FLIP_POSE, MenuVerb.Slot.COMMON, this::flipPose).keepOpen());
 

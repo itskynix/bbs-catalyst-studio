@@ -173,6 +173,17 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
 
     public static ModelInstance getModel(ModelForm form)
     {
+        /* Mesh swap: one keyframe on "damaged" takes the form from the intact model to the wrecked one. */
+        if (form.damaged.get() && form.damagedModel.get() != null && !form.damagedModel.get().isEmpty())
+        {
+            ModelInstance wrecked = BBSModClient.getModels().getModel(form.damagedModel.get());
+
+            if (wrecked != null)
+            {
+                return wrecked;
+            }
+        }
+
         return BBSModClient.getModels().getModel(form.model.get());
     }
 
@@ -212,6 +223,13 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
         for (ValuePose newPose : this.form.additionalOverlays)
         {
             this.applyPose(pose, newPose.get());
+        }
+
+        if (Float.isFinite(this.form.gazeX) && Float.isFinite(this.form.gazeY))
+        {
+            /* Additive on top of whatever is keyed: clearing the target just stops this. */
+            pose.getOrCreate("pupil_l").translate.add(this.form.gazeX, this.form.gazeY, 0F);
+            pose.getOrCreate("pupil_r").translate.add(this.form.gazeX, this.form.gazeY, 0F);
         }
 
         return pose;
@@ -474,7 +492,7 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
 
         this.applyIK(model, baseTransform, target, transition);
         this.applyPhysics(target, model, transition, baseTransform);
-        this.applyConstraints(model);
+        this.applyConstraints(model, target, transition);
 
         /* Default texture for materials without their own: the form's texture override, else the
          * model's default. Per-material textures (folder defaults now, animation tracks later)
@@ -714,9 +732,9 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
         ModelPhysicsRuntime.apply(target, model, transition, baseTransform);
     }
 
-    private void applyConstraints(ModelInstance model)
+    private void applyConstraints(ModelInstance model, IEntity target, float transition)
     {
-        ModelConstraintsRuntime.apply(model);
+        ModelConstraintsRuntime.apply(model, target, transition);
     }
 
     private void renderArmor(IEntity target, MatrixStack stack, ArmorType type, ArmorSlot armorSlot, Color color, int overlay, int light)

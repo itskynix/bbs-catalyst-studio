@@ -39,14 +39,18 @@ import mchorse.bbs_mod.ui.forms.IUIFormList;
 import mchorse.bbs_mod.ui.forms.UIFormList;
 import mchorse.bbs_mod.ui.forms.UIFormPalette;
 import mchorse.bbs_mod.forms.forms.AudioForm;
+import mchorse.bbs_mod.forms.forms.DecalForm;
+import mchorse.bbs_mod.forms.forms.HeightFogForm;
 import mchorse.bbs_mod.ui.forms.editors.forms.UIAnchorForm;
 import mchorse.bbs_mod.ui.forms.editors.forms.UIAudioForm;
+import mchorse.bbs_mod.ui.forms.editors.forms.UIDecalForm;
 import mchorse.bbs_mod.ui.forms.editors.forms.UIPortalForm;
 import mchorse.bbs_mod.ui.forms.editors.forms.UIBillboardForm;
 import mchorse.bbs_mod.ui.forms.editors.forms.UIBlockForm;
 import mchorse.bbs_mod.ui.forms.editors.forms.UIExtrudedForm;
 import mchorse.bbs_mod.ui.forms.editors.forms.UIForm;
 import mchorse.bbs_mod.ui.forms.editors.forms.UIFramebufferForm;
+import mchorse.bbs_mod.ui.forms.editors.forms.UIHeightFogForm;
 import mchorse.bbs_mod.ui.forms.editors.forms.UIItemForm;
 import mchorse.bbs_mod.ui.forms.editors.forms.UILabelForm;
 import mchorse.bbs_mod.ui.forms.editors.forms.UIMobForm;
@@ -181,6 +185,8 @@ public class UIFormEditor extends UIElement implements IUIFormList, ICursor, IBo
         register(FramebufferForm.class, UIFramebufferForm::new);
         register(StructureForm.class, UIStructureForm::new);
         register(AudioForm.class, UIAudioForm::new);
+        register(DecalForm.class, UIDecalForm::new);
+        register(HeightFogForm.class, UIHeightFogForm::new);
     }
 
     public static void register(Class clazz, Supplier<UIForm> supplier)
@@ -758,7 +764,7 @@ public class UIFormEditor extends UIElement implements IUIFormList, ICursor, IBo
             {
                 menu.action(Icons.CAMERA, UIKeys.FORMS_EDITOR_CONTEXT_SETUP_FACE, () ->
                 {
-                    UIOverlay.addOverlay(this.getContext(), new UISetupFaceOverlayPanel((model, offset) -> this.setupFace(framebuffer, parent, model, offset)), 240, 170);
+                    UIOverlay.addOverlay(this.getContext(), new UISetupFaceOverlayPanel((model, offset, depth, glow) -> this.setupFace(framebuffer, parent, model, offset, depth, glow)), 240, 210);
                 });
             }
 
@@ -779,7 +785,7 @@ public class UIFormEditor extends UIElement implements IUIFormList, ICursor, IBo
      * as a flat billboard, its face square erased from the parent so the framebuffer shows
      * through, and a rig for the eyes on top of it.
      */
-    private void setupFace(FramebufferForm framebuffer, ModelForm parent, String model, double verticalOffset)
+    private void setupFace(FramebufferForm framebuffer, ModelForm parent, String model, double verticalOffset, double depth, boolean glow)
     {
         BaseValue.edit(parent, (v) ->
         {
@@ -840,9 +846,11 @@ public class UIFormEditor extends UIElement implements IUIFormList, ICursor, IBo
 
             eyes.model.set(model);
             eyesPart.setForm(eyes);
-            eyesPart.transform.get().translate.set(0F, (float) (-1D + verticalOffset / 8D), -0.495F);
+            eyesPart.transform.get().translate.set(0F, (float) (-1D + verticalOffset / 8D), (float) (-0.495F - depth));
             eyesPart.transform.get().scale.set(2F);
 
+            framebuffer.glow.set(glow);
+            framebuffer.inset.set((float) depth);
             framebuffer.transform.get().translate.set(0F, 0.5F, 0.25F);
             framebuffer.parts.addBodyPart(facePart);
             framebuffer.parts.addBodyPart(eyesPart);

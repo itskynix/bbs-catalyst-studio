@@ -20,6 +20,7 @@ import mchorse.bbs_mod.graphics.texture.TextureFormat;
 import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.dashboard.UIDashboard;
 import mchorse.bbs_mod.ui.film.FrameOverlays;
+import mchorse.bbs_mod.ui.film.PostFxRenderer;
 import mchorse.bbs_mod.ui.film.UIFilmPanel;
 import mchorse.bbs_mod.ui.framework.UIBaseMenu;
 import mchorse.bbs_mod.ui.framework.UIScreen;
@@ -648,6 +649,30 @@ public class BBSRendering
         }
 
         toggleFramebuffer(true);
+    }
+
+    /**
+     * Keep the world's depth for the world wobble. Vanilla clears the depth buffer before it draws the hand,
+     * which comes after the world, so this has to run when the world is done and before that.
+     */
+    public static void captureWobbleDepth()
+    {
+        boolean wanted = false;
+
+        if (BBSModClient.getCameraController().getCurrent() instanceof PlayCameraController controller)
+        {
+            wanted = PostFxRenderer.wantsDepth(controller.getContext());
+        }
+
+        if (!wanted && customSize && UIScreen.getCurrentMenu() instanceof UIDashboard dashboard && dashboard.getPanels().panel instanceof UIFilmPanel panel)
+        {
+            wanted = PostFxRenderer.wantsDepth(panel.getRunner().getContext());
+        }
+
+        if (wanted)
+        {
+            PostFxRenderer.captureDepth();
+        }
     }
 
     public static void onWorldRenderEnd()

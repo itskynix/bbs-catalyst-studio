@@ -94,9 +94,14 @@ public class SoundPlayer
         return this.unique;
     }
 
+    public boolean isValid()
+    {
+        return this.source > 0 && AL10.alIsSource(this.source);
+    }
+
     public boolean canBeRemoved()
     {
-        return !this.unique && this.isStopped();
+        return (!this.unique && this.isStopped()) || !this.isValid();
     }
 
     /* Properties */
@@ -175,6 +180,11 @@ public class SoundPlayer
 
     private void applyRampedVolume(float volume)
     {
+        if (!this.isValid())
+        {
+            return;
+        }
+
         float gain = MathUtils.clamp(volume, 0F, getGainLimit());
 
         /* AL_MAX_GAIN has to be lifted first, or the gain below gets clamped back to it */
@@ -188,13 +198,19 @@ public class SoundPlayer
 
     public void setPitch(float pitch)
     {
-        AL10.alSourcef(this.source, AL10.AL_PITCH, pitch);
+        if (this.isValid())
+        {
+            AL10.alSourcef(this.source, AL10.AL_PITCH, pitch);
+        }
     }
 
     public void setRelative(boolean relative)
     {
-        AL10.alSourcei(this.source, AL10.AL_SOURCE_RELATIVE, relative ? AL10.AL_TRUE : AL10.AL_FALSE);
-        AL10.alSourcef(this.source, AL10.AL_ROLLOFF_FACTOR, relative ? 0.0F : 1.0F);
+        if (this.isValid())
+        {
+            AL10.alSourcei(this.source, AL10.AL_SOURCE_RELATIVE, relative ? AL10.AL_TRUE : AL10.AL_FALSE);
+            AL10.alSourcef(this.source, AL10.AL_ROLLOFF_FACTOR, relative ? 0.0F : 1.0F);
+        }
     }
 
     /**
@@ -206,6 +222,11 @@ public class SoundPlayer
      */
     public SoundPlayer configure2DStereo()
     {
+        if (!this.isValid())
+        {
+            return this;
+        }
+
         AL10.alSourcei(this.source, AL10.AL_SOURCE_RELATIVE, AL10.AL_TRUE);
         AL10.alSource3f(this.source, AL10.AL_POSITION, 0.0F, 0.0F, 0.0F);
         AL10.alSource3f(this.source, AL10.AL_VELOCITY, 0.0F, 0.0F, 0.0F);
@@ -227,7 +248,7 @@ public class SoundPlayer
      */
     public SoundPlayer setPan(float pan)
     {
-        if (this.source > 0)
+        if (this.isValid())
         {
             float clampedPan = Math.max(-1.0f, Math.min(1.0f, pan));
 
@@ -257,7 +278,10 @@ public class SoundPlayer
 
     public void setLooping(boolean looping)
     {
-        AL10.alSourcei(this.source, AL10.AL_LOOPING, looping ? AL10.AL_TRUE : AL10.AL_FALSE);
+        if (this.isValid())
+        {
+            AL10.alSourcei(this.source, AL10.AL_LOOPING, looping ? AL10.AL_TRUE : AL10.AL_FALSE);
+        }
     }
 
     public void setPosition(Vector3f vector)
@@ -267,7 +291,10 @@ public class SoundPlayer
 
     public void setPosition(float x, float y, float z)
     {
-        AL10.alSource3f(this.source, AL10.AL_POSITION, x, y, z);
+        if (this.isValid())
+        {
+            AL10.alSource3f(this.source, AL10.AL_POSITION, x, y, z);
+        }
     }
 
     public void setVelocity(Vector3f vector)
@@ -277,13 +304,21 @@ public class SoundPlayer
 
     public void setVelocity(float x, float y, float z)
     {
-        AL10.alSource3f(this.source, AL10.AL_VELOCITY, x, y, z);
+        if (this.isValid())
+        {
+            AL10.alSource3f(this.source, AL10.AL_VELOCITY, x, y, z);
+        }
     }
 
     /* Playback */
 
     public void play()
     {
+        if (!this.isValid())
+        {
+            return;
+        }
+
         if (!mchorse.bbs_mod.BBSModClient.getVideoRecorder().isRecording())
         {
             this.triggerSoftGainRamp();
@@ -300,34 +335,45 @@ public class SoundPlayer
 
     public void pause()
     {
-        AL10.alSourcePause(this.source);
+        if (this.isValid())
+        {
+            AL10.alSourcePause(this.source);
+        }
     }
 
     public void stop()
     {
-        AL10.alSourceStop(this.source);
+        if (this.isValid())
+        {
+            AL10.alSourceStop(this.source);
+        }
         this.pendingOffset = -1F;
         this.ramping = false;
     }
 
     public int getSourceState()
     {
+        if (!this.isValid())
+        {
+            return AL10.AL_STOPPED;
+        }
+
         return AL10.alGetSourcei(this.source, AL10.AL_SOURCE_STATE);
     }
 
     public boolean isPlaying()
     {
-        return this.getSourceState() == AL10.AL_PLAYING;
+        return this.isValid() && this.getSourceState() == AL10.AL_PLAYING;
     }
 
     public boolean isPaused()
     {
-        return this.getSourceState() == AL10.AL_PAUSED;
+        return this.isValid() && this.getSourceState() == AL10.AL_PAUSED;
     }
 
     public boolean isStopped()
     {
-        if (this.source == -1)
+        if (!this.isValid())
         {
             return true;
         }
@@ -339,6 +385,11 @@ public class SoundPlayer
 
     public float getPlaybackPosition()
     {
+        if (!this.isValid())
+        {
+            return 0.0F;
+        }
+
         return AL10.alGetSourcef(this.source, AL11.AL_SEC_OFFSET);
     }
 
@@ -349,12 +400,15 @@ public class SoundPlayer
             seconds = MathUtils.clamp(seconds, 0, this.buffer.getDuration());
         }
 
+        if (!this.isValid())
+        {
+            this.pendingOffset = seconds;
+            return;
+        }
+
         if (this.isPlaying())
         {
-            if (this.source > 0)
-            {
-                AL10.alSourcef(this.source, AL11.AL_SEC_OFFSET, seconds);
-            }
+            AL10.alSourcef(this.source, AL11.AL_SEC_OFFSET, seconds);
             this.pendingOffset = -1F;
             if (!mchorse.bbs_mod.BBSModClient.getVideoRecorder().isRecording())
             {
@@ -364,19 +418,16 @@ public class SoundPlayer
         else
         {
             this.pendingOffset = seconds;
-            if (this.source > 0)
-            {
-                AL10.alSourcef(this.source, AL11.AL_SEC_OFFSET, seconds);
-            }
+            AL10.alSourcef(this.source, AL11.AL_SEC_OFFSET, seconds);
         }
     }
 
     public void setBuffer(SoundBuffer buffer)
     {
-        if (this.source > 0)
+        if (this.isValid())
         {
             AL10.alSourceStop(this.source);
-            AL10.alSourcei(this.source, AL10.AL_BUFFER, buffer != null ? buffer.getBuffer() : 0);
+            AL10.alSourcei(this.source, AL10.AL_BUFFER, buffer != null && buffer.isValid() ? buffer.getBuffer() : 0);
         }
         this.buffer = buffer;
     }
@@ -387,11 +438,14 @@ public class SoundPlayer
         {
             try
             {
-                AL10.alSourceStop(this.source);
-                AL10.alSourcei(this.source, AL10.AL_BUFFER, 0);
-                AL10.alDeleteSources(this.source);
+                if (AL10.alIsSource(this.source))
+                {
+                    AL10.alSourceStop(this.source);
+                    AL10.alSourcei(this.source, AL10.AL_BUFFER, 0);
+                    AL10.alDeleteSources(this.source);
+                }
             }
-            catch (Exception ignored) {}
+            catch (Throwable ignored) {}
             this.source = -1;
         }
 

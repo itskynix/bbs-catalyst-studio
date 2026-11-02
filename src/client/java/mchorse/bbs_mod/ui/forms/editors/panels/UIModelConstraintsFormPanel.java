@@ -37,6 +37,11 @@ public class UIModelConstraintsFormPanel extends UIBoneListFormPanel
     public UISliderTrackpad maxZ;
     public UIButton applyToChildren;
 
+    public UIToggle jitter;
+    public UISliderTrackpad jitterIntensity;
+    public UISliderTrackpad jitterFrequency;
+    private UIElement jitterRow;
+
     /** The angle pairs, shown only for the axes whose switch is on — as in the IK joint. */
     private UIElement limitRowX;
     private UIElement limitRowY;
@@ -68,6 +73,27 @@ public class UIModelConstraintsFormPanel extends UIBoneListFormPanel
         this.maxZ = axisTrackpad((v) -> this.editConstraint((c) -> c.maxZ = v.floatValue()), Colors.BLUE, axis.format(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_MAX, UIKeys.GENERAL_Z));
         this.applyToChildren = new UIButton(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_APPLY_TO_CHILDREN, (b) -> this.applySelectedToChildren());
 
+        this.jitter = new UIToggle(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_JITTER, false, (b) ->
+        {
+            this.editConstraint((c) -> c.jitter = b.getValue());
+            this.jitterRow.setVisible(b.getValue());
+            this.options.resize();
+        });
+        this.jitter.tooltip(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_JITTER_TOOLTIP);
+
+        this.jitterIntensity = new UISliderTrackpad((v) -> this.editConstraint((c) -> c.jitterIntensity = v.floatValue()));
+        this.jitterIntensity.limit(0D, 30D).values(0.1D, 0.5D, 1.0D);
+        this.jitterIntensity.tooltip(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_JITTER_INTENSITY_TOOLTIP);
+
+        this.jitterFrequency = new UISliderTrackpad((v) -> this.editConstraint((c) -> c.jitterFrequency = v.floatValue()));
+        this.jitterFrequency.limit(0.1D, 10D).values(0.1D, 0.5D, 1.0D);
+        this.jitterFrequency.tooltip(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_JITTER_FREQUENCY_TOOLTIP);
+
+        this.jitterRow = UI.row(
+            UI.column(UI.label(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_JITTER_INTENSITY), this.jitterIntensity),
+            UI.column(UI.label(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_JITTER_FREQUENCY), this.jitterFrequency)
+        );
+
         UISection params = this.section(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_SETTINGS, "constraints.settings", true);
 
         this.limitRowX = UI.row(this.minX, this.maxX);
@@ -88,9 +114,13 @@ public class UIModelConstraintsFormPanel extends UIBoneListFormPanel
             this.applyToChildren.marginTop(UIConstants.SECTION_GAP)
         );
 
+        UISection jitterSection = this.section(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_JITTER, "constraints.jitter", true);
+        jitterSection.fields.add(this.jitter, this.jitterRow);
+
         this.options.add(
             this.bonesSearch,
-            params
+            params,
+            jitterSection
         );
     }
 
@@ -168,6 +198,10 @@ public class UIModelConstraintsFormPanel extends UIBoneListFormPanel
         this.maxX.setValue(c.maxX);
         this.maxY.setValue(c.maxY);
         this.maxZ.setValue(c.maxZ);
+        this.jitter.setValue(c.jitter);
+        this.jitterIntensity.setValue(c.jitterIntensity);
+        this.jitterFrequency.setValue(c.jitterFrequency);
+        this.jitterRow.setVisible(c.jitter);
 
         this.updateFieldsEnabled();
     }
@@ -190,6 +224,9 @@ public class UIModelConstraintsFormPanel extends UIBoneListFormPanel
         this.maxX.setEnabled(active && c.limitX);
         this.maxY.setEnabled(active && c.limitY);
         this.maxZ.setEnabled(active && c.limitZ);
+        this.jitter.setEnabled(active);
+        this.jitterIntensity.setEnabled(active && c.jitter);
+        this.jitterFrequency.setEnabled(active && c.jitter);
     }
 
     private void applySelectedToChildren()

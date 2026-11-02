@@ -28,6 +28,7 @@ public class UIAudioFormPanel extends UIFormPanel<AudioForm>
 
     public UIToggle loop;
     public UIToggle muffle;
+    public UIToggle doppler;
     public UIToggle wireframeSwitch;
 
     public UITrackpad volume;
@@ -36,6 +37,7 @@ public class UIAudioFormPanel extends UIFormPanel<AudioForm>
     public UITrackpad pan;
     public UITrackpad radius;
     public UITrackpad occlusion;
+    public UITrackpad dopplerScale;
 
     public UIAudioFormPanel(UIForm editor)
     {
@@ -84,6 +86,7 @@ public class UIAudioFormPanel extends UIFormPanel<AudioForm>
 
         this.loop = UIValues.toggle(UIKeys.FORMS_AUDIO_LOOP, () -> this.form.loop);
         this.muffle = UIValues.toggle(UIKeys.FORMS_AUDIO_MUFFLE, () -> this.form.muffle);
+        this.doppler = UIValues.toggle(UIKeys.FORMS_AUDIO_DOPPLER, () -> this.form.doppler);
         this.wireframeSwitch = new UIToggle(UIKeys.FORMS_AUDIO_SHOW_WIREFRAME, (b) ->
         {
             if (this.form != null)
@@ -129,17 +132,25 @@ public class UIAudioFormPanel extends UIFormPanel<AudioForm>
             .values(0.05D, 0.01D, 0.1D);
         this.occlusion.tooltip(UIKeys.FORMS_AUDIO_OCCLUSION_TOOLTIP);
 
+        this.dopplerScale = UIValues.trackpad(() -> this.form.dopplerScale)
+            .limit(0.0D, 5.0D)
+            .increment(0.1D)
+            .values(0.1D, 0.01D, 0.5D);
+        this.dopplerScale.tooltip(UIKeys.FORMS_AUDIO_DOPPLER_SCALE_TOOLTIP);
+
         this.options.add(
             UI.row(this.pick, this.toggleWireframe, this.openFolder),
             this.loop,
             this.muffle,
+            this.doppler,
             this.wireframeSwitch,
             UI.labelRow(UIKeys.FORMS_AUDIO_VOLUME, this.volume).marginTop(UIConstants.SECTION_GAP),
             UI.labelRow(UIKeys.FORMS_AUDIO_PITCH, this.pitch),
             UI.labelRow(UIKeys.FORMS_AUDIO_OFFSET, this.offset),
             UI.labelRow(UIKeys.FORMS_AUDIO_PAN, this.pan),
             UI.labelRow(UIKeys.FORMS_AUDIO_RADIUS, this.radius),
-            UI.labelRow(UIKeys.FORMS_AUDIO_OCCLUSION, this.occlusion)
+            UI.labelRow(UIKeys.FORMS_AUDIO_OCCLUSION, this.occlusion),
+            UI.labelRow(UIKeys.FORMS_AUDIO_DOPPLER_SCALE, this.dopplerScale)
         );
     }
 

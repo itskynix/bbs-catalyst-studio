@@ -30,6 +30,7 @@ public class AudioForm extends Form
     public final ValueBoolean muffle = new ValueBoolean("muffle", true);
     public final ValueBoolean showWireframe = new ValueBoolean("showWireframe", true);
     public final ValueBoolean stream = new ValueBoolean("stream", false);
+    public final ValueBoolean doppler = new ValueBoolean("doppler", false);
 
     /* Animatable properties (exposed in UIAudioFormPanel and "Audio Tracks" Dope Sheet tab) */
     public final ValueFloat volume = new ValueFloat("volume", 1.0F, 0.0F, 2.0F);
@@ -38,6 +39,7 @@ public class AudioForm extends Form
     public final ValueFloat pan = new ValueFloat("pan", 0.0F, -1.0F, 1.0F);
     public final ValueFloat radius = new ValueFloat("radius", 16.0F, 0.1F, 256.0F);
     public final ValueFloat occlusionFactor = new ValueFloat("occlusionFactor", 1.0F, 0.0F, 2.0F);
+    public final ValueFloat dopplerScale = new ValueFloat("dopplerScale", 1.0F, 0.0F, 5.0F);
 
     public AudioForm()
     {
@@ -49,12 +51,14 @@ public class AudioForm extends Form
         this.muffle.invisible();
         this.showWireframe.invisible();
         this.stream.invisible();
+        this.doppler.invisible();
 
         this.add(this.sound);
         this.add(this.loop);
         this.add(this.muffle);
         this.add(this.showWireframe);
         this.add(this.stream);
+        this.add(this.doppler);
 
         this.add(this.volume);
         this.add(this.pitch);
@@ -62,6 +66,7 @@ public class AudioForm extends Form
         this.add(this.pan);
         this.add(this.radius);
         this.add(this.occlusionFactor);
+        this.add(this.dopplerScale);
     }
 
     public long getRuntimeInstanceId()
@@ -114,6 +119,21 @@ public class AudioForm extends Form
     public double getOcclusionFactor(float transition)
     {
         return this.occlusionFactor.get();
+    }
+
+    public boolean isDoppler()
+    {
+        return this.doppler.get();
+    }
+
+    public double getDopplerScale()
+    {
+        return this.dopplerScale.get();
+    }
+
+    public double getDopplerScale(float transition)
+    {
+        return this.dopplerScale.get();
     }
 
     @Override

@@ -29,7 +29,7 @@ import mchorse.bbs_mod.utils.keyframes.factories.KeyframeFactories;
 import java.util.HashMap;
 import java.util.Map;
 
-public abstract class UIKeyframeFactory <T> extends UIElement
+public abstract class UIKeyframeFactory<T> extends UIElement
 {
     private static final Map<IKeyframeFactory, IUIKeyframeFactoryFactory> FACTORIES = new HashMap<>();
 
@@ -75,6 +75,7 @@ public abstract class UIKeyframeFactory <T> extends UIElement
         register(KeyframeFactories.WIND, UIWindKeyframeFactory::new);
         register(KeyframeFactories.POSE_TRANSFORM, UIPoseTransformKeyframeFactory::new);
         register(KeyframeFactories.BONE_CONSTRAINT, UIBoneConstraintKeyframeFactory::new);
+        register(KeyframeFactories.JITTER, UIJitterKeyframeFactory::new);
         register(KeyframeFactories.STRING, UIStringKeyframeFactory::new);
         register(KeyframeFactories.TRANSFORM, UITransformKeyframeFactory::new);
         register(KeyframeFactories.VECTOR4F, UIVector4fKeyframeFactory::new);
@@ -85,6 +86,7 @@ public abstract class UIKeyframeFactory <T> extends UIElement
         register(KeyframeFactories.PARTICLE_SETTINGS, UIParticleSettingsKeyframeFactory::new);
 
         registerProperty("model", UIModelKeyframeFactory::new);
+        registerProperty("targetActor", UITargetActorKeyframeFactory::new);
     }
 
     public static <T> void register(IKeyframeFactory<T> clazz, IUIKeyframeFactoryFactory<T> factory)
@@ -131,12 +133,25 @@ public abstract class UIKeyframeFactory <T> extends UIElement
         IUIKeyframeGraph graph = editor == null ? null : editor.getGraph();
         UIKeyframeSheet sheet = graph == null ? null : graph.getSheet(keyframe);
 
-        if (sheet == null || sheet.property == null || sheet.isBoneTrack)
+        if (sheet == null || sheet.isBoneTrack)
         {
             return null;
         }
 
-        return PROPERTIES.get(StringUtils.fileName(sheet.channel.getId()));
+        String id = sheet.channel != null ? sheet.channel.getId() : "";
+
+        if (id.endsWith("targetActor") || id.equals("targetActor"))
+        {
+            return PROPERTIES.get("targetActor");
+        }
+
+        if (sheet.property == null)
+        {
+            return null;
+        }
+
+        String propName = StringUtils.fileName(id);
+        return PROPERTIES.get(propName);
     }
 
     public UIKeyframeFactory(Keyframe<T> keyframe, UIKeyframes editor)
@@ -163,9 +178,11 @@ public abstract class UIKeyframeFactory <T> extends UIElement
         });
         this.interp.wh(UIConstants.CONTROL_HEIGHT, UIConstants.CONTROL_HEIGHT);
         this.interp.tooltip(new InterpolationTooltip(0F, 0.5F, () -> this.keyframe.getInterpolation()));
-        this.interp.keys().register(Keys.KEYFRAMES_INTERP, this.interp::clickItself).category(UIKeys.KEYFRAMES_KEYS_CATEGORY);
+        this.interp.keys().register(Keys.KEYFRAMES_INTERP, this.interp::clickItself)
+            .category(UIKeys.KEYFRAMES_KEYS_CATEGORY);
 
-        this.motionShift = new UITrackpad(v -> this.editor.getGraph().setMotionShift(v.floatValue() / 100F, !this.draggingMotionShift));
+        this.motionShift = new UITrackpad(
+            v -> this.editor.getGraph().setMotionShift(v.floatValue() / 100F, !this.draggingMotionShift));
         this.motionShift.limit(-49, 49).tooltip(UIKeys.KEYFRAMES_MOTION_SHIFT);
         this.motionShift.getEvents().register(UITrackpadDragStartEvent.class, e ->
         {
@@ -260,7 +277,7 @@ public abstract class UIKeyframeFactory <T> extends UIElement
         this.motionShift.setEnabled(this.keyframe.supportsMotionShift());
     }
 
-    public static interface IUIKeyframeFactoryFactory <T>
+    public static interface IUIKeyframeFactoryFactory<T>
     {
         public UIKeyframeFactory<T> create(Keyframe<T> keyframe, UIKeyframes editor);
     }

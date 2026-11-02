@@ -1,0 +1,10 @@
+.gradle/
+build/
+run/
+versions/
+.git/
+*.jar
+*.png
+*.jpg
+*.log
+temp_*

@@ -1,6 +1,7 @@
 package mchorse.bbs_mod.ui.forms.editors.panels;
 
 import mchorse.bbs_mod.cubic.ModelInstance;
+import mchorse.bbs_mod.cubic.constraints.JitterControl;
 import mchorse.bbs_mod.forms.forms.ModelForm;
 import mchorse.bbs_mod.forms.renderers.ModelFormRenderer;
 import mchorse.bbs_mod.graphics.window.Window;
@@ -13,6 +14,9 @@ import mchorse.bbs_mod.ui.forms.editors.panels.widgets.UIModelPicker;
 import mchorse.bbs_mod.ui.forms.editors.panels.widgets.UIModelPoseEditor;
 import mchorse.bbs_mod.ui.framework.elements.UISection;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIButton;
+import mchorse.bbs_mod.ui.framework.elements.buttons.UICirculate;
+import mchorse.bbs_mod.ui.framework.elements.buttons.UIToggle;
+import mchorse.bbs_mod.ui.framework.elements.input.UISliderTrackpad;
 import mchorse.bbs_mod.ui.framework.elements.input.UITexturePicker;
 import mchorse.bbs_mod.ui.framework.elements.input.UITrackpad;
 import mchorse.bbs_mod.ui.utils.UI;
@@ -33,8 +37,16 @@ public class UIModelFormPanel extends UIFormPanel<ModelForm>
     /** Only for a model that carries a CEM program — see {@link mchorse.bbs_mod.cubic.jem.CemStatus}. */
     public UISection cemSection;
     public UISection capeSection;
+    public UISection jitterSection;
+
+    public UIToggle jitterEnable;
+    public UISliderTrackpad jitterIntensity;
+    public UISliderTrackpad jitterFrequency;
+    public UICirculate jitterTarget;
 
     public UIButton pickModel;
+    public UIButton pickDamagedModel;
+    public UIToggle damaged;
     public UIButton pick;
     public UIButton pickCape;
 
@@ -61,6 +73,15 @@ public class UIModelFormPanel extends UIFormPanel<ModelForm>
                 this.editor.startEdit(this.form);
             });
         });
+        this.pickDamagedModel = new UIButton(UIKeys.FORMS_EDITOR_MODEL_PICK_DAMAGED_MODEL, (b) ->
+        {
+            UIModelPicker.open(this.getContext(), this.form.damagedModel.get(), (l) ->
+            {
+                this.form.damagedModel.set(l);
+                this.editor.startEdit(this.form);
+            });
+        });
+        this.damaged = UIValues.toggle(UIKeys.FORMS_EDITOR_MODEL_DAMAGED, () -> this.form.damaged);
         this.poseEditor = new UIModelPoseEditor();
         this.poseEditor.transform.barBackground();
         this.shapeKeys = new UIShapeKeys();
@@ -93,8 +114,9 @@ public class UIModelFormPanel extends UIFormPanel<ModelForm>
 
         this.buildCemSection();
         this.buildCapeSection();
+        this.buildJitterSection();
 
-        this.options.add(this.pickModel, this.pick, this.poseEditor, this.capeSection);
+        this.options.add(this.pickModel, this.pickDamagedModel, this.damaged, this.pick, this.poseEditor, this.jitterSection, this.capeSection);
     }
 
     @Override
@@ -140,6 +162,47 @@ public class UIModelFormPanel extends UIFormPanel<ModelForm>
         this.capeSection.fields.add(
             UIValues.toggle(UIKeys.FORMS_EDITOR_MODEL_CAPE_ENABLE, () -> this.form.hasCape),
             this.pickCape
+        );
+    }
+
+    private void buildJitterSection()
+    {
+        this.jitterEnable = new UIToggle(UIKeys.FORMS_EDITORS_MODEL_JITTER_ENABLE, (b) ->
+        {
+            this.form.jitter.get().enabled = b.getValue();
+        });
+        this.jitterEnable.tooltip(UIKeys.FORMS_EDITORS_MODEL_JITTER_ENABLE_TOOLTIP);
+
+        this.jitterIntensity = new UISliderTrackpad((v) ->
+        {
+            this.form.jitter.get().intensity = v.floatValue();
+        });
+        this.jitterIntensity.limit(0D, 30D).values(0.1D, 0.5D, 1.0D);
+        this.jitterIntensity.tooltip(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_JITTER_INTENSITY_TOOLTIP);
+
+        this.jitterFrequency = new UISliderTrackpad((v) ->
+        {
+            this.form.jitter.get().frequency = v.floatValue();
+        });
+        this.jitterFrequency.limit(0.1D, 20D).values(0.1D, 0.5D, 1.0D);
+        this.jitterFrequency.tooltip(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_JITTER_FREQUENCY_TOOLTIP);
+
+        this.jitterTarget = new UICirculate((c) ->
+        {
+            this.form.jitter.get().target = c.getValue();
+        });
+        this.jitterTarget.addLabel(UIKeys.FORMS_EDITORS_MODEL_JITTER_TARGET_ALL);
+        this.jitterTarget.addLabel(UIKeys.FORMS_EDITORS_MODEL_JITTER_TARGET_ARMS);
+        this.jitterTarget.addLabel(UIKeys.FORMS_EDITORS_MODEL_JITTER_TARGET_HEAD);
+        this.jitterTarget.addLabel(UIKeys.FORMS_EDITORS_MODEL_JITTER_TARGET_ARMS_AND_HEAD);
+        this.jitterTarget.tooltip(UIKeys.FORMS_EDITORS_MODEL_JITTER_TARGET_TOOLTIP);
+
+        this.jitterSection = this.section(UIKeys.FORMS_EDITORS_MODEL_JITTER, "model.jitter", false);
+        this.jitterSection.fields.add(
+            this.jitterEnable,
+            UI.labelRow(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_JITTER_INTENSITY, this.jitterIntensity),
+            UI.labelRow(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_JITTER_FREQUENCY, this.jitterFrequency),
+            UI.labelRow(UIKeys.FORMS_EDITORS_MODEL_JITTER_TARGET, this.jitterTarget)
         );
     }
 
@@ -220,6 +283,13 @@ public class UIModelFormPanel extends UIFormPanel<ModelForm>
         {
             this.options.add(this.cemSection);
         }
+
+        JitterControl jc = this.form.jitter.get();
+
+        this.jitterEnable.setValue(jc.enabled || jc.intensity > 0.0001F);
+        this.jitterIntensity.setValue(jc.intensity);
+        this.jitterFrequency.setValue(jc.frequency);
+        this.jitterTarget.setValue(Math.max(0, Math.min(3, jc.target)));
 
         this.options.resize();
     }

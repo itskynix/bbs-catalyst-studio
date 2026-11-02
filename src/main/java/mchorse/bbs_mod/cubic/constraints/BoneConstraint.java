@@ -31,10 +31,15 @@ public class BoneConstraint implements IMapSerializable
     public float maxY = DEFAULT_MAX;
     public float maxZ = DEFAULT_MAX;
 
+    /* Procedural Jitter / Shaking (tremors, shivering, horror, panic attacks) */
+    public boolean jitter;
+    public float jitterFrequency = 1.0F;
+    public float jitterIntensity = 0.0F;
+
     /** Whether this constraint clamps anything at all — no axis switched on is nothing to apply. */
     public boolean isActive()
     {
-        return this.limitX || this.limitY || this.limitZ;
+        return this.limitX || this.limitY || this.limitZ || (this.jitter && this.jitterIntensity > 0F);
     }
 
     public void identity()
@@ -48,6 +53,9 @@ public class BoneConstraint implements IMapSerializable
         this.maxX = DEFAULT_MAX;
         this.maxY = DEFAULT_MAX;
         this.maxZ = DEFAULT_MAX;
+        this.jitter = false;
+        this.jitterFrequency = 1.0F;
+        this.jitterIntensity = 0.0F;
     }
 
     public void lerp(BoneConstraint preA, BoneConstraint a, BoneConstraint b, BoneConstraint postB, IInterp interp, float x)
@@ -58,9 +66,12 @@ public class BoneConstraint implements IMapSerializable
         this.maxX = (float) interp.interpolate(IInterp.context.set(preA.maxX, a.maxX, b.maxX, postB.maxX, x));
         this.maxY = (float) interp.interpolate(IInterp.context.set(preA.maxY, a.maxY, b.maxY, postB.maxY, x));
         this.maxZ = (float) interp.interpolate(IInterp.context.set(preA.maxZ, a.maxZ, b.maxZ, postB.maxZ, x));
+        this.jitterFrequency = (float) interp.interpolate(IInterp.context.set(preA.jitterFrequency, a.jitterFrequency, b.jitterFrequency, postB.jitterFrequency, x));
+        this.jitterIntensity = (float) interp.interpolate(IInterp.context.set(preA.jitterIntensity, a.jitterIntensity, b.jitterIntensity, postB.jitterIntensity, x));
         this.limitX = a.limitX;
         this.limitY = a.limitY;
         this.limitZ = a.limitZ;
+        this.jitter = a.jitter;
     }
 
     public void autoLerp(BoneConstraint preA, BoneConstraint a, BoneConstraint b, BoneConstraint postB, float pt, float at, float bt, float qt, boolean clamped, float x)
@@ -71,9 +82,12 @@ public class BoneConstraint implements IMapSerializable
         this.maxX = (float) AutoBezier.get(preA.maxX, a.maxX, b.maxX, postB.maxX, pt, at, bt, qt, clamped, x);
         this.maxY = (float) AutoBezier.get(preA.maxY, a.maxY, b.maxY, postB.maxY, pt, at, bt, qt, clamped, x);
         this.maxZ = (float) AutoBezier.get(preA.maxZ, a.maxZ, b.maxZ, postB.maxZ, pt, at, bt, qt, clamped, x);
+        this.jitterFrequency = (float) AutoBezier.get(preA.jitterFrequency, a.jitterFrequency, b.jitterFrequency, postB.jitterFrequency, pt, at, bt, qt, clamped, x);
+        this.jitterIntensity = (float) AutoBezier.get(preA.jitterIntensity, a.jitterIntensity, b.jitterIntensity, postB.jitterIntensity, pt, at, bt, qt, clamped, x);
         this.limitX = a.limitX;
         this.limitY = a.limitY;
         this.limitZ = a.limitZ;
+        this.jitter = a.jitter;
     }
 
     public BoneConstraint copy()
@@ -96,6 +110,9 @@ public class BoneConstraint implements IMapSerializable
         this.maxX = other.maxX;
         this.maxY = other.maxY;
         this.maxZ = other.maxZ;
+        this.jitter = other.jitter;
+        this.jitterFrequency = other.jitterFrequency;
+        this.jitterIntensity = other.jitterIntensity;
     }
 
     public boolean isDefault()
@@ -121,7 +138,10 @@ public class BoneConstraint implements IMapSerializable
                 && this.minZ == constraint.minZ
                 && this.maxX == constraint.maxX
                 && this.maxY == constraint.maxY
-                && this.maxZ == constraint.maxZ;
+                && this.maxZ == constraint.maxZ
+                && this.jitter == constraint.jitter
+                && this.jitterFrequency == constraint.jitterFrequency
+                && this.jitterIntensity == constraint.jitterIntensity;
         }
 
         return false;
@@ -139,6 +159,9 @@ public class BoneConstraint implements IMapSerializable
         data.putDouble("max_x", this.maxX);
         data.putDouble("max_y", this.maxY);
         data.putDouble("max_z", this.maxZ);
+        data.putBool("jitter", this.jitter);
+        data.putDouble("jitter_freq", this.jitterFrequency);
+        data.putDouble("jitter_intensity", this.jitterIntensity);
     }
 
     @Override
@@ -153,5 +176,8 @@ public class BoneConstraint implements IMapSerializable
         this.maxX = (float) data.getDouble("max_x", DEFAULT.maxX);
         this.maxY = (float) data.getDouble("max_y", DEFAULT.maxY);
         this.maxZ = (float) data.getDouble("max_z", DEFAULT.maxZ);
+        this.jitter = data.getBool("jitter", DEFAULT.jitter);
+        this.jitterFrequency = (float) data.getDouble("jitter_freq", 1.0);
+        this.jitterIntensity = (float) data.getDouble("jitter_intensity", 0.0);
     }
 }

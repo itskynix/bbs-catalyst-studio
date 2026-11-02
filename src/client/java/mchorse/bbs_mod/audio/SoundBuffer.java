@@ -70,11 +70,27 @@ public class SoundBuffer
         return this.wave;
     }
 
+    public boolean isValid()
+    {
+        return this.buffer > 0 && AL10.alIsBuffer(this.buffer);
+    }
+
     public void delete()
     {
-        AL10.alDeleteBuffers(this.buffer);
+        if (this.buffer > 0)
+        {
+            try
+            {
+                if (AL10.alIsBuffer(this.buffer))
+                {
+                    AL10.alDeleteBuffers(this.buffer);
+                }
+            }
+            catch (Throwable ignored) {}
 
-        this.buffer = -1;
+            this.buffer = -1;
+        }
+
         this.wave = null;
 
         if (this.waveform != null)

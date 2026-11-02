@@ -29,6 +29,7 @@ public class KeyframeFactories
     public static final ShapeKeysKeyframeFactory SHAPE_KEYS = new ShapeKeysKeyframeFactory();
     public static final ParticleSettingsKeyframeFactory PARTICLE_SETTINGS = new ParticleSettingsKeyframeFactory();
     public static final BoneConstraintKeyframeFactory BONE_CONSTRAINT = new BoneConstraintKeyframeFactory();
+    public static final JitterKeyframeFactory JITTER = new JitterKeyframeFactory();
 
     /** Transform-like values, which the graph editor opens as one curve per component. */
     public static boolean isComposite(IKeyframeFactory factory)
@@ -83,5 +84,6 @@ public class KeyframeFactories
         FACTORIES.put("shape_keys", SHAPE_KEYS);
         FACTORIES.put("particle_settings", PARTICLE_SETTINGS);
         FACTORIES.put("bone_constraint", BONE_CONSTRAINT);
+        FACTORIES.put("jitter", JITTER);
     }
 }

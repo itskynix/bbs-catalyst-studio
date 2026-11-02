@@ -13,6 +13,7 @@ import mchorse.bbs_mod.ui.framework.elements.input.list.UISearchList;
 import mchorse.bbs_mod.ui.framework.elements.input.list.UIStringList;
 import mchorse.bbs_mod.ui.utils.context.MenuIcon;
 import mchorse.bbs_mod.ui.utils.context.MenuVerb;
+import mchorse.bbs_mod.utils.pose.PoseManager;
 import mchorse.bbs_mod.utils.presets.DataManager;
 
 import java.util.function.Consumer;
@@ -52,7 +53,21 @@ public class UIDataContextMenu extends UIContextMenu
         this.group = group;
         this.supplier = supplier;
         this.callback = callback;
-        this.data = this.manager.getData(group);
+
+        MapType loadedData = this.manager != null ? this.manager.getData(group) : null;
+
+        /* Modelin (örn. player/alex veya özel rigler) kendine ait pose grubu yoksa varsayılan player/steve pozlarını yükle */
+        if ((loadedData == null || loadedData.isEmpty()) && this.manager instanceof PoseManager && !"player/steve".equals(group))
+        {
+            MapType fallback = this.manager.getData("player/steve");
+
+            if (fallback != null && !fallback.isEmpty())
+            {
+                loadedData = fallback;
+            }
+        }
+
+        this.data = loadedData != null ? loadedData : new MapType();
 
         this.bar = new UIContextMenuBar(this::dismiss);
 
@@ -74,7 +89,18 @@ public class UIDataContextMenu extends UIContextMenu
         this.bar.register(this.reset);
         this.bar.register(this.save);
 
-        this.entries = new UISearchList<>(new UIStringList((l) -> this.send(this.data.getMap(l.get(0)))));
+        this.entries = new UISearchList<>(new UIStringList((l) ->
+        {
+            if (this.data != null && !l.isEmpty())
+            {
+                MapType map = this.data.getMap(l.get(0));
+
+                if (map != null)
+                {
+                    this.send(map);
+                }
+            }
+        }));
         this.entries.search.filename();
         this.entries.search.placeholder(UIKeys.POSE_CONTEXT_NAME);
 
@@ -102,11 +128,16 @@ public class UIDataContextMenu extends UIContextMenu
     {
         String name = this.entries.search.getText();
 
-        if (!name.isEmpty())
+        if (!name.isEmpty() && this.manager != null)
         {
             this.manager.saveData(this.group, name, this.supplier.get());
 
-            this.data = this.manager.getData(this.group);
+            MapType updated = this.manager.getData(this.group);
+
+            if (updated != null)
+            {
+                this.data = updated;
+            }
 
             this.fillPoses();
             this.entries.search.setText("");
@@ -124,6 +155,12 @@ public class UIDataContextMenu extends UIContextMenu
     private void fillPoses()
     {
         this.entries.list.clear();
+
+        if (this.data == null)
+        {
+            return;
+        }
+
         this.entries.list.add(this.data.keys());
         this.entries.list.sort();
 
@@ -137,6 +174,11 @@ public class UIDataContextMenu extends UIContextMenu
      */
     private void scrollToCurrent()
     {
+        if (this.data == null)
+        {
+            return;
+        }
+
         MapType current = this.supplier == null ? null : this.supplier.get();
 
         if (current == null)

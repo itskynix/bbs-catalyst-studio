@@ -4,6 +4,8 @@ import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.ui.utils.icons.Icon;
 import mchorse.bbs_mod.cubic.animation.ActionsConfig;
 import mchorse.bbs_mod.cubic.constraints.BoneConstraintsIO;
+import mchorse.bbs_mod.cubic.constraints.JitterControl;
+import mchorse.bbs_mod.settings.values.core.ValueJitterControl;
 import mchorse.bbs_mod.cubic.ik.BoneIKIO;
 import mchorse.bbs_mod.forms.forms.utils.FormBone;
 import mchorse.bbs_mod.forms.forms.utils.FormFxValues;
@@ -40,6 +42,9 @@ public class ModelForm extends Form implements IPosedForm
     public final ValueLink texture = new ValueLink("texture", null);
     public final ValueLinks materialTextures = new ValueLinks("material_textures");
     public final ValueString model = new ValueString("model", "");
+    /** Mesh swap: the model shown instead of the intact one while {@link #damaged} is on (a crashed car, say). */
+    public final ValueString damagedModel = new ValueString("damaged_model", "");
+    public final ValueBoolean damaged = new ValueBoolean("damaged", false);
     public final ValuePose pose = new ValuePose("pose", new Pose());
     public final ValuePose poseOverlay = new ValuePose("pose_overlay", new Pose());
     public final ValueActionsConfig actions = new ValueActionsConfig("actions", new ActionsConfig());
@@ -51,6 +56,9 @@ public class ModelForm extends Form implements IPosedForm
 
     /** The global wind of the form's physics — one compound animatable property, not bound to a bone. */
     public final ValueWindControl wind = new ValueWindControl("wind", new WindControl());
+
+    /** Procedural jitter tremor at form level (keyframeable global track). */
+    public final ValueJitterControl jitter = new ValueJitterControl("jitter", new JitterControl());
 
     /**
      * The entity states an OptiFine CEM model asks about and a form cannot know — see
@@ -97,6 +105,10 @@ public class ModelForm extends Form implements IPosedForm
     /** PBR slider overrides (keyed by material name, then by the slider's property name). */
     public final transient Map<String, Map<String, Float>> materialPbrOverrides = new HashMap<>();
 
+    /** Autonomous gaze offset for the pupils (set per frame by a framebuffer form, never saved); NaN X means off. */
+    public transient float gazeX = Float.NaN;
+    public transient float gazeY;
+
     public final transient Map<String, Vector3f> ikTargetOverrides = new HashMap<>();
     public final transient Map<String, Vector3f> poleTargetOverrides = new HashMap<>();
     public final transient Map<String, Float> ikTargetWeights = new HashMap<>();
@@ -112,6 +124,8 @@ public class ModelForm extends Form implements IPosedForm
         this.materialTextures.invisible();
         this.add(this.materialTextures);
         this.add(this.model);
+        this.add(this.damagedModel);
+        this.add(this.damaged);
         this.add(this.pose);
         this.add(this.poseOverlay);
 
@@ -129,6 +143,7 @@ public class ModelForm extends Form implements IPosedForm
         this.add(this.bones);
         this.wind.invisible();
         this.add(this.wind);
+        this.add(this.jitter);
 
         /* Visible, so each is a track of its own: a cat that sits down mid-take is a keyframe like
          * any other. */

@@ -24,7 +24,9 @@ import net.minecraft.client.render.VertexFormats;
 import net.minecraft.client.util.math.MatrixStack;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
+import org.lwjgl.system.MemoryStack;
 
+import java.nio.FloatBuffer;
 import java.util.List;
 
 /**
@@ -44,6 +46,11 @@ public class PostFxRenderer
     private static SimpleFramebuffer scratch;
     private static boolean failed;
 
+    /* The world's depth, copied the moment the world is done: the hand is drawn after a depth clear, so by
+     * the time the post passes run the main buffer holds nothing but the hand. */
+    private static SimpleFramebuffer worldDepth;
+    private static boolean depthCaptured;
+
     /* Camera turning, measured between two frames of the film: where it was, when, and how fast it is
      * turning now in frame fractions per second (x, y). */
     private static boolean hasTurn;
@@ -59,6 +66,71 @@ public class PostFxRenderer
     /* A blur never smears further than this much of the frame, whatever the camera did */
     private static final double MAX_BLUR = 0.2D;
 
+    /** Whether any of the frame's clips asks for the world wobble, and so wants the depth kept. */
+    public static boolean wantsDepth(ClipContext context)
+    {
+        if (context == null)
+        {
+            return false;
+        }
+
+        for (FxOverlay overlay : FxClip.getOverlays(context))
+        {
+            if (overlay.kind == FxOverlay.WORLD_WOBBLE)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Call when the world is drawn and before the hand: keeps its depth for the wobble pass. */
+    public static void captureDepth()
+    {
+        if (failed)
+        {
+            return;
+        }
+
+        Framebuffer main = MinecraftClient.getInstance().getFramebuffer();
+
+        if (main == null || main.textureWidth <= 0 || main.textureHeight <= 0)
+        {
+            return;
+        }
+
+        int prevRead = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+        int prevDraw = GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
+
+        try
+        {
+            if (worldDepth == null)
+            {
+                worldDepth = new SimpleFramebuffer(main.textureWidth, main.textureHeight, true, MinecraftClient.IS_SYSTEM_MAC);
+            }
+            else if (worldDepth.textureWidth != main.textureWidth || worldDepth.textureHeight != main.textureHeight)
+            {
+                worldDepth.resize(main.textureWidth, main.textureHeight, MinecraftClient.IS_SYSTEM_MAC);
+            }
+
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, main.fbo);
+            GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, worldDepth.fbo);
+            GL30.glBlitFramebuffer(0, 0, main.textureWidth, main.textureHeight, 0, 0, main.textureWidth, main.textureHeight, GL11.GL_DEPTH_BUFFER_BIT, GL11.GL_NEAREST);
+
+            depthCaptured = true;
+        }
+        catch (Throwable e)
+        {
+            depthCaptured = false;
+        }
+        finally
+        {
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, prevRead);
+            GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, prevDraw);
+        }
+    }
+
     public static void render(MatrixStack stack, Batcher2D batcher, ClipContext context)
     {
         if (failed)
@@ -70,6 +142,8 @@ public class PostFxRenderer
 
         if (overlays.isEmpty())
         {
+            depthCaptured = false;
+
             return;
         }
 
@@ -88,7 +162,7 @@ public class PostFxRenderer
         {
             if (scratch == null)
             {
-                scratch = new SimpleFramebuffer(main.textureWidth, main.textureHeight, false, MinecraftClient.IS_SYSTEM_MAC);
+                scratch = new SimpleFramebuffer(main.textureWidth, main.textureHeight, true, MinecraftClient.IS_SYSTEM_MAC);
             }
             else if (scratch.textureWidth != main.textureWidth || scratch.textureHeight != main.textureHeight)
             {
@@ -117,6 +191,7 @@ public class PostFxRenderer
         {
             GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, prevRead);
             GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, prevDraw);
+            depthCaptured = false;
 
             RenderSystem.depthMask(true);
             RenderSystem.enableDepthTest();
@@ -228,6 +303,36 @@ public class PostFxRenderer
         }
     }
 
+    /**
+     * Whether the depth copy holds a scene at all. The interface clears depth before it draws, and a
+     * shader pack can keep it elsewhere, so the buffer can be a flat 1.0 - in which case the wobble
+     * falls back to bending the whole picture by screen position instead of doing nothing.
+     */
+    private static boolean hasDepth(int w, int h)
+    {
+        GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, worldDepth.fbo);
+
+        try (MemoryStack memory = MemoryStack.stackPush())
+        {
+            FloatBuffer pixel = memory.mallocFloat(1);
+
+            for (int i = 1; i < 6; i++)
+            {
+                for (int j = 1; j < 6; j++)
+                {
+                    GL11.glReadPixels(w * i / 6, h * j / 6, 1, 1, GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT, pixel);
+
+                    if (pixel.get(0) < 0.99999F)
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
     private static void pass(ShaderProgram program, Framebuffer main, FxOverlay overlay)
     {
         int w = main.textureWidth;
@@ -238,12 +343,22 @@ public class PostFxRenderer
         GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, scratch.fbo);
         GL30.glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL11.GL_COLOR_BUFFER_BIT, GL11.GL_NEAREST);
 
+        boolean wobble = overlay.kind == FxOverlay.WORLD_WOBBLE;
+
+        if (wobble)
+        {
+            overlay.params[5] = 0.05F;
+            overlay.params[6] = MinecraftClient.getInstance().gameRenderer.getFarPlaneDistance();
+            overlay.params[7] = depthCaptured && hasDepth(w, h) ? 1F : 0F;
+        }
+
         /* ... and back to drawing on the original */
         GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, main.fbo);
         GlStateManager._viewport(0, 0, w, h);
 
         RenderSystem.setShader(() -> program);
         RenderSystem.setShaderTexture(0, scratch.getColorAttachment());
+        RenderSystem.setShaderTexture(1, wobble && worldDepth != null ? worldDepth.getDepthAttachment() : scratch.getColorAttachment());
 
         set(program, "Mode", overlay.kind);
         set(program, "Size", w, h);

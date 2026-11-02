@@ -3,6 +3,9 @@
 /* The finished frame, copied aside so the pass can read it while writing over the original */
 uniform sampler2D Sampler0;
 
+/* The frame's depth buffer (only read by the world wobble) */
+uniform sampler2D Sampler1;
+
 /* Which effect this pass is (FxOverlay.GRADE ... FxOverlay.EYE) and the size of the frame in pixels */
 uniform float Mode;
 uniform vec2 Size;
@@ -437,6 +440,49 @@ vec3 screenShake(vec2 uv)
     return scene(p / vec2(a, 1.0) + 0.5 + U0.xy);
 }
 
+/* 18: world wobble. U0 = (ripples across the frame height, amplitude, cycles per second, distance in blocks
+ * up to which the bend is at full strength), U1 = (seconds, near, far, 1 when the depth buffer holds a scene),
+ * U2 = (0 wave / 1 twirl, twirl center x, twirl center y). With depth, the bend is full up to the distance
+ * in U0.w, fades to nothing by twice that, and the sky is left alone. Without depth the whole frame bends alike. */
+vec3 worldWobble(vec2 uv)
+{
+    float dist = 0.0;
+    float w = 1.0;
+
+    if (U1.w > 0.5)
+    {
+        float d = texture(Sampler1, uv).r;
+
+        if (d >= 0.99999)
+        {
+            return scene(uv);
+        }
+
+        float near = max(U1.y, 0.001);
+        float far = max(U1.z, near + 1.0);
+
+        /* linearize_depth: the buffer's 0..1 back to blocks from the camera */
+        dist = 2.0 * near * far / (far + near - (d * 2.0 - 1.0) * (far - near));
+        w = 1.0 - smoothstep(U0.w, U0.w * 2.0, dist);
+    }
+
+    float phase = (U1.x * U0.z) * 6.2831853 + dist * 0.35;
+
+    if (U2.x > 0.5)
+    {
+        /* Twirl: turn the picture around the center by an angle that itself ripples with the distance from it */
+        vec2 p = (uv - U2.yz) * vec2(aspect(), 1.0);
+        float r = length(p);
+        float angle = sin(r * U0.x * 6.2831853 - phase) * U0.y * w * (1.0 - 0.6 * smoothstep(0.0, 1.0, r));
+
+        return scene(U2.yz + rotate(p, degrees(angle)) / vec2(aspect(), 1.0));
+    }
+
+    vec2 wave = vec2(sin(uv.y * U0.x * 6.2831853 + phase), cos(uv.x * U0.x * 6.2831853 * aspect() + phase * 1.31));
+
+    return scene(uv + wave * U0.y * w * vec2(1.0 / aspect(), 1.0));
+}
+
 void main()
 {
     vec2 uv = texCoord0;
@@ -460,6 +506,7 @@ void main()
     else if (mode == 15) c = mblur(uv);
     else if (mode == 16) c = lensDistortion(uv);
     else if (mode == 17) c = screenShake(uv);
+    else if (mode == 18) c = worldWobble(uv);
     else c = scene(uv);
 
     fragColor = vec4(clamp(c, 0.0, 1.0), 1.0);

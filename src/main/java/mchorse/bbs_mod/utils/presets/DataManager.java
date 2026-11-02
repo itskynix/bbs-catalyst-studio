@@ -32,13 +32,26 @@ public abstract class DataManager
 
         try (InputStream stream = BBSMod.getProvider().getAsset(getFile(group)))
         {
-            newData = DataToString.mapFromString(IOUtils.readText(stream));
+            if (stream != null)
+            {
+                MapType map = DataToString.mapFromString(IOUtils.readText(stream));
+
+                if (map != null)
+                {
+                    newData = map;
+                }
+            }
         }
         catch (FileNotFoundException e)
         {}
         catch (Exception e)
         {
             e.printStackTrace();
+        }
+
+        if (newData == null)
+        {
+            newData = new MapType();
         }
 
         data.put(group, newData);

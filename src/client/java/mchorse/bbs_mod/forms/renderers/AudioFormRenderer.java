@@ -30,6 +30,7 @@ import mchorse.bbs_mod.utils.MathUtils;
 import mchorse.bbs_mod.utils.colors.Colors;
 import mchorse.bbs_mod.utils.pose.Transform;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.sound.SoundCategory;
 import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.client.render.Camera;
 import net.minecraft.client.render.GameRenderer;
@@ -65,6 +66,12 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
      */
     private static final long FILM_MAX_IDLE_MS = 150L;
 
+    /**
+     * Maximum physical speed (m/s) allowed for audio velocity derivation
+     * to eliminate division spikes, mouse jumps, and runaway Doppler distortion.
+     */
+    private static final float MAX_AUDIO_SPEED = 40.0F;
+
     private SoundPlayer activeSoundInstance;
     private Link currentSound;
     private int lowPassFilterId = -1;
@@ -77,6 +84,22 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
     private long lastWorldRenderTimeMs;
     private long lastActiveTimeMs;
     private boolean lastLoopState;
+
+    /* Kinematic tracking state for 3D Doppler effect and velocity derivation */
+    private double prevWorldX = Double.NaN;
+    private double prevWorldY = Double.NaN;
+    private double prevWorldZ = Double.NaN;
+    private double prevCamX = Double.NaN;
+    private double prevCamY = Double.NaN;
+    private double prevCamZ = Double.NaN;
+    private long prevTimeMs = 0L;
+    private int prevRenderFrame = -1;
+    private float velocityX = 0.0F;
+    private float velocityY = 0.0F;
+    private float velocityZ = 0.0F;
+    private float camVelocityX = 0.0F;
+    private float camVelocityY = 0.0F;
+    private float camVelocityZ = 0.0F;
 
     private enum PlaybackState {
         STOPPED,
@@ -107,8 +130,14 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
         while (it.hasNext()) {
             AudioFormRenderer renderer = it.next();
 
-            if (renderer.activeSoundInstance == null) {
+            if (renderer.activeSoundInstance == null || !renderer.activeSoundInstance.isValid()) {
+                renderer.stopInternal(false);
                 it.remove();
+                continue;
+            }
+
+            if (renderer.lastEntity != null && renderer.lastEntity.getWorld() == null) {
+                renderer.stop();
                 continue;
             }
 
@@ -181,6 +210,21 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
         this.currentSound = null;
         this.lastPlaybackState = PlaybackState.STOPPED;
 
+        this.prevWorldX = Double.NaN;
+        this.prevWorldY = Double.NaN;
+        this.prevWorldZ = Double.NaN;
+        this.prevCamX = Double.NaN;
+        this.prevCamY = Double.NaN;
+        this.prevCamZ = Double.NaN;
+        this.prevTimeMs = 0L;
+        this.prevRenderFrame = -1;
+        this.velocityX = 0.0F;
+        this.velocityY = 0.0F;
+        this.velocityZ = 0.0F;
+        this.camVelocityX = 0.0F;
+        this.camVelocityY = 0.0F;
+        this.camVelocityZ = 0.0F;
+
         if (removeFromSet) {
             ACTIVE_RENDERERS.remove(this);
         }
@@ -240,9 +284,9 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
         this.lastActiveTimeMs = this.lastWorldRenderTimeMs;
 
         /*
-         * Update playback state directly on render frame as well so pausing timeline
-         * stops audio within 1 frame. If stopped (or not in an active film playback),
-         * audio is immediately stopped and released.
+         * Fast stop if timeline paused / stopped.
+         * Notice: render3D NEVER initiates playback or calls ensureActivePlayer/play()!
+         * Playback lifecycle and active player maintenance belongs strictly to tick().
          */
         PlaybackState state = this.resolvePlaybackState(context.entity);
 
@@ -250,8 +294,9 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
             if (this.activeSoundInstance != null) {
                 this.stop();
             }
-        } else {
-            this.updateAudioPlayback(context.entity, context.getTransition());
+        } else if (this.activeSoundInstance != null && this.activeSoundInstance.isPlaying()) {
+            /* Render frame sub-tick spatial update (pan, 360 HRTF, distance attenuation, muffle) */
+            this.updateSpatialOnly(context.entity, context.getTransition());
         }
 
         MinecraftClient mc = MinecraftClient.getInstance();
@@ -300,44 +345,43 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
             return;
         }
 
-        /*
-         * If this form was rendered in 3D recently (< 150ms), render3D handles playback
-         * with exact sub-tick camera transforms. Skip tick playback update to prevent
-         * jitter and ear-flipping!
-         */
-        long now = System.currentTimeMillis();
-        if (now - this.lastWorldRenderTimeMs < 150L) {
-            return;
-        }
-
         /* Ignore dummy item entities at origin (0, 0, 0) from ModelBlockItemRenderer */
         if (entity.getX() == 0D && entity.getY() == 0D && entity.getZ() == 0D && this.lastWorldRenderTimeMs == 0L) {
             return;
         }
 
+        long now = System.currentTimeMillis();
         this.lastEntity = entity;
         this.lastActiveTimeMs = now;
 
-        /* Always refresh world position from entity + form transform */
-        Transform transform = this.createTransform();
-        this.lastWorldPos = new Vec3d(
-                entity.getX() + transform.translate.x,
-                entity.getY() + transform.translate.y,
-                entity.getZ() + transform.translate.z);
+        /*
+         * If the block is NOT being rendered in 3D right now (e.g. player looking away,
+         * frustum culling, distance > render distance, or behind camera), update world and camera positions
+         * from entity coords and camera.
+         */
+        boolean isRenderCulled = (now - this.lastWorldRenderTimeMs >= 100L);
 
-        MinecraftClient mc = MinecraftClient.getInstance();
+        if (isRenderCulled || this.lastWorldPos == null || this.lastCameraPos == null) {
+            Transform transform = this.createTransform();
+            this.lastWorldPos = new Vec3d(
+                    entity.getX() + transform.translate.x,
+                    entity.getY() + transform.translate.y,
+                    entity.getZ() + transform.translate.z);
 
-        if (mc.gameRenderer != null && mc.gameRenderer.getCamera() != null) {
-            Camera cam = mc.gameRenderer.getCamera();
-            this.lastCameraPos = cam.getPos();
-            Quaternionf q = new Quaternionf(cam.getRotation()).conjugate();
-            this.lastCameraRotation.rotation(q);
+            MinecraftClient mc = MinecraftClient.getInstance();
+
+            if (mc.gameRenderer != null && mc.gameRenderer.getCamera() != null) {
+                Camera cam = mc.gameRenderer.getCamera();
+                this.lastCameraPos = cam.getPos();
+                Quaternionf q = new Quaternionf(cam.getRotation()).conjugate();
+                this.lastCameraRotation.rotation(q);
+            }
         }
 
-        this.updateAudioPlayback(entity, 0.0F);
+        this.updateAudioPlayback(entity, 0.0F, isRenderCulled);
     }
 
-    private void updateAudioPlayback(IEntity entity, float transition) {
+    private void updateAudioPlayback(IEntity entity, float transition, boolean applySpatial) {
         Link sound = this.form.sound.get();
 
         if (sound == null || !this.isFormHierarchyVisible()) {
@@ -437,24 +481,64 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
         }
 
         /*
-         * Apply 3D spatial positioning, distance attenuation, pan, pitch, and acoustic
-         * muffle
+         * Apply 3D spatial positioning if culled from rendering (e.g. looking away).
+         * If rendered in 3D (< 100ms ago), render3D handles sub-tick spatial updates!
          */
+        if (applySpatial) {
+            this.updateVelocity(System.currentTimeMillis());
+            this.applySpatialParameters(sound, timelineSec, loop, dx, dy, dz, distance, radius);
+        }
+    }
+
+    private void updateSpatialOnly(IEntity entity, float transition) {
+        Link sound = this.form.sound.get();
+
+        if (sound == null || !this.isFormHierarchyVisible()) {
+            this.stop();
+            return;
+        }
+
+        if (this.lastWorldPos == null || this.lastCameraPos == null) {
+            return;
+        }
+
+        this.updateVelocity(System.currentTimeMillis());
+
+        double dx = this.lastWorldPos.x - this.lastCameraPos.x;
+        double dy = this.lastWorldPos.y - this.lastCameraPos.y;
+        double dz = this.lastWorldPos.z - this.lastCameraPos.z;
+        double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        float radius = Math.max(0.1F, this.form.radius.get());
+
+        float offsetSec = this.form.offset.get();
+        float timelineSec = this.getFilmTimelineSeconds(entity, transition) - offsetSec;
+        boolean loop = this.form.loop.get();
+
         this.applySpatialParameters(sound, timelineSec, loop, dx, dy, dz, distance, radius);
     }
 
     private boolean ensureActivePlayer(Link sound, SoundBuffer buffer) {
-        if (this.activeSoundInstance != null && this.activeSoundInstance.getSource() > 0) {
-            this.activeSoundInstance.refresh();
-            ACTIVE_RENDERERS.add(this);
-            return true;
+        if (this.activeSoundInstance != null) {
+            if (this.activeSoundInstance.getSource() > 0 && this.activeSoundInstance.isValid()) {
+                this.activeSoundInstance.refresh();
+                ACTIVE_RENDERERS.add(this);
+                return true;
+            }
+
+            /* Invalid or dead OpenAL hardware source: dispose stale instance immediately! */
+            this.stopInternal(false);
+        }
+
+        if (buffer == null || !buffer.isValid()) {
+            return false;
         }
 
         this.stopInternal(false);
 
         SoundPlayer player = new SoundPlayer(buffer).unique().owner(this);
 
-        if (player.getSource() <= 0) {
+        if (player.getSource() <= 0 || !player.isValid()) {
+            player.delete();
             return false;
         }
 
@@ -463,6 +547,115 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
         ACTIVE_RENDERERS.add(this);
 
         return true;
+    }
+
+    private void updateVelocity(long now) {
+        if (this.lastWorldPos == null || this.lastCameraPos == null) {
+            return;
+        }
+
+        boolean isRecording = BBSModClient.getVideoRecorder() != null && BBSModClient.getVideoRecorder().isRecording();
+        MinecraftSoundCapture capture = BBSModClient.getMinecraftSoundCapture();
+        int currentFrame = (isRecording && capture != null && capture.isActive()) ? capture.getCurrentFrame() : -1;
+
+        float dtSec = 0.0F;
+        boolean validDt = false;
+
+        if (isRecording && currentFrame >= 0) {
+            if (this.prevRenderFrame >= 0 && currentFrame != this.prevRenderFrame) {
+                int frameDiff = currentFrame - this.prevRenderFrame;
+                if (frameDiff > 0 && frameDiff <= 5) {
+                    float fps = (float) Math.max(1, BBSRendering.getVideoFrameRate());
+                    dtSec = frameDiff / fps;
+                    validDt = true;
+                }
+            }
+            this.prevRenderFrame = currentFrame;
+        } else {
+            if (!Double.isNaN(this.prevWorldX) && this.prevTimeMs > 0L) {
+                long dtMs = now - this.prevTimeMs;
+                if (dtMs < 5L) {
+                    /* Skip velocity update on sub-5ms delta to prevent division spikes / NaN / audio glitches */
+                    return;
+                }
+                if (dtMs < 500L) {
+                    dtSec = (float) dtMs / 1000.0F;
+                    validDt = true;
+                }
+            }
+            this.prevRenderFrame = -1;
+        }
+
+        if (validDt && (isRecording || dtSec >= 0.005F)) {
+            if (!Double.isNaN(this.prevWorldX)) {
+                float vx = (float) (this.lastWorldPos.x - this.prevWorldX) / dtSec;
+                float vy = (float) (this.lastWorldPos.y - this.prevWorldY) / dtSec;
+                float vz = (float) (this.lastWorldPos.z - this.prevWorldZ) / dtSec;
+
+                float speedSq = vx * vx + vy * vy + vz * vz;
+                if (speedSq > MAX_AUDIO_SPEED * MAX_AUDIO_SPEED) {
+                    float scale = MAX_AUDIO_SPEED / (float) Math.sqrt(speedSq);
+                    vx *= scale;
+                    vy *= scale;
+                    vz *= scale;
+                }
+
+                float alpha = isRecording ? 1.0F : MathUtils.clamp(dtSec * 15.0F, 0.1F, 1.0F);
+                this.velocityX += (vx - this.velocityX) * alpha;
+                this.velocityY += (vy - this.velocityY) * alpha;
+                this.velocityZ += (vz - this.velocityZ) * alpha;
+            }
+
+            if (!Double.isNaN(this.prevCamX)) {
+                float cvx = (float) (this.lastCameraPos.x - this.prevCamX) / dtSec;
+                float cvy = (float) (this.lastCameraPos.y - this.prevCamY) / dtSec;
+                float cvz = (float) (this.lastCameraPos.z - this.prevCamZ) / dtSec;
+
+                float camSpeedSq = cvx * cvx + cvy * cvy + cvz * cvz;
+                if (camSpeedSq > MAX_AUDIO_SPEED * MAX_AUDIO_SPEED) {
+                    float scale = MAX_AUDIO_SPEED / (float) Math.sqrt(camSpeedSq);
+                    cvx *= scale;
+                    cvy *= scale;
+                    cvz *= scale;
+                }
+
+                float alpha = isRecording ? 1.0F : MathUtils.clamp(dtSec * 15.0F, 0.1F, 1.0F);
+                this.camVelocityX += (cvx - this.camVelocityX) * alpha;
+                this.camVelocityY += (cvy - this.camVelocityY) * alpha;
+                this.camVelocityZ += (cvz - this.camVelocityZ) * alpha;
+            }
+
+            /* Extra safety clamp on smoothed velocities */
+            float speedSq = this.velocityX * this.velocityX + this.velocityY * this.velocityY + this.velocityZ * this.velocityZ;
+            if (speedSq > MAX_AUDIO_SPEED * MAX_AUDIO_SPEED) {
+                float scale = MAX_AUDIO_SPEED / (float) Math.sqrt(speedSq);
+                this.velocityX *= scale;
+                this.velocityY *= scale;
+                this.velocityZ *= scale;
+            }
+            float camSpeedSq = this.camVelocityX * this.camVelocityX + this.camVelocityY * this.camVelocityY + this.camVelocityZ * this.camVelocityZ;
+            if (camSpeedSq > MAX_AUDIO_SPEED * MAX_AUDIO_SPEED) {
+                float scale = MAX_AUDIO_SPEED / (float) Math.sqrt(camSpeedSq);
+                this.camVelocityX *= scale;
+                this.camVelocityY *= scale;
+                this.camVelocityZ *= scale;
+            }
+        } else if (!isRecording && (now - this.prevTimeMs >= 500L)) {
+            this.velocityX = 0.0F;
+            this.velocityY = 0.0F;
+            this.velocityZ = 0.0F;
+            this.camVelocityX = 0.0F;
+            this.camVelocityY = 0.0F;
+            this.camVelocityZ = 0.0F;
+        }
+
+        this.prevWorldX = this.lastWorldPos.x;
+        this.prevWorldY = this.lastWorldPos.y;
+        this.prevWorldZ = this.lastWorldPos.z;
+        this.prevCamX = this.lastCameraPos.x;
+        this.prevCamY = this.lastCameraPos.y;
+        this.prevCamZ = this.lastCameraPos.z;
+        this.prevTimeMs = now;
     }
 
     private void applySpatialParameters(Link sound, double sourceSec, boolean loop, double dx, double dy, double dz, double distance, float radius) {
@@ -483,14 +676,13 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
         MinecraftClient mc = MinecraftClient.getInstance();
         Vector3f camRight = new Vector3f(1.0F, 0.0F, 0.0F);
         Vector3f camUp = new Vector3f(0.0F, 1.0F, 0.0F);
-        Vector3f camForward = new Vector3f(0.0F, 0.0F, -1.0F);
+        Vector3f camForward = new Vector3f(0.0F, 0.0F, 1.0F);
 
         if (mc.gameRenderer != null && mc.gameRenderer.getCamera() != null) {
             Camera cam = mc.gameRenderer.getCamera();
-            Quaternionf rot = cam.getRotation();
-            camRight.rotate(rot);
-            camUp.rotate(rot);
-            camForward.rotate(rot);
+            camRight.set(cam.getDiagonalPlane());
+            camUp.set(cam.getVerticalPlane());
+            camForward.set(cam.getHorizontalPlane());
         } else {
             this.lastCameraRotation.transform(camRight);
             this.lastCameraRotation.transform(camUp);
@@ -516,25 +708,70 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
         float panBias = MathUtils.clamp(this.form.pan.get(), -1.0F, 1.0F);
 
         /*
-         * Near-field blend: when camera is extremely close (< 0.5 blocks), smoothly blend
-         * localX toward center/panBias to avoid harsh ear-flipping when crossing through center.
+         * 360-Degree OpenAL 3D Spatial Position:
+         * Vanilla Minecraft / playsound compatible full spherical coordinates in listener space.
+         * localX: +Right, -Left
+         * localY: +Up, -Down
+         * localZ: +Behind, -Forward
          */
+        float localZ = -localZForward;
         float nearBlend = MathUtils.clamp((float) (distance / 0.5D), 0.0F, 1.0F);
-        float effectivePan = MathUtils.clamp(localX * nearBlend + panBias, -1.0F, 1.0F);
 
-        /*
-         * OpenAL 3D Spatial Position:
-         * Uses a circular constant-power panning vector on the listener's front/lateral arc.
-         * Keeping spatialZ <= 0 eliminates OpenAL-Soft HRTF back-hemisphere pinna phase flips
-         * that cause sound on the right to abruptly leak into the left ear.
-         */
-        float spatialX = effectivePan;
-        float spatialY = MathUtils.clamp(localY * nearBlend * 0.7F, -1.0F, 1.0F);
-        float spatialZ = (float) -Math.sqrt(Math.max(0.0F, 1.0F - spatialX * spatialX));
+        float spatialX = MathUtils.clamp(localX * nearBlend + panBias, -1.0F, 1.0F);
+        float spatialY = MathUtils.clamp(localY * nearBlend, -1.0F, 1.0F);
+        float spatialZ = MathUtils.clamp(localZ * nearBlend, -1.0F, 1.0F);
 
-        /* 3. Base Volume & Pitch + Acoustic Muffle (Low-Pass) */
+        float spatialLenSq = spatialX * spatialX + spatialY * spatialY + spatialZ * spatialZ;
+        if (spatialLenSq > 0.0001F) {
+            float invLen = (float) (1.0D / Math.sqrt(spatialLenSq));
+            spatialX *= invLen;
+            spatialY *= invLen;
+            spatialZ *= invLen;
+        } else {
+            spatialX = 0.0F;
+            spatialY = 0.0F;
+            spatialZ = -1.0F;
+        }
+
+        /* 3. Base Volume & Pitch + Acoustic Muffle (Low-Pass) + Doppler Pitch */
         float effectiveVolume = this.form.volume.get() * distanceGain;
-        float effectivePitch = MathUtils.clamp(this.form.pitch.get(), 0.5F, 2.0F);
+
+        /* Apply Minecraft Sound Options (Master Volume and Records/Blocks Category Volume) */
+        float masterVolume = mc.options != null ? mc.options.getSoundVolume(SoundCategory.MASTER) : 1.0F;
+        float categoryVolume = mc.options != null ? mc.options.getSoundVolume(SoundCategory.RECORDS) : 1.0F;
+        effectiveVolume *= (masterVolume * categoryVolume);
+
+        float basePitch = MathUtils.clamp(this.form.pitch.get(), 0.5F, 2.0F);
+        float effectivePitch = basePitch;
+
+        float relVx = 0.0F;
+        float relVy = 0.0F;
+        float relVz = 0.0F;
+
+        if (this.form.isDoppler()) {
+            relVx = MathUtils.clamp(this.velocityX - this.camVelocityX, -MAX_AUDIO_SPEED, MAX_AUDIO_SPEED);
+            relVy = MathUtils.clamp(this.velocityY - this.camVelocityY, -MAX_AUDIO_SPEED, MAX_AUDIO_SPEED);
+            relVz = MathUtils.clamp(this.velocityZ - this.camVelocityZ, -MAX_AUDIO_SPEED, MAX_AUDIO_SPEED);
+
+            if (distance > 0.001D) {
+                float invDist = 1.0F / (float) distance;
+                float rx = (float) dx * invDist;
+                float ry = (float) dy * invDist;
+                float rz = (float) dz * invDist;
+
+                /* Relative radial velocity along line-of-sight:
+                 * vRel > 0: source moving away from listener -> frequency/pitch drops (< 1.0)
+                 * vRel < 0: source moving towards listener -> frequency/pitch rises (> 1.0)
+                 */
+                float vRel = relVx * rx + relVy * ry + relVz * rz;
+                float dopplerScale = (float) this.form.getDopplerScale();
+                float speedOfSound = 340.0F;
+
+                float dopplerFactor = MathUtils.clamp(1.0F - (vRel / speedOfSound) * dopplerScale, 0.5F, 1.5F);
+                effectivePitch *= dopplerFactor;
+            }
+        }
+
         float muffled = 0.0F;
 
         /* If sound is behind listener (localZForward < 0), apply subtle natural rear-shadow muffle & attenuation */
@@ -557,7 +794,8 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
         MinecraftSoundCapture capture = BBSModClient.getMinecraftSoundCapture();
 
         if (capture != null && capture.isActive() && sound != null) {
-            double angle = (spatialX + 1.0D) * Math.PI / 4.0D;
+            float clampedX = MathUtils.clamp(spatialX, -1.0F, 1.0F);
+            double angle = (clampedX + 1.0D) * Math.PI / 4.0D;
             float gainL = effectiveVolume * (float) Math.cos(angle);
             float gainR = effectiveVolume * (float) Math.sin(angle);
             float lowPassFactor = MathUtils.clamp((float) Math.pow(1.0F - Math.min(1.0F, muffled), 2.0D), 0.02F, 1.0F);
@@ -568,7 +806,11 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
         /* 5. Live OpenAL hardware playback */
         AL10.alSourcei(source, AL10.AL_SOURCE_RELATIVE, AL10.AL_TRUE);
         AL10.alSource3f(source, AL10.AL_POSITION, spatialX, spatialY, spatialZ);
-        AL10.alSource3f(source, AL10.AL_VELOCITY, 0.0F, 0.0F, 0.0F);
+        if (this.form.isDoppler()) {
+            AL10.alSource3f(source, AL10.AL_VELOCITY, relVx, relVy, relVz);
+        } else {
+            AL10.alSource3f(source, AL10.AL_VELOCITY, 0.0F, 0.0F, 0.0F);
+        }
         AL10.alSourcef(source, AL10.AL_ROLLOFF_FACTOR, 0.0F);
 
         ALCapabilities caps = AL.getCapabilities();
@@ -580,12 +822,17 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
         boolean muteDuringCapture = BBSSettings.videoMuteAudioWhileRender.get()
                 && BBSModClient.getVideoRecorder().isRecording();
 
-        if (muteDuringCapture || distance >= radius) {
+        if (muteDuringCapture || distance >= radius || effectiveVolume <= 0.0001F) {
             this.activeSoundInstance.setVolume(0.0F);
         } else {
             this.applyLowPassFilter(source, Math.min(1.0F, muffled));
             this.activeSoundInstance.setVolume(Math.max(0.0F, effectiveVolume));
             this.activeSoundInstance.setPitch(MathUtils.clamp(effectivePitch, 0.25F, 2.5F));
+
+            /* Revive hardware playback if sound was paused or stopped due to zero volume / reload */
+            if (!this.activeSoundInstance.isPlaying()) {
+                this.activeSoundInstance.play();
+            }
         }
     }
 
@@ -641,6 +888,10 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
     }
 
     private PlaybackState resolvePlaybackState(IEntity entity) {
+        if (entity != null && entity.getWorld() == null) {
+            return PlaybackState.STOPPED;
+        }
+
         MinecraftClient mc = MinecraftClient.getInstance();
 
         if (mc.world == null || mc.isPaused()) {
@@ -858,5 +1109,29 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
                 builder.vertex(m, c1, s1, off).color(r, g, b, a)/* $ nx */.next()/**/;
             }
         }
+    }
+
+    public float getVelocityX() {
+        return this.velocityX;
+    }
+
+    public float getVelocityY() {
+        return this.velocityY;
+    }
+
+    public float getVelocityZ() {
+        return this.velocityZ;
+    }
+
+    public float getCamVelocityX() {
+        return this.camVelocityX;
+    }
+
+    public float getCamVelocityY() {
+        return this.camVelocityY;
+    }
+
+    public float getCamVelocityZ() {
+        return this.camVelocityZ;
     }
 }

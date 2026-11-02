@@ -1,8 +1,10 @@
 package mchorse.bbs_mod.cubic.constraints;
 
+import mchorse.bbs_mod.camera.clips.modifiers.ShakeClip;
 import mchorse.bbs_mod.cubic.IModel;
 import mchorse.bbs_mod.cubic.RigBone;
 import mchorse.bbs_mod.cubic.ModelInstance;
+import mchorse.bbs_mod.forms.entities.IEntity;
 import mchorse.bbs_mod.forms.forms.ModelForm;
 import mchorse.bbs_mod.forms.forms.utils.FormBone;
 import mchorse.bbs_mod.forms.renderers.utils.RenderFrame;
@@ -22,19 +24,27 @@ public final class ModelConstraintsRuntime
 
     public static void apply(ModelInstance instance)
     {
+        apply(instance, null, 0F);
+    }
+
+    public static void apply(ModelInstance instance, IEntity target, float transition)
+    {
         if (instance == null || instance.model == null)
         {
             return;
         }
 
         Map<String, BoneConstraint> bones = getBones(instance);
+        ModelForm form = instance.form instanceof ModelForm modelForm ? modelForm : null;
+        JitterControl globalJitter = form != null ? form.jitter.get() : null;
+        boolean hasGlobalJitter = globalJitter != null && globalJitter.isEnabled();
 
-        if (bones.isEmpty())
+        if (bones.isEmpty() && !hasGlobalJitter)
         {
             return;
         }
 
-        applyToBones(instance.model, bones);
+        applyToBones(instance.model, bones, globalJitter, target, transition);
     }
 
     /* One-slot per-frame memo - the walk used to run twice per form per frame (physics asks
@@ -111,8 +121,10 @@ public final class ModelConstraintsRuntime
      * decomposition goes against the bone's own channels so a clamp lands on angles the animator
      * would recognise.
      */
-    private static void applyToBones(IModel model, Map<String, BoneConstraint> bones)
+    private static void applyToBones(IModel model, Map<String, BoneConstraint> bones, JitterControl globalJitter, IEntity target, float transition)
     {
+        float time = target != null ? (float) target.getAge() + transition : (float) (System.currentTimeMillis() / 50.0);
+
         for (RigBone bone : model.getRigBones())
         {
             if (bone == null)
@@ -121,18 +133,50 @@ public final class ModelConstraintsRuntime
             }
 
             BoneConstraint c = bones.get(bone.getBoneName());
+            boolean boneHasConstraint = c != null && c.isActive();
+            boolean applyGlobal = globalJitter != null && globalJitter.isEnabled() && globalJitter.matchesTarget(bone.getBoneName());
 
-            if (c == null || !c.isActive())
+            if (!boneHasConstraint && !applyGlobal)
             {
                 continue;
             }
 
             Vector3f euler = bone.toCompatibleEuler(new Vector3f());
 
-            clamp(euler, c, bone.fromDegrees());
+            if (c != null && c.jitter && c.jitterIntensity > 0F)
+            {
+                applyJitter(bone, euler, c.jitterIntensity, c.jitterFrequency, time);
+            }
+            else if (applyGlobal)
+            {
+                applyJitter(bone, euler, globalJitter.intensity, globalJitter.frequency, time);
+            }
+
+            if (c != null)
+            {
+                clamp(euler, c, bone.fromDegrees());
+            }
 
             bone.setOrient(bone.orientFromEuler(euler));
         }
+    }
+
+    private static void applyJitter(RigBone bone, Vector3f euler, float intensity, float frequency, float time)
+    {
+        int seed = Math.abs(bone.getBoneName().hashCode()) % 1000;
+        float freq = frequency * 0.75F;
+        float t = time * freq;
+
+        /* Multi-octave natural jitter tremor (primary rapid vibration + secondary irregular twitch) */
+        float nX = ShakeClip.perlinNoise(t * 1.0F, seed * 3 + 1) + ShakeClip.noise(t * 2.1F, seed * 3 + 10) * 0.35F;
+        float nY = ShakeClip.perlinNoise(t * 1.1F, seed * 3 + 2) + ShakeClip.noise(t * 2.3F, seed * 3 + 20) * 0.35F;
+        float nZ = ShakeClip.perlinNoise(t * 0.9F, seed * 3 + 3) + ShakeClip.noise(t * 1.9F, seed * 3 + 30) * 0.35F;
+
+        float intensityRad = intensity * bone.fromDegrees();
+
+        euler.x += nX * intensityRad;
+        euler.y += nY * intensityRad;
+        euler.z += nZ * intensityRad;
     }
 
     /**

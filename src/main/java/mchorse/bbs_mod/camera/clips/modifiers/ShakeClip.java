@@ -11,12 +11,14 @@ import mchorse.bbs_mod.settings.values.numeric.ValueInt;
 import mchorse.bbs_mod.utils.clips.Clip;
 import mchorse.bbs_mod.utils.clips.ClipContext;
 import mchorse.bbs_mod.utils.interps.Lerps;
+import mchorse.bbs_mod.utils.keyframes.KeyframeChannel;
+import mchorse.bbs_mod.utils.keyframes.factories.KeyframeFactories;
 
 /**
  * Shake modifier
  *
  * Professional camera shake modifier supporting Sine, Cosine, Perlin Noise (handheld organic camera),
- * and custom Math Expressions.
+ * custom Math Expressions, and Dope Sheet Keyframe Channels automation.
  */
 public class ShakeClip extends ComponentClip
 {
@@ -25,11 +27,27 @@ public class ShakeClip extends ComponentClip
     public static final int MODE_PERLIN = 2;
     public static final int MODE_MATH = 3;
 
+    public static final int PRESET_CUSTOM = 0;
+    public static final int PRESET_HANDHELD = 1;
+    public static final int PRESET_PANIC = 2;
+    public static final int PRESET_IMPACT = 3;
+
     public final ValueInt mode = new ValueInt("mode", 0, 0, 3);
+    public final ValueInt preset = new ValueInt("preset", PRESET_CUSTOM, 0, 3);
     public final ValueFloat frequency = new ValueFloat("frequency", 1F);
     public final ValueFloat amplitude = new ValueFloat("amplitude", 1F);
     public final ValueFloat rotationalWeight = new ValueFloat("rotationalWeight", 1F);
     public final ValueFloat positionalWeight = new ValueFloat("positionalWeight", 1F);
+    public final ValueFloat macroWobble = new ValueFloat("macroWobble", 0.6F, 0F, 5F);
+    public final ValueFloat microJitter = new ValueFloat("microJitter", 0.4F, 0F, 5F);
+    public final ValueFloat rollWeight = new ValueFloat("rollWeight", 0.5F, 0F, 5F);
+    public final ValueFloat fovWeight = new ValueFloat("fovWeight", 0.25F, 0F, 5F);
+
+    /* Dope Sheet Keyframe Channels */
+    public final KeyframeChannel<Double> intensityChannel = new KeyframeChannel<>("shake_intensity", KeyframeFactories.DOUBLE);
+    public final KeyframeChannel<Double> frequencyChannel = new KeyframeChannel<>("shake_frequency", KeyframeFactories.DOUBLE);
+    public final KeyframeChannel<Double> fovChannel = new KeyframeChannel<>("shake_fov", KeyframeFactories.DOUBLE);
+    public final KeyframeChannel<Double> rollChannel = new KeyframeChannel<>("shake_roll", KeyframeFactories.DOUBLE);
 
     public final MathBuilder builder = new MathBuilder();
     public final ValueExpression expression;
@@ -79,11 +97,21 @@ public class ShakeClip extends ComponentClip
         this.expression = new ValueExpression("expression", this.builder);
 
         this.add(this.mode);
+        this.add(this.preset);
         this.add(this.frequency);
         this.add(this.amplitude);
         this.add(this.rotationalWeight);
         this.add(this.positionalWeight);
+        this.add(this.macroWobble);
+        this.add(this.microJitter);
+        this.add(this.rollWeight);
+        this.add(this.fovWeight);
         this.add(this.expression);
+
+        this.add(this.intensityChannel);
+        this.add(this.frequencyChannel);
+        this.add(this.fovChannel);
+        this.add(this.rollChannel);
 
         this.add(this.shake);
         this.add(this.shakeAmount);
@@ -91,6 +119,51 @@ public class ShakeClip extends ComponentClip
 
         /* Yaw and pitch should be enabled by default */
         this.active.set(0b0011000);
+    }
+
+    public void applyPreset(int presetId)
+    {
+        this.preset.set(presetId);
+
+        if (presetId == PRESET_HANDHELD)
+        {
+            this.mode.set(MODE_PERLIN);
+            this.frequency.set(0.85F);
+            this.amplitude.set(0.65F);
+            this.rotationalWeight.set(0.85F);
+            this.positionalWeight.set(0.3F);
+            this.macroWobble.set(0.85F);
+            this.microJitter.set(0.2F);
+            this.rollWeight.set(0.35F);
+            this.fovWeight.set(0.1F);
+            this.active.set(0b1111000); // Yaw, Pitch, Roll, FOV
+        }
+        else if (presetId == PRESET_PANIC)
+        {
+            this.mode.set(MODE_PERLIN);
+            this.frequency.set(2.4F);
+            this.amplitude.set(1.5F);
+            this.rotationalWeight.set(1.3F);
+            this.positionalWeight.set(0.8F);
+            this.macroWobble.set(0.6F);
+            this.microJitter.set(0.95F);
+            this.rollWeight.set(0.85F);
+            this.fovWeight.set(0.6F);
+            this.active.set(0b1111111); // All active
+        }
+        else if (presetId == PRESET_IMPACT)
+        {
+            this.mode.set(MODE_PERLIN);
+            this.frequency.set(4.2F);
+            this.amplitude.set(2.4F);
+            this.rotationalWeight.set(1.8F);
+            this.positionalWeight.set(1.2F);
+            this.macroWobble.set(0.3F);
+            this.microJitter.set(1.2F);
+            this.rollWeight.set(1.2F);
+            this.fovWeight.set(0.9F);
+            this.active.set(0b1111111); // All active
+        }
     }
 
     @Override
@@ -114,6 +187,22 @@ public class ShakeClip extends ComponentClip
             amp = this.shakeAmount.get();
         }
 
+        float relTick = context.relativeTick + context.transition;
+
+        /* Dope Sheet Keyframe Channels Modulation */
+        float intensityMod = this.intensityChannel.isEmpty() ? 1F : this.intensityChannel.interpolate(relTick, 1D).floatValue();
+        float freqMod = this.frequencyChannel.isEmpty() ? 1F : this.frequencyChannel.interpolate(relTick, 1D).floatValue();
+        float fovMod = this.fovChannel.isEmpty() ? 1F : this.fovChannel.interpolate(relTick, 1D).floatValue();
+        float rollMod = this.rollChannel.isEmpty() ? 1F : this.rollChannel.interpolate(relTick, 1D).floatValue();
+
+        amp *= intensityMod;
+        freq *= freqMod;
+
+        if (amp <= 1E-5F)
+        {
+            return;
+        }
+
         float time = context.ticks + context.transition;
         float t = time * freq;
         float rotW = this.rotationalWeight.get();
@@ -127,17 +216,21 @@ public class ShakeClip extends ComponentClip
         boolean isRoll = this.isActive(5);
         boolean isFov = this.isActive(6);
 
+        float rollW = this.rollWeight.get() * rollMod;
+        float fovW = this.fovWeight.get() * fovMod;
+
         if (currentMode == MODE_PERLIN)
         {
-            float n = t * 0.15F;
+            float macro = this.macroWobble.get();
+            float micro = this.microJitter.get();
 
-            if (isX) position.point.x += perlinNoise(n, 0) * amp * posW;
-            if (isY) position.point.y += perlinNoise(n, 1) * amp * posW;
-            if (isZ) position.point.z += perlinNoise(n, 2) * amp * posW;
-            if (isYaw) position.angle.yaw += perlinNoise(n, 3) * amp * rotW;
-            if (isPitch) position.angle.pitch += perlinNoise(n, 4) * amp * rotW;
-            if (isRoll) position.angle.roll += perlinNoise(n, 5) * amp * rotW;
-            if (isFov) position.angle.fov += perlinNoise(n, 6) * amp * rotW;
+            if (isX) position.point.x += this.sampleMultiLayer(t, 0, macro, micro) * amp * posW;
+            if (isY) position.point.y += this.sampleMultiLayer(t, 1, macro, micro) * amp * posW;
+            if (isZ) position.point.z += this.sampleMultiLayer(t, 2, macro, micro) * amp * posW;
+            if (isYaw) position.angle.yaw += this.sampleMultiLayer(t, 3, macro, micro) * amp * rotW;
+            if (isPitch) position.angle.pitch += this.sampleMultiLayer(t, 4, macro, micro) * amp * rotW;
+            if (isRoll) position.angle.roll += this.sampleMultiLayer(t, 5, macro, micro) * amp * rotW * rollW;
+            if (isFov) position.angle.fov += this.sampleMultiLayer(t, 6, macro, micro) * amp * fovW * 2.5F;
 
             return;
         }
@@ -172,8 +265,8 @@ public class ShakeClip extends ComponentClip
                 if (isZ) position.point.z += val * posW;
                 if (isYaw) position.angle.yaw += (float) (val * rotW);
                 if (isPitch) position.angle.pitch += (float) (val * rotW);
-                if (isRoll) position.angle.roll += (float) (val * rotW);
-                if (isFov) position.angle.fov += (float) (val * rotW);
+                if (isRoll) position.angle.roll += (float) (val * rotW * rollW);
+                if (isFov) position.angle.fov += (float) (val * fovW * 2.5F);
             }
 
             return;
@@ -199,8 +292,8 @@ public class ShakeClip extends ComponentClip
                 if (isZ) position.point.z -= cos * amp * posW;
                 if (isYaw) position.angle.yaw += cos * amp * rotW;
                 if (isPitch) position.angle.pitch += sin * amp * rotW;
-                if (isRoll) position.angle.roll += cos * amp * rotW;
-                if (isFov) position.angle.fov += sin * amp * rotW;
+                if (isRoll) position.angle.roll += cos * amp * rotW * rollW;
+                if (isFov) position.angle.fov += sin * amp * fovW * 2.5F;
             }
 
             return;
@@ -225,9 +318,32 @@ public class ShakeClip extends ComponentClip
             if (isZ) position.point.z += cos * amp * posW;
             if (isYaw) position.angle.yaw += sin * amp * rotW;
             if (isPitch) position.angle.pitch += cos * amp * rotW;
-            if (isRoll) position.angle.roll += sin * amp * rotW;
-            if (isFov) position.angle.fov += cos * amp * rotW;
+            if (isRoll) position.angle.roll += sin * amp * rotW * rollW;
+            if (isFov) position.angle.fov += cos * amp * fovW * 2.5F;
         }
+    }
+
+    /**
+     * Multi-layer procedural noise for organic camera motion:
+     * - Macro layer: broad, wandering handheld/breathing sway
+     * - Mid layer: natural human body movement & steps
+     * - Micro layer: rapid muscle micro-tremors and impact shudders
+     */
+    public float sampleMultiLayer(float time, int channel, float macroFactor, float microFactor)
+    {
+        /* 1. Macro Wobble: low-frequency, high-smoothness sway */
+        float macro = noise(time * 0.04F, channel * 17 + 101) * macroFactor;
+
+        /* 2. Mid fBm: standard organic handheld motion */
+        float mid = perlinNoise(time * 0.15F, channel);
+
+        /* 3. Micro Jitter: high-frequency shudder & tremor */
+        float microTime = time * 0.65F;
+        float micro = (noise(microTime, channel * 23 + 203) * 0.7F + noise(microTime * 2.3F, channel * 31 + 307) * 0.3F) * microFactor;
+
+        float totalWeight = 0.45F + 0.4F + 0.3F;
+
+        return (macro * 0.45F + mid * 0.4F + micro * 0.3F) / totalWeight;
     }
 
     public static float perlinNoise(float x, int channel)
@@ -256,8 +372,8 @@ public class ShakeClip extends ComponentClip
         int cell = (int) Math.floor(x);
         float t = x - cell;
 
-        /* Smoothstep, so the lattice points don't show up as kinks */
-        t = t * t * (3F - 2F * t);
+        /* Quintic smoothstep for continuous acceleration (eliminates mechanical jerk) */
+        t = t * t * t * (t * (t * 6F - 15F) + 10F);
 
         return Lerps.lerp(hash(cell, channel), hash(cell + 1, channel), t);
     }

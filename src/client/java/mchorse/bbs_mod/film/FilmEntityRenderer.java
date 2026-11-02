@@ -52,8 +52,50 @@ import java.util.Map;
  */
 public class FilmEntityRenderer
 {
+    /**
+     * The actors the film is drawing right now, by replay name and id (lower case). Filled by
+     * {@link #renderEntity} on every frame, so gaze tracking can find its target in the world
+     * preview (GUI closed) and in exports, where no film panel is around to ask.
+     */
+    private static final Map<String, IEntity> ACTORS = new java.util.HashMap<>();
+    private static Map<String, IEntity> actorsOwner;
+
+    public static IEntity findActor(String name)
+    {
+        return name == null ? null : ACTORS.get(name.trim().toLowerCase());
+    }
+
+    private static void registerActor(FilmControllerContext context)
+    {
+        if (context.entities != actorsOwner)
+        {
+            ACTORS.clear();
+            actorsOwner = context.entities;
+        }
+
+        if (context.replay == null || context.entity == null)
+        {
+            return;
+        }
+
+        String name = context.replay.getName();
+        String id = context.replay.getId();
+
+        if (name != null && !name.trim().isEmpty())
+        {
+            ACTORS.put(name.trim().toLowerCase(), context.entity);
+        }
+
+        if (id != null && !id.trim().isEmpty())
+        {
+            ACTORS.put(id.trim().toLowerCase(), context.entity);
+        }
+    }
+
     public static void renderEntity(FilmControllerContext context)
     {
+        registerActor(context);
+
         FormPoseEvents.ACTOR_BEFORE.invoker().prepare(context);
 
         Map<String, IEntity> entities = context.entities;

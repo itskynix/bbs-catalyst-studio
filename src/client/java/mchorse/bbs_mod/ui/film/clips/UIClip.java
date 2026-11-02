@@ -149,7 +149,10 @@ public abstract class UIClip <T extends Clip> extends UIElement
         register(mchorse.bbs_mod.camera.clips.fx.EyeClip.class, UIFxClips.UIEyeClip::new);
         register(mchorse.bbs_mod.camera.clips.fx.LensDistortionClip.class, UIFxClips.UILensDistortionClip::new);
         register(mchorse.bbs_mod.camera.clips.fx.ScreenShakeClip.class, UIFxClips.UIScreenShakeClip::new);
+        register(mchorse.bbs_mod.camera.clips.fx.WorldWobbleClip.class, UIFxClips.UIWorldWobbleClip::new);
+        register(mchorse.bbs_mod.camera.clips.fx.DebrisClip.class, UIFxClips.UIDebrisClip::new);
         register(mchorse.bbs_mod.camera.clips.fx.ScreenShaderGraphClip.class, UIFxClips.UIScreenShaderGraphClip::new);
+        register(mchorse.bbs_mod.camera.clips.fx.CompoundFxClip.class, UICompoundFxClip::new);
 
         register(ChatActionClip.class, UIChatActionClip::new);
         register(CommandActionClip.class, UICommandActionClip::new);

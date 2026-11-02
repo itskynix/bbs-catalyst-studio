@@ -1,8 +1,15 @@
 package mchorse.bbs_mod.audio;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D;
+import mchorse.bbs_mod.utils.Bufs;
 import mchorse.bbs_mod.utils.colors.Colors;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.render.BufferBuilder;
+import net.minecraft.client.render.GameRenderer;
+import net.minecraft.client.render.VertexFormat;
+import net.minecraft.client.render.VertexFormats;
+import org.joml.Matrix4f;
 
 import java.util.List;
 
@@ -81,64 +88,222 @@ public class Waveform
          * when a zoomed timeline extends far beyond the screen. */
         int first = (int) Math.max(0L, -(long) x);
         int last = (int) Math.min(w, (long) MinecraftClient.getInstance().getWindow().getWidth() - x);
+
+        if (first >= last)
+        {
+            return;
+        }
+
         float center = y + h / 2F;
         WaveformEnvelope.Range range = new WaveformEnvelope.Range();
         boolean wasBatching = batcher.isBatching();
 
         batcher.clip(x, y, w, h, 0, 0);
+
+        /* 1. Background cues and color codes */
         batcher.beginBatch();
 
-        for (int i = first; i < last; i++)
+        if (this.colorCodes != null || this.cues != null)
         {
-            double from = startTime + i * secondsPerPixel;
+            for (int i = first; i < last; i++)
+            {
+                double from = startTime + i * secondsPerPixel;
+                double to = from + secondsPerPixel;
+
+                if (to <= 0 || from >= this.duration)
+                {
+                    continue;
+                }
+
+                if (this.colorCodes != null)
+                {
+                    for (ColorCode code : this.colorCodes)
+                    {
+                        if (code.isInside((float) Math.max(0, from)))
+                        {
+                            int columnColor = tint(code.color | 0xff000000, color);
+                            batcher.gradientVBox(x + i, y, x + i + 1, y + h,
+                                Colors.mulA(columnColor, 0.125F), Colors.mulA(columnColor, 0.375F));
+                            break;
+                        }
+                    }
+                }
+
+                if (this.cues != null)
+                {
+                    for (float cue : this.cues)
+                    {
+                        if (cue >= from && cue < to)
+                        {
+                            batcher.box(x + i, y, x + i + 1, y + h, tint(Colors.ACTIVE | Colors.A75, color));
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        batcher.endBatch();
+
+        /* 2. Sample envelope columns into contiguous arrays for high-res sub-pixel connected waveform rendering */
+        int count = last - first;
+        float[] peaks = new float[count];
+        float[] avgs = new float[count];
+        int[] cols = new int[count];
+        boolean[] active = new boolean[count];
+
+        float halfH = Math.max(1.0F, (h - 2) / 2.0F);
+
+        for (int i = 0; i < count; i++)
+        {
+            int colIdx = first + i;
+            double from = startTime + colIdx * secondsPerPixel;
             double to = from + secondsPerPixel;
 
             if (to <= 0 || from >= this.duration)
             {
+                active[i] = false;
                 continue;
             }
 
             this.envelope.sample(from, to, range);
-            int columnColor = color;
+            active[i] = true;
 
+            int col = color;
             if (this.colorCodes != null)
             {
                 for (ColorCode code : this.colorCodes)
                 {
                     if (code.isInside((float) Math.max(0, from)))
                     {
-                        columnColor = tint(code.color | 0xff000000, color);
-                        batcher.gradientVBox(x + i, y, x + i + 1, y + h,
-                            Colors.mulA(columnColor, 0.125F), Colors.mulA(columnColor, 0.375F));
+                        col = tint(code.color | 0xff000000, color);
                         break;
                     }
                 }
             }
+            cols[i] = col;
 
-            if (this.cues != null)
-            {
-                for (float cue : this.cues)
-                {
-                    if (cue >= from && cue < to)
-                    {
-                        batcher.box(x + i, y, x + i + 1, y + h, tint(Colors.ACTIVE | Colors.A75, color));
-                        break;
-                    }
-                }
-            }
-
-            float peak = range.maximum * h / 2F;
-            float average = range.average * h / 2F;
-
-            batcher.box(x + i, center - peak, x + i + 1, center + peak, columnColor);
-            batcher.box(x + i, center - average, x + i + 1, center + average, Colors.mulRGB(columnColor, 0.8F));
+            /* Peak amplitude with subtle hairline floor so silent regions retain sleek waveform continuity */
+            peaks[i] = Math.max(0.6F, range.maximum * halfH);
+            avgs[i] = Math.max(0.3F, range.average * halfH);
         }
+
+        /* 3. Modern DaVinci / Premiere Style Continuous Connected Geometry */
+        Matrix4f matrix = batcher.getContext().getMatrices().peek().getPositionMatrix();
+
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.setShader(GameRenderer::getPositionColorProgram);
+
+        BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
+
+        /* 3a. Subtle Center Zero-Crossing Reference Line */
+        int zeroCrossColor = Colors.setA(color, 0.22F);
+        for (int i = 0; i < count - 1; i++)
+        {
+            if (!active[i] && !active[i + 1])
+            {
+                continue;
+            }
+            float x0 = x + first + i;
+            float x1 = x0 + 1.0F;
+
+            builder.vertex(matrix, x0, center - 0.5F, 0F).color(zeroCrossColor)/*$ nx*/.next()/**/;
+            builder.vertex(matrix, x0, center + 0.5F, 0F).color(zeroCrossColor)/*$ nx*/.next()/**/;
+            builder.vertex(matrix, x1, center + 0.5F, 0F).color(zeroCrossColor)/*$ nx*/.next()/**/;
+            builder.vertex(matrix, x1, center - 0.5F, 0F).color(zeroCrossColor)/*$ nx*/.next()/**/;
+        }
+
+        /* 3b. Outer Waveform Body Fill (Connected Trapezoids) with Soft Opacity */
+        for (int i = 0; i < count - 1; i++)
+        {
+            if (!active[i] && !active[i + 1])
+            {
+                continue;
+            }
+
+            float x0 = x + first + i;
+            float x1 = x0 + 1.0F;
+
+            float y0Top = center - peaks[i];
+            float y0Bot = center + peaks[i];
+            float y1Top = center - peaks[i + 1];
+            float y1Bot = center + peaks[i + 1];
+
+            int c0 = Colors.setA(cols[i], 0.38F);
+            int c1 = Colors.setA(cols[i + 1], 0.38F);
+
+            builder.vertex(matrix, x0, y0Top, 0F).color(c0)/*$ nx*/.next()/**/;
+            builder.vertex(matrix, x0, y0Bot, 0F).color(c0)/*$ nx*/.next()/**/;
+            builder.vertex(matrix, x1, y1Bot, 0F).color(c1)/*$ nx*/.next()/**/;
+            builder.vertex(matrix, x1, y1Top, 0F).color(c1)/*$ nx*/.next()/**/;
+        }
+
+        /* 3c. Inner RMS / Average Energy Core (Connected Trapezoids) with Higher Density */
+        for (int i = 0; i < count - 1; i++)
+        {
+            if (!active[i] && !active[i + 1])
+            {
+                continue;
+            }
+
+            float x0 = x + first + i;
+            float x1 = x0 + 1.0F;
+
+            float y0Top = center - avgs[i];
+            float y0Bot = center + avgs[i];
+            float y1Top = center - avgs[i + 1];
+            float y1Bot = center + avgs[i + 1];
+
+            int c0 = Colors.setA(cols[i], 0.75F);
+            int c1 = Colors.setA(cols[i + 1], 0.75F);
+
+            builder.vertex(matrix, x0, y0Top, 0F).color(c0)/*$ nx*/.next()/**/;
+            builder.vertex(matrix, x0, y0Bot, 0F).color(c0)/*$ nx*/.next()/**/;
+            builder.vertex(matrix, x1, y1Bot, 0F).color(c1)/*$ nx*/.next()/**/;
+            builder.vertex(matrix, x1, y1Top, 0F).color(c1)/*$ nx*/.next()/**/;
+        }
+
+        /* 3d. Modern High-Res 1D Anti-Aliased Crest Line (Continuous Contour Stroke) */
+        float strokeHalf = 0.65F;
+        for (int i = 0; i < count - 1; i++)
+        {
+            if (!active[i] && !active[i + 1])
+            {
+                continue;
+            }
+
+            float x0 = x + first + i;
+            float x1 = x0 + 1.0F;
+
+            float y0Top = center - peaks[i];
+            float y1Top = center - peaks[i + 1];
+            float y0Bot = center + peaks[i];
+            float y1Bot = center + peaks[i + 1];
+
+            int c0 = Colors.setA(cols[i], 1.0F);
+            int c1 = Colors.setA(cols[i + 1], 1.0F);
+
+            /* Top crest line */
+            builder.vertex(matrix, x0, y0Top - strokeHalf, 0F).color(c0)/*$ nx*/.next()/**/;
+            builder.vertex(matrix, x0, y0Top + strokeHalf, 0F).color(c0)/*$ nx*/.next()/**/;
+            builder.vertex(matrix, x1, y1Top + strokeHalf, 0F).color(c1)/*$ nx*/.next()/**/;
+            builder.vertex(matrix, x1, y1Top - strokeHalf, 0F).color(c1)/*$ nx*/.next()/**/;
+
+            /* Bottom crest line */
+            builder.vertex(matrix, x0, y0Bot - strokeHalf, 0F).color(c0)/*$ nx*/.next()/**/;
+            builder.vertex(matrix, x0, y0Bot + strokeHalf, 0F).color(c0)/*$ nx*/.next()/**/;
+            builder.vertex(matrix, x1, y1Bot + strokeHalf, 0F).color(c1)/*$ nx*/.next()/**/;
+            builder.vertex(matrix, x1, y1Bot - strokeHalf, 0F).color(c1)/*$ nx*/.next()/**/;
+        }
+
+        Bufs.draw(builder);
 
         batcher.unclip(0, 0);
 
-        if (!wasBatching)
+        if (wasBatching)
         {
-            batcher.endBatch();
+            batcher.beginBatch();
         }
     }
 

@@ -6,6 +6,8 @@ import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.camera.clips.CameraClip;
 import mchorse.bbs_mod.camera.clips.ClipFactoryData;
 import mchorse.bbs_mod.camera.clips.converters.IClipConverter;
+import mchorse.bbs_mod.camera.clips.fx.CompoundFxClip;
+import mchorse.bbs_mod.camera.clips.fx.FxClip;
 import mchorse.bbs_mod.camera.clips.overwrite.KeyframeClip;
 import mchorse.bbs_mod.camera.utils.TimeUtils;
 import mchorse.bbs_mod.data.types.BaseType;
@@ -186,6 +188,32 @@ public class UIClips extends UITimelineCanvas
                 menu.action(Icons.CUT, UIKeys.CAMERA_TIMELINE_CONTEXT_CUT, this::cut);
                 menu.action(Icons.MOVE_TO, UIKeys.CAMERA_TIMELINE_CONTEXT_SHIFT, this::shiftToCursor);
                 menu.action(Icons.SHIFT_TO, UIKeys.CAMERA_TIMELINE_CONTEXT_SHIFT_DURATION, this::shiftDurationToCursor);
+
+                List<Clip> selectedClips = this.getClipsFromSelection();
+
+                if (selectedClips.isEmpty() && this.delegate.getClip() != null)
+                {
+                    selectedClips = Collections.singletonList(this.delegate.getClip());
+                }
+
+                boolean allFx = !selectedClips.isEmpty() && selectedClips.stream().allMatch((c) -> c instanceof FxClip);
+
+                if (allFx && (selectedClips.size() > 1 || !(selectedClips.get(0) instanceof CompoundFxClip)))
+                {
+                    menu.action(Icons.SPARKLES, UIKeys.CAMERA_TIMELINE_CONTEXT_CONVERT_COMPOUND, this::convertToCompound);
+                }
+
+                if (selectedClips.size() == 1 && selectedClips.get(0) instanceof CompoundFxClip single)
+                {
+                    menu.action(Icons.EDIT, UIKeys.CAMERA_TIMELINE_CONTEXT_ENTER_COMPOUND, () -> this.enterCompound(single));
+                }
+
+                boolean hasCompound = selectedClips.stream().anyMatch((c) -> c instanceof CompoundFxClip);
+
+                if (hasCompound)
+                {
+                    menu.action(Icons.EXPAND_ALL, UIKeys.CAMERA_TIMELINE_CONTEXT_DECOMPOSE_COMPOUND, this::decomposeCompound);
+                }
             }
 
             menu.action(Icons.EXCHANGE, UIKeys.CAMERA_TIMELINE_CONTEXT_REORGANIZE, () -> this.clips.sortLayers());
@@ -247,7 +275,7 @@ public class UIClips extends UITimelineCanvas
         this.keys().register(Keys.FADE_IN, () ->
         {
             Clip clip = this.delegate.getClip();
-            int tick = Math.max(0, this.delegate.getCursor() - clip.tick.get());
+            int tick = Math.max(0, this.cursorTick() - clip.tick.get());
 
             clip.envelope.fadeIn.set((float) tick);
             this.delegate.fillData();
@@ -255,7 +283,7 @@ public class UIClips extends UITimelineCanvas
         this.keys().register(Keys.FADE_OUT, () ->
         {
             Clip clip = this.delegate.getClip();
-            int tick = Math.max(0, clip.tick.get() + clip.duration.get() - this.delegate.getCursor());
+            int tick = Math.max(0, clip.tick.get() + clip.duration.get() - this.cursorTick());
 
             clip.envelope.fadeOut.set((float) tick);
             this.delegate.fillData();
@@ -318,7 +346,7 @@ public class UIClips extends UITimelineCanvas
 
     private void showAddsAtTick(UIContext context, int mouseX, int mouseY)
     {
-        this.showAddClips(context, this.checkSize(this.delegate.getCursor(), this.fromLayerY(mouseY), BBSSettings.getDefaultDuration()));
+        this.showAddClips(context, this.checkSize(this.cursorTick(), this.fromLayerY(mouseY), BBSSettings.getDefaultDuration()));
     }
 
     private void showAddsOnTop()
@@ -374,6 +402,26 @@ public class UIClips extends UITimelineCanvas
             this.addPreview = null;
 
             this.getContext().notifyError(UIKeys.CAMERA_TIMELINE_CANT_FIT_NOTIFICATION);
+
+            return;
+        }
+
+        if (this.isNested())
+        {
+            List<Link> effects = UIClipTypeMenu.effectTypes(this.factory);
+
+            context.replaceContextMenu((add) ->
+            {
+                UIChoiceMenu.of(effects)
+                    .icon((type) -> this.factory.getData(type).icon)
+                    .label((type) -> UIKeys.C_CLIP.get(type))
+                    .color((type) -> this.factory.getData(type).color)
+                    .build(add, UIKeys.CAMERA_TIMELINE_KEYS_CLIPS, (type) -> this.addClip(type, preview.x, preview.y, preview.z));
+
+                add.onClose((m) -> this.addPreview = null);
+            });
+
+            this.addPreview = preview;
 
             return;
         }
@@ -527,7 +575,7 @@ public class UIClips extends UITimelineCanvas
      */
     private void cut()
     {
-        int offset = this.delegate.getCursor();
+        int offset = this.cursorTick();
         List<Clip> toCut = this.getClipsUnderPlayhead(offset);
 
         if (toCut.isEmpty())
@@ -618,7 +666,7 @@ public class UIClips extends UITimelineCanvas
      */
     public void rippleTrimHead()
     {
-        int cursor = this.delegate.getCursor();
+        int cursor = this.cursorTick();
         List<Clip> toTrim = this.getClipsUnderPlayhead(cursor);
 
         List<Clip> validClips = new ArrayList<>();
@@ -661,7 +709,7 @@ public class UIClips extends UITimelineCanvas
 
         if (minStart != Integer.MAX_VALUE)
         {
-            this.delegate.setCursor(minStart);
+            this.putCursor(minStart);
         }
 
         this.clips.postNotify();
@@ -678,7 +726,7 @@ public class UIClips extends UITimelineCanvas
      */
     public void rippleTrimTail()
     {
-        int cursor = this.delegate.getCursor();
+        int cursor = this.cursorTick();
         List<Clip> toTrim = this.getClipsUnderPlayhead(cursor);
 
         List<Clip> validClips = new ArrayList<>();
@@ -877,7 +925,7 @@ public class UIClips extends UITimelineCanvas
             min = Math.min(min, clip.tick.get());
         }
 
-        int diff = this.delegate.getCursor() - min;
+        int diff = this.cursorTick() - min;
 
         for (Clip clip : clips)
         {
@@ -903,14 +951,14 @@ public class UIClips extends UITimelineCanvas
         {
             int offset = clip.tick.get();
 
-            if (this.delegate.getCursor() > offset)
+            if (this.cursorTick() > offset)
             {
-                clip.duration.set(this.delegate.getCursor() - offset);
+                clip.duration.set(this.cursorTick() - offset);
             }
-            else if (this.delegate.getCursor() < offset + clip.duration.get())
+            else if (this.cursorTick() < offset + clip.duration.get())
             {
-                clip.tick.set(this.delegate.getCursor());
-                clip.duration.set(clip.duration.get() + offset - this.delegate.getCursor());
+                clip.tick.set(this.cursorTick());
+                clip.duration.set(clip.duration.get() + offset - this.cursorTick());
             }
         }
 
@@ -952,7 +1000,7 @@ public class UIClips extends UITimelineCanvas
 
         if (clips.isEmpty())
         {
-            int cursor = (int) Math.floor(this.delegate.getCursor());
+            int cursor = (int) Math.floor(this.cursorTick());
             List<Clip> underPlayhead = this.getClipsUnderPlayhead(cursor);
             if (!underPlayhead.isEmpty())
             {
@@ -984,7 +1032,7 @@ public class UIClips extends UITimelineCanvas
 
     private void selectBefore()
     {
-        int cursor = this.delegate.getCursor();
+        int cursor = this.cursorTick();
 
         this.selectWhere((clip) -> clip.tick.get() < cursor);
     }
@@ -1064,7 +1112,7 @@ public class UIClips extends UITimelineCanvas
             return;
         }
 
-        int cursor = this.delegate.getCursor();
+        int cursor = this.cursorTick();
 
         this.selectWhere((c) -> c.layer.get() == layer && c.tick.get() < cursor);
     }
@@ -1081,14 +1129,14 @@ public class UIClips extends UITimelineCanvas
             return;
         }
 
-        int cursor = this.delegate.getCursor();
+        int cursor = this.cursorTick();
 
         this.selectWhere((c) -> c.layer.get() == layer && c.tick.get() + c.duration.get() > cursor);
     }
 
     private void selectAfter()
     {
-        int cursor = this.delegate.getCursor();
+        int cursor = this.cursorTick();
 
         this.selectWhere((clip) -> clip.tick.get() + clip.duration.get() > cursor);
     }
@@ -1186,6 +1234,9 @@ public class UIClips extends UITimelineCanvas
     public void setClips(Clips clips)
     {
         this.clips = clips;
+        this.nestOwners.clear();
+        this.nestParents.clear();
+        this.nestOffset = 0;
         this.addPreview = null;
 
         this.centerScrollOnRender = true;
@@ -1193,6 +1244,174 @@ public class UIClips extends UITimelineCanvas
         this.embedView(null);
 
         this.resetView();
+    }
+
+    /* Nesting: the stack of compound clips the view has been entered into. Empty at the film's own timeline. */
+
+    private final List<CompoundFxClip> nestOwners = new ArrayList<>();
+    private final List<Clips> nestParents = new ArrayList<>();
+    private int nestOffset;
+
+    /** The cursor in this timeline's own time: inside a compound clip, ticks count from its start. */
+    private int cursorTick()
+    {
+        return this.delegate.getCursor() - this.nestOffset;
+    }
+
+    private void putCursor(float tick)
+    {
+        this.delegate.setCursor(tick + this.nestOffset);
+    }
+
+    public boolean isNested()
+    {
+        return !this.nestOwners.isEmpty();
+    }
+
+    /** DaVinci Compound Clip / Premiere Nest: swap the timeline for the compound clip's own. */
+    public void enterCompound(CompoundFxClip compound)
+    {
+        if (compound == null || this.clips == null)
+        {
+            return;
+        }
+
+        this.nestOwners.add(compound);
+        this.nestParents.add(this.clips);
+        this.nestOffset += compound.tick.get();
+        this.showNested(compound.children);
+        UIUtils.playClick();
+    }
+
+    /** Back out to {@code depth} levels of nesting (0 is the film's own timeline). */
+    public void exitToDepth(int depth)
+    {
+        if (depth < 0 || depth >= this.nestOwners.size())
+        {
+            return;
+        }
+
+        CompoundFxClip last = null;
+        Clips target = this.clips;
+
+        while (this.nestOwners.size() > depth)
+        {
+            int index = this.nestOwners.size() - 1;
+
+            last = this.nestOwners.remove(index);
+            target = this.nestParents.remove(index);
+            this.nestOffset -= last.tick.get();
+        }
+
+        this.showNested(target);
+
+        if (last != null && target.getIndex(last) >= 0)
+        {
+            this.setSelected(last);
+            this.delegate.pickClip(last);
+        }
+
+        UIUtils.playClick();
+    }
+
+    private void showNested(Clips clips)
+    {
+        this.clips = clips;
+        this.addPreview = null;
+        this.centerScrollOnRender = true;
+
+        this.clearSelection();
+        this.delegate.pickClip(null);
+        this.embedView(null);
+        this.resetView();
+    }
+
+    private int getBreadcrumbY()
+    {
+        return TimelineRulerRenderer.getRulerBottom(this.area) + 2;
+    }
+
+    /** The crumbs left to right: the film's timeline, then every compound clip entered. */
+    private List<String> getCrumbs()
+    {
+        List<String> crumbs = new ArrayList<>();
+
+        crumbs.add(UIKeys.CAMERA_TIMELINE_NEST_ROOT.get());
+
+        for (CompoundFxClip owner : this.nestOwners)
+        {
+            String title = owner.title.get();
+
+            crumbs.add(title == null || title.isEmpty() ? UIKeys.CAMERA_TIMELINE_NEST_COMPOUND.get() : title);
+        }
+
+        return crumbs;
+    }
+
+    private void renderBreadcrumb(UIContext context)
+    {
+        if (!this.isNested())
+        {
+            return;
+        }
+
+        int x = this.area.x + 6;
+        int y = this.getBreadcrumbY();
+        List<String> crumbs = this.getCrumbs();
+        int sep = context.batcher.getFont().getWidth(" > ");
+        int total = 8;
+
+        for (String crumb : crumbs)
+        {
+            total += context.batcher.getFont().getWidth(crumb) + sep;
+        }
+
+        context.batcher.box(x - 4, y, x - 4 + total - sep, y + 16, 0xb3000000);
+
+        for (int i = 0; i < crumbs.size(); i++)
+        {
+            int w = context.batcher.getFont().getWidth(crumbs.get(i));
+            boolean last = i == crumbs.size() - 1;
+            boolean hover = !last && context.mouseX >= x && context.mouseX < x + w && context.mouseY >= y && context.mouseY < y + 16;
+
+            context.batcher.text(crumbs.get(i), x, y + 4, last ? Colors.WHITE : (hover ? 0xff0088ff : Colors.LIGHTER_GRAY));
+            x += w;
+
+            if (!last)
+            {
+                context.batcher.text(" > ", x, y + 4, Colors.LIGHTER_GRAY);
+                x += sep;
+            }
+        }
+    }
+
+    /** @return whether the click landed on a crumb (and took us back to it) */
+    private boolean clickBreadcrumb(UIContext context, int mouseX, int mouseY)
+    {
+        if (!this.isNested() || mouseY < this.getBreadcrumbY() || mouseY >= this.getBreadcrumbY() + 16)
+        {
+            return false;
+        }
+
+        List<String> crumbs = this.getCrumbs();
+        int sep = context.batcher.getFont().getWidth(" > ");
+        int x = this.area.x + 6;
+
+        for (int i = 0; i < crumbs.size() - 1; i++)
+        {
+            int w = context.batcher.getFont().getWidth(crumbs.get(i));
+
+            if (mouseX >= x && mouseX < x + w)
+            {
+                this.exitToDepth(i);
+
+                return true;
+            }
+
+            x += w + sep;
+        }
+
+        return false;
     }
 
     /**
@@ -1326,17 +1545,17 @@ public class UIClips extends UITimelineCanvas
 
     public void setLoopMin()
     {
-        this.loopMin = this.delegate.getCursor();
+        this.loopMin = this.cursorTick();
     }
 
     public void setLoopMax()
     {
-        this.loopMax = this.delegate.getCursor();
+        this.loopMax = this.cursorTick();
     }
 
     public void setInPoint()
     {
-        this.setInPoint((int) Math.floor(this.delegate.getCursor()));
+        this.setInPoint((int) Math.floor(this.cursorTick()));
     }
 
     public void setInPoint(int tick)
@@ -1351,7 +1570,7 @@ public class UIClips extends UITimelineCanvas
 
     public void setOutPoint()
     {
-        this.setOutPoint((int) Math.floor(this.delegate.getCursor()));
+        this.setOutPoint((int) Math.floor(this.cursorTick()));
     }
 
     public void setOutPoint(int tick)
@@ -1400,7 +1619,7 @@ public class UIClips extends UITimelineCanvas
 
         if (targetClips.isEmpty())
         {
-            int cursor = (int) Math.floor(this.delegate.getCursor());
+            int cursor = (int) Math.floor(this.cursorTick());
             List<Clip> underPlayhead = this.getClipsUnderPlayhead(cursor);
             if (!underPlayhead.isEmpty())
             {
@@ -1435,27 +1654,27 @@ public class UIClips extends UITimelineCanvas
 
     public void jumpToPreviousEditPoint()
     {
-        int current = (int) Math.round(this.delegate.getCursor());
+        int current = (int) Math.round(this.cursorTick());
         if (this.delegate instanceof UIFilmPanel filmPanel)
         {
-            this.delegate.setCursor(filmPanel.findPreviousEditPoint(current));
+            this.putCursor(filmPanel.findPreviousEditPoint(current));
         }
         else if (this.clips != null)
         {
-            this.delegate.setCursor(this.clips.findPreviousTick(current));
+            this.putCursor(this.clips.findPreviousTick(current));
         }
     }
 
     public void jumpToNextEditPoint()
     {
-        int current = (int) Math.round(this.delegate.getCursor());
+        int current = (int) Math.round(this.cursorTick());
         if (this.delegate instanceof UIFilmPanel filmPanel)
         {
-            this.delegate.setCursor(filmPanel.findNextEditPoint(current));
+            this.putCursor(filmPanel.findNextEditPoint(current));
         }
         else if (this.clips != null)
         {
-            this.delegate.setCursor(this.clips.findNextTick(current));
+            this.putCursor(this.clips.findNextTick(current));
         }
     }
 
@@ -1614,6 +1833,11 @@ public class UIClips extends UITimelineCanvas
             boolean shift = Window.isShiftPressed();
             boolean alt = Window.isAltPressed();
 
+            if (context.mouseButton == 0 && this.clickBreadcrumb(context, mouseX, mouseY))
+            {
+                return true;
+            }
+
             if (context.mouseButton == 0 && this.handleLeftClick(context, mouseX, mouseY, ctrl, shift, alt))
             {
                 return true;
@@ -1740,6 +1964,16 @@ public class UIClips extends UITimelineCanvas
                     {
                         /* A clip with a sub-editor opens it; any other clip has nothing to open and
                          * the click falls through to the plain select-and-grab it always was. */
+                        if (clip instanceof CompoundFxClip compound)
+                        {
+                            this.grabbing = false;
+                            this.grabbedClips = Collections.emptyList();
+                            this.otherClips = Collections.emptyList();
+                            this.enterCompound(compound);
+
+                            return true;
+                        }
+
                         if (this.delegate.openClipEditor(clip))
                         {
                             this.grabbing = false;
@@ -1762,7 +1996,7 @@ public class UIClips extends UITimelineCanvas
                 }
 
                 this.snappingPoints.clear();
-                this.snappingPoints.add(this.delegate.getCursor());
+                this.snappingPoints.add(this.cursorTick());
 
                 if (BBSSettings.editorSnapToMarkers.get())
                 {
@@ -1841,7 +2075,7 @@ public class UIClips extends UITimelineCanvas
 
         this.scrubbing = true;
         this.delegate.stopPlaybackOnScrub();
-        this.delegate.setCursor(Math.max(0F, this.fromGraphCursor(mouseX)));
+        this.putCursor(Math.max(0F, this.fromGraphCursor(mouseX)));
 
         return true;
     }
@@ -1947,7 +2181,7 @@ public class UIClips extends UITimelineCanvas
 
         if (this.scrubbing)
         {
-            this.delegate.setCursor(Math.max(0F, this.fromGraphCursor(context.mouseX)));
+            this.putCursor(Math.max(0F, this.fromGraphCursor(context.mouseX)));
         }
 
         if (this.marquee.isActive())
@@ -2006,12 +2240,12 @@ public class UIClips extends UITimelineCanvas
             }
             if (context.isPressed(GLFW.GLFW_KEY_I) && !Window.isCtrlPressed() && !Window.isAltPressed() && !Window.isShiftPressed())
             {
-                this.setInPoint((int) Math.floor(this.delegate.getCursor()));
+                this.setInPoint((int) Math.floor(this.cursorTick()));
                 return true;
             }
             if (context.isPressed(GLFW.GLFW_KEY_O) && !Window.isCtrlPressed() && !Window.isAltPressed() && !Window.isShiftPressed())
             {
-                this.setOutPoint((int) Math.floor(this.delegate.getCursor()));
+                this.setOutPoint((int) Math.floor(this.cursorTick()));
                 return true;
             }
             if (context.isPressed(GLFW.GLFW_KEY_X) && Window.isAltPressed() && !Window.isCtrlPressed() && !Window.isShiftPressed())
@@ -2087,7 +2321,7 @@ public class UIClips extends UITimelineCanvas
         }
         else if (this.scrubbing)
         {
-            this.delegate.setCursor(Math.max(0F, this.fromGraphCursor(mouseX)));
+            this.putCursor(Math.max(0F, this.fromGraphCursor(mouseX)));
         }
         else if (this.selectingLoop == 0)
         {
@@ -2514,11 +2748,12 @@ public class UIClips extends UITimelineCanvas
         /* Keep marker lines visible over the clips, below the playhead. */
         this.markers.render(context, this.area, this.xAxis, 0);
 
-        float cursor = this.delegate.getTimelineCursor(context.getTransition());
+        float cursor = this.delegate.getTimelineCursor(context.getTransition()) - this.nestOffset;
         String label = TimeUtils.formatCursorTime(cursor) + "/" + TimeUtils.formatTime(this.clips.calculateDuration());
 
         renderCursor(context, label, area, this.toGraphX(cursor));
         this.renderSelection(context);
+        this.renderBreadcrumb(context);
 
         batcher.unclip(context);
         batcher.clip(this.vertical.area, context);
@@ -2712,5 +2947,164 @@ public class UIClips extends UITimelineCanvas
             context.batcher.box(minX, y, minX + 1, this.area.ey(), color);
             context.batcher.box(maxX - 1, y, maxX, this.area.ey(), color);
         }
+    }
+
+    /**
+     * Convert selected clips into a nested Compound FX clip (DaVinci Resolve Compound Clip style).
+     */
+    public void convertToCompound()
+    {
+        List<Clip> selected = this.getClipsFromSelection();
+
+        if (selected.isEmpty())
+        {
+            Clip current = this.delegate.getClip();
+
+            if (current != null)
+            {
+                selected = Collections.singletonList(current);
+            }
+        }
+
+        if (selected.isEmpty() || !selected.stream().allMatch((c) -> c instanceof FxClip))
+        {
+            return;
+        }
+
+        int minTick = Integer.MAX_VALUE;
+        int maxEndTick = Integer.MIN_VALUE;
+        int minLayer = Integer.MAX_VALUE;
+
+        for (Clip clip : selected)
+        {
+            minTick = Math.min(minTick, clip.tick.get());
+            maxEndTick = Math.max(maxEndTick, clip.tick.get() + clip.duration.get());
+            minLayer = Math.min(minLayer, clip.layer.get());
+        }
+
+        int duration = Math.max(1, maxEndTick - minTick);
+
+        CompoundFxClip compound = new CompoundFxClip();
+
+        compound.tick.set(minTick);
+        compound.duration.set(duration);
+        compound.layer.set(minLayer);
+
+        for (Clip clip : selected)
+        {
+            Clip copy = clip.copy();
+
+            copy.tick.set(clip.tick.get() - minTick);
+            copy.layer.set(Math.max(0, clip.layer.get() - minLayer));
+            compound.children.addClip(copy);
+        }
+
+        compound.children.sortLayers();
+
+        this.clips.preNotify();
+
+        for (Clip clip : selected)
+        {
+            this.clips.remove(clip);
+        }
+
+        this.clips.addClip(compound);
+        this.clips.sortLayers();
+        this.clips.sync();
+        this.clips.postNotify();
+
+        this.clearSelection();
+        this.setSelected(compound);
+        this.delegate.pickClip(compound);
+        UIUtils.playClick();
+    }
+
+    /**
+     * Decompose selected Compound FX clip(s) back into original standalone timeline clips.
+     */
+    public void decomposeCompound(CompoundFxClip compound)
+    {
+        if (this.clips == null || this.clips.getIndex(compound) < 0)
+        {
+            return;
+        }
+
+        this.setSelected(compound);
+        this.decomposeCompound();
+    }
+
+    public void decomposeCompound()
+    {
+        List<Clip> selected = this.getClipsFromSelection();
+
+        if (selected.isEmpty())
+        {
+            Clip current = this.delegate.getClip();
+
+            if (current != null)
+            {
+                selected = Collections.singletonList(current);
+            }
+        }
+
+        List<CompoundFxClip> compounds = new ArrayList<>();
+
+        for (Clip clip : selected)
+        {
+            if (clip instanceof CompoundFxClip compound)
+            {
+                compounds.add(compound);
+            }
+        }
+
+        if (compounds.isEmpty())
+        {
+            return;
+        }
+
+        this.clips.preNotify();
+
+        List<Clip> newlyAdded = new ArrayList<>();
+
+        for (CompoundFxClip compound : compounds)
+        {
+            int baseTick = compound.tick.get();
+            int baseLayer = compound.layer.get();
+
+            for (Clip child : compound.children.get())
+            {
+                Clip copy = child.copy();
+
+                copy.tick.set(baseTick + child.tick.get());
+                copy.layer.set(baseLayer + child.layer.get());
+
+                this.clips.addClip(copy);
+                newlyAdded.add(copy);
+            }
+
+            this.clips.remove(compound);
+        }
+
+        this.clips.sortLayers();
+        this.clips.sync();
+        this.clips.postNotify();
+
+        this.clearSelection();
+
+        for (Clip clip : newlyAdded)
+        {
+            this.addSelected(clip);
+        }
+
+        if (newlyAdded.isEmpty())
+        {
+            this.delegate.pickClip(null);
+        }
+        else
+        {
+            this.delegate.pickClip(newlyAdded.get(newlyAdded.size() - 1));
+        }
+
+        UIUtils.playClick();
     }
 }

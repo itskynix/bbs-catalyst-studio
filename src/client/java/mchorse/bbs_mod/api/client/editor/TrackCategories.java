@@ -92,7 +92,9 @@ public final class TrackCategories
             || "pan".equals(name)
             || "offset".equals(name)
             || "occlusionFactor".equals(name)
-            || "occlusion".equals(name);
+            || "occlusion".equals(name)
+            || "dopplerScale".equals(name)
+            || "doppler".equals(name);
     }
 
     /** Called once after category registration, before loading keybind settings. */

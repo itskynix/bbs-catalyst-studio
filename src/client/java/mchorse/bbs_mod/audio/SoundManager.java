@@ -264,11 +264,12 @@ public class SoundManager implements IWatchDogListener
         {
             SoundBuffer player = this.buffers.get(link);
 
-            if (player != null && includeWaveform && player.getWaveform() == null)
+            if (player != null && (!player.isValid() || (includeWaveform && player.getWaveform() == null)))
             {
                 player.delete();
+                this.buffers.remove(link);
 
-                return this.load(link, true);
+                return this.load(link, includeWaveform);
             }
 
             return player;
@@ -355,7 +356,14 @@ public class SoundManager implements IWatchDogListener
                 continue;
             }
 
-            if (player.getBuffer().getId().equals(link))
+            if (!player.isValid())
+            {
+                player.delete();
+                it.remove();
+                break;
+            }
+
+            if (player.getBuffer() != null && player.getBuffer().getId().equals(link))
             {
                 player.refresh();
 
@@ -438,7 +446,7 @@ public class SoundManager implements IWatchDogListener
             SoundPlayer player = it.next();
             boolean orphaned = player.getOwner() != null && now - player.getLastUsed() > OWNED_IDLE_MS;
 
-            if (player.canBeRemoved() || orphaned)
+            if (!player.isValid() || player.canBeRemoved() || orphaned)
             {
                 player.stop();
                 player.delete();

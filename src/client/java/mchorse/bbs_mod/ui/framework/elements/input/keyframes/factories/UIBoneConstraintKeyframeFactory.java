@@ -33,6 +33,11 @@ public class UIBoneConstraintKeyframeFactory extends UIKeyframeFactory<BoneConst
     public UISliderTrackpad maxY;
     public UISliderTrackpad maxZ;
 
+    public UIToggle jitter;
+    public UISliderTrackpad jitterIntensity;
+    public UISliderTrackpad jitterFrequency;
+    private UIElement jitterRow;
+
     /** The angle pairs, shown only for the axes whose switch is on — as in the form editor's tab. */
     private UIElement limitRowX;
     private UIElement limitRowY;
@@ -57,6 +62,27 @@ public class UIBoneConstraintKeyframeFactory extends UIKeyframeFactory<BoneConst
         this.maxY = this.axisTrackpad((v) -> this.edit((c) -> c.maxY = v.floatValue()), Colors.GREEN, axis.format(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_MAX, UIKeys.GENERAL_Y));
         this.maxZ = this.axisTrackpad((v) -> this.edit((c) -> c.maxZ = v.floatValue()), Colors.BLUE, axis.format(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_MAX, UIKeys.GENERAL_Z));
 
+        this.jitter = new UIToggle(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_JITTER, false, (b) ->
+        {
+            this.edit((c) -> c.jitter = b.getValue());
+            this.jitterRow.setVisible(b.getValue());
+            this.resize();
+        });
+        this.jitter.tooltip(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_JITTER_TOOLTIP);
+
+        this.jitterIntensity = new UISliderTrackpad((v) -> this.edit((c) -> c.jitterIntensity = v.floatValue()));
+        this.jitterIntensity.limit(0D, 30D).values(0.1D, 0.5D, 1.0D);
+        this.jitterIntensity.tooltip(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_JITTER_INTENSITY_TOOLTIP);
+
+        this.jitterFrequency = new UISliderTrackpad((v) -> this.edit((c) -> c.jitterFrequency = v.floatValue()));
+        this.jitterFrequency.limit(0.1D, 10D).values(0.1D, 0.5D, 1.0D);
+        this.jitterFrequency.tooltip(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_JITTER_FREQUENCY_TOOLTIP);
+
+        this.jitterRow = UI.row(
+            UI.column(UI.label(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_JITTER_INTENSITY), this.jitterIntensity),
+            UI.column(UI.label(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_JITTER_FREQUENCY), this.jitterFrequency)
+        );
+
         this.limitRowX = UI.row(this.minX, this.maxX);
         this.limitRowY = UI.row(this.minY, this.maxY);
         this.limitRowZ = UI.row(this.minZ, this.maxZ);
@@ -67,7 +93,9 @@ public class UIBoneConstraintKeyframeFactory extends UIKeyframeFactory<BoneConst
             this.axisHeader(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_AXIS.format(UIKeys.GENERAL_Y), this.limitY),
             this.limitRowY,
             this.axisHeader(UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_AXIS.format(UIKeys.GENERAL_Z), this.limitZ),
-            this.limitRowZ
+            this.limitRowZ,
+            this.jitter.marginTop(UIConstants.SECTION_GAP),
+            this.jitterRow
         ));
 
         this.display();
@@ -92,6 +120,10 @@ public class UIBoneConstraintKeyframeFactory extends UIKeyframeFactory<BoneConst
             this.limitRowX.setVisible(c.limitX);
             this.limitRowY.setVisible(c.limitY);
             this.limitRowZ.setVisible(c.limitZ);
+            this.jitter.setValue(c.jitter);
+            this.jitterIntensity.setValue(c.jitterIntensity);
+            this.jitterFrequency.setValue(c.jitterFrequency);
+            this.jitterRow.setVisible(c.jitter);
             this.resize();
             this.minX.setValue(c.minX);
             this.minY.setValue(c.minY);

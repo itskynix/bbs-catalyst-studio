@@ -808,6 +808,8 @@ public class BBSModClient implements ClientModInitializer
             /* Portal windows of the frame - films, entities and model blocks alike - once all of those are drawn */
             FormPortals.flush();
 
+            BBSRendering.captureWobbleDepth();
+
             if (videoRecorder.isRecording() && BBSRendering.canRender)
             {
                 RenderSystem.enableDepthTest();
@@ -831,6 +833,12 @@ public class BBSModClient implements ClientModInitializer
             /* A panel export dies with its dashboard without finishing - the sound
              * capture must not keep accumulating into the next session */
             minecraftSoundCapture.end();
+
+            mchorse.bbs_mod.forms.renderers.AudioFormRenderer.stopAll();
+            if (sounds != null)
+            {
+                sounds.deleteSounds();
+            }
 
             films = new Films();
 

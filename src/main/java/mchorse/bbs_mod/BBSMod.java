@@ -30,6 +30,8 @@ import mchorse.bbs_mod.camera.clips.converters.PathToDollyConverter;
 import mchorse.bbs_mod.camera.clips.converters.PathToKeyframeConverter;
 import mchorse.bbs_mod.camera.clips.fx.CinematicEffectsClip;
 import mchorse.bbs_mod.camera.clips.fx.ColorGradeClip;
+import mchorse.bbs_mod.camera.clips.fx.CompoundFxClip;
+import mchorse.bbs_mod.camera.clips.fx.DebrisClip;
 import mchorse.bbs_mod.camera.clips.fx.EyeClip;
 import mchorse.bbs_mod.camera.clips.fx.GrainClip;
 import mchorse.bbs_mod.camera.clips.fx.LensDistortionClip;
@@ -38,6 +40,7 @@ import mchorse.bbs_mod.camera.clips.fx.ScreenShakeClip;
 import mchorse.bbs_mod.camera.clips.fx.MotionBlurClip;
 import mchorse.bbs_mod.camera.clips.fx.ScreenShaderGraphClip;
 import mchorse.bbs_mod.camera.clips.fx.VignetteClip;
+import mchorse.bbs_mod.camera.clips.fx.WorldWobbleClip;
 import mchorse.bbs_mod.camera.clips.misc.AudioClip;
 import mchorse.bbs_mod.camera.clips.misc.CurveClip;
 import mchorse.bbs_mod.camera.clips.misc.ImageClip;
@@ -81,8 +84,10 @@ import mchorse.bbs_mod.forms.forms.PortalForm;
 import mchorse.bbs_mod.forms.forms.BillboardForm;
 import mchorse.bbs_mod.forms.forms.VideoForm;
 import mchorse.bbs_mod.forms.forms.BlockForm;
+import mchorse.bbs_mod.forms.forms.DecalForm;
 import mchorse.bbs_mod.forms.forms.ExtrudedForm;
 import mchorse.bbs_mod.forms.forms.FramebufferForm;
+import mchorse.bbs_mod.forms.forms.HeightFogForm;
 import mchorse.bbs_mod.forms.forms.ItemForm;
 import mchorse.bbs_mod.forms.forms.LabelForm;
 import mchorse.bbs_mod.forms.forms.MobForm;
@@ -455,7 +460,9 @@ public class BBSMod implements ModInitializer
             .register(Link.bbs("trail"), TrailForm.class, null)
             .register(Link.bbs("framebuffer"), FramebufferForm.class, null)
             .register(Link.bbs("structure"), StructureForm.class, null)
-            .register(Link.bbs("audio"), AudioForm.class, null);
+            .register(Link.bbs("audio"), AudioForm.class, null)
+            .register(Link.bbs("decal"), DecalForm.class, null)
+            .register(Link.bbs("height_fog"), HeightFogForm.class, null);
 
         events.post(new RegisterFormsEvent(forms));
         events.post(new RegisterFormModifiersEvent());
@@ -507,7 +514,10 @@ public class BBSMod implements ModInitializer
             .register(Link.bbs("motion_blur"), MotionBlurClip.class, new ClipFactoryData(Icons.FADING, 0x3a7bd5))
             .register(Link.bbs("lens_distortion"), LensDistortionClip.class, new ClipFactoryData(Icons.FULLSCREEN, 0x2f8f83))
             .register(Link.bbs("screen_shake"), ScreenShakeClip.class, new ClipFactoryData(Icons.EXCHANGE, 0xc2562f))
-            .register(Link.bbs("screen_shader_graph"), ScreenShaderGraphClip.class, new ClipFactoryData(Icons.CODE, 0x7a3fb0));
+            .register(Link.bbs("world_wobble"), WorldWobbleClip.class, new ClipFactoryData(Icons.ARC, 0x6a4fb5))
+            .register(Link.bbs("debris"), DebrisClip.class, new ClipFactoryData(Icons.SPARKLES, 0xd9822b))
+            .register(Link.bbs("screen_shader_graph"), ScreenShaderGraphClip.class, new ClipFactoryData(Icons.CODE, 0x7a3fb0))
+            .register(Link.bbs("compound_fx"), CompoundFxClip.class, new ClipFactoryData(Icons.SPARKLES, 0x9b59b6));
 
         events.post(new RegisterCameraClipsEvent(factoryCameraClips));
 

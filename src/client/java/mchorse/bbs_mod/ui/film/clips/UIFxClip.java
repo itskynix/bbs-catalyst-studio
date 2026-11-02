@@ -31,6 +31,12 @@ public abstract class UIFxClip <T extends FxClip> extends UIClip<T>
         super(clip, editor);
     }
 
+    /** Whether the keyframes button closes the panel; a compound clip has no channels of its own to edit. */
+    protected boolean hasKeyframesSection()
+    {
+        return true;
+    }
+
     /** Panels between the envelope and the keyframes. */
     protected void addFxPanels()
     {}
@@ -64,7 +70,10 @@ public abstract class UIFxClip <T extends FxClip> extends UIClip<T>
 
         this.addFxPanels();
 
-        this.panels.add(this.section(UIKeys.CAMERA_PANELS_KEYFRAMES, this.edit));
+        if (this.hasKeyframesSection())
+        {
+            this.panels.add(this.section(UIKeys.CAMERA_PANELS_KEYFRAMES, this.edit));
+        }
     }
 
     @Override

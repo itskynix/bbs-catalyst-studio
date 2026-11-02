@@ -4,34 +4,52 @@ import mchorse.bbs_mod.data.IMapSerializable;
 import mchorse.bbs_mod.data.types.MapType;
 import mchorse.bbs_mod.utils.joml.Matrices;
 import mchorse.bbs_mod.utils.pose.Transform;
+import org.joml.Matrix3f;
 import org.joml.Matrix4f;
+import org.joml.Vector3f;
+import org.joml.Vector4f;
 
-public class Anchor implements IMapSerializable
-{
+public class Anchor implements IMapSerializable {
     public static final String NO_ATTACHMENT = "";
 
     /**
-     * Stable id of the replay this anchor hangs off ({@link #NO_ATTACHMENT} = none). An id, not a
-     * list index: the target must survive replays being reordered or removed around it.
+     * Stable id of the replay this anchor hangs off ({@link #NO_ATTACHMENT} =
+     * none). An id, not a
+     * list index: the target must survive replays being reordered or removed around
+     * it.
      */
     public String replay = NO_ATTACHMENT;
     public String attachment = "";
 
     /**
-     * Which components of the target's frame the anchored form rides — the same three the body
-     * parts use ({@code BodyPart.inheritPosition} and friends), so one idea reads the same way
-     * wherever something hangs off something else. All three on (the default) is the plain
-     * behaviour: the target's matrix is taken whole. A component that is not inherited comes from
+     * Which components of the target's frame the anchored form rides — the same
+     * three the body
+     * parts use ({@code BodyPart.inheritPosition} and friends), so one idea reads
+     * the same way
+     * wherever something hangs off something else. All three on (the default) is
+     * the plain
+     * behaviour: the target's matrix is taken whole. A component that is not
+     * inherited comes from
      * the frame the form would have had with no anchor at all.
-     *
-     * <p>These replace the older {@code translate} / {@code scale} pair, whose two flags meant
-     * opposite things ({@code translate} = take ONLY the position, {@code scale} = take everything
-     * BUT the scale) and could not express the other combinations at all. Files written by those
-     * versions are converted on read, see {@link #fromData}.</p>
      */
     public boolean inheritPosition = true;
     public boolean inheritRotation = true;
     public boolean inheritScale = true;
+
+    /**
+     * Rotation Constraints (Selective Axis Lock & Gravity Alignment):
+     * - gravityLock: Aligns Up vector strictly with world vertical (0, 1, 0), so
+     * props (suitcases, bags, torches)
+     * hang upright naturally with gravity regardless of how the actor/limb rotates.
+     * - lockYaw: Locks rotation around world Y axis (prevents horizontal spinning).
+     * - lockPitch: Locks rotation around X axis (prevents forward/backward
+     * tilting).
+     * - lockRoll: Locks rotation around Z axis (prevents sideways tilting).
+     */
+    public boolean gravityLock = false;
+    public boolean lockYaw = false;
+    public boolean lockPitch = false;
+    public boolean lockRoll = false;
 
     public final Transform transform = new Transform();
 
@@ -39,11 +57,11 @@ public class Anchor implements IMapSerializable
     public Anchor previous;
     public float x;
 
-    public Anchor()
-    {}
+    public Anchor() {
+    }
 
-    public Anchor(String replay, String attachment, boolean inheritPosition, boolean inheritRotation, boolean inheritScale)
-    {
+    public Anchor(String replay, String attachment, boolean inheritPosition, boolean inheritRotation,
+            boolean inheritScale) {
         this.replay = replay;
         this.attachment = attachment;
         this.inheritPosition = inheritPosition;
@@ -51,98 +69,180 @@ public class Anchor implements IMapSerializable
         this.inheritScale = inheritScale;
     }
 
-    public boolean hasTarget()
-    {
+    public boolean hasTarget() {
         return !this.replay.isEmpty();
     }
 
-    public boolean inheritsWholeTarget()
-    {
-        return this.inheritPosition && this.inheritRotation && this.inheritScale;
+    public boolean inheritsWholeTarget() {
+        return this.inheritPosition && this.inheritRotation && this.inheritScale && !this.hasRotationConstraints();
+    }
+
+    public boolean hasRotationConstraints() {
+        return this.gravityLock || this.lockYaw || this.lockPitch || this.lockRoll;
     }
 
     /**
-     * The resolved target matrix with the components this anchor doesn't inherit taken from
-     * {@code fallback} — the matrix the form would have had unanchored. Returns the matrix itself
+     * The resolved target matrix with the components this anchor doesn't inherit
+     * taken from
+     * {@code fallback} — the matrix the form would have had unanchored. Returns the
+     * matrix itself
      * when there is nothing to take out.
      */
-    public Matrix4f filterMatrix(Matrix4f matrix, Matrix4f fallback)
-    {
-        if (matrix == null || fallback == null || this.inheritsWholeTarget())
-        {
+    public Matrix4f filterMatrix(Matrix4f matrix, Matrix4f fallback) {
+        if (matrix == null || fallback == null) {
             return matrix;
         }
 
-        return Matrices.compose(
-            this.inheritPosition ? matrix : fallback,
-            this.inheritRotation ? matrix : fallback,
-            this.inheritScale ? matrix : fallback
-        );
+        Matrix4f result = matrix;
+
+        if (!this.inheritsWholeTarget()) {
+            result = Matrices.compose(
+                    this.inheritPosition ? matrix : fallback,
+                    this.inheritRotation ? matrix : fallback,
+                    this.inheritScale ? matrix : fallback);
+        }
+
+        if (this.hasRotationConstraints()) {
+            result = this.applyRotationConstraints(result);
+        }
+
+        return result;
     }
 
-    public boolean isFadeIn()
-    {
+    /**
+     * Applies rotation constraints (gravity lock or selective axis locks) onto the
+     * matrix in-place or returns
+     * an adjusted matrix while fully preserving translation and scaling.
+     */
+    public Matrix4f applyRotationConstraints(Matrix4f matrix) {
+        Vector3f translation = new Vector3f();
+        Vector3f scale = new Vector3f();
+        matrix.getTranslation(translation);
+        matrix.getScale(scale);
+
+        Matrix3f rot = new Matrix3f();
+        matrix.get3x3(rot);
+
+        Vector3f col0 = new Vector3f();
+        Vector3f col1 = new Vector3f();
+        Vector3f col2 = new Vector3f();
+        rot.getColumn(0, col0).normalize();
+        rot.getColumn(1, col1).normalize();
+        rot.getColumn(2, col2).normalize();
+
+        if (this.gravityLock) {
+            /* Gravity Lock: Up vector is strictly world vertical (0, 1, 0) */
+            col1.set(0F, 1F, 0F);
+
+            if (this.lockYaw) {
+                col2.set(0F, 0F, 1F);
+                col0.set(1F, 0F, 0F);
+            } else {
+                /* Keep horizontal facing from target */
+                col2.y = 0F;
+                if (col2.lengthSquared() < 1E-6F) {
+                    col2.set(0F, 0F, 1F);
+                } else {
+                    col2.normalize();
+                }
+                col0.set(col1).cross(col2).normalize();
+            }
+        } else {
+            /* Selective Euler-based locking */
+            Transform t = new Transform();
+            t.fromMatrix(matrix);
+            Vector3f euler = t.getEulerRotation(new Vector3f());
+
+            if (this.lockYaw)
+                euler.y = 0F;
+            if (this.lockPitch)
+                euler.x = 0F;
+            if (this.lockRoll)
+                euler.z = 0F;
+
+            t.rotationMode = Transform.RotationMode.EULER;
+            t.rotate.set(euler);
+            return t.createMatrix();
+        }
+
+        col0.mul(scale.x);
+        col1.mul(scale.y);
+        col2.mul(scale.z);
+
+        Matrix4f out = new Matrix4f();
+        out.setColumn(0, new Vector4f(col0, 0F));
+        out.setColumn(1, new Vector4f(col1, 0F));
+        out.setColumn(2, new Vector4f(col2, 0F));
+        out.setColumn(3, new Vector4f(translation, 1F));
+
+        return out;
+    }
+
+    public boolean isFadeIn() {
         return this.previous != null && this.hasTarget() && !this.previous.hasTarget();
     }
 
-    public boolean isFadeOut()
-    {
+    public boolean isFadeOut() {
         return this.previous != null && !this.hasTarget() && this.previous.hasTarget();
     }
 
-    public boolean hasSameTarget(Anchor anchor)
-    {
+    public boolean hasSameTarget(Anchor anchor) {
         return anchor != null
-            && this.replay.equals(anchor.replay)
-            && this.attachment.equals(anchor.attachment)
-            && this.inheritPosition == anchor.inheritPosition
-            && this.inheritRotation == anchor.inheritRotation
-            && this.inheritScale == anchor.inheritScale;
+                && this.replay.equals(anchor.replay)
+                && this.attachment.equals(anchor.attachment)
+                && this.inheritPosition == anchor.inheritPosition
+                && this.inheritRotation == anchor.inheritRotation
+                && this.inheritScale == anchor.inheritScale
+                && this.gravityLock == anchor.gravityLock
+                && this.lockYaw == anchor.lockYaw
+                && this.lockPitch == anchor.lockPitch
+                && this.lockRoll == anchor.lockRoll;
     }
 
-    public Anchor copy()
-    {
-        Anchor anchor = new Anchor(this.replay, this.attachment, this.inheritPosition, this.inheritRotation, this.inheritScale);
+    public Anchor copy() {
+        Anchor anchor = new Anchor(this.replay, this.attachment, this.inheritPosition, this.inheritRotation,
+                this.inheritScale);
 
+        anchor.gravityLock = this.gravityLock;
+        anchor.lockYaw = this.lockYaw;
+        anchor.lockPitch = this.lockPitch;
+        anchor.lockRoll = this.lockRoll;
         anchor.transform.copy(this.transform);
 
         return anchor;
     }
 
     @Override
-    public boolean equals(Object obj)
-    {
-        if (super.equals(obj))
-        {
+    public boolean equals(Object obj) {
+        if (super.equals(obj)) {
             return true;
         }
 
-        if (obj instanceof Anchor anchor)
-        {
+        if (obj instanceof Anchor anchor) {
             return this.hasSameTarget(anchor)
-                && this.transform.equals(anchor.transform);
+                    && this.transform.equals(anchor.transform);
         }
 
         return false;
     }
 
     @Override
-    public void fromData(MapType data)
-    {
+    public void fromData(MapType data) {
         this.replay = data.getString("actor");
         this.attachment = data.getString("attachment");
 
-        if (data.has("inheritPosition") || data.has("inheritRotation") || data.has("inheritScale"))
-        {
+        if (data.has("inheritPosition") || data.has("inheritRotation") || data.has("inheritScale")) {
             this.inheritPosition = data.getBool("inheritPosition", true);
             this.inheritRotation = data.getBool("inheritRotation", true);
             this.inheritScale = data.getBool("inheritScale", true);
-        }
-        else
-        {
-            /* Anchors written before the flags were split up. "translate" took only the position,
-             * dropping both the rotation and the scale; "scale" dropped the scale alone and was
-             * moot next to it. The position was always inherited, so it stays on. */
+        } else {
+            /*
+             * Anchors written before the flags were split up. "translate" took only the
+             * position,
+             * dropping both the rotation and the scale; "scale" dropped the scale alone and
+             * was
+             * moot next to it. The position was always inherited, so it stays on.
+             */
             boolean translate = data.getBool("translate", false);
             boolean scale = data.getBool("scale", false);
 
@@ -151,27 +251,36 @@ public class Anchor implements IMapSerializable
             this.inheritScale = !translate && !scale;
         }
 
-        if (data.has("transform"))
-        {
+        this.gravityLock = data.getBool("gravityLock", false);
+        this.lockYaw = data.getBool("lockYaw", false);
+        this.lockPitch = data.getBool("lockPitch", false);
+        this.lockRoll = data.getBool("lockRoll", false);
+
+        if (data.has("transform")) {
             this.transform.fromData(data.getMap("transform"));
-        }
-        else
-        {
+        } else {
             this.transform.identity();
         }
     }
 
     @Override
-    public void toData(MapType data)
-    {
+    public void toData(MapType data) {
         data.putString("actor", this.replay);
         data.putString("attachment", this.attachment);
         data.putBool("inheritPosition", this.inheritPosition);
         data.putBool("inheritRotation", this.inheritRotation);
         data.putBool("inheritScale", this.inheritScale);
 
-        if (!this.transform.isDefault())
-        {
+        if (this.gravityLock)
+            data.putBool("gravityLock", true);
+        if (this.lockYaw)
+            data.putBool("lockYaw", true);
+        if (this.lockPitch)
+            data.putBool("lockPitch", true);
+        if (this.lockRoll)
+            data.putBool("lockRoll", true);
+
+        if (!this.transform.isDefault()) {
             data.put("transform", this.transform.toData());
         }
     }

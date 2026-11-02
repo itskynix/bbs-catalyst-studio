@@ -110,6 +110,9 @@ public class UIKeys
     public static final IKey FORMS_AUDIO_RADIUS_TOOLTIP = L10n.lang("bbs.ui.forms.audio.radius_tooltip");
     public static final IKey FORMS_AUDIO_OCCLUSION = L10n.lang("bbs.ui.forms.audio.occlusion");
     public static final IKey FORMS_AUDIO_OCCLUSION_TOOLTIP = L10n.lang("bbs.ui.forms.audio.occlusion_tooltip");
+    public static final IKey FORMS_AUDIO_DOPPLER = L10n.lang("bbs.ui.forms.audio.doppler");
+    public static final IKey FORMS_AUDIO_DOPPLER_SCALE = L10n.lang("bbs.ui.forms.audio.doppler_scale");
+    public static final IKey FORMS_AUDIO_DOPPLER_SCALE_TOOLTIP = L10n.lang("bbs.ui.forms.audio.doppler_scale_tooltip");
     public static final IKey FORMS_AUDIO_CHANNELS = L10n.lang("bbs.ui.forms.audio.channels");
     public static final IKey FORMS_AUDIO_CHANNELS_DESC = L10n.lang("bbs.ui.forms.audio.channels_desc");
     public static final IKey CAMERA_PANELS_BLOCK = L10n.lang("bbs.ui.camera.panels.block");
@@ -185,6 +188,15 @@ public class UIKeys
     public static final IKey CAMERA_PANELS_SHAKE_ROTATIONAL_WEIGHT = L10n.lang("bbs.ui.camera.panels.shake_rotational_weight");
     public static final IKey CAMERA_PANELS_SHAKE_POSITIONAL_WEIGHT = L10n.lang("bbs.ui.camera.panels.shake_positional_weight");
     public static final IKey CAMERA_PANELS_SHAKE_MODE = L10n.lang("bbs.ui.camera.panels.shake_mode");
+    public static final IKey CAMERA_PANELS_SHAKE_PRESET = L10n.lang("bbs.ui.camera.panels.shake_preset");
+    public static final IKey CAMERA_PANELS_SHAKE_PRESET_CUSTOM = L10n.lang("bbs.ui.camera.panels.shake_preset_custom");
+    public static final IKey CAMERA_PANELS_SHAKE_PRESET_HANDHELD = L10n.lang("bbs.ui.camera.panels.shake_preset_handheld");
+    public static final IKey CAMERA_PANELS_SHAKE_PRESET_PANIC = L10n.lang("bbs.ui.camera.panels.shake_preset_panic");
+    public static final IKey CAMERA_PANELS_SHAKE_PRESET_IMPACT = L10n.lang("bbs.ui.camera.panels.shake_preset_impact");
+    public static final IKey CAMERA_PANELS_SHAKE_MACRO_WOBBLE = L10n.lang("bbs.ui.camera.panels.shake_macro_wobble");
+    public static final IKey CAMERA_PANELS_SHAKE_MICRO_JITTER = L10n.lang("bbs.ui.camera.panels.shake_micro_jitter");
+    public static final IKey CAMERA_PANELS_SHAKE_ROLL_WEIGHT = L10n.lang("bbs.ui.camera.panels.shake_roll_weight");
+    public static final IKey CAMERA_PANELS_SHAKE_FOV_WEIGHT = L10n.lang("bbs.ui.camera.panels.shake_fov_weight");
     public static final IKey CAMERA_PANELS_SHAKE_NOISE = L10n.lang("bbs.ui.camera.panels.shake_noise");
     public static final IKey CAMERA_PANELS_SHAKE_NOISE_TOOLTIP = L10n.lang("bbs.ui.camera.panels.shake_noise_tooltip");
     public static final IKey CAMERA_PANELS_SUBTITLE_BACKGROUND = L10n.lang("bbs.ui.camera.panels.subtitle.background");
@@ -270,6 +282,11 @@ public class UIKeys
     public static final IKey CAMERA_TIMELINE_CONTEXT_ADD_ON_TOP = L10n.lang("bbs.ui.camera.timeline.context.add_on_top");
     public static final IKey CAMERA_TIMELINE_CONTEXT_CONVERT = L10n.lang("bbs.ui.camera.timeline.context.convert");
     public static final IKey CAMERA_TIMELINE_CONTEXT_CONVERT_TO = L10n.lang("bbs.ui.camera.timeline.context.convert_to");
+    public static final IKey CAMERA_TIMELINE_CONTEXT_CONVERT_COMPOUND = L10n.lang("bbs.ui.camera.timeline.context.convert_to_compound");
+    public static final IKey CAMERA_TIMELINE_CONTEXT_DECOMPOSE_COMPOUND = L10n.lang("bbs.ui.camera.timeline.context.decompose_compound");
+    public static final IKey CAMERA_TIMELINE_CONTEXT_ENTER_COMPOUND = L10n.lang("bbs.ui.camera.timeline.context.enter_compound");
+    public static final IKey CAMERA_TIMELINE_NEST_ROOT = L10n.lang("bbs.ui.camera.timeline.nest.root");
+    public static final IKey CAMERA_TIMELINE_NEST_COMPOUND = L10n.lang("bbs.ui.camera.timeline.nest.compound");
     public static final IKey CAMERA_TIMELINE_CONTEXT_COPY = L10n.lang("bbs.ui.camera.timeline.context.copy");
     public static final IKey CAMERA_TIMELINE_CONTEXT_CUT = L10n.lang("bbs.ui.camera.timeline.context.cut");
     public static final IKey CAMERA_TIMELINE_CONTEXT_FROM_PLAYER_RECORDING = L10n.lang("bbs.ui.camera.timeline.context.from_player_recording");
@@ -1059,6 +1076,21 @@ public class UIKeys
     public static final IKey FORMS_EDITORS_MODEL_CONSTRAINTS_CONTEXT_RESET = L10n.lang("bbs.ui.forms.editors.model.constraints.context.reset");
     public static final IKey FORMS_EDITORS_MODEL_CONSTRAINTS_CONTEXT_SAVE = L10n.lang("bbs.ui.forms.editors.model.constraints.context.save");
     public static final IKey FORMS_EDITORS_MODEL_CONSTRAINTS_CONTEXT_NAME = L10n.lang("bbs.ui.forms.editors.model.constraints.context.name");
+    public static final IKey FORMS_EDITORS_MODEL_CONSTRAINTS_JITTER = L10n.lang("bbs.ui.forms.editors.model.constraints.jitter");
+    public static final IKey FORMS_EDITORS_MODEL_CONSTRAINTS_JITTER_TOOLTIP = L10n.lang("bbs.ui.forms.editors.model.constraints.jitter_tooltip");
+    public static final IKey FORMS_EDITORS_MODEL_CONSTRAINTS_JITTER_INTENSITY = L10n.lang("bbs.ui.forms.editors.model.constraints.jitter_intensity");
+    public static final IKey FORMS_EDITORS_MODEL_CONSTRAINTS_JITTER_INTENSITY_TOOLTIP = L10n.lang("bbs.ui.forms.editors.model.constraints.jitter_intensity_tooltip");
+    public static final IKey FORMS_EDITORS_MODEL_CONSTRAINTS_JITTER_FREQUENCY = L10n.lang("bbs.ui.forms.editors.model.constraints.jitter_frequency");
+    public static final IKey FORMS_EDITORS_MODEL_CONSTRAINTS_JITTER_FREQUENCY_TOOLTIP = L10n.lang("bbs.ui.forms.editors.model.constraints.jitter_frequency_tooltip");
+    public static final IKey FORMS_EDITORS_MODEL_JITTER = L10n.lang("bbs.ui.forms.editors.model.jitter");
+    public static final IKey FORMS_EDITORS_MODEL_JITTER_ENABLE = L10n.lang("bbs.ui.forms.editors.model.jitter.enable");
+    public static final IKey FORMS_EDITORS_MODEL_JITTER_ENABLE_TOOLTIP = L10n.lang("bbs.ui.forms.editors.model.jitter.enable_tooltip");
+    public static final IKey FORMS_EDITORS_MODEL_JITTER_TARGET = L10n.lang("bbs.ui.forms.editors.model.jitter.target");
+    public static final IKey FORMS_EDITORS_MODEL_JITTER_TARGET_TOOLTIP = L10n.lang("bbs.ui.forms.editors.model.jitter.target_tooltip");
+    public static final IKey FORMS_EDITORS_MODEL_JITTER_TARGET_ALL = L10n.lang("bbs.ui.forms.editors.model.jitter.target_all");
+    public static final IKey FORMS_EDITORS_MODEL_JITTER_TARGET_ARMS = L10n.lang("bbs.ui.forms.editors.model.jitter.target_arms");
+    public static final IKey FORMS_EDITORS_MODEL_JITTER_TARGET_HEAD = L10n.lang("bbs.ui.forms.editors.model.jitter.target_head");
+    public static final IKey FORMS_EDITORS_MODEL_JITTER_TARGET_ARMS_AND_HEAD = L10n.lang("bbs.ui.forms.editors.model.jitter.target_arms_and_head");
     public static final IKey FORMS_EDITORS_MODEL_POSE = L10n.lang("bbs.ui.forms.editors.model.pose");
 
     /* Material tab */
@@ -1114,6 +1146,62 @@ public class UIKeys
     public static final IKey FORMS_EDITOR_SETUP_FACE_EYES_RIG = L10n.lang("bbs.ui.forms.editor.setup_face.eyes_rig");
     public static final IKey FORMS_EDITOR_SETUP_FACE_VERTICAL_OFFSET = L10n.lang("bbs.ui.forms.editor.setup_face.vertical_offset");
     public static final IKey FORMS_EDITOR_SETUP_FACE_VERTICAL_OFFSET_HINT = L10n.lang("bbs.ui.forms.editor.setup_face.vertical_offset_hint");
+    public static final IKey FORMS_EDITOR_SETUP_FACE_DEPTH = L10n.lang("bbs.ui.forms.editor.setup_face.depth");
+    public static final IKey FORMS_EDITOR_SETUP_FACE_DEPTH_HINT = L10n.lang("bbs.ui.forms.editor.setup_face.depth_hint");
+    public static final IKey FORMS_EDITOR_SETUP_FACE_GLOW = L10n.lang("bbs.ui.forms.editor.setup_face.glow");
+    public static final IKey FORMS_EDITOR_SETUP_FACE_GLOW_HINT = L10n.lang("bbs.ui.forms.editor.setup_face.glow_hint");
+    public static final IKey FORMS_EDITOR_FRAMEBUFFER_TARGET = L10n.lang("bbs.ui.forms.editor.framebuffer.target");
+    public static final IKey FORMS_EDITOR_FRAMEBUFFER_TARGET_NONE = L10n.lang("bbs.ui.forms.editor.framebuffer.target_none");
+    public static final IKey FORMS_EDITOR_FRAMEBUFFER_TARGET_CAMERA = L10n.lang("bbs.ui.forms.editor.framebuffer.target_camera");
+    public static final IKey FORMS_EDITOR_FRAMEBUFFER_TARGET_ACTOR = L10n.lang("bbs.ui.forms.editor.framebuffer.target_actor");
+    public static final IKey FORMS_EDITOR_FRAMEBUFFER_TARGET_ACTOR_NAME = L10n.lang("bbs.ui.forms.editor.framebuffer.target_actor_name");
+    public static final IKey FORMS_EDITOR_FRAMEBUFFER_SACCADES = L10n.lang("bbs.ui.forms.editor.framebuffer.saccades");
+    public static final IKey FORMS_EDITOR_FRAMEBUFFER_SACCADE_FREQ = L10n.lang("bbs.ui.forms.editor.framebuffer.saccade_freq");
+    public static final IKey FORMS_EDITOR_FRAMEBUFFER_SACCADE_AMP = L10n.lang("bbs.ui.forms.editor.framebuffer.saccade_amp");
+    public static final IKey FORMS_EDITOR_FRAMEBUFFER_INSET = L10n.lang("bbs.ui.forms.editor.framebuffer.inset");
+    public static final IKey FORMS_EDITOR_FRAMEBUFFER_GLOW = L10n.lang("bbs.ui.forms.editor.framebuffer.glow");
+    public static final IKey FORMS_EDITOR_FRAMEBUFFER_SACCADE_MAX_OFFSET = L10n.lang("bbs.ui.forms.editor.framebuffer.saccade_max_offset");
+
+    /* Decal Form */
+    public static final IKey FORMS_EDITORS_DECAL_TITLE = L10n.lang("bbs.ui.forms.editors.decal.title");
+    public static final IKey FORMS_EDITORS_DECAL_PICK_TEXTURE = L10n.lang("bbs.ui.forms.editors.decal.pick_texture");
+    public static final IKey FORMS_EDITORS_DECAL_SIZE = L10n.lang("bbs.ui.forms.editors.decal.size");
+    public static final IKey FORMS_EDITORS_DECAL_DEPTH = L10n.lang("bbs.ui.forms.editors.decal.depth");
+    public static final IKey FORMS_EDITORS_DECAL_THRESHOLD = L10n.lang("bbs.ui.forms.editors.decal.threshold");
+    public static final IKey FORMS_EDITORS_DECAL_DOUBLE_SIDED = L10n.lang("bbs.ui.forms.editors.decal.double_sided");
+    public static final IKey FORMS_EDITORS_DECAL_GLOW = L10n.lang("bbs.ui.forms.editors.decal.glow");
+    public static final IKey FORMS_EDITORS_DECAL_OPACITY = L10n.lang("bbs.ui.forms.editors.decal.opacity");
+    public static final IKey FORMS_EDITORS_DECAL_OFFSET = L10n.lang("bbs.ui.forms.editors.decal.offset");
+
+    /* Height Fog Form */
+    public static final IKey FORMS_EDITORS_HEIGHT_FOG_TITLE = L10n.lang("bbs.ui.forms.editors.height_fog.title");
+    public static final IKey FORMS_EDITORS_HEIGHT_FOG_BASE_HEIGHT = L10n.lang("bbs.ui.forms.editors.height_fog.base_height");
+    public static final IKey FORMS_EDITORS_HEIGHT_FOG_DENSITY = L10n.lang("bbs.ui.forms.editors.height_fog.density");
+    public static final IKey FORMS_EDITORS_HEIGHT_FOG_FALLOFF = L10n.lang("bbs.ui.forms.editors.height_fog.falloff");
+    public static final IKey FORMS_EDITORS_HEIGHT_FOG_SIZE = L10n.lang("bbs.ui.forms.editors.height_fog.size");
+    public static final IKey FORMS_EDITORS_HEIGHT_FOG_SLICES = L10n.lang("bbs.ui.forms.editors.height_fog.slices");
+    public static final IKey FORMS_EDITORS_HEIGHT_FOG_FOLLOW_CAMERA = L10n.lang("bbs.ui.forms.editors.height_fog.follow_camera");
+
+    /* Compound FX Clip */
+    public static final IKey CAMERA_CLIPS_COMPOUND_FX_TITLE = L10n.lang("bbs.ui.camera.clips.bbs:compound_fx");
+    public static final IKey CAMERA_CLIPS_COMPOUND_FX_PRESETS = L10n.lang("bbs.ui.camera.compound_fx.presets");
+    public static final IKey CAMERA_CLIPS_COMPOUND_FX_PRESET_TERMINAL_NIGHT = L10n.lang("bbs.ui.camera.compound_fx.terminal_night");
+    public static final IKey CAMERA_CLIPS_COMPOUND_FX_PRESET_NISYAN_LOBBY = L10n.lang("bbs.ui.camera.compound_fx.nisyan_lobby");
+    public static final IKey CAMERA_CLIPS_COMPOUND_FX_PRESET_MENTAL_BREAKDOWN = L10n.lang("bbs.ui.camera.compound_fx.mental_breakdown");
+    public static final IKey CAMERA_CLIPS_COMPOUND_FX_LOAD_PRESET = L10n.lang("bbs.ui.camera.compound_fx.load_preset");
+    public static final IKey CAMERA_CLIPS_COMPOUND_FX_SAVE_PRESET = L10n.lang("bbs.ui.camera.compound_fx.save_preset");
+    public static final IKey CAMERA_CLIPS_COMPOUND_FX_PRESET_NAME = L10n.lang("bbs.ui.camera.compound_fx.preset_name");
+    public static final IKey CAMERA_CLIPS_COMPOUND_FX_COLOR_GRADE = L10n.lang("bbs.ui.camera.compound_fx.color_grade");
+    public static final IKey CAMERA_CLIPS_COMPOUND_FX_LENS_DISTORTION = L10n.lang("bbs.ui.camera.compound_fx.lens_distortion");
+    public static final IKey CAMERA_CLIPS_COMPOUND_FX_CHROMATIC = L10n.lang("bbs.ui.camera.compound_fx.chromatic");
+    public static final IKey CAMERA_CLIPS_COMPOUND_FX_VIGNETTE = L10n.lang("bbs.ui.camera.compound_fx.vignette");
+    public static final IKey CAMERA_CLIPS_COMPOUND_FX_GRAIN = L10n.lang("bbs.ui.camera.compound_fx.grain");
+    public static final IKey CAMERA_CLIPS_COMPOUND_FX_MOTION_BLUR = L10n.lang("bbs.ui.camera.compound_fx.motion_blur");
+    public static final IKey CAMERA_CLIPS_COMPOUND_FX_NESTED_CLIPS = L10n.lang("bbs.ui.camera.compound_fx.nested_clips");
+    public static final IKey CAMERA_CLIPS_COMPOUND_FX_ADD_CHILD = L10n.lang("bbs.ui.camera.compound_fx.add_child");
+    public static final IKey CAMERA_CLIPS_COMPOUND_FX_DECOMPOSE = L10n.lang("bbs.ui.camera.compound_fx.decompose");
+    public static final IKey CAMERA_CLIPS_COMPOUND_FX_EDIT_CHILD = L10n.lang("bbs.ui.camera.compound_fx.edit_child");
+    public static final IKey CAMERA_CLIPS_COMPOUND_FX_NO_CHILDREN = L10n.lang("bbs.ui.camera.compound_fx.no_children");
     public static final IKey FORMS_EDITOR_CONTEXT_ADD = L10n.lang("bbs.ui.forms.editor.context.add");
     public static final IKey FORMS_EDITOR_CONTEXT_COPY = L10n.lang("bbs.ui.forms.editor.context.copy");
     public static final IKey FORMS_EDITOR_CONTEXT_MOVE_DOWN = L10n.lang("bbs.ui.forms.editor.context.move_down");
@@ -1123,6 +1211,8 @@ public class UIKeys
     public static final IKey FORMS_EDITOR_FINISH = L10n.lang("bbs.ui.forms.editor.finish");
     public static final IKey FORMS_EDITOR_MODEL_MODELS = L10n.lang("bbs.ui.forms.editor.model.models");
     public static final IKey FORMS_EDITOR_MODEL_PICK_MODEL = L10n.lang("bbs.ui.forms.editor.model.pick_model");
+    public static final IKey FORMS_EDITOR_MODEL_PICK_DAMAGED_MODEL = L10n.lang("bbs.ui.forms.editor.model.pick_damaged_model");
+    public static final IKey FORMS_EDITOR_MODEL_DAMAGED = L10n.lang("bbs.ui.forms.editor.model.damaged");
     public static final IKey FORMS_EDITOR_MODEL_PICK_TEXTURE = L10n.lang("bbs.ui.forms.editor.model.pick_texture");
     public static final IKey FORMS_EDITOR_MODEL_CEM = L10n.lang("bbs.ui.forms.editor.model.cem");
     public static final IKey FORMS_EDITOR_MODEL_CEM_TOOLTIP = L10n.lang("bbs.ui.forms.editor.model.cem-tooltip");
@@ -1289,6 +1379,13 @@ public class UIKeys
     public static final IKey GENERIC_KEYFRAMES_ANCHOR_PICK_ATTACHMENT = L10n.lang("bbs.ui.generic_keyframes.anchor.pick_attachment");
     public static final IKey GENERIC_KEYFRAMES_ANCHOR_KEEP_TRANSFORM = L10n.lang("bbs.ui.generic_keyframes.anchor.keep_transform");
     public static final IKey GENERIC_KEYFRAMES_ANCHOR_KEEP_TRANSFORM_TOOLTIP = L10n.lang("bbs.ui.generic_keyframes.anchor.keep_transform_tooltip");
+    public static final IKey GENERIC_KEYFRAMES_ANCHOR_TRANSFER_PROP = L10n.lang("bbs.ui.generic_keyframes.anchor.transfer_prop");
+    public static final IKey GENERIC_KEYFRAMES_ANCHOR_TRANSFER_PROP_TOOLTIP = L10n.lang("bbs.ui.generic_keyframes.anchor.transfer_prop_tooltip");
+    public static final IKey GENERIC_KEYFRAMES_ANCHOR_CONSTRAINTS_TITLE = L10n.lang("bbs.ui.generic_keyframes.anchor.constraints_title");
+    public static final IKey GENERIC_KEYFRAMES_ANCHOR_GRAVITY_LOCK = L10n.lang("bbs.ui.generic_keyframes.anchor.gravity_lock");
+    public static final IKey GENERIC_KEYFRAMES_ANCHOR_LOCK_YAW = L10n.lang("bbs.ui.generic_keyframes.anchor.lock_yaw");
+    public static final IKey GENERIC_KEYFRAMES_ANCHOR_LOCK_PITCH = L10n.lang("bbs.ui.generic_keyframes.anchor.lock_pitch");
+    public static final IKey GENERIC_KEYFRAMES_ANCHOR_LOCK_ROLL = L10n.lang("bbs.ui.generic_keyframes.anchor.lock_roll");
     public static final IKey GENERIC_KEYFRAMES_BOOLEAN_TRUE = L10n.lang("bbs.ui.generic_keyframes.boolean.true");
     public static final IKey GENERIC_KEYFRAMES_LINK_PICK_TEXTURE = L10n.lang("bbs.ui.generic_keyframes.link.pick_texture");
     public static final IKey GUN_COMMANDS_FIRING = L10n.lang("bbs.ui.gun.commands.firing");

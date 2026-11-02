@@ -7,8 +7,10 @@ import mchorse.bbs_mod.forms.forms.AudioForm;
 import mchorse.bbs_mod.forms.forms.PortalForm;
 import mchorse.bbs_mod.forms.forms.BillboardForm;
 import mchorse.bbs_mod.forms.forms.BlockForm;
+import mchorse.bbs_mod.forms.forms.DecalForm;
 import mchorse.bbs_mod.forms.forms.ExtrudedForm;
 import mchorse.bbs_mod.forms.forms.FramebufferForm;
+import mchorse.bbs_mod.forms.forms.HeightFogForm;
 import mchorse.bbs_mod.forms.forms.ItemForm;
 import mchorse.bbs_mod.forms.forms.LabelForm;
 import mchorse.bbs_mod.forms.forms.MobForm;
@@ -78,6 +80,8 @@ public class ExtraFormSection extends FormSection
         extra.addForm(video);
         extra.addForm(new FramebufferForm());
         extra.addForm(new AudioForm());
+        extra.addForm(new DecalForm());
+        extra.addForm(new HeightFogForm());
 
         this.mobsAnimals = new FormCategory(UIKeys.FORMS_CATEGORIES_MOBS_ANIMALS, this.parent.preferences.visible("mobs_animals")).icon(Icons.CHICKEN);
         this.mobsNeutral = new FormCategory(UIKeys.FORMS_CATEGORIES_MOBS_NEUTRAL, this.parent.preferences.visible("mobs_neutral")).icon(Icons.PLAYER);

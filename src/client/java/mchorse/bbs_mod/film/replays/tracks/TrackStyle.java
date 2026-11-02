@@ -5,6 +5,7 @@ import mchorse.bbs_mod.l10n.keys.IKey;
 
 import mchorse.bbs_mod.forms.entities.EntityState;
 import mchorse.bbs_mod.film.replays.ReplayKeyframes;
+import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.utils.icons.Icon;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.utils.StringUtils;
@@ -63,6 +64,17 @@ public class TrackStyle
         setupColors();
         setupIcons();
         LABELS.put("occlusionFactor", IKey.constant("occlusion"));
+        LABELS.put("jitter", UIKeys.FORMS_EDITORS_MODEL_JITTER);
+        LABELS.put("shake_intensity", UIKeys.CAMERA_PANELS_SHAKE_AMOUNT);
+        LABELS.put("shake_frequency", UIKeys.CAMERA_PANELS_SHAKE_FREQUENCY);
+        LABELS.put("shake_fov", UIKeys.CAMERA_PANELS_SHAKE_FOV_WEIGHT);
+        LABELS.put("shake_roll", UIKeys.CAMERA_PANELS_SHAKE_ROLL_WEIGHT);
+        LABELS.put("targetActor", UIKeys.FORMS_EDITOR_FRAMEBUFFER_TARGET_ACTOR_NAME);
+        LABELS.put("targetType", UIKeys.FORMS_EDITOR_FRAMEBUFFER_TARGET);
+        LABELS.put("compound_fx", UIKeys.CAMERA_CLIPS_COMPOUND_FX_TITLE);
+        LABELS.put("baseHeight", UIKeys.FORMS_EDITORS_HEIGHT_FOG_BASE_HEIGHT);
+        LABELS.put("density", UIKeys.FORMS_EDITORS_HEIGHT_FOG_DENSITY);
+        LABELS.put("falloff", UIKeys.FORMS_EDITORS_HEIGHT_FOG_FALLOFF);
     }
 
     /**
@@ -109,6 +121,23 @@ public class TrackStyle
         COLORS.put("pan", 0x9b59b6);
         COLORS.put("offset", 0x3498db);
         COLORS.put("occlusionFactor", 0xe67e22);
+        COLORS.put("jitter", 0xff7675);
+
+        /* Camera Shake channels */
+        COLORS.put("shake_intensity", 0xff5555);
+        COLORS.put("shake_frequency", 0xffaa00);
+        COLORS.put("shake_fov", 0x55aaff);
+        COLORS.put("shake_roll", 0xaa55ff);
+
+        /* Framebuffer Gaze Tracking channels */
+        COLORS.put("targetActor", 0x38ada9);
+        COLORS.put("targetType", 0x4a69bd);
+
+        /* Compound FX & Height Fog channels */
+        COLORS.put("compound_fx", 0x9b59b6);
+        COLORS.put("baseHeight", 0x2ecc71);
+        COLORS.put("density", 0x3498db);
+        COLORS.put("falloff", 0xe67e22);
     }
 
     /**
@@ -225,6 +254,13 @@ public class TrackStyle
         ICONS.put("mobNbt", Icons.CODE);
         ICONS.put("length", Icons.LINE);
         ICONS.put("loop", Icons.REFRESH);
+        ICONS.put("jitter", Icons.MOVE_TO);
+        ICONS.put("targetActor", Icons.USER);
+        ICONS.put("targetType", Icons.CAMERA);
+        ICONS.put("compound_fx", Icons.SPARKLES);
+        ICONS.put("baseHeight", Icons.MOVE_UP);
+        ICONS.put("density", Icons.FILTER);
+        ICONS.put("falloff", Icons.FADING);
 
         /* Pose and transform, and their overlays - see getIcon(), which folds the numbered
          * overlays onto the thing they overlay: an overlay is that thing, layered. */
@@ -260,6 +296,12 @@ public class TrackStyle
         ICONS.put("radius", Icons.SPHERE);
         ICONS.put("pan", Icons.HORIZONTAL);
         ICONS.put("occlusionFactor", Icons.FILTER);
+
+        /* Camera Shake channels */
+        ICONS.put("shake_intensity", Icons.SOUND);
+        ICONS.put("shake_frequency", Icons.REFRESH);
+        ICONS.put("shake_fov", Icons.FULLSCREEN);
+        ICONS.put("shake_roll", Icons.ORBIT);
     }
 
     private static void setupItemIcons()

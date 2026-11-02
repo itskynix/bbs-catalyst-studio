@@ -30,6 +30,7 @@ import mchorse.bbs_mod.ui.utils.bones.UIBonePickerContextMenu;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.utils.colors.Colors;
 import mchorse.bbs_mod.utils.keyframes.Keyframe;
+import mchorse.bbs_mod.utils.keyframes.KeyframeChannel;
 import mchorse.bbs_mod.utils.pose.Transform;
 
 import java.util.List;
@@ -41,8 +42,10 @@ public class UIAnchorKeyframeFactory extends UIKeyframeFactory<Anchor>
 {
     private UIButton actor;
     private UIButton attachment;
+    private UIButton transferProp;
     private UIToggle keepTransform;
     private UIIconToggles inherit;
+    private UIIconToggles constraints;
     public UIPropTransform transform;
 
     /**
@@ -118,6 +121,8 @@ public class UIAnchorKeyframeFactory extends UIKeyframeFactory<Anchor>
             this.getPanel().getController().picker.cancelTargetPick();
             displayAttachments(this.getPanel(), this.keyframe.getValue().replay, this.keyframe.getValue().attachment, this::setAttachment);
         });
+        this.transferProp = new UIButton(UIKeys.GENERIC_KEYFRAMES_ANCHOR_TRANSFER_PROP, (b) -> this.transferProp());
+        this.transferProp.tooltip(UIKeys.GENERIC_KEYFRAMES_ANCHOR_TRANSFER_PROP_TOOLTIP);
         /* Which components of the target's frame the form rides, as one strip: the same three icons
          * the gizmo and the body part editor use for the same three ideas. The anchor's flags are
          * plain fields rather than values, so the cells are bound by getter and setter. */
@@ -127,6 +132,11 @@ public class UIAnchorKeyframeFactory extends UIKeyframeFactory<Anchor>
             .add(Icons.ALL_DIRECTIONS, UIKeys.INHERIT_POSITION, () -> this.keyframe.getValue().inheritPosition, (v) -> this.retarget((anchor) -> anchor.inheritPosition = v))
             .add(Icons.ORBIT, UIKeys.INHERIT_ROTATION, () -> this.keyframe.getValue().inheritRotation, (v) -> this.retarget((anchor) -> anchor.inheritRotation = v))
             .add(Icons.SCALE, UIKeys.INHERIT_SCALE, () -> this.keyframe.getValue().inheritScale, (v) -> this.retarget((anchor) -> anchor.inheritScale = v));
+        this.constraints = new UIIconToggles(null)
+            .add(Icons.MOVE_DOWN, UIKeys.GENERIC_KEYFRAMES_ANCHOR_GRAVITY_LOCK, () -> this.keyframe.getValue().gravityLock, (v) -> this.retarget((anchor) -> anchor.gravityLock = v))
+            .add(Icons.ORBIT, UIKeys.GENERIC_KEYFRAMES_ANCHOR_LOCK_YAW, () -> this.keyframe.getValue().lockYaw, (v) -> this.retarget((anchor) -> anchor.lockYaw = v))
+            .add(Icons.MOVE_UP, UIKeys.GENERIC_KEYFRAMES_ANCHOR_LOCK_PITCH, () -> this.keyframe.getValue().lockPitch, (v) -> this.retarget((anchor) -> anchor.lockPitch = v))
+            .add(Icons.MOVE_RIGHT, UIKeys.GENERIC_KEYFRAMES_ANCHOR_LOCK_ROLL, () -> this.keyframe.getValue().lockRoll, (v) -> this.retarget((anchor) -> anchor.lockRoll = v));
         this.transform = new UIAnchorTransforms(this);
         this.transform.withAnchor();
         this.transform.enableHotkeys();
@@ -141,7 +151,15 @@ public class UIAnchorKeyframeFactory extends UIKeyframeFactory<Anchor>
         pickAttachment.highlight(() -> this.getPanel() != null && this.getPanel().getController().picker.isPickingTarget(pickAttachment), Direction.BOTTOM);
         pickActor.tooltip(UIKeys.GENERIC_KEYFRAMES_ANCHOR_PICK_ACTOR);
         pickAttachment.tooltip(UIKeys.GENERIC_KEYFRAMES_ANCHOR_PICK_ATTACHMENT);
-        this.scroll.add(UI.row(this.actor, pickActor), UI.row(this.attachment, pickAttachment), this.keepTransform, this.inherit.labelRow(UIKeys.INHERIT_TITLE), this.transform);
+        this.scroll.add(
+            UI.row(this.actor, pickActor),
+            UI.row(this.attachment, pickAttachment),
+            this.transferProp,
+            this.keepTransform,
+            this.inherit.labelRow(UIKeys.INHERIT_TITLE),
+            this.constraints.labelRow(UIKeys.GENERIC_KEYFRAMES_ANCHOR_CONSTRAINTS_TITLE),
+            this.transform
+        );
     }
 
     private void pickTarget(UIIcon owner, boolean bone)
@@ -182,6 +200,80 @@ public class UIAnchorKeyframeFactory extends UIKeyframeFactory<Anchor>
     private void setAttachment(String attachment)
     {
         this.retarget((anchor) -> anchor.attachment = attachment);
+    }
+
+    private void transferProp()
+    {
+        UIFilmPanel panel = this.getPanel();
+
+        if (panel == null)
+        {
+            return;
+        }
+
+        panel.getController().picker.cancelTargetPick();
+        displayActors(this.getContext(), panel.getController().getEntities(), this.keyframe.getValue().replay, (actor) ->
+        {
+            if (actor.isEmpty())
+            {
+                this.retarget((anchor) ->
+                {
+                    anchor.replay = Anchor.NO_ATTACHMENT;
+                    anchor.attachment = Anchor.NO_ATTACHMENT;
+                });
+                return;
+            }
+
+            displayAttachments(panel, actor, this.keyframe.getValue().attachment, (attachment) ->
+            {
+                this.executeTransfer(actor, attachment);
+            });
+        });
+    }
+
+    private void executeTransfer(String targetActor, String targetAttachment)
+    {
+        UIFilmPanel panel = this.getPanel();
+        Replay replay = panel == null ? null : panel.replayEditor.getReplay();
+
+        if (replay == null)
+        {
+            return;
+        }
+
+        Map<String, IEntity> entities = panel.getController().getEntities();
+        float currentTick = panel.getCursor();
+
+        Anchor from = this.keyframe.getValue().copy();
+        Anchor to = from.copy();
+        to.replay = targetActor;
+        to.attachment = targetAttachment;
+
+        /* Force seamless rebase onto new target world frame */
+        AnchorRebase.keepWorldTransform(entities, entities.get(replay.getId()), replay, 0F, from, to);
+
+        if (Math.abs(currentTick - this.keyframe.getTick()) > 0.5F && this.keyframe.getParent() instanceof KeyframeChannel<?> rawChannel)
+        {
+            KeyframeChannel<Anchor> channel = (KeyframeChannel<Anchor>) rawChannel;
+            Keyframe<Anchor> newKf = channel.insertInheriting(currentTick, to);
+
+            if (this.editor != null && this.editor.getGraph() != null)
+            {
+                this.editor.getGraph().clearSelection();
+                this.editor.getGraph().selectKeyframe(newKf);
+            }
+        }
+        else
+        {
+            BaseValue.edit(this.keyframe, (keyframe) ->
+            {
+                Anchor anchor = keyframe.getValue();
+                anchor.replay = targetActor;
+                anchor.attachment = targetAttachment;
+                anchor.transform.copy(to.transform);
+            });
+            this.transform.setTransform(this.keyframe.getValue().transform);
+        }
     }
 
     /**

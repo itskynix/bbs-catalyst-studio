@@ -8,6 +8,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.systems.VertexSorter;
 import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.client.BBSRendering;
+import mchorse.bbs_mod.film.replays.Replay;
 import mchorse.bbs_mod.forms.FormRenderLast;
 import mchorse.bbs_mod.forms.FormTranslucentQueue;
 import mchorse.bbs_mod.forms.FormUtilsClient;
@@ -16,12 +17,15 @@ import mchorse.bbs_mod.forms.entities.StubEntity;
 import mchorse.bbs_mod.forms.forms.BodyPart;
 import mchorse.bbs_mod.forms.forms.Form;
 import mchorse.bbs_mod.forms.forms.FramebufferForm;
+import mchorse.bbs_mod.forms.forms.ModelForm;
 import mchorse.bbs_mod.forms.renderers.utils.FramebufferDebug;
 import mchorse.bbs_mod.forms.renderers.utils.MatrixCache;
 import mchorse.bbs_mod.forms.renderers.utils.MatrixCacheEntry;
 import mchorse.bbs_mod.graphics.Framebuffer;
 import mchorse.bbs_mod.graphics.FramebufferPool;
 import mchorse.bbs_mod.graphics.texture.Texture;
+import mchorse.bbs_mod.ui.dashboard.UIDashboard;
+import mchorse.bbs_mod.ui.film.UIFilmPanel;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.utils.MathUtils;
@@ -31,6 +35,8 @@ import mchorse.bbs_mod.utils.StringUtils;
 import mchorse.bbs_mod.utils.colors.Color;
 import mchorse.bbs_mod.utils.colors.Colors;
 import mchorse.bbs_mod.utils.joml.Vectors;
+import mchorse.bbs_mod.utils.pose.Pose;
+import mchorse.bbs_mod.utils.pose.PoseTransform;
 import mchorse.bbs_mod.utils.profiler.BBSProfiler;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gl.ShaderProgram;
@@ -45,7 +51,9 @@ import net.minecraft.client.render.VertexConsumer;
 import net.minecraft.client.render.VertexFormat;
 import net.minecraft.client.render.VertexFormats;
 import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.RotationAxis;
+import net.minecraft.util.math.Vec3d;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
@@ -116,7 +124,8 @@ public class FramebufferFormRenderer extends FormRenderer<FramebufferForm>
     public void renderBodyParts(FormRenderingContext context)
     {
         FramebufferPool pool = BBSModClient.getFramebuffers().getFormFramebuffers();
-        Framebuffer framebuffer = pool.get(MathUtils.clamp(this.form.width.get(), 2, 4096), MathUtils.clamp(this.form.height.get(), 2, 4096));
+        int width = MathUtils.clamp(this.form.width.get(), 2, 4096);
+        int height = MathUtils.clamp(this.form.height.get(), 2, 4096);
         boolean outermost = renderDepth == 0;
 
         BBSProfiler.count(BBSProfiler.Section.FRAMEBUFFER_RENDERS);
@@ -127,17 +136,81 @@ public class FramebufferFormRenderer extends FormRenderer<FramebufferForm>
         }
 
         renderDepth += 1;
-        FramebufferDebug.beginRender(this.form, context, framebuffer);
 
         try
         {
-            this.renderFramebuffer(context, framebuffer);
+            this.updateGazeTracking(context);
+
+            boolean glowActive = this.form.glow.get();
+            boolean hasEyes = false;
+            boolean hasNonEyes = false;
+
+            if (glowActive)
+            {
+                for (BodyPart part : this.form.parts.getAllTyped())
+                {
+                    if (isEyesPart(part))
+                    {
+                        hasEyes = true;
+                    }
+                    else
+                    {
+                        hasNonEyes = true;
+                    }
+                }
+            }
+
+            if (glowActive && hasEyes && hasNonEyes)
+            {
+                /* 1. Pass: Sahnenin normal Minecraft ışıklandırmasıyla gölgeli yüz / ten dokusu */
+                Framebuffer faceFb = pool.get(width, height);
+                FramebufferDebug.beginRender(this.form, context, faceFb);
+
+                try
+                {
+                    this.renderFramebuffer(context, faceFb, false, false);
+                }
+                finally
+                {
+                    FramebufferDebug.endRender();
+                    pool.release(faceFb);
+                }
+
+                /* 2. Pass: Tam parlak parlayan göz modelleri (player/eyes, player/eyes_1px vb.) */
+                Framebuffer eyesFb = pool.get(width, height);
+                FramebufferDebug.beginRender(this.form, context, eyesFb);
+
+                try
+                {
+                    this.renderFramebuffer(context, eyesFb, true, true);
+                }
+                finally
+                {
+                    FramebufferDebug.endRender();
+                    pool.release(eyesFb);
+                }
+            }
+            else
+            {
+                /* Tek pass: Glow kapalıysa normal sahne ışığı, yalnızca göz varsa parlak */
+                boolean glowThisPass = glowActive && hasEyes;
+                Framebuffer framebuffer = pool.get(width, height);
+                FramebufferDebug.beginRender(this.form, context, framebuffer);
+
+                try
+                {
+                    this.renderFramebuffer(context, framebuffer, glowThisPass, null);
+                }
+                finally
+                {
+                    FramebufferDebug.endRender();
+                    pool.release(framebuffer);
+                }
+            }
         }
         finally
         {
             renderDepth -= 1;
-            FramebufferDebug.endRender();
-            pool.release(framebuffer);
 
             if (outermost)
             {
@@ -168,7 +241,69 @@ public class FramebufferFormRenderer extends FormRenderer<FramebufferForm>
         FramebufferDebug.readViewport("part end " + name);
     }
 
-    private void renderFramebuffer(FormRenderingContext context, Framebuffer framebuffer)
+    public static boolean isEyesPart(BodyPart part)
+    {
+        if (part == null || part.getForm() == null)
+        {
+            return false;
+        }
+
+        Form form = part.getForm();
+
+        if (form instanceof ModelForm modelForm)
+        {
+            String model = modelForm.model.get();
+
+            if (model != null)
+            {
+                String lower = model.toLowerCase();
+
+                if (lower.startsWith("player/eyes") || lower.contains("eyes"))
+                {
+                    return true;
+                }
+            }
+        }
+
+        String partId = part.getId();
+
+        if (partId != null)
+        {
+            String lower = partId.toLowerCase();
+
+            if (lower.contains("eye") || lower.contains("pupil"))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void renderFilteredParts(FormRenderingContext context, Boolean filterEyes)
+    {
+        for (BodyPart part : this.form.parts.getAllTyped())
+        {
+            if (filterEyes != null)
+            {
+                boolean isEyes = isEyesPart(part);
+
+                if (filterEyes && !isEyes)
+                {
+                    continue;
+                }
+
+                if (!filterEyes && isEyes)
+                {
+                    continue;
+                }
+            }
+
+            this.renderBodyPart(part, context);
+        }
+    }
+
+    private void renderFramebuffer(FormRenderingContext context, Framebuffer framebuffer, boolean glowing, Boolean filterEyes)
     {
         int x;
         int y;
@@ -272,7 +407,7 @@ public class FramebufferFormRenderer extends FormRenderer<FramebufferForm>
 
         try
         {
-            BBSRendering.renderOffscreen(() -> super.renderBodyParts(context));
+            BBSRendering.renderOffscreen(() -> this.renderFilteredParts(context, filterEyes));
         }
         finally
         {
@@ -314,9 +449,13 @@ public class FramebufferFormRenderer extends FormRenderer<FramebufferForm>
         RenderSystem.setProjectionMatrix(projectionMatrix, vertexSorter);
         GL11.glCullFace(cullFace);
 
-        boolean shading = !context.isPicking();
-        VertexFormat format = shading ? VertexFormats.POSITION_COLOR_TEXTURE_OVERLAY_LIGHT_NORMAL : VertexFormats.POSITION_TEXTURE_LIGHT_COLOR;
-        Supplier<ShaderProgram> shader = shading ? GameRenderer::getRenderTypeEntityTranslucentProgram : /*$ ptl*/GameRenderer::getPositionTexLightmapColorProgram/**/;
+        boolean shading = !context.isPicking() && !glowing;
+        VertexFormat format = glowing
+            ? VertexFormats.POSITION_TEXTURE_COLOR
+            : (shading ? VertexFormats.POSITION_COLOR_TEXTURE_OVERLAY_LIGHT_NORMAL : VertexFormats.POSITION_TEXTURE_LIGHT_COLOR);
+        Supplier<ShaderProgram> shader = glowing
+            ? GameRenderer::getPositionTexColorProgram
+            : (shading ? GameRenderer::getRenderTypeEntityTranslucentProgram : /*$ ptl*/GameRenderer::getPositionTexLightmapColorProgram/**/);
 
         if (FramebufferDebug.logging)
         {
@@ -327,13 +466,283 @@ public class FramebufferFormRenderer extends FormRenderer<FramebufferForm>
 
         FramebufferDebug.state("before quad", context);
 
-        this.renderModel(framebuffer.getMainTexture(), format, shader, context.stack, context.overlay, context.light, context.color, context.getTransition(), !context.isPicking());
+        int actualLight = glowing ? LightmapTextureManager.MAX_LIGHT_COORDINATE : context.light;
+
+        this.renderModel(framebuffer.getMainTexture(), format, shader, context.stack, context.overlay, actualLight, context.color, context.getTransition(), !context.isPicking());
 
         FramebufferDebug.state("after quad", context);
     }
 
+    private double getEntityEyeHeight(IEntity entity)
+    {
+        if (entity == null)
+        {
+            return 1.62D;
+        }
+
+        Form form = entity.getForm();
+
+        if (form != null)
+        {
+            return form.hitboxHeight.get() * form.hitboxEyeHeight.get();
+        }
+
+        return 1.62D;
+    }
+
+    private Vec3d findTargetActorPosition(String actorName)
+    {
+        if (actorName == null || actorName.trim().isEmpty())
+        {
+            return null;
+        }
+
+        actorName = actorName.trim();
+
+        /* 0. The actors the film is drawing this very frame: works with the GUI closed
+         * (world preview) and in exports, where there is no film panel to ask. */
+        IEntity actor = mchorse.bbs_mod.film.FilmEntityRenderer.findActor(actorName);
+
+        if (actor != null)
+        {
+            return new Vec3d(actor.getX(), actor.getY() + this.getEntityEyeHeight(actor), actor.getZ());
+        }
+
+        /* 1. Film / Replay sahnesindeki aktörleri kontrol et */
+        UIDashboard dashboard = BBSModClient.getDashboardIfCreated();
+
+        if (dashboard != null)
+        {
+            UIFilmPanel filmPanel = dashboard.getPanel(UIFilmPanel.class);
+
+            if (filmPanel != null)
+            {
+                /* A. Canlı IEntity haritasından kontrol et */
+                Map<String, IEntity> entities = filmPanel.getController() != null ? filmPanel.getController().getEntities() : null;
+
+                if (entities != null && !entities.isEmpty())
+                {
+                    for (Map.Entry<String, IEntity> entry : entities.entrySet())
+                    {
+                        if (entry.getKey().equalsIgnoreCase(actorName))
+                        {
+                            IEntity e = entry.getValue();
+
+                            if (e != null)
+                            {
+                                return new Vec3d(e.getX(), e.getY() + this.getEntityEyeHeight(e), e.getZ());
+                            }
+                        }
+                    }
+                }
+
+                /* B. Film verisindeki Replay listesinden isim ve keyframe enterpolasyonu ile kontrol et */
+                if (filmPanel.getData() != null)
+                {
+                    for (Replay replay : filmPanel.getData().replays.getList())
+                    {
+                        if (actorName.equalsIgnoreCase(replay.getName()) || actorName.equalsIgnoreCase(replay.getId()))
+                        {
+                            if (entities != null)
+                            {
+                                IEntity e = entities.get(replay.getId());
+
+                                if (e != null)
+                                {
+                                    return new Vec3d(e.getX(), e.getY() + this.getEntityEyeHeight(e), e.getZ());
+                                }
+                            }
+
+                            int cursor = filmPanel.getCursor();
+                            float at = replay.getTick(cursor);
+                            Form form = replay.form.get();
+                            double eye = form == null ? 1.62D : form.hitboxHeight.get() * form.hitboxEyeHeight.get();
+
+                            double x = replay.keyframes.x.isEmpty() ? 0 : replay.keyframes.x.interpolate(at);
+                            double y = (replay.keyframes.y.isEmpty() ? 0 : replay.keyframes.y.interpolate(at)) + eye;
+                            double z = replay.keyframes.z.isEmpty() ? 0 : replay.keyframes.z.interpolate(at);
+
+                            return new Vec3d(x, y, z);
+                        }
+                    }
+                }
+            }
+        }
+
+        /* 2. Minecraft dünyasındaki canlı entity'leri kontrol et */
+        MinecraftClient mc = MinecraftClient.getInstance();
+
+        if (mc.world != null)
+        {
+            for (net.minecraft.entity.Entity e : mc.world.getEntities())
+            {
+                if (e.getName().getString().equalsIgnoreCase(actorName)
+                    || (e.getCustomName() != null && e.getCustomName().getString().equalsIgnoreCase(actorName)))
+                {
+                    return new Vec3d(e.getX(), e.getY() + e.getStandingEyeHeight(), e.getZ());
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /** Sets (or, with NaN, clears) the transient gaze offset on every model part; it is never written into the saved pose. */
+    private void setGaze(float x, float y)
+    {
+        for (BodyPart part : this.form.parts.getAllTyped())
+        {
+            if (part.getForm() instanceof ModelForm modelForm)
+            {
+                boolean changed = Float.compare(modelForm.gazeX, x) != 0 || Float.compare(modelForm.gazeY, y) != 0;
+
+                modelForm.gazeX = x;
+                modelForm.gazeY = y;
+
+                if (changed)
+                {
+                    modelForm.bumpPoseVersion();
+                }
+            }
+        }
+    }
+
+    /** Older saves may carry exploded pupil values in the stored poses; make them harmless. */
+    private static void sanitizePupil(ModelForm modelForm, Pose pose)
+    {
+        if (pose == null)
+        {
+            return;
+        }
+
+        for (String bone : new String[] {"pupil_l", "pupil_r"})
+        {
+            PoseTransform transform = pose.get(bone);
+
+            if (transform == null)
+            {
+                continue;
+            }
+
+            float x = transform.translate.x;
+            float y = transform.translate.y;
+            float z = transform.translate.z;
+
+            if (!Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(z) || Math.abs(x) > 64F || Math.abs(y) > 64F || Math.abs(z) > 64F)
+            {
+                transform.translate.set(0F, 0F, 0F);
+                modelForm.bumpPoseVersion();
+            }
+        }
+    }
+
+    private void updateGazeTracking(FormRenderingContext context)
+    {
+        int target = this.form.targetType.get();
+
+        /* Previews and the GUI have no scene to look at; with no target the pupils are plainly
+         * free: nothing is written, so the form editor and the dope sheet own the bones. */
+        if (context.ui || target == FramebufferForm.TARGET_NONE)
+        {
+            this.setGaze(Float.NaN, 0F);
+
+            for (BodyPart part : this.form.parts.getAllTyped())
+            {
+                if (part.getForm() instanceof ModelForm modelForm)
+                {
+                    sanitizePupil(modelForm, modelForm.pose.get());
+                    sanitizePupil(modelForm, modelForm.poseOverlay.get());
+                }
+            }
+
+            return;
+        }
+
+        MinecraftClient mc = MinecraftClient.getInstance();
+        Vec3d targetWorldPos = null;
+
+        if (target == FramebufferForm.TARGET_CAMERA)
+        {
+            if (mc.gameRenderer != null && mc.gameRenderer.getCamera() != null)
+            {
+                targetWorldPos = mc.gameRenderer.getCamera().getPos();
+            }
+        }
+        else if (target == FramebufferForm.TARGET_ACTOR)
+        {
+            targetWorldPos = this.findTargetActorPosition(this.form.targetActor.get());
+        }
+
+        if (targetWorldPos == null || context.world == null)
+        {
+            this.setGaze(Float.NaN, 0F);
+
+            return;
+        }
+
+        /* The head's matrix in world space (the entity's placement and every transform on the
+         * way here), and the target in the very same space: bringing the target into the head's
+         * local space is then one inverse, with no camera involved. */
+        Matrix4f headWorld = new Matrix4f(context.world.peek().getPositionMatrix());
+
+        if (!headWorld.isFinite() || Math.abs(headWorld.determinant()) < 1.0E-8F)
+        {
+            this.setGaze(Float.NaN, 0F);
+
+            return;
+        }
+
+        Vector3f targetLocal = new Matrix4f(headWorld).invert().transformPosition(
+            new Vector3f((float) targetWorldPos.x, (float) targetWorldPos.y, (float) targetWorldPos.z)
+        );
+        float len = targetLocal.length();
+
+        if (!Float.isFinite(len) || len <= 0.001F)
+        {
+            this.setGaze(Float.NaN, 0F);
+
+            return;
+        }
+
+        float maxOffset = this.form.maxLookOffset.get();
+        float saccadeAmp = this.form.saccadeAmplitude.get();
+        float saccadeFreq = this.form.saccadeFrequency.get();
+        float lookX = MathUtils.clamp(targetLocal.x / len, -1F, 1F) * maxOffset;
+        float lookY = MathUtils.clamp(targetLocal.y / len, -1F, 1F) * (maxOffset * 0.75F);
+
+        /* Micro-saccades & physiological jitter, only while a valid target is tracked */
+        if (saccadeFreq > 0F && saccadeAmp > 0F)
+        {
+            double time = (System.currentTimeMillis() / 1000.0) * saccadeFreq;
+            long step = (long) time;
+            float hash1 = (float) Math.sin(step * 12.9898 + 78.233);
+            float hash2 = (float) Math.cos(step * 43.1231 + 93.987);
+
+            lookX += hash1 * saccadeAmp * 0.15F + (float) Math.sin(time * 8.0) * saccadeAmp * 0.02F;
+            lookY += hash2 * saccadeAmp * 0.1F;
+        }
+
+        lookX = MathUtils.clamp(lookX, -maxOffset, maxOffset);
+        lookY = MathUtils.clamp(lookY, -maxOffset, maxOffset);
+
+        if (!Float.isFinite(lookX) || !Float.isFinite(lookY))
+        {
+            this.setGaze(Float.NaN, 0F);
+
+            return;
+        }
+
+        this.setGaze(lookX, lookY);
+    }
+
     private void renderModel(Texture texture, VertexFormat format, Supplier<ShaderProgram> shader, MatrixStack matrices, int overlay, int light, int overlayColor, float transition, boolean defer)
     {
+        /* The glowing eyes layer sits a hair in front of the face layer so the two coplanar quads do not z-fight. */
+        float insetZ = -this.form.inset.get() * 0.0625F + (format == VertexFormats.POSITION_TEXTURE_COLOR ? 0.0004F : 0F);
+
+        matrices.push();
+        matrices.translate(0F, 0F, insetZ);
+
         float w = texture.width;
         float h = texture.height;
 
@@ -368,6 +777,8 @@ public class FramebufferFormRenderer extends FormRenderer<FramebufferForm>
         FramebufferDebug.quad("quad corners", matrices, quad);
 
         this.renderQuad(format, texture, shader, matrices, overlay, light, overlayColor, transition, defer);
+
+        matrices.pop();
     }
 
     private void renderQuad(VertexFormat format, Texture texture, Supplier<ShaderProgram> shader, MatrixStack matrices, int overlay, int light, int overlayColor, float transition, boolean defer)
@@ -436,7 +847,7 @@ public class FramebufferFormRenderer extends FormRenderer<FramebufferForm>
              * is always further than the quad's own plane, so it replays first. With depth in
              * the buffer that layer lands over the quad by the depth test, pixel by pixel,
              * instead of the two fighting over who overwrites whom. */
-            ShaderProgram cutout = GameRenderer.getRenderTypeEntityCutoutProgram();
+            ShaderProgram cutout = this.form.glow.get() ? finalShader : GameRenderer.getRenderTypeEntityCutoutProgram();
 
             if (cutout != null)
             {
@@ -463,6 +874,11 @@ public class FramebufferFormRenderer extends FormRenderer<FramebufferForm>
 
     private VertexConsumer fill(VertexFormat format, VertexConsumer consumer, Matrix4f matrix, float x, float y, Color color, float u, float v, int overlay, int light, Matrix3f normal, float nz)
     {
+        if (format == VertexFormats.POSITION_TEXTURE_COLOR)
+        {
+            return consumer.vertex(matrix, x, y, 0F).texture(u, v).color(color.r, color.g, color.b, color.a);
+        }
+
         if (format == VertexFormats.POSITION_TEXTURE_LIGHT_COLOR)
         {
             return consumer.vertex(matrix, x, y, 0F).texture(u, v).light(light).color(color.r, color.g, color.b, color.a);

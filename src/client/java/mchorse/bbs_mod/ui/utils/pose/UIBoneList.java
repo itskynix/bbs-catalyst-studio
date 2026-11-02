@@ -6,6 +6,7 @@ import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIIcon;
+import mchorse.bbs_mod.ui.framework.elements.context.UIContextMenu;
 import mchorse.bbs_mod.ui.framework.elements.input.text.UITextbox;
 import mchorse.bbs_mod.ui.utils.UIConstants;
 import mchorse.bbs_mod.ui.utils.UIUtils;
@@ -34,6 +35,7 @@ public class UIBoneList extends UIElement
     private final UITextbox search;
     private final UIIcon mirror;
     private final UIIcon invert;
+    private final UIIcon presets;
 
     /** Unfiltered source kept so the list can be re-filtered as the query changes; {@link #sort}
      *  remembers whether that source should be sorted alphabetically. */
@@ -61,11 +63,36 @@ public class UIBoneList extends UIElement
         this.invert.highlight(BBSSettings.poseAlternateInvert::get, Direction.BOTTOM);
         this.invert.tooltip(UIKeys.TRANSFORMS_ALTERNATE_INVERT);
         this.invert.wh(20, 20);
+        this.presets = new UIIcon(Icons.POSE, (b) ->
+        {
+            UIContext context = this.getContext();
+
+            if (context == null || this.list == null)
+            {
+                return;
+            }
+
+            try
+            {
+                UIContextMenu menu = this.list.createContextMenu(context);
+
+                if (menu != null)
+                {
+                    context.replaceContextMenu(menu);
+                }
+            }
+            catch (Exception e)
+            {
+                e.printStackTrace();
+            }
+        });
+        this.presets.tooltip(UIKeys.FORMS_EDITORS_MODEL_POSE);
+        this.presets.wh(20, 20);
 
         UIElement header = new UIElement();
         header.h(20).row(0).height(20);
-        /* The search fills the row; the two toggles sit fixed-width at the right (all 20px tall). */
-        header.add(this.search, this.mirror, this.invert);
+        /* The search fills the row; the toggles sit fixed-width at the right (all 20px tall). */
+        header.add(this.search, this.mirror, this.invert, this.presets);
 
         this.keys().register(Keys.TRANSFORMATIONS_MIRROR_EDIT, this::toggleMirrorEdit).category(UIKeys.TRANSFORMS_KEYS_CATEGORY);
 
