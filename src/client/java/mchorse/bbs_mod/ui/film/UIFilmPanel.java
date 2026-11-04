@@ -167,13 +167,13 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
 
     /* Icon bar buttons */
     public UIIcon openFilmMenu;
-    public UIMenuBarItem menuLayout;
     public UIMenuBarItem menuEdit;
     public UIIcon menuDataManager;
     public UIIcon menuLock;
     public UIIcon openCameraEditor;
     public UIIcon openReplayEditor;
     public UIIcon openCopilot;
+    public mchorse.bbs_mod.catalyst.ai.UICatalystAIPanel catalystAI;
     public UIIcon layoutLock;
 
     private UICopyPasteController layoutPresetsController;
@@ -271,8 +271,8 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.openCameraEditor.tooltip(UIKeys.FILM_OPEN_CAMERA_EDITOR);
         this.openReplayEditor.tooltip(UIKeys.FILM_OPEN_REPLAY_EDITOR);
 
-        this.openCopilot = new UIIcon(Icons.SPARKLES, (b) -> this.openCopilotDialog());
-        this.openCopilot.tooltip(L10n.lang("bbs.copilot.title"));
+        this.openCopilot = new UIIcon(Icons.SPARKLES, (b) -> this.toggleCatalystAI());
+        this.openCopilot.tooltip(L10n.lang("bbs.catalyst_ai.title"));
 
         /* What the tour of this editor points at. The two editor buttons are one place: they
          * only mean something as a pair. */
@@ -806,11 +806,16 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         }
     }
 
+    /** The menu bar's Window and Layout menu: the side panels, the presets, binding, reset, the lock and hidden panels. */
     private void fillWindowMenu(ContextMenuManager menu)
     {
         menu.action(this.isLeftPanelVisible() ? Icons.CHECKMARK : Icons.NONE, UIKeys.FILM_MENU_LEFT_PANEL, this::toggleLeftPanel);
         menu.action(this.isRightPanelVisible() ? Icons.CHECKMARK : Icons.NONE, UIKeys.FILM_MENU_RIGHT_PANEL, this::toggleRightPanel);
+        menu.action(Icons.LAYOUT, UIKeys.FILM_LAYOUT_PRESETS, this::openLayoutPresetsMenu);
+        menu.action(Icons.SAVED, L10n.lang("bbs.ui.film.layout_save_preset"), () -> UIFilmLayoutPresetsOverlayPanel.promptSave(this.getContext(), this::getFilmLayoutPresetData, null));
+        menu.action(Icons.LINK, UIKeys.FILM_LAYOUT_BIND_TO_EDITOR, this.isCurrentFilmLayoutBound(), this::toggleCurrentFilmLayoutBinding);
         menu.action(Icons.REFRESH, UIKeys.FILM_MENU_RESET_LAYOUT, this::resetFilmLayout);
+        menu.action(this.dock.isLocked() ? Icons.UNLOCKED : Icons.LOCKED, this.dock.isLocked() ? UIKeys.FILM_LAYOUT_UNLOCK : UIKeys.FILM_LAYOUT_LOCK, this::toggleLayoutLock);
         this.dock.fillHiddenPanelsMenu(menu);
     }
 
@@ -909,11 +914,6 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
             this.getContext().replaceContextMenu(this::fillHelpMenu, b.area.x, b.area.ey() + 1);
         });
 
-        this.menuLayout = new UIMenuBarItem(UIKeys.FILM_MENU_LAYOUT, (b) ->
-        {
-            this.getContext().replaceContextMenu(this::fillLayoutMenu, b.area.x, b.area.ey() + 1);
-        });
-
         this.menuEdit = new UIMenuBarItem(UIKeys.FILM_MENU_EDIT, (b) ->
         {
             this.getContext().replaceContextMenu(this::fillEditMenu, b.area.x, b.area.ey() + 1);
@@ -928,7 +928,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.menuLock.tooltip(() -> (this.dock.isLocked() ? UIKeys.FILM_LAYOUT_UNLOCK : UIKeys.FILM_LAYOUT_LOCK).get());
         this.menuLock.wh(16, 16);
 
-        this.menuBar.add(this.menuDataManager, this.menuLock, this.menuWindow, this.menuLayout, this.menuEdit, this.menuTools, this.menuHelp);
+        this.menuBar.add(this.menuDataManager, this.menuLock, this.menuWindow, this.menuEdit, this.menuTools, this.menuHelp);
     }
 
     public static class UIMenuBarItem extends UIClickable<UIMenuBarItem>
@@ -1929,18 +1929,8 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
 
     private void fillFilmContextMenu(ContextMenuManager menu)
     {
-        this.fillLayoutMenu(menu);
+        this.fillWindowMenu(menu);
         this.fillEditMenu(menu);
-    }
-
-    /** The menu bar's Layout menu: presets, binding, reset, hidden panels and the lock. */
-    private void fillLayoutMenu(ContextMenuManager menu)
-    {
-        menu.action(Icons.LAYOUT, UIKeys.FILM_LAYOUT_PRESETS, this::openLayoutPresetsMenu);
-        menu.action(Icons.LINK, UIKeys.FILM_LAYOUT_BIND_TO_EDITOR, this.isCurrentFilmLayoutBound(), this::toggleCurrentFilmLayoutBinding);
-        menu.action(Icons.REFRESH, UIKeys.FILM_LAYOUT_RESET, this::resetFilmLayout);
-        menu.action(this.dock.isLocked() ? Icons.UNLOCKED : Icons.LOCKED, this.dock.isLocked() ? UIKeys.FILM_LAYOUT_UNLOCK : UIKeys.FILM_LAYOUT_LOCK, this::toggleLayoutLock);
-        this.dock.fillHiddenPanelsMenu(menu);
     }
 
     /** The menu bar's Edit menu: history and the operations on the whole film. Needs a film. */
@@ -2032,10 +2022,33 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         });
     }
 
-    public void openCopilotDialog()
+    /** Catalyst AI docks at the right of the editor, below the top bar and over the properties, clear of the preview and the timeline. */
+    public void openCatalystAI()
     {
-        UIOverlay.addOverlay(this.getContext(), new mchorse.bbs_mod.copilot.ui.UICopilotDialog(this), 620, 380);
+        if (this.catalystAI == null)
+        {
+            this.catalystAI = new mchorse.bbs_mod.catalyst.ai.UICatalystAIPanel(this);
+            this.catalystAI.relative(this.editor).x(1F, -6).anchorX(1F).y(22).w(300).h(0.62F, -22);
+            this.editor.add(this.catalystAI);
+        }
+
+        this.catalystAI.setVisible(true);
+        this.resize();
+        this.catalystAI.input.textbox.setFocused(true);
     }
+
+    public void toggleCatalystAI()
+    {
+        if (this.catalystAI != null && this.catalystAI.isVisible())
+        {
+            this.catalystAI.setVisible(false);
+        }
+        else
+        {
+            this.openCatalystAI();
+        }
+    }
+
 
     /**
      * Relative move that snaps the scene's first position keyframe onto the
@@ -2089,9 +2102,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
 
     private void openLayoutPresetsMenu()
     {
-        UIContext context = this.getContext();
-
-        this.layoutPresetsController.openPresets(context, context.mouseX, context.mouseY);
+        UIOverlay.addOverlay(this.getContext(), new UIFilmLayoutPresetsOverlayPanel(this::getFilmLayoutPresetData, this::applyLayoutPreset), 560, 0.8F);
     }
 
     @Override

@@ -27,6 +27,10 @@ import mchorse.bbs_mod.forms.entities.IEntity;
 import mchorse.bbs_mod.forms.entities.MCEntity;
 import mchorse.bbs_mod.forms.entities.StubEntity;
 import mchorse.bbs_mod.forms.forms.Form;
+import mchorse.bbs_mod.forms.forms.utils.FormIllusionValues;
+import mchorse.bbs_mod.forms.renderers.utils.FormIllusions;
+import mchorse.bbs_mod.forms.renderers.utils.RenderFrame;
+import mchorse.bbs_mod.utils.colors.Colors;
 import mchorse.bbs_mod.forms.forms.utils.Anchor;
 import mchorse.bbs_mod.forms.renderers.utils.MatrixCache;
 import mchorse.bbs_mod.mixin.EntityInvoker;
@@ -156,6 +160,9 @@ public abstract class BaseFilmController
         {
             Replay replay = replays.get(i);
             IEntity entity = this.entities.get(replay.getId());
+
+            /* Before the pause check: a switch flipped in the editor shows on a paused film too */
+            VehicleRide.syncSettings(this.film, replay, entity);
 
             if (entity == null || !this.canUpdate(i, replay, entity, UpdateMode.UPDATE))
             {
@@ -487,11 +494,23 @@ public abstract class BaseFilmController
      */
     protected float getTransition(IEntity entity, float transition)
     {
+        /* A ridden vehicle moves on in a paused film: it is the drive that moves it, not the film */
+        if (VehicleRide.isRidden(entity))
+        {
+            return transition;
+        }
+
         return this.paused ? 0F : transition;
     }
 
     protected boolean canUpdate(int i, Replay replay, IEntity entity, UpdateMode updateMode)
     {
+        /* Ridden: drawn and ticked whatever the film is doing - paused, or recording this very replay */
+        if (VehicleRide.isRidden(this.film, replay))
+        {
+            return true;
+        }
+
         if (this.paused && (updateMode == UpdateMode.UPDATE))
         {
             return false;
@@ -639,6 +658,107 @@ public abstract class BaseFilmController
         filmContext.transition = getTransition(entity, context./*$ wtd*/tickDelta()/**/);
 
         FilmEntityRenderer.renderEntity(filmContext);
+
+        this.renderIllusionTrail(context, replay, entity);
+    }
+
+    /**
+     * The illusions of a form with a delay: the actor drawn again as it stood some ticks ago, once
+     * for each copy, each lagging further behind and fainter. The actor is put back to a past tick
+     * the way the onion skin does it, drawn, and returned to where it was, position and all.
+     */
+    private void renderIllusionTrail(WorldRenderContext context, Replay replay, IEntity entity)
+    {
+        Form form = entity.getForm();
+
+        if (form == null || !form.illusions.isActive() || form.illusions.delay.get() <= 0 || FormIllusions.isDrawing())
+        {
+            return;
+        }
+
+        FormIllusionValues illusions = form.illusions;
+        int ticks = replay.getTick(this.getTick());
+        float transition = this.getTransition(entity, context./*$ wtd*/tickDelta()/**/);
+
+        double x = entity.getX();
+        double y = entity.getY();
+        double z = entity.getZ();
+        double px = entity.getPrevX();
+        double py = entity.getPrevY();
+        double pz = entity.getPrevZ();
+        float yaw = entity.getYaw();
+        float headYaw = entity.getHeadYaw();
+        float bodyYaw = entity.getBodyYaw();
+        float pitch = entity.getPitch();
+        float pyaw = entity.getPrevYaw();
+        float pHeadYaw = entity.getPrevHeadYaw();
+        float pBodyYaw = entity.getPrevBodyYaw();
+        float pPitch = entity.getPrevPitch();
+        boolean drew = false;
+
+        FormIllusions.begin();
+
+        try
+        {
+            for (int n = 1; n <= illusions.count.get(); n++)
+            {
+                float opacity = illusions.opacityOf(n);
+                float tick = ticks + transition - illusions.delay.get() * n;
+
+                if (tick < 0F)
+                {
+                    break;
+                }
+
+                if (opacity <= 0.003F)
+                {
+                    continue;
+                }
+
+                replay.keyframes.apply(tick, entity);
+                replay.properties.applyProperties(form, tick);
+                entity.setPrevX(entity.getX());
+                entity.setPrevY(entity.getY());
+                entity.setPrevZ(entity.getZ());
+                entity.setPrevYaw(entity.getYaw());
+                entity.setPrevHeadYaw(entity.getHeadYaw());
+                entity.setPrevBodyYaw(entity.getBodyYaw());
+                entity.setPrevPitch(entity.getPitch());
+                RenderFrame.invalidate();
+
+                FilmControllerContext ghost = this.getFilmControllerContext(context, replay, entity)
+                    .color(Colors.setA(Colors.WHITE, opacity))
+                    .transition(0F);
+
+                FilmEntityRenderer.renderEntity(ghost);
+                drew = true;
+            }
+        }
+        finally
+        {
+            FormIllusions.end();
+
+            if (drew)
+            {
+                /* Back to now: the keyframes and the form's properties, then the place the actor stood at */
+                replay.keyframes.apply(ticks + transition, entity);
+                replay.properties.applyProperties(form, ticks + transition);
+                RenderFrame.invalidate();
+
+                entity.setPosition(x, y, z);
+                entity.setPrevX(px);
+                entity.setPrevY(py);
+                entity.setPrevZ(pz);
+                entity.setYaw(yaw);
+                entity.setHeadYaw(headYaw);
+                entity.setBodyYaw(bodyYaw);
+                entity.setPitch(pitch);
+                entity.setPrevYaw(pyaw);
+                entity.setPrevHeadYaw(pHeadYaw);
+                entity.setPrevBodyYaw(pBodyYaw);
+                entity.setPrevPitch(pPitch);
+            }
+        }
     }
 
     protected FilmControllerContext getFilmControllerContext(WorldRenderContext context, Replay replay, IEntity entity)

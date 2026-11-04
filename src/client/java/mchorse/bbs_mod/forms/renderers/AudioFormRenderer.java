@@ -101,6 +101,164 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
     private float camVelocityY = 0.0F;
     private float camVelocityZ = 0.0F;
 
+    /* Occlusion: the voxel raymarch runs at most every OCCLUSION_TICKS world ticks, or sooner once the
+     * listener or the source has moved further than OCCLUSION_MOVE blocks (never twice in one tick);
+     * frames in between ease toward the last result instead of jumping to it. */
+    private static final int OCCLUSION_TICKS = 4;
+    private static final double OCCLUSION_MOVE_SQ = 0.25D * 0.25D;
+
+    private float cachedOcclusion;
+    private float smoothedOcclusion;
+    private long occlusionTick = Long.MIN_VALUE;
+    private long occlusionSmoothNs;
+    private Vec3d occlusionListener;
+    private Vec3d occlusionSource;
+
+    /**
+     * The diagnostic log (switched on from the audio form panel, never saved): once a second, per
+     * sound, what the playback actually did - how often it was drawn and ticked, how many draws a
+     * single frame had, how far the source jumped between draws, seeks, restarts, stops and who
+     * stopped it, the muffle and the filter writes - so a stutter can be read off the log instead
+     * of guessed at.
+     */
+    public static class Diagnostics {
+        public static boolean enabled;
+        static long frame;
+
+        private long lastFrame = -1;
+        private int callsThisFrame;
+        private int maxCallsPerFrame;
+        private int renders;
+        private int ticks;
+        private float maxJump;
+        private float offAxis;
+        private float viewDistance;
+        private final Vector3f prev = new Vector3f();
+        private boolean hasPrev;
+        int starts;
+        int seeks;
+        int revives;
+        int filterWrites;
+        int undrawn;
+        int jumps;
+        float drift;
+        final Map<String, Integer> stops = new java.util.LinkedHashMap<>();
+        private long windowStart;
+        private long windowFrame;
+
+        void render(Vector3f view) {
+            if (!enabled) {
+                return;
+            }
+
+            this.renders += 1;
+
+            if (this.lastFrame == frame) {
+                this.callsThisFrame += 1;
+            } else {
+                this.callsThisFrame = 1;
+                this.lastFrame = frame;
+            }
+
+            this.maxCallsPerFrame = Math.max(this.maxCallsPerFrame, this.callsThisFrame);
+
+            if (this.hasPrev) {
+                this.maxJump = Math.max(this.maxJump, view.distance(this.prev));
+            }
+
+            this.prev.set(view);
+            this.hasPrev = true;
+            this.viewDistance = view.length();
+            this.offAxis = this.viewDistance > 0.001F ? (float) Math.toDegrees(Math.acos(MathUtils.clamp(-view.z / this.viewDistance, -1F, 1F))) : 0F;
+        }
+
+        void tick(AudioFormRenderer renderer) {
+            if (!enabled) {
+                return;
+            }
+
+            this.ticks += 1;
+
+            long now = System.currentTimeMillis();
+
+            if (this.windowStart == 0L) {
+                this.windowStart = now;
+                this.windowFrame = frame;
+
+                return;
+            }
+
+            if (now - this.windowStart < 1000L) {
+                return;
+            }
+
+            float seconds = (now - this.windowStart) / 1000F;
+            boolean playing = renderer.activeSoundInstance != null && renderer.activeSoundInstance.isPlaying();
+
+            mchorse.bbs_mod.BBSMod.LOGGER.info(String.format(java.util.Locale.ROOT,
+                "[BBS audio] %s fps=%.0f draws=%d maxDrawsPerFrame=%d ticks=%d dist=%.2f offAxis=%.1f maxJump=%.3f playing=%s state=%s undrawnTicks=%d starts=%d seeks=%d jumps=%d revives=%d drift=%.3f sync=%.3f occl=%.3f/%.3f filterWrites=%d stops=%s",
+                renderer.form.sound.get(), (frame - this.windowFrame) / seconds, this.renders, this.maxCallsPerFrame, this.ticks,
+                this.viewDistance, this.offAxis, this.maxJump, playing, renderer.lastPlaybackState, this.undrawn,
+                this.starts, this.seeks, this.jumps, this.revives, this.drift, renderer.syncPitch,
+                renderer.cachedOcclusion, renderer.smoothedOcclusion, this.filterWrites, this.stops));
+
+            this.windowStart = now;
+            this.windowFrame = frame;
+            this.renders = 0;
+            this.ticks = 0;
+            this.maxCallsPerFrame = 0;
+            this.maxJump = 0F;
+            this.starts = 0;
+            this.seeks = 0;
+            this.jumps = 0;
+            this.revives = 0;
+            this.filterWrites = 0;
+            this.undrawn = 0;
+            this.stops.clear();
+        }
+    }
+
+    private final Diagnostics diag = new Diagnostics();
+
+    /* The frame this source was last placed in (see render3D); one placement per frame */
+    private long audioFrame = -1;
+
+    /* The source in camera space as of the last frame it was drawn (see render3D) */
+    private final Vector3f lastViewPos = new Vector3f();
+    /* The source from the form's world matrix (see render3D), null when the pass has none */
+    private Vec3d occlusionWorldPos;
+    /* The source relative to its entity at the last draw, so the undrawn path keeps it in the same place */
+    private Vec3d drawnOffset;
+    private boolean hasViewPos;
+
+    /* The direction OpenAL is given, eased so no single frame can make it jump */
+    private final Vector3f smoothedSpatial = new Vector3f(0F, 0F, -1F);
+    private long spatialSmoothNs;
+
+    /* How long without a draw before tick() takes the spatial update over: long enough that a
+     * slow frame does not hand it back and forth between the two every other tick */
+    private static final long RENDER_STALE_MS = 250L;
+
+    /* Keeping the sound on the film's time. A small drift is pulled back by playing a hair faster or
+     * slower (SYNC_RATE of the drift per second, at most SYNC_MAX); only a real jump - a scrub, a
+     * loop, a drift past SYNC_SEEK - seeks, because every seek is an audible skip. */
+    private static final float SYNC_SEEK = 0.75F;
+    private static final float SYNC_JUMP = 0.15F;
+    private static final float SYNC_RATE = 0.5F;
+    private static final float SYNC_MAX = 0.05F;
+
+    private float syncPitch = 1F;
+    private float lastTimelineSec = Float.NaN;
+    private long lastTimelineMs;
+
+    /* The source the one-off spatial setup (relative, rolloff, spatialize) was written for */
+    private int configuredSource = -1;
+
+    /* Last values sent to the low-pass filter, so it is only rewritten when it really changes */
+    private float filterGain = Float.NaN;
+    private float filterGainHf = Float.NaN;
+    private boolean filterAttached;
+
     private enum PlaybackState {
         STOPPED,
         PLAYING
@@ -171,6 +329,12 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
      * Stops playback and frees the OpenAL hardware source channel immediately.
      */
     public void stop() {
+        if (Diagnostics.enabled) {
+            StackTraceElement caller = Thread.currentThread().getStackTrace()[2];
+
+            this.diag.stops.merge(caller.getMethodName() + ":" + caller.getLineNumber(), 1, Integer::sum);
+        }
+
         this.stopInternal(true);
     }
 
@@ -218,6 +382,11 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
         this.prevCamZ = Double.NaN;
         this.prevTimeMs = 0L;
         this.prevRenderFrame = -1;
+        this.syncPitch = 1F;
+        this.lastTimelineSec = Float.NaN;
+        this.spatialSmoothNs = 0L;
+        this.smoothedSpatial.set(0F, 0F, -1F);
+        this.hasViewPos = false;
         this.velocityX = 0.0F;
         this.velocityY = 0.0F;
         this.velocityZ = 0.0F;
@@ -225,8 +394,51 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
         this.camVelocityY = 0.0F;
         this.camVelocityZ = 0.0F;
 
+        /* The next source starts from scratch: its setup is written again and the muffle is measured anew */
+        this.configuredSource = -1;
+        this.filterAttached = false;
+        this.filterGain = Float.NaN;
+        this.filterGainHf = Float.NaN;
+        this.occlusionTick = Long.MIN_VALUE;
+        this.occlusionSmoothNs = 0L;
+        this.occlusionListener = null;
+        this.occlusionSource = null;
+
         if (removeFromSet) {
             ACTIVE_RENDERERS.remove(this);
+        }
+    }
+
+    /**
+     * Once per frame, before the world draws: a source whose block was broken or whose chunk
+     * unloaded (the block entity drops its world on removal), or whose film has stopped or paused,
+     * is stopped and deleted right away instead of waiting for the next client tick.
+     */
+    public static void reapOrphans() {
+        Diagnostics.frame++;
+        if (ACTIVE_RENDERERS.isEmpty()) {
+            return;
+        }
+
+        Iterator<AudioFormRenderer> it = ACTIVE_RENDERERS.iterator();
+
+        while (it.hasNext()) {
+            AudioFormRenderer renderer = it.next();
+            boolean orphan = renderer.activeSoundInstance == null
+                || !renderer.activeSoundInstance.isValid()
+                || (renderer.lastEntity != null && renderer.lastEntity.getWorld() == null)
+                || renderer.resolvePlaybackState(renderer.lastEntity) == PlaybackState.STOPPED;
+
+            if (orphan && Diagnostics.enabled) {
+                String why = renderer.activeSoundInstance == null || !renderer.activeSoundInstance.isValid() ? "invalid" : (renderer.lastEntity != null && renderer.lastEntity.getWorld() == null ? "noWorld" : "stoppedState");
+
+                renderer.diag.stops.merge("reapOrphans:" + why, 1, Integer::sum);
+            }
+
+            if (orphan) {
+                renderer.stopInternal(false);
+                it.remove();
+            }
         }
     }
 
@@ -245,9 +457,8 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
         }
 
         if (context.modelRenderer) {
-            /* Form Editor 3D viewport: stop playback and render visual helper */
-            this.stop();
-
+            /* Form Editor 3D viewport: the visual helper only. Nothing here keeps the source alive, so the
+             * idle watchdog lets go of it - render3D itself never starts or stops hardware. */
             if (!context.isPicking() && !BBSRendering.isIrisShadowPass()) {
                 this.renderEditorVisuals(context.stack, (float) this.form.getRadius(context.getTransition()));
             }
@@ -260,9 +471,21 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
             return;
         }
 
-        if (context.isPicking() || BBSRendering.isIrisShadowPass()) {
+        /* A portal window draws the scene a second time from the portal's own camera: in that pass
+         * the source was ~125 blocks off, the last draw of the frame won, and the sound was thrown
+         * past its radius and back every frame a portal was on screen - the stutter (and the ears
+         * flipping) that only happened looking in some directions, and only in the world. */
+        if (context.isPicking() || BBSRendering.isIrisShadowPass() || mchorse.bbs_mod.forms.FormPortals.isPassActive()) {
             return;
         }
+
+        /* And whatever else may draw it again in the same frame: the first draw of the frame is the
+         * view the listener is in, the rest only get to show it */
+        if (this.audioFrame == Diagnostics.frame) {
+            return;
+        }
+
+        this.audioFrame = Diagnostics.frame;
 
         this.lastEntity = context.entity;
 
@@ -274,30 +497,53 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
         Matrix4f worldRelMatrix = new Matrix4f(invView).mul(context.stack.peek().getPositionMatrix());
         Vector3f relOffset = worldRelMatrix.getTranslation(new Vector3f());
 
+        /* Where the source is in the very frame being drawn, in the camera's own axes (+X right,
+         * +Y up, -Z ahead - OpenAL's listener axes too). The ear direction is taken from this
+         * alone: mixing a world offset with the camera's direction vectors agreed only near the
+         * middle of the screen, and drifted apart toward its edges. */
+        context.stack.peek().getPositionMatrix().getTranslation(this.lastViewPos);
+        this.diag.render(this.lastViewPos);
+        this.hasViewPos = Float.isFinite(this.lastViewPos.x) && Float.isFinite(this.lastViewPos.y) && Float.isFinite(this.lastViewPos.z);
+
+        /* The same place, straight from the form's world matrix: no camera math in it, so it does not
+         * move by a hair as the head turns. The muffle raymarch goes to this one. */
+        if (context.world != null) {
+            Vector3f world = context.world.peek().getPositionMatrix().getTranslation(new Vector3f());
+
+            this.occlusionWorldPos = Float.isFinite(world.x) && Float.isFinite(world.y) && Float.isFinite(world.z) ? new Vec3d(world.x, world.y, world.z) : null;
+        } else {
+            this.occlusionWorldPos = null;
+        }
+
         this.lastCameraPos = new Vec3d(context.camera.position.x, context.camera.position.y, context.camera.position.z);
         this.lastWorldPos = new Vec3d(
                 this.lastCameraPos.x + relOffset.x,
                 this.lastCameraPos.y + relOffset.y,
                 this.lastCameraPos.z + relOffset.z);
         this.lastCameraRotation.set(invView).transpose();
+
+        if (context.entity != null) {
+            float t = context.getTransition();
+            double ex = context.entity.getPrevX() + (context.entity.getX() - context.entity.getPrevX()) * t;
+            double ey = context.entity.getPrevY() + (context.entity.getY() - context.entity.getPrevY()) * t;
+            double ez = context.entity.getPrevZ() + (context.entity.getZ() - context.entity.getPrevZ()) * t;
+
+            this.drawnOffset = this.lastWorldPos.subtract(ex, ey, ez);
+        }
         this.lastWorldRenderTimeMs = System.currentTimeMillis();
         this.lastActiveTimeMs = this.lastWorldRenderTimeMs;
 
         /*
-         * Fast stop if timeline paused / stopped.
-         * Notice: render3D NEVER initiates playback or calls ensureActivePlayer/play()!
-         * Playback lifecycle and active player maintenance belongs strictly to tick().
+         * render3D only steers: sub-tick listener orientation and the source's spatial position. It
+         * never starts, stops or raycasts - play/pause/stop/loop belong to tick(), and stopping a
+         * paused or removed source belongs to reapOrphans(), which runs once per frame.
          */
-        PlaybackState state = this.resolvePlaybackState(context.entity);
-
-        if (state == PlaybackState.STOPPED) {
-            if (this.activeSoundInstance != null) {
-                this.stop();
-            }
-        } else if (this.activeSoundInstance != null && this.activeSoundInstance.isPlaying()) {
-            /* Render frame sub-tick spatial update (pan, 360 HRTF, distance attenuation, muffle) */
+        if (this.activeSoundInstance != null && this.lastPlaybackState == PlaybackState.PLAYING && this.activeSoundInstance.isPlaying()) {
             this.updateSpatialOnly(context.entity, context.getTransition());
         }
+
+        /* Part of the picture, not of the editor: drawn in F1, while the film plays and in exports */
+        this.renderWaves(context);
 
         MinecraftClient mc = MinecraftClient.getInstance();
 
@@ -331,6 +577,7 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
 
     @Override
     public void tick(IEntity entity) {
+        this.diag.tick(this);
         if (entity == null || entity.getWorld() == null) {
             this.stop();
             return;
@@ -359,14 +606,21 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
          * frustum culling, distance > render distance, or behind camera), update world and camera positions
          * from entity coords and camera.
          */
-        boolean isRenderCulled = (now - this.lastWorldRenderTimeMs >= 100L);
+        boolean isRenderCulled = (now - this.lastWorldRenderTimeMs >= RENDER_STALE_MS);
 
         if (isRenderCulled || this.lastWorldPos == null || this.lastCameraPos == null) {
-            Transform transform = this.createTransform();
-            this.lastWorldPos = new Vec3d(
-                    entity.getX() + transform.translate.x,
-                    entity.getY() + transform.translate.y,
-                    entity.getZ() + transform.translate.z);
+            if (this.drawnOffset != null) {
+                /* Where the last draw put the source relative to its entity, carried along with the
+                 * entity: the form's place on a bone, an anchor or a parent is not lost, so the
+                 * sound does not leap to another spot the moment it stops being drawn */
+                this.lastWorldPos = new Vec3d(entity.getX(), entity.getY(), entity.getZ()).add(this.drawnOffset);
+            } else {
+                Transform transform = this.createTransform();
+                this.lastWorldPos = new Vec3d(
+                        entity.getX() + transform.translate.x,
+                        entity.getY() + transform.translate.y,
+                        entity.getZ() + transform.translate.z);
+            }
 
             MinecraftClient mc = MinecraftClient.getInstance();
 
@@ -438,12 +692,16 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
 
         float offsetSec = this.form.offset.get();
         float duration = buffer.getDuration();
-        float timelineSec = this.getFilmTimelineSeconds(entity, transition) - offsetSec;
+        float filmSec = this.getFilmTimelineSeconds(entity, transition) - offsetSec;
 
-        if (timelineSec < 0.0F) {
+        if (filmSec < 0.0F) {
             this.stop();
             return;
         }
+
+        /* A sound pitched up runs through its samples faster than the film runs: the place it
+         * should be at is the film's time scaled by the pitch, or it falls out of sync by itself */
+        float timelineSec = filmSec * MathUtils.clamp(this.form.pitch.get(), 0.5F, 2.0F);
 
         if (duration > 0.0F) {
             if (loop) {
@@ -464,19 +722,50 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
 
         this.activeSoundInstance.setLooping(loop);
 
+        long nowMs = System.currentTimeMillis();
+
+        /* Did the film's clock jump (a scrub, a seek, a loop of the film) rather than run? */
+        boolean jumped = Float.isNaN(this.lastTimelineSec);
+
+        if (!jumped) {
+            float ran = (nowMs - this.lastTimelineMs) / 1000F;
+            float moved = filmSec - this.lastTimelineSec;
+
+            jumped = Math.abs(moved - ran) > SYNC_JUMP + ran * 0.5F;
+        }
+
+        this.lastTimelineSec = filmSec;
+        this.lastTimelineMs = nowMs;
+
         if (!this.activeSoundInstance.isPlaying()) {
             this.activeSoundInstance.setPlaybackPosition(timelineSec);
             this.activeSoundInstance.play();
+            this.diag.starts++;
+            this.syncPitch = 1F;
         } else {
             float currentPos = this.activeSoundInstance.getPlaybackPosition();
-            float drift = Math.abs(timelineSec - currentPos);
+            /* Positive: the sound is behind where it should be */
+            float drift = timelineSec - currentPos;
 
             if (loop && duration > 0.0F) {
-                drift = Math.min(drift, Math.abs(drift - duration));
+                if (drift > duration / 2F) {
+                    drift -= duration;
+                } else if (drift < -duration / 2F) {
+                    drift += duration;
+                }
             }
 
-            if (drift > 0.25F) {
+            this.diag.drift = drift;
+            this.diag.jumps += jumped ? 1 : 0;
+
+            if (jumped || Math.abs(drift) > SYNC_SEEK) {
                 this.activeSoundInstance.setPlaybackPosition(timelineSec);
+                this.diag.seeks++;
+                this.syncPitch = 1F;
+            } else if (Math.abs(drift) > 0.02F) {
+                this.syncPitch = 1F + MathUtils.clamp(drift * SYNC_RATE, -SYNC_MAX, SYNC_MAX);
+            } else {
+                this.syncPitch = 1F;
             }
         }
 
@@ -485,16 +774,17 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
          * If rendered in 3D (< 100ms ago), render3D handles sub-tick spatial updates!
          */
         if (applySpatial) {
+            this.diag.undrawn++;
             this.updateVelocity(System.currentTimeMillis());
-            this.applySpatialParameters(sound, timelineSec, loop, dx, dy, dz, distance, radius);
+            this.applySpatialParameters(sound, timelineSec, loop, dx, dy, dz, distance, radius, false);
         }
     }
 
     private void updateSpatialOnly(IEntity entity, float transition) {
         Link sound = this.form.sound.get();
 
+        /* tick() takes it from here on its next run; the render pass does not stop hardware */
         if (sound == null || !this.isFormHierarchyVisible()) {
-            this.stop();
             return;
         }
 
@@ -514,7 +804,7 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
         float timelineSec = this.getFilmTimelineSeconds(entity, transition) - offsetSec;
         boolean loop = this.form.loop.get();
 
-        this.applySpatialParameters(sound, timelineSec, loop, dx, dy, dz, distance, radius);
+        this.applySpatialParameters(sound, timelineSec, loop, dx, dy, dz, distance, radius, this.hasViewPos);
     }
 
     private boolean ensureActivePlayer(Link sound, SoundBuffer buffer) {
@@ -658,7 +948,7 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
         this.prevTimeMs = now;
     }
 
-    private void applySpatialParameters(Link sound, double sourceSec, boolean loop, double dx, double dy, double dz, double distance, float radius) {
+    private void applySpatialParameters(Link sound, double sourceSec, boolean loop, double dx, double dy, double dz, double distance, float radius, boolean fromView) {
         if (this.activeSoundInstance == null || this.activeSoundInstance.getSource() <= 0) {
             return;
         }
@@ -693,7 +983,14 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
         float localY;
         float localZForward;
 
-        if (distance > 0.001D) {
+        float viewLength = this.lastViewPos.length();
+
+        if (fromView && viewLength > 0.001F) {
+            /* The frame's own camera space: no world offset, no camera vectors, nothing to disagree */
+            localX = this.lastViewPos.x / viewLength;
+            localY = this.lastViewPos.y / viewLength;
+            localZForward = -this.lastViewPos.z / viewLength;
+        } else if (distance > 0.001D) {
             float invDist = 1.0F / (float) distance;
             /* Invert dot product polarity so +localX is strictly right ear and -localX is strictly left ear */
             localX = -(float) (dx * camRight.x + dy * camRight.y + dz * camRight.z) * invDist;
@@ -732,6 +1029,25 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
             spatialY = 0.0F;
             spatialZ = -1.0F;
         }
+
+        /* Eased over ~30 ms and kept on the unit sphere: a turn of the head still follows at once,
+         * but whatever one odd frame says can no longer snap the sound across the ears */
+        long spatialNow = System.nanoTime();
+        float spatialDt = this.spatialSmoothNs == 0L ? 1F : MathUtils.clamp((spatialNow - this.spatialSmoothNs) / 1.0E9F, 0F, 0.25F);
+        float spatialAlpha = MathUtils.clamp(spatialDt / 0.03F, 0F, 1F);
+
+        this.spatialSmoothNs = spatialNow;
+        this.smoothedSpatial.lerp(new Vector3f(spatialX, spatialY, spatialZ), spatialAlpha);
+
+        if (this.smoothedSpatial.lengthSquared() > 0.0001F) {
+            this.smoothedSpatial.normalize();
+        } else {
+            this.smoothedSpatial.set(spatialX, spatialY, spatialZ);
+        }
+
+        spatialX = this.smoothedSpatial.x;
+        spatialY = this.smoothedSpatial.y;
+        spatialZ = this.smoothedSpatial.z;
 
         /* 3. Base Volume & Pitch + Acoustic Muffle (Low-Pass) + Doppler Pitch */
         float effectiveVolume = this.form.volume.get() * distanceGain;
@@ -782,12 +1098,13 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
         }
 
         if (this.form.muffle.get()) {
-            float occlusion = AudioOcclusionManager.calculateOcclusion(this.lastCameraPos, this.lastWorldPos);
+            float occlusion = this.getOcclusion();
             float factor = MathUtils.clamp(this.form.occlusionFactor.get(), 0.0F, 2.0F);
             muffled = MathUtils.clamp(muffled + occlusion * factor, 0.0F, 1.0F);
 
             effectiveVolume *= (1.0F - Math.min(1.0F, occlusion * factor) * 0.65F);
-            effectivePitch *= (1.0F - Math.min(1.0F, occlusion * factor) * 0.12F);
+            /* No pitch drop for a muffled sound: a wall dulls a sound, it does not slow it down - and any
+             * pitch away from the film's own makes the playback drift off the timeline. */
         }
 
         /* 4. Report to MinecraftSoundCapture for offline video export mix */
@@ -803,20 +1120,29 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
             capture.reportExternal(this, sound, sourceSec, gainL, gainR, effectivePitch, lowPassFactor, loop);
         }
 
-        /* 5. Live OpenAL hardware playback */
-        AL10.alSourcei(source, AL10.AL_SOURCE_RELATIVE, AL10.AL_TRUE);
+        /* 5. Live OpenAL hardware playback. What a source is (listener relative, no rolloff,
+         * spatialized) is written once per source; only position and velocity move every frame. */
+        if (this.configuredSource != source) {
+            AL10.alSourcei(source, AL10.AL_SOURCE_RELATIVE, AL10.AL_TRUE);
+            AL10.alSourcef(source, AL10.AL_ROLLOFF_FACTOR, 0.0F);
+
+            ALCapabilities caps = AL.getCapabilities();
+
+            if (caps != null && caps.AL_SOFT_source_spatialize) {
+                AL10.alSourcei(source, SOFTSourceSpatialize.AL_SOURCE_SPATIALIZE_SOFT, AL10.AL_TRUE);
+            }
+
+            this.configuredSource = source;
+            this.filterAttached = false;
+            this.filterGain = Float.NaN;
+            this.filterGainHf = Float.NaN;
+        }
+
         AL10.alSource3f(source, AL10.AL_POSITION, spatialX, spatialY, spatialZ);
         if (this.form.isDoppler()) {
             AL10.alSource3f(source, AL10.AL_VELOCITY, relVx, relVy, relVz);
         } else {
             AL10.alSource3f(source, AL10.AL_VELOCITY, 0.0F, 0.0F, 0.0F);
-        }
-        AL10.alSourcef(source, AL10.AL_ROLLOFF_FACTOR, 0.0F);
-
-        ALCapabilities caps = AL.getCapabilities();
-
-        if (caps != null && caps.AL_SOFT_source_spatialize) {
-            AL10.alSourcei(source, SOFTSourceSpatialize.AL_SOURCE_SPATIALIZE_SOFT, AL10.AL_TRUE);
         }
 
         boolean muteDuringCapture = BBSSettings.videoMuteAudioWhileRender.get()
@@ -827,20 +1153,63 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
         } else {
             this.applyLowPassFilter(source, Math.min(1.0F, muffled));
             this.activeSoundInstance.setVolume(Math.max(0.0F, effectiveVolume));
-            this.activeSoundInstance.setPitch(MathUtils.clamp(effectivePitch, 0.25F, 2.5F));
+            this.activeSoundInstance.setPitch(MathUtils.clamp(effectivePitch * this.syncPitch, 0.25F, 2.5F));
 
             /* Revive hardware playback if sound was paused or stopped due to zero volume / reload */
             if (!this.activeSoundInstance.isPlaying()) {
                 this.activeSoundInstance.play();
+                this.diag.revives++;
             }
         }
     }
 
+    /**
+     * The muffle, cached: the raymarch through the blocks runs every few ticks or after real movement,
+     * and the frames between ease toward its result, so a wall coming between does not click in.
+     */
+    private float getOcclusion() {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        long tick = mc.world == null ? 0L : mc.world.getTime();
+        Vec3d listener = this.lastCameraPos;
+        boolean drawn = System.currentTimeMillis() - this.lastWorldRenderTimeMs < RENDER_STALE_MS;
+        /* Trusted only where it agrees with the drawn place: a pass with an empty world matrix would
+         * aim the ray at the world origin */
+        boolean agrees = this.occlusionWorldPos != null && this.occlusionWorldPos.squaredDistanceTo(this.lastWorldPos) < 4.0D;
+        Vec3d source = drawn && agrees ? this.occlusionWorldPos : this.lastWorldPos;
+        boolean stale = this.occlusionTick == Long.MIN_VALUE || tick - this.occlusionTick >= OCCLUSION_TICKS || tick < this.occlusionTick;
+        boolean moved = this.occlusionListener == null || this.occlusionSource == null
+            || listener.squaredDistanceTo(this.occlusionListener) > OCCLUSION_MOVE_SQ
+            || source.squaredDistanceTo(this.occlusionSource) > OCCLUSION_MOVE_SQ;
+
+        if (stale || (moved && tick != this.occlusionTick)) {
+            this.cachedOcclusion = AudioOcclusionManager.calculateOcclusion(listener, source);
+            this.occlusionTick = tick;
+            this.occlusionListener = listener;
+            this.occlusionSource = source;
+
+            if (this.occlusionSmoothNs == 0L) {
+                this.smoothedOcclusion = this.cachedOcclusion;
+            }
+        }
+
+        long now = System.nanoTime();
+        float dt = this.occlusionSmoothNs == 0L ? 1F : MathUtils.clamp((now - this.occlusionSmoothNs) / 1.0E9F, 0F, 0.25F);
+
+        this.occlusionSmoothNs = now;
+        /* About a fifth of a second to settle: as long as the raymarch interval itself */
+        this.smoothedOcclusion += (this.cachedOcclusion - this.smoothedOcclusion) * MathUtils.clamp(dt * 10F, 0F, 1F);
+
+        return this.smoothedOcclusion;
+    }
+
     private void applyLowPassFilter(int source, float muffled) {
         try {
-            if (muffled <= 0.001F) {
-                if (this.lowPassFilterId > 0) {
+            /* Hysteresis: a muffle hovering at the edge must not switch the filter in and out every frame */
+            if (this.filterAttached ? muffled <= 0.005F : muffled <= 0.02F) {
+                if (this.lowPassFilterId > 0 && this.filterAttached) {
                     AL10.alSourcei(source, EXTEfx.AL_DIRECT_FILTER, EXTEfx.AL_FILTER_NULL);
+                    this.filterAttached = false;
+                    this.diag.filterWrites++;
                 }
 
                 return;
@@ -866,9 +1235,17 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
             float gain = MathUtils.clamp(1.0F - muffled * 0.45F, 0.15F, 1.0F);
             float gainHf = MathUtils.clamp((float) Math.pow(1.0F - muffled, 2.2D), 0.02F, 1.0F);
 
-            EXTEfx.alFilterf(this.lowPassFilterId, EXTEfx.AL_LOWPASS_GAIN, gain);
-            EXTEfx.alFilterf(this.lowPassFilterId, EXTEfx.AL_LOWPASS_GAINHF, gainHf);
-            AL10.alSourcei(source, EXTEfx.AL_DIRECT_FILTER, this.lowPassFilterId);
+            /* A filter's settings reach the source only when it is (re)attached, so a change means both */
+            if (!this.filterAttached || !(Math.abs(gain - this.filterGain) < 0.001F) || !(Math.abs(gainHf - this.filterGainHf) < 0.001F)) {
+                EXTEfx.alFilterf(this.lowPassFilterId, EXTEfx.AL_LOWPASS_GAIN, gain);
+                EXTEfx.alFilterf(this.lowPassFilterId, EXTEfx.AL_LOWPASS_GAINHF, gainHf);
+                AL10.alSourcei(source, EXTEfx.AL_DIRECT_FILTER, this.lowPassFilterId);
+
+                this.filterGain = gain;
+                this.filterGainHf = gainHf;
+                this.filterAttached = true;
+                this.diag.filterWrites++;
+            }
         } catch (Throwable ignored) {
         }
     }
@@ -1062,6 +1439,236 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
         }
 
         return false;
+    }
+
+    /* Sound vibration waves */
+
+    /** The air bending of this frame's waves, one screen-space pass each, drawn once the world is done */
+    private static final java.util.List<mchorse.bbs_mod.camera.clips.fx.FxOverlay> RIPPLES = new java.util.ArrayList<>();
+
+    /** Called when the world has been drawn and before the hand: bends the air of every wave queued this frame. */
+    public static void flushRipples() {
+        if (!RIPPLES.isEmpty()) {
+            mchorse.bbs_mod.ui.film.PostFxRenderer.renderRipples(RIPPLES);
+            RIPPLES.clear();
+        }
+    }
+
+    /** At the start of a frame: what a frame that never got to its end queued is not carried over. */
+    public static void clearRipples() {
+        RIPPLES.clear();
+    }
+
+    /**
+     * The rings as the screen sees them: the source's center and every ring's radius projected with
+     * the frame's own projection, in frame heights, with the same phases and tremble as the drawn
+     * rings, so the bend sits on them.
+     */
+    private void queueRipple(float time, float reach, float strength) {
+        float distortion = MathUtils.clamp(this.form.waveDistortion.get(), 0F, 4F);
+
+        if (distortion <= 0.001F || RIPPLES.size() >= 8 || this.lastViewPos.z >= -0.05F) {
+            return;
+        }
+
+        Matrix4f projection = RenderSystem.getProjectionMatrix();
+        org.joml.Vector4f center = projection.transform(new org.joml.Vector4f(this.lastViewPos, 1F));
+        org.joml.Vector4f up = projection.transform(new org.joml.Vector4f(this.lastViewPos.x, this.lastViewPos.y + 1F, this.lastViewPos.z, 1F));
+
+        if (center.w <= 0.0001F || up.w <= 0.0001F) {
+            return;
+        }
+
+        float cx = center.x / center.w * 0.5F + 0.5F;
+        float cy = center.y / center.w * 0.5F + 0.5F;
+        /* One block at the source's distance, in frame heights */
+        float perBlock = Math.abs(up.y / up.w - center.y / center.w) * 0.5F;
+
+        if (!Float.isFinite(perBlock) || perBlock <= 0.0001F || cx < -1F || cx > 2F || cy < -1F || cy > 2F) {
+            return;
+        }
+
+        mchorse.bbs_mod.camera.clips.fx.FxOverlay ripple = new mchorse.bbs_mod.camera.clips.fx.FxOverlay(mchorse.bbs_mod.camera.clips.fx.FxOverlay.RIPPLE);
+        float width = (0.025F + 0.04F * Math.min(strength, 1.5F)) * 1.6F;
+
+        ripple.set(0, cx).set(1, cy);
+        /* The largest shift: a fraction of the band's own width, so a far source bends as little as it looks */
+        ripple.set(2, width * perBlock * 0.45F * distortion * Math.min(strength, 1.5F));
+        ripple.set(3, width * perBlock);
+
+        for (int ring = 0; ring < WAVE_RINGS; ring++) {
+            float phase = time / WAVE_PERIOD + ring / (float) WAVE_RINGS;
+            float p = phase - (float) Math.floor(phase);
+
+            ripple.set(4 + ring, (0.08F + p * reach) * perBlock);
+            ripple.set(8 + ring, MathUtils.clamp((float) Math.sin(p * Math.PI) * (1F - p) * 1.4F, 0F, 1F));
+        }
+
+        ripple.set(12, this.lastViewPos.length());
+        ripple.set(16, time).set(17, 0.07F * strength);
+
+        RIPPLES.add(ripple);
+    }
+
+    private static final int WAVE_RINGS = 4;
+    private static final int WAVE_SEGMENTS = 56;
+    /** Seconds for one ring to travel from the source out to its widest */
+    private static final float WAVE_PERIOD = 0.9F;
+
+    /** How loud the sound is right now, eased: quick to rise with a hit, slow to let go of it */
+    private float waveEnvelope;
+    private long waveEnvelopeNs;
+
+    /**
+     * The loudness (RMS, 0..1) of the sound around a moment of it, read straight from the samples.
+     * Taken from the film's time rather than from OpenAL, so an exported frame shows exactly what
+     * the frame before it on screen did. Every 8th frame of a 40 ms window is plenty for a ripple.
+     */
+    private static float sampleLoudness(SoundBuffer buffer, float seconds) {
+        mchorse.bbs_mod.audio.Wave wave = buffer == null ? null : buffer.getWave();
+
+        if (wave == null || wave.data == null || wave.bitsPerSample != 16 || wave.sampleRate <= 0) {
+            return 0F;
+        }
+
+        int frameBytes = wave.numChannels * 2;
+        int frames = wave.data.length / frameBytes;
+        int center = (int) (seconds * wave.sampleRate);
+        int half = (int) (wave.sampleRate * 0.02F);
+        int from = Math.max(0, center - half);
+        int to = Math.min(frames, center + half);
+
+        if (to <= from) {
+            return 0F;
+        }
+
+        double sum = 0D;
+        int count = 0;
+
+        for (int frame = from; frame < to; frame += 8) {
+            int at = frame * frameBytes;
+            /* Little endian 16 bit, the channels averaged */
+            double sample = 0D;
+
+            for (int c = 0; c < wave.numChannels; c++) {
+                int i = at + c * 2;
+                short value = (short) ((wave.data[i] & 0xFF) | (wave.data[i + 1] << 8));
+
+                sample += value / 32768D;
+            }
+
+            sample /= wave.numChannels;
+            sum += sample * sample;
+            count += 1;
+        }
+
+        return count == 0 ? 0F : MathUtils.clamp((float) Math.sqrt(sum / count), 0F, 1F);
+    }
+
+    /**
+     * Rings that ripple out of the source, faint and camera facing, as wide and as bright as the
+     * sound is loud this moment, with a tremble along their rims that grows with it. Drawn additively
+     * and without depth writes, so they read as a disturbance in the air rather than an object.
+     */
+    private void renderWaves(FormRenderingContext context) {
+        if (!this.form.waves.get() || context.isPicking() || BBSRendering.isIrisShadowPass() || !this.hasViewPos) {
+            return;
+        }
+
+        Link sound = this.form.sound.get();
+        SoundBuffer buffer = sound == null ? null : BBSModClient.getSounds().get(sound, false);
+        float filmSec = this.getFilmTimelineSeconds(context.entity, context.getTransition()) - this.form.offset.get();
+        float soundSec = filmSec * MathUtils.clamp(this.form.pitch.get(), 0.5F, 2.0F);
+        float target = 0F;
+
+        if (buffer != null && this.lastPlaybackState == PlaybackState.PLAYING && soundSec >= 0F) {
+            float duration = buffer.getDuration();
+
+            if (this.form.loop.get() && duration > 0F) {
+                soundSec %= duration;
+            }
+
+            if (duration <= 0F || soundSec < duration) {
+                /* Loudness heard in a quiet mix still makes a ripple: RMS of speech sits near 0.1 */
+                target = MathUtils.clamp(sampleLoudness(buffer, soundSec) * 3.5F * this.form.volume.get(), 0F, 1.5F);
+            }
+        }
+
+        long now = System.nanoTime();
+        float dt = this.waveEnvelopeNs == 0L ? 0F : MathUtils.clamp((now - this.waveEnvelopeNs) / 1.0E9F, 0F, 0.25F);
+
+        this.waveEnvelopeNs = now;
+        this.waveEnvelope += (target - this.waveEnvelope) * MathUtils.clamp(dt / (target > this.waveEnvelope ? 0.03F : 0.25F), 0F, 1F);
+
+        float strength = this.waveEnvelope * MathUtils.clamp(this.form.waveIntensity.get(), 0F, 4F);
+
+        if (strength <= 0.003F) {
+            return;
+        }
+
+        mchorse.bbs_mod.utils.colors.Color color = this.form.waveColor.get();
+        Matrix4f matrix = new Matrix4f().translation(this.lastViewPos);
+        float time = filmSec;
+        float reach = 0.5F + 1.6F * Math.min(strength, 2F);
+        BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+
+        for (int ring = 0; ring < WAVE_RINGS; ring++) {
+            float phase = time / WAVE_PERIOD + ring / (float) WAVE_RINGS;
+            float p = phase - (float) Math.floor(phase);
+            float radius = 0.08F + p * reach;
+            float width = (0.025F + 0.04F * Math.min(strength, 1.5F)) * (1F - p * 0.5F);
+            /* Fades in as it leaves the source and out as it spreads */
+            float alpha = MathUtils.clamp(strength * 0.32F * (float) Math.sin(p * Math.PI) * (1F - p), 0F, 0.6F);
+
+            if (alpha <= 0.002F) {
+                continue;
+            }
+
+            for (int i = 0; i < WAVE_SEGMENTS; i++) {
+                float a0 = (float) (Math.PI * 2D * i / WAVE_SEGMENTS);
+                float a1 = (float) (Math.PI * 2D * (i + 1) / WAVE_SEGMENTS);
+                float r0 = radius * (1F + 0.07F * strength * (float) Math.sin(a0 * 6F + time * 11F + ring * 1.7F));
+                float r1 = radius * (1F + 0.07F * strength * (float) Math.sin(a1 * 6F + time * 11F + ring * 1.7F));
+                float c0 = (float) Math.cos(a0);
+                float s0 = (float) Math.sin(a0);
+                float c1 = (float) Math.cos(a1);
+                float s1 = (float) Math.sin(a1);
+
+                /* A soft band: transparent at both rims, brightest along the middle */
+                float in0 = r0 - width;
+                float in1 = r1 - width;
+                float out0 = r0 + width;
+                float out1 = r1 + width;
+
+                builder.vertex(matrix, c0 * in0, s0 * in0, 0F).color(color.r, color.g, color.b, 0F)/* $ nx */.next()/**/;
+                builder.vertex(matrix, c0 * r0, s0 * r0, 0F).color(color.r, color.g, color.b, alpha)/* $ nx */.next()/**/;
+                builder.vertex(matrix, c1 * r1, s1 * r1, 0F).color(color.r, color.g, color.b, alpha)/* $ nx */.next()/**/;
+                builder.vertex(matrix, c0 * in0, s0 * in0, 0F).color(color.r, color.g, color.b, 0F)/* $ nx */.next()/**/;
+                builder.vertex(matrix, c1 * r1, s1 * r1, 0F).color(color.r, color.g, color.b, alpha)/* $ nx */.next()/**/;
+                builder.vertex(matrix, c1 * in1, s1 * in1, 0F).color(color.r, color.g, color.b, 0F)/* $ nx */.next()/**/;
+
+                builder.vertex(matrix, c0 * r0, s0 * r0, 0F).color(color.r, color.g, color.b, alpha)/* $ nx */.next()/**/;
+                builder.vertex(matrix, c0 * out0, s0 * out0, 0F).color(color.r, color.g, color.b, 0F)/* $ nx */.next()/**/;
+                builder.vertex(matrix, c1 * out1, s1 * out1, 0F).color(color.r, color.g, color.b, 0F)/* $ nx */.next()/**/;
+                builder.vertex(matrix, c0 * r0, s0 * r0, 0F).color(color.r, color.g, color.b, alpha)/* $ nx */.next()/**/;
+                builder.vertex(matrix, c1 * out1, s1 * out1, 0F).color(color.r, color.g, color.b, 0F)/* $ nx */.next()/**/;
+                builder.vertex(matrix, c1 * r1, s1 * r1, 0F).color(color.r, color.g, color.b, alpha)/* $ nx */.next()/**/;
+            }
+        }
+
+        this.queueRipple(time, reach, strength);
+
+        RenderSystem.setShader(GameRenderer::getPositionColorProgram);
+        RenderSystem.enableBlend();
+        RenderSystem.blendFunc(com.mojang.blaze3d.platform.GlStateManager.SrcFactor.SRC_ALPHA, com.mojang.blaze3d.platform.GlStateManager.DstFactor.ONE);
+        RenderSystem.depthMask(false);
+        RenderSystem.disableCull();
+
+        Bufs.draw(builder);
+
+        RenderSystem.enableCull();
+        RenderSystem.depthMask(true);
+        RenderSystem.defaultBlendFunc();
     }
 
     private void renderWireframeSphere(MatrixStack stack, float radius, float r, float g, float b, float a) {

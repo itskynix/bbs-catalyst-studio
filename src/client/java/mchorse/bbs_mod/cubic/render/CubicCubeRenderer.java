@@ -13,6 +13,7 @@ import mchorse.bbs_mod.obj.shapes.ShapeKeys;
 import mchorse.bbs_mod.ui.framework.elements.utils.StencilMap;
 import mchorse.bbs_mod.utils.MathUtils;
 import mchorse.bbs_mod.utils.interps.Lerps;
+import mchorse.bbs_mod.utils.joml.Matrices;
 import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.client.render.LightmapTextureManager;
 import net.minecraft.client.util.math.MatrixStack;
@@ -77,6 +78,16 @@ public class CubicCubeRenderer implements ICubicRenderer
 
     private ModelVertex modelVertex = new ModelVertex();
     private ShapeKeys shapeKeys;
+
+    /* Free-form deformation: the lattice bends the vertices of the bones it reaches in the model's rest
+     * space, which is where a cube or mesh turned about its own pivot, in its bone's initial pose, ends up */
+    private LatticeDeform lattice;
+    private boolean bending;
+    private final Matrix4f toRest = new Matrix4f();
+    private final Matrix4f fromRest = new Matrix4f();
+    private final Vector3f bent = new Vector3f();
+    private Matrix4f groupRest;
+    private ModelVertex[] gridPoints;
 
     /* Welds active for the model being rendered (null when it has none). Resolved once on the instance. */
     protected List<WeldBinding> welds;
@@ -219,6 +230,11 @@ public class CubicCubeRenderer implements ICubicRenderer
         this.welds = welds;
     }
 
+    public void setLattice(LatticeDeform lattice)
+    {
+        this.lattice = lattice;
+    }
+
     public void setCaptureOnly(boolean captureOnly)
     {
         this.captureOnly = captureOnly;
@@ -227,6 +243,8 @@ public class CubicCubeRenderer implements ICubicRenderer
     @Override
     public boolean renderGroup(BufferBuilder builder, MatrixStack stack, ModelGroup group, Model model)
     {
+        this.groupRest = this.lattice != null && this.lattice.affects(group) && !this.captureOnly ? LatticeDeform.rest(group) : null;
+
         for (ModelCube cube : group.cubes)
         {
             this.renderCube(builder, stack, group, cube);
@@ -259,6 +277,7 @@ public class CubicCubeRenderer implements ICubicRenderer
         rotate(stack, cube.rotate);
         moveBackFromPivot(stack, cube.pivot);
 
+        this.beginBending(cube.pivot, cube.rotate);
         this.pickWelds(cube);
         this.collectSnaps();
 
@@ -275,7 +294,11 @@ public class CubicCubeRenderer implements ICubicRenderer
 
             /* Only quads within a seam's bend band tessellate — everything further is rigid anyway, so it
              * takes the plain path (most of a cube's quads are far ones). */
-            if (subdivide && this.nearSeam(quad))
+            if (this.bending && count == 4 && this.lattice.split() > 1)
+            {
+                this.renderQuadBent(builder, stack, group, quad);
+            }
+            else if (subdivide && this.nearSeam(quad))
             {
                 this.renderQuadSubdivided(stack, group, quad);
             }
@@ -294,7 +317,102 @@ public class CubicCubeRenderer implements ICubicRenderer
             }
         }
 
+        this.bending = false;
         stack.pop();
+    }
+
+    /** From here on the vertices of a cube or mesh with this pivot and turn (pixels, degrees) go through the lattice, when it reaches the bone */
+    private void beginBending(Vector3f pivot, Vector3f rotate)
+    {
+        this.bending = this.groupRest != null;
+
+        if (!this.bending)
+        {
+            return;
+        }
+
+        this.toRest.set(this.groupRest)
+            .translate(pivot.x / 16F, pivot.y / 16F, pivot.z / 16F)
+            .rotate(Matrices.toQuaternionZYXDegrees(rotate.x, rotate.y, rotate.z))
+            .translate(-pivot.x / 16F, -pivot.y / 16F, -pivot.z / 16F);
+        this.fromRest.set(this.toRest).invert();
+    }
+
+    /** A point of the cube or mesh own space, bent by the lattice */
+    private void bend(Vector3f point)
+    {
+        this.toRest.transformPosition(point);
+        this.lattice.apply(point);
+        this.fromRest.transformPosition(point);
+    }
+
+    /**
+     * A quad of a bent cube as a grid of small ones: four corners can only be moved, the lattice
+     * curves what is between them. Position, texture and normal are blended across the quad as a
+     * bilinear patch, the corners going round as the quad two triangles (0, 1, 2) and (0, 2, 3) have them.
+     */
+    private void renderQuadBent(BufferBuilder builder, MatrixStack stack, ModelGroup group, ModelQuad quad)
+    {
+        int n = this.lattice.split();
+        int side = n + 1;
+
+        if (this.gridPoints == null || this.gridPoints.length != side * side)
+        {
+            this.gridPoints = new ModelVertex[side * side];
+
+            for (int i = 0; i < this.gridPoints.length; i++)
+            {
+                this.gridPoints[i] = new ModelVertex();
+            }
+        }
+
+        ModelVertex v0 = quad.vertices.get(0);
+        ModelVertex v1 = quad.vertices.get(1);
+        ModelVertex v2 = quad.vertices.get(2);
+        ModelVertex v3 = quad.vertices.get(3);
+
+        for (int row = 0; row <= n; row++)
+        {
+            for (int column = 0; column <= n; column++)
+            {
+                float s = column / (float) n;
+                float t = row / (float) n;
+                float a = (1F - s) * (1F - t);
+                float b = s * (1F - t);
+                float c = s * t;
+                float d = (1F - s) * t;
+                ModelVertex point = this.gridPoints[row * side + column];
+
+                point.vertex.set(
+                    v0.vertex.x * a + v1.vertex.x * b + v2.vertex.x * c + v3.vertex.x * d,
+                    v0.vertex.y * a + v1.vertex.y * b + v2.vertex.y * c + v3.vertex.y * d,
+                    v0.vertex.z * a + v1.vertex.z * b + v2.vertex.z * c + v3.vertex.z * d
+                );
+                point.uv.set(
+                    v0.uv.x * a + v1.uv.x * b + v2.uv.x * c + v3.uv.x * d,
+                    v0.uv.y * a + v1.uv.y * b + v2.uv.y * c + v3.uv.y * d
+                );
+                point.normal.set(v0.normal);
+            }
+        }
+
+        for (int row = 0; row < n; row++)
+        {
+            for (int column = 0; column < n; column++)
+            {
+                ModelVertex p00 = this.gridPoints[row * side + column];
+                ModelVertex p10 = this.gridPoints[row * side + column + 1];
+                ModelVertex p11 = this.gridPoints[(row + 1) * side + column + 1];
+                ModelVertex p01 = this.gridPoints[(row + 1) * side + column];
+
+                this.writeVertex(builder, stack, group, p00);
+                this.writeVertex(builder, stack, group, p10);
+                this.writeVertex(builder, stack, group, p11);
+                this.writeVertex(builder, stack, group, p00);
+                this.writeVertex(builder, stack, group, p11);
+                this.writeVertex(builder, stack, group, p01);
+            }
+        }
     }
 
     /**
@@ -383,6 +501,8 @@ public class CubicCubeRenderer implements ICubicRenderer
         rotate(stack, mesh.rotate);
         moveBackFromPivot(stack, mesh.origin);
 
+        this.beginBending(mesh.origin, mesh.rotate);
+
         ModelData baseData = mesh.baseData;
 
         for (int i = 0, c = baseData.vertices.size() / 3; i < c; i++)
@@ -439,6 +559,7 @@ public class CubicCubeRenderer implements ICubicRenderer
             this.writeVertex(builder, stack, group, this.modelVertex, this.normal);
         }
 
+        this.bending = false;
         stack.pop();
     }
 
@@ -487,7 +608,17 @@ public class CubicCubeRenderer implements ICubicRenderer
 
     protected void writeVertex(BufferBuilder builder, MatrixStack stack, ModelGroup group, ModelVertex vertex, Vector3f normal)
     {
-        this.vertex.set(vertex.vertex.x, vertex.vertex.y, vertex.vertex.z, 1);
+        if (this.bending)
+        {
+            this.bent.set(vertex.vertex);
+            this.bend(this.bent);
+            this.vertex.set(this.bent.x, this.bent.y, this.bent.z, 1);
+        }
+        else
+        {
+            this.vertex.set(vertex.vertex.x, vertex.vertex.y, vertex.vertex.z, 1);
+        }
+
         stack.peek().getPositionMatrix().transform(this.vertex);
 
         this.snapWeldCorner(vertex.vertex);

@@ -94,7 +94,11 @@ public final class TrackCategories
             || "occlusionFactor".equals(name)
             || "occlusion".equals(name)
             || "dopplerScale".equals(name)
-            || "doppler".equals(name);
+            || "doppler".equals(name)
+            || "waves".equals(name)
+            || "waveIntensity".equals(name)
+            || "waveColor".equals(name)
+            || "waveDistortion".equals(name);
     }
 
     /** Called once after category registration, before loading keybind settings. */

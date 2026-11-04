@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.forms.forms;
 
+import mchorse.bbs_mod.forms.forms.utils.FormIllusionValues;
 import mchorse.bbs_mod.utils.VersionCompat;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -130,6 +131,9 @@ public abstract class Form extends ValueGroup
     public final ValueFloat sliceRoll = new ValueFloat("slice_roll", 0F);
     public final ValueBoolean sliceInvert = new ValueBoolean("slice_invert", false);
 
+    /** Ghost copies of the form: their count, spread and opacity are tracks, the rest sets how they are laid out */
+    public final FormIllusionValues illusions;
+
     /** Geometric mask the form is drawn through (circle, rectangle or custom shape). */
     public final FormMask mask = new FormMask("mask", this.maskRotationX, this.maskRotationY, this.maskRotationZ, this.maskPosX, this.maskPosY, this.maskScaleX, this.maskScaleY);
 
@@ -242,6 +246,7 @@ public abstract class Form extends ValueGroup
         this.add(this.maskScaleX);
         this.add(this.maskScaleY);
         this.add(this.mask);
+        this.illusions = new FormIllusionValues(this);
 
         this.add(this.parts);
         this.add(this.states);

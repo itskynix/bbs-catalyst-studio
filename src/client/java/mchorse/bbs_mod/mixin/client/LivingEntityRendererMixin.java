@@ -1,6 +1,7 @@
 package mchorse.bbs_mod.mixin.client;
 
 import mchorse.bbs_mod.forms.renderers.mob.MobRenderContext;
+import mchorse.bbs_mod.film.VehicleRide;
 import net.minecraft.client.render.VertexConsumerProvider;
 import net.minecraft.client.render.entity.LivingEntityRenderer;
 import net.minecraft.client.util.math.MatrixStack;
@@ -8,6 +9,7 @@ import net.minecraft.entity.LivingEntity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(LivingEntityRenderer.class)
@@ -22,6 +24,13 @@ public abstract class LivingEntityRendererMixin
         {
             context.applyPose();
         }
+    }
+
+    /** Sitting in a film's vehicle: no real vehicle under the player, but the legs go forward all the same */
+    @Redirect(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/entity/LivingEntity;hasVehicle()Z"))
+    public boolean onHasVehicle(LivingEntity entity)
+    {
+        return entity.hasVehicle() || VehicleRide.isSeated(entity);
     }
 
     @Inject(method = "render", at = @At("TAIL"))

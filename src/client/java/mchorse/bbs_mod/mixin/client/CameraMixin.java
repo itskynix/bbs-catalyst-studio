@@ -3,8 +3,10 @@ package mchorse.bbs_mod.mixin.client;
 import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.camera.WorldFreeCam;
 import mchorse.bbs_mod.camera.controller.CameraController;
+import mchorse.bbs_mod.film.VehicleRide;
 import net.minecraft.client.render.Camera;
 import net.minecraft.entity.Entity;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.BlockView;
 import org.joml.Vector3d;
 import org.spongepowered.asm.mixin.Mixin;
@@ -46,6 +48,19 @@ public abstract class CameraMixin
 
             this.setPos(position.x, position.y, position.z);
             this.setRotation(yaw, pitch);
+
+            return;
+        }
+
+        /* Seated in a film's vehicle: the body sits on the seat, the view is where the driver's
+         * camera was set and rides its spring over steps (see VehicleRide#sit) */
+        Vec3d offset = VehicleRide.getCameraOffset(focusedEntity, thirdPerson, tickDelta);
+
+        if (offset != null)
+        {
+            Vec3d position = ((Camera) (Object) this).getPos();
+
+            this.setPos(position.x + offset.x, position.y + offset.y, position.z + offset.z);
         }
     }
 }

@@ -13,6 +13,8 @@ import mchorse.bbs_mod.client.renderer.entity.ActorEntityRenderer;
 import mchorse.bbs_mod.cubic.IBoneHierarchy;
 import mchorse.bbs_mod.cubic.ModelInstance;
 import mchorse.bbs_mod.cubic.animation.ActionsConfig;
+import mchorse.bbs_mod.cubic.render.LatticeBake;
+import mchorse.bbs_mod.cubic.render.LatticeDeform;
 import mchorse.bbs_mod.cubic.animation.Animator;
 import mchorse.bbs_mod.cubic.animation.IAnimator;
 import mchorse.bbs_mod.cubic.animation.ItemUsePose;
@@ -322,6 +324,16 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
         model.model.applyPose(model.getDefaultPose());
         model.model.applyPose(this.getPose());
 
+        /* Vehicle IK last: the wheels, steering and body follow the actor's motion over whatever pose it has */
+        this.vehicle.apply(model.model, this.form, entity, transition);
+
+        /* A rider of a model without the procedural animator (which seats riders itself): its walk
+         * would swing the legs however fast the vehicle goes, so they are folded onto the seat */
+        if (entity != null && entity.isRiding() && !(this.animator instanceof ProceduralAnimator))
+        {
+            VehicleIkState.seatLegs(model.model);
+        }
+
         if (cacheable)
         {
             model.model.snapshotChannels();
@@ -557,10 +569,17 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
 
         try
         {
+            LatticeDeform deform = LatticeDeform.of(this.form);
+
+            /* Bent once, drawn from the GPU: a model that can be baked rides its bent VAOs, anything else is bent on the CPU as it draws */
+            model.bakedVaos = deform != null && model.canBake() ? LatticeBake.get(this.form, model, deform) : null;
+            model.lattice = model.bakedVaos == null ? deform : null;
             model.render(newStack, program, finalColor, light, overlay, stencilMap, this.form.shapeKeys.get(), resolver);
         }
         finally
         {
+            model.lattice = null;
+            model.bakedVaos = null;
             model.shatterFx = null;
 
             if (dissolve)
@@ -1512,10 +1531,19 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
         return result;
     }
 
+    /** The vehicle IK of this form: driven by the actor's motion, tick by tick */
+    private final VehicleIkState vehicle = new VehicleIkState();
+
+    public VehicleIkState getVehicle()
+    {
+        return this.vehicle;
+    }
+
     @Override
     public void tick(IEntity entity)
     {
         this.ensureAnimator(0F);
+        this.vehicle.tick(entity, this.form);
 
         if (this.animator != null)
         {

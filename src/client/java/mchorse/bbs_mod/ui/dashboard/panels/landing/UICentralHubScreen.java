@@ -1,6 +1,7 @@
 package mchorse.bbs_mod.ui.dashboard.panels.landing;
 
 import mchorse.bbs_mod.BBSSettings;
+import mchorse.bbs_mod.l10n.L10n;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.dashboard.panels.UICatalystPanel;
@@ -17,6 +18,7 @@ import mchorse.bbs_mod.ui.utility.audio.UIAudioEditorPanel;
 import mchorse.bbs_mod.ui.utils.icons.Icon;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.utils.colors.Colors;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.util.math.MatrixStack;
 
 import java.util.ArrayList;
@@ -69,6 +71,23 @@ public class UICentralHubScreen extends UIElement
         return null;
     }
 
+    /**
+     * The panels that cannot work without a world: a film needs chunks to stand its actors in, morphing
+     * changes the player, and a model block is a block entity at a place in the world.
+     */
+    public static boolean requiresWorld(Class<? extends UIDashboardPanel> panel)
+    {
+        return panel == UIFilmPanel.class
+            || panel == mchorse.bbs_mod.ui.morphing.UIMorphingPanel.class
+            || panel == mchorse.bbs_mod.ui.model_blocks.UIModelBlockPanel.class;
+    }
+
+    /** Whether the editor is shut now: it needs a world and the client is not in one */
+    public static boolean isLocked(Class<? extends UIDashboardPanel> panel)
+    {
+        return requiresWorld(panel) && MinecraftClient.getInstance().world == null;
+    }
+
     /** Whether the Central Hub leads to this panel, i.e. it is an editor with a place in the tab strip. */
     public static boolean isWorkspace(Class<? extends UIDashboardPanel> panel)
     {
@@ -95,14 +114,40 @@ public class UICentralHubScreen extends UIElement
     /** Where each card was drawn last frame, for the clicks; same order as {@link #CARDS}. */
     private final List<int[]> rects = new ArrayList<>();
 
+    private HubChangelog changelog;
+    /** The cursor is on a card that is shut; the reason is drawn over everything once the cards are */
+    private boolean lockedHover;
+    private boolean changelogChecked;
+
     public UICentralHubScreen(Consumer<Class<? extends UIDashboardPanel>> picker)
     {
         this.picker = picker;
     }
 
     @Override
+    protected boolean subMouseScrolled(UIContext context)
+    {
+        if (this.changelog != null)
+        {
+            this.changelog.mouseScrolled(context);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    @Override
     protected boolean subMouseClicked(UIContext context)
     {
+        /* While what is new is up, it takes every click */
+        if (this.changelog != null)
+        {
+            this.changelog.mouseClicked(context);
+
+            return true;
+        }
+
         if (context.mouseButton != 0 || !this.area.isInside(context))
         {
             return false;
@@ -114,6 +159,13 @@ public class UICentralHubScreen extends UIElement
 
             if (context.mouseX >= r[0] && context.mouseX < r[2] && context.mouseY >= r[1] && context.mouseY < r[3])
             {
+                if (isLocked(CARDS.get(i).panel()))
+                {
+                    context.notifyError(L10n.lang("bbs.hub.locked.world_required"));
+
+                    return true;
+                }
+
                 this.picker.accept(CARDS.get(i).panel());
 
                 return true;
@@ -174,6 +226,53 @@ public class UICentralHubScreen extends UIElement
             this.rects.add(new int[] {x, y, x + CARD_W, y + CARD_H});
             this.renderCard(context, CARDS.get(i), x, y, primary);
         }
+
+        if (this.lockedHover)
+        {
+            this.lockedHover = false;
+
+            FontRenderer lockFont = context.batcher.getFont();
+            List<String> lines = lockFont.wrap(L10n.lang("bbs.hub.locked.world_required").get(), 220);
+            int tw = 0;
+
+            for (String line : lines)
+            {
+                tw = Math.max(tw, lockFont.getWidth(line));
+            }
+
+            int th = lines.size() * (lockFont.getHeight() + 2) + 6;
+            int tx = Math.min(context.mouseX + 10, this.area.ex() - tw - 12);
+            int ty = Math.min(context.mouseY + 12, this.area.ey() - th - 2);
+
+            context.batcher.box(tx, ty, tx + tw + 10, ty + th, 0xF0101420);
+            context.batcher.outline(tx, ty, tx + tw + 10, ty + th, Colors.setA(Colors.WHITE, 0.25F));
+
+            for (int i = 0; i < lines.size(); i++)
+            {
+                context.batcher.text(lines.get(i), tx + 5, ty + 4 + i * (lockFont.getHeight() + 2), Colors.WHITE, false);
+            }
+        }
+
+        /* What is new in this version, once, the first time the hub opens after the setup wizard */
+        if (!this.changelogChecked)
+        {
+            this.changelogChecked = true;
+
+            if (HubChangelog.shouldShow())
+            {
+                this.changelog = new HubChangelog();
+            }
+        }
+
+        if (this.changelog != null)
+        {
+            this.changelog.render(context, this.area);
+
+            if (this.changelog.isGone())
+            {
+                this.changelog = null;
+            }
+        }
     }
 
     private void renderCard(UIContext context, Card card, int x, int y, int primary)
@@ -205,6 +304,17 @@ public class UICentralHubScreen extends UIElement
             context.batcher.text(lines.get(i), x + 14, lineY, hover ? DIMMED : MUTED, false);
 
             lineY += font.getHeight() + 3;
+        }
+
+        if (isLocked(card.panel()))
+        {
+            context.batcher.box(x, y, ex, ey, 0x80000000);
+            context.batcher.icon(Icons.LOCKED, Colors.WHITE, x + CARD_W / 2, y + CARD_H / 2, 0.5F, 0.5F);
+
+            if (hover)
+            {
+                this.lockedHover = true;
+            }
         }
 
         if (card.isNew())

@@ -16,6 +16,7 @@ public class UIBlockForm extends UIForm<BlockForm>
 
         this.registerPanel(this.defaultPanel, UIKeys.FORMS_EDITORS_BLOCK_TITLE, BlockForm.ICON);
         this.registerDefaultPanels();
+        this.registerPanel(new mchorse.bbs_mod.ui.forms.editors.panels.UILatticeFormPanel<>(this), UIKeys.FORMS_EDITORS_LATTICE, Icons.BLOCK);
         this.registerMaskPanel();
         this.registerPanel(new UIFormEffectsPanel<BlockForm>(this, (f) -> f.fx), UIKeys.FORMS_EDITORS_EFFECTS, Icons.SHAPES);
     }

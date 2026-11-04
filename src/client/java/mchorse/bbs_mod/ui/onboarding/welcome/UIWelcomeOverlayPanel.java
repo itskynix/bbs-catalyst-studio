@@ -23,7 +23,7 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * "First time in BBS FS?" — the whole screen, once. One tab at a time in the middle, right
+ * "First time in BBS CS?" — the whole screen, once. One tab at a time in the middle, right
  * on the backdrop, arrows at the sides to walk them, the title above and the dots below. Every tab
  * is one decision: how it looks, whether video can be saved, where to go next. The last one
  * holds the only way out; what going out starts is {@code Onboarding}'s business, hooked to

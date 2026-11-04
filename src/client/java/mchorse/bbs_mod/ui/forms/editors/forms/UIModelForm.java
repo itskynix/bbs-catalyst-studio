@@ -15,6 +15,8 @@ import mchorse.bbs_mod.ui.forms.editors.panels.UIModelConstraintsFormPanel;
 import mchorse.bbs_mod.ui.forms.editors.panels.UIModelFormPanel;
 import mchorse.bbs_mod.ui.forms.editors.panels.UIModelIKFormPanel;
 import mchorse.bbs_mod.ui.forms.editors.panels.UIModelPhysicsFormPanel;
+import mchorse.bbs_mod.ui.forms.editors.panels.UILatticeFormPanel;
+import mchorse.bbs_mod.ui.forms.editors.panels.UIVehicleIkFormPanel;
 import mchorse.bbs_mod.ui.framework.elements.input.UIPropTransform;
 import mchorse.bbs_mod.ui.utils.pose.UIPoseEditor;
 import mchorse.bbs_mod.ui.framework.elements.input.drag.TransformSpace;
@@ -44,6 +46,8 @@ public class UIModelForm extends UIForm<ModelForm>
         this.registerPanel(this.defaultPanel, UIKeys.FORMS_EDITORS_MODEL_POSE, ModelForm.ICON);
         this.registerPanel(new UIModelIKFormPanel(this), UIKeys.FORMS_EDITORS_MODEL_IK, Icons.IK);
         this.registerPanel(new UIModelPhysicsFormPanel(this), UIKeys.FORMS_EDITORS_MODEL_PHYSICS_TITLE, Icons.PHYSICS);
+        this.registerPanel(new UIVehicleIkFormPanel(this), UIKeys.FORMS_EDITORS_VEHICLE_IK, Icons.JOYSTICK);
+        this.registerPanel(new UILatticeFormPanel<>(this), UIKeys.FORMS_EDITORS_LATTICE, Icons.BLOCK);
         this.registerPanel(new UIModelConstraintsFormPanel(this), UIKeys.FORMS_EDITORS_MODEL_CONSTRAINTS_TITLE, Icons.LOCKED);
         this.registerPanel(new UIActionsFormPanel(this), UIKeys.FORMS_EDITORS_ACTIONS_TITLE, Icons.MORE);
         this.registerDefaultPanels();

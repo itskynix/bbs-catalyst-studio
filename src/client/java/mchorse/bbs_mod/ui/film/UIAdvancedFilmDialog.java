@@ -1,6 +1,8 @@
 package mchorse.bbs_mod.ui.film;
 
+import mchorse.bbs_mod.BBSMod;
 import mchorse.bbs_mod.BBSSettings;
+import mchorse.bbs_mod.l10n.L10n;
 import mchorse.bbs_mod.data.types.MapType;
 import mchorse.bbs_mod.film.Film;
 import mchorse.bbs_mod.graphics.texture.Texture;
@@ -34,7 +36,10 @@ import org.lwjgl.glfw.GLFW;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Consumer;
@@ -54,6 +59,14 @@ public class UIAdvancedFilmDialog extends UIOverlayPanel
     private String selectedFolder = "";
     private final List<String> allKeys = new ArrayList<>();
     private final List<String> folders = new ArrayList<>();
+    /** Folders the tree has folded shut, and the rows it shows as a result */
+    private final Set<String> collapsed = new HashSet<>();
+    private final List<String> visibleFolders = new ArrayList<>();
+
+    /** The new film's profiles: width, height and frame rate */
+    private static final String[] PROFILE_IDS = {"cinematic", "hd60", "uhd", "shorts"};
+    private static final int[][] PROFILES = {{1920, 1080, 24}, {1920, 1080, 60}, {3840, 2160, 30}, {1080, 1920, 30}};
+    private int profile;
 
     /* Left pane elements */
     private final UIElement leftPane;
@@ -100,7 +113,19 @@ public class UIAdvancedFilmDialog extends UIOverlayPanel
         {
             if (!list.isEmpty())
             {
-                this.selectedFolder = list.get(0);
+                String picked = list.get(0);
+
+                /* A folder with folders in it opens and shuts as it is picked */
+                if (!picked.isEmpty() && this.hasSubfolders(picked))
+                {
+                    if (!this.collapsed.remove(picked))
+                    {
+                        this.collapsed.add(picked);
+                    }
+                }
+
+                this.selectedFolder = picked;
+                this.rebuildTree();
                 this.updateFolderView();
             }
         })
@@ -108,8 +133,25 @@ public class UIAdvancedFilmDialog extends UIOverlayPanel
             @Override
             protected void renderElementPart(UIContext context, String element, int i, int x, int y, boolean hover, boolean selected)
             {
-                context.batcher.icon(Icons.FOLDER, RowStyle.iconColor(hover || selected), x, y + this.rowHeight() / 2F, 0F, 0.5F);
-                super.renderElementPart(context, element, i, x + 16, y, hover, selected);
+                int depth = element.isEmpty() ? 0 : UIAdvancedFilmDialog.this.depthOf(element);
+                int base = x + depth * 12;
+                int mid = y + this.rowHeight() / 2;
+                int line = Colors.setA(Colors.WHITE, 0.18F);
+
+                /* The lines that tie a folder to the one it hangs from */
+                if (depth > 0)
+                {
+                    context.batcher.box(base - 7, y, base - 6, mid + 1, line);
+                    context.batcher.box(base - 7, mid, base, mid + 1, line);
+                }
+
+                if (!element.isEmpty() && UIAdvancedFilmDialog.this.hasSubfolders(element))
+                {
+                    context.batcher.text(UIAdvancedFilmDialog.this.collapsed.contains(element) ? ">" : "v", base, mid - 4, RowStyle.iconColor(hover || selected), false);
+                }
+
+                context.batcher.icon(Icons.FOLDER, RowStyle.iconColor(hover || selected), base + 10, mid, 0F, 0.5F);
+                super.renderElementPart(context, element, i, base + 26, y, hover, selected);
             }
 
             @Override
@@ -119,7 +161,8 @@ public class UIAdvancedFilmDialog extends UIOverlayPanel
                 {
                     return UIKeys.FILM_CREATE_DIALOG_ROOT_FOLDER.get();
                 }
-                return element + "/";
+
+                return element.substring(element.lastIndexOf('/') + 1) + "/";
             }
         };
         this.folderList.background();
@@ -143,7 +186,7 @@ public class UIAdvancedFilmDialog extends UIOverlayPanel
 
         /* 1. Target Folder & Input Row */
         UIElement creationBar = new UIElement();
-        creationBar.relative(this.rightPane).xy(0, 0).w(1F).h(48);
+        creationBar.relative(this.rightPane).xy(0, 0).w(1F).h(74);
 
         this.locationLabel = UI.label(IKey.raw(""));
         this.locationLabel.relative(creationBar).xy(0, 0).w(1F).h(14);
@@ -159,15 +202,28 @@ public class UIAdvancedFilmDialog extends UIOverlayPanel
         this.createBtn.relative(inputRow).x(1F, -76).y(0).w(76).h(24);
 
         inputRow.add(this.nameBox, this.createBtn);
-        creationBar.add(this.locationLabel, inputRow);
+
+        /* The resolution and frame rate profiles of the new film */
+        UIElement profileRow = new UIElement();
+        profileRow.relative(creationBar).xy(0, 48).w(1F).h(22);
+
+        for (int i = 0; i < PROFILE_IDS.length; i++)
+        {
+            ProfileChip chip = new ProfileChip(this, i);
+
+            chip.relative(profileRow).x(i / (float) PROFILE_IDS.length, 0).y(0).w(1F / PROFILE_IDS.length, -4).h(22);
+            profileRow.add(chip);
+        }
+
+        creationBar.add(this.locationLabel, inputRow, profileRow);
 
         /* 2. Section Header */
         this.sectionLabel = UI.label(UIKeys.FILM_CREATE_DIALOG_EXISTING_FILMS);
-        this.sectionLabel.relative(this.rightPane).xy(0, 52).w(1F).h(16);
+        this.sectionLabel.relative(this.rightPane).xy(0, 78).w(1F).h(16);
 
         /* 3. Existing Films Grid */
         UIElement filmsContainer = new UIElement();
-        filmsContainer.relative(this.rightPane).xy(0, 72).w(1F).h(1F, -72);
+        filmsContainer.relative(this.rightPane).xy(0, 98).w(1F).h(1F, -98);
         filmsContainer.add(new UIRenderable((context) ->
         {
             Area a = filmsContainer.area;
@@ -180,7 +236,7 @@ public class UIAdvancedFilmDialog extends UIOverlayPanel
 
         this.filmsGrid = this.filmsScroll.grid(6);
         this.filmsGrid.padding(4);
-        this.filmsGrid.width(108).height(88);
+        this.filmsGrid.width(108).height(104);
 
         filmsContainer.add(this.filmsScroll);
 
@@ -282,12 +338,69 @@ public class UIAdvancedFilmDialog extends UIOverlayPanel
                 this.selectedFolder = "";
             }
 
-            this.folderList.setList(this.folders);
-            this.folderList.setCurrentScroll(this.selectedFolder);
-            this.folderList.update();
-
+            this.rebuildTree();
             this.updateFolderView();
         });
+    }
+
+    private int depthOf(String folder)
+    {
+        int depth = 1;
+
+        for (int i = 0; i < folder.length(); i++)
+        {
+            if (folder.charAt(i) == '/')
+            {
+                depth += 1;
+            }
+        }
+
+        return depth;
+    }
+
+    private boolean hasSubfolders(String folder)
+    {
+        String prefix = folder + "/";
+
+        for (String other : this.folders)
+        {
+            if (!other.isEmpty() && !other.equals(folder) && (folder.isEmpty() || other.startsWith(prefix)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** The rows the tree shows: every folder whose ancestors are all open */
+    private void rebuildTree()
+    {
+        this.visibleFolders.clear();
+
+        for (String folder : this.folders)
+        {
+            boolean hidden = false;
+
+            for (String shut : this.collapsed)
+            {
+                if (folder.startsWith(shut + "/"))
+                {
+                    hidden = true;
+
+                    break;
+                }
+            }
+
+            if (!hidden)
+            {
+                this.visibleFolders.add(folder);
+            }
+        }
+
+        this.folderList.setList(this.visibleFolders);
+        this.folderList.setCurrentScroll(this.selectedFolder);
+        this.folderList.update();
     }
 
     private void addFolderAndAncestors(Set<String> set, String folderPath)
@@ -382,12 +495,115 @@ public class UIAdvancedFilmDialog extends UIOverlayPanel
             return;
         }
 
+        /* The profile: the film's frame rate, and the size the studio renders at from here on */
+        int[] profile = PROFILES[this.profile];
+
+        if (this.defaultData != null)
+        {
+            this.defaultData.putInt("fps", profile[2]);
+        }
+
+        BBSSettings.videoWidth.set(profile[0]);
+        BBSSettings.videoHeight.set(profile[1]);
+        BBSSettings.videoFrameRate.set(profile[2]);
+
         this.close();
 
         if (this.callback != null)
         {
             this.callback.accept(targetId);
         }
+    }
+
+    /** One of the new film's profiles, drawn as a chip; the picked one is lit in the accent colour */
+    public static class ProfileChip extends UIClickable<ProfileChip>
+    {
+        private final UIAdvancedFilmDialog dialog;
+        private final int index;
+
+        public ProfileChip(UIAdvancedFilmDialog dialog, int index)
+        {
+            super((c) ->
+            {
+                UIUtils.playClick();
+                dialog.profile = index;
+            });
+
+            this.dialog = dialog;
+            this.index = index;
+
+            int[] size = PROFILES[index];
+
+            this.tooltip(IKey.raw(size[0] + "x" + size[1] + " " + size[2] + " fps"));
+        }
+
+        @Override
+        protected ProfileChip get()
+        {
+            return this;
+        }
+
+        @Override
+        protected void renderSkin(UIContext context)
+        {
+            Area a = this.area;
+            boolean picked = this.dialog.profile == this.index;
+            int primary = BBSSettings.primaryColor.get();
+            FontRenderer font = context.batcher.getFont();
+            String label = font.limitToWidth(L10n.lang("bbs.ui.film.dialog.profile." + PROFILE_IDS[this.index]).get(), a.w - 8);
+
+            context.batcher.box(a.x, a.y, a.ex(), a.ey(), picked ? Colors.setA(primary, 0.55F) : (this.hover ? 0xe01a2232 : 0xc010141d));
+            context.batcher.outline(a.x, a.y, a.ex(), a.ey(), picked || this.hover ? (Colors.A100 | primary) : 0x2affffff);
+            context.batcher.text(label, a.mx(font.getWidth(label)), a.my(font.getHeight()), picked ? Colors.WHITE : 0xffcccccc, false);
+        }
+    }
+
+    /** What the cards say under a film's name: its length and when it was last saved, read once per film */
+    private static final Map<String, String> META = new HashMap<>();
+    private static long metaFrame = -1;
+
+    private static String metaOf(UIAdvancedFilmDialog dialog, UIContext context, String filmId)
+    {
+        String meta = META.get(filmId);
+
+        if (meta != null)
+        {
+            return meta;
+        }
+
+        /* One film a frame, so a folder of a hundred does not stop the screen */
+        long frame = System.nanoTime() / 8_000_000L;
+
+        if (frame == metaFrame)
+        {
+            return "";
+        }
+
+        metaFrame = frame;
+        META.put(filmId, "");
+
+        try
+        {
+            java.io.File file = BBSMod.getFilms() == null ? null : BBSMod.getFilms().getFile(filmId);
+            String date = file != null && file.exists()
+                ? new java.text.SimpleDateFormat("dd.MM.yyyy HH:mm").format(new java.util.Date(file.lastModified()))
+                : "";
+
+            dialog.panel.getType().getRepository().load(filmId, (film) ->
+            {
+                if (film instanceof Film loaded)
+                {
+                    int ticks = loaded.camera.calculateDuration();
+                    int seconds = ticks / 20;
+
+                    META.put(filmId, String.format("%d:%02d  %d tick", seconds / 60, seconds % 60, ticks) + (date.isEmpty() ? "" : "\n" + date));
+                }
+            });
+        }
+        catch (Exception ignored)
+        {}
+
+        return META.get(filmId);
     }
 
     /**
@@ -457,7 +673,7 @@ public class UIAdvancedFilmDialog extends UIOverlayPanel
 
             /* Preview box */
             int pad = 4;
-            int previewH = a.h - 22;
+            int previewH = a.h - 40;
             int px = a.x + pad;
             int py = a.y + pad;
             int pw = a.w - pad * 2;
@@ -483,10 +699,19 @@ public class UIAdvancedFilmDialog extends UIOverlayPanel
             /* Label */
             FontRenderer font = context.batcher.getFont();
             String trimmed = font.limitToWidth(this.displayName, a.w - 8);
-            int textX = a.mx() - font.getWidth(trimmed) / 2;
-            int textY = a.ey() - 13;
+            int textX = a.x + 5;
+            int textY = a.ey() - 31;
             int textColor = hovered ? Colors.WHITE : Colors.setA(Colors.WHITE, 0.85F);
             context.batcher.text(trimmed, textX, textY, textColor, false);
+
+            /* Length and last save */
+            String[] meta = metaOf(this.dialog, context, this.filmId).split("\n");
+            int metaColor = Colors.setA(Colors.WHITE, hovered ? 0.7F : 0.45F);
+
+            for (int line = 0; line < meta.length && line < 2; line++)
+            {
+                context.batcher.text(font.limitToWidth(meta[line], a.w - 8), textX, textY + 10 + line * 9, metaColor, false);
+            }
         }
     }
 }

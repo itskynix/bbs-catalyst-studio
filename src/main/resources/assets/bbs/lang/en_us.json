@@ -30,6 +30,7 @@
     "key.bbs.replay_prev_track": "Previous Actor / Take",
     "key.bbs.play_film_and_record": "Play Film and Record",
     "key.bbs.teleport": "Teleport to Current Replay",
+    "key.bbs.vehicle_door": "Open or Close Vehicle Door",
     "key.bbs.zoom": "Zoom (BBS Gun)",
     "category.bbs.main": "BBS Mod",
     "gamerule.bbsEditing": "BBS Mod Editing Permission",

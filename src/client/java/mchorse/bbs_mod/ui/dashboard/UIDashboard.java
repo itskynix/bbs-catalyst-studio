@@ -19,6 +19,7 @@ import mchorse.bbs_mod.ui.dashboard.panels.IFlightSupported;
 import mchorse.bbs_mod.ui.dashboard.panels.UIDashboardPanel;
 import mchorse.bbs_mod.ui.dashboard.panels.UICatalystPanel;
 import mchorse.bbs_mod.ui.dashboard.panels.UICentralHubPanel;
+import mchorse.bbs_mod.ui.dashboard.panels.landing.UICentralHubScreen;
 import mchorse.bbs_mod.ui.dashboard.panels.tabs.UIDataTabs;
 import mchorse.bbs_mod.ui.dashboard.panels.tabs.UIGlobalTabs;
 import mchorse.bbs_mod.ui.dashboard.panels.UIDashboardPanels;
@@ -58,6 +59,7 @@ import net.minecraft.util.math.Vec3d;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.ArrayList;
 import java.util.List;
 
 public class UIDashboard extends UIBaseMenu
@@ -220,20 +222,43 @@ public class UIDashboard extends UIBaseMenu
     public void copyCurrentEntityCamera()
     {
         Entity cameraEntity = MinecraftClient.getInstance().getCameraEntity();
-        Vec3d eyePos = cameraEntity.getEyePos();
         Camera camera = new Camera();
 
-        camera.position.set(eyePos.getX(), eyePos.getY(), eyePos.getZ());
-        camera.rotation.set(MathUtils.toRad(cameraEntity.getPitch()), MathUtils.toRad(cameraEntity.getHeadYaw() - 180), 0);
+        if (cameraEntity != null)
+        {
+            Vec3d eyePos = cameraEntity.getEyePos();
+
+            camera.position.set(eyePos.getX(), eyePos.getY(), eyePos.getZ());
+            camera.rotation.set(MathUtils.toRad(cameraEntity.getPitch()), MathUtils.toRad(cameraEntity.getHeadYaw() - 180), 0);
+        }
+        else
+        {
+            /* Opened from the title screen: no world, so no one to look through; the studio starts above the origin */
+            camera.position.set(0D, 70D, 0D);
+            camera.rotation.set(MathUtils.toRad(20F), 0F, 0F);
+        }
+
         camera.fov = MathUtils.toRad(MinecraftClient.getInstance().options.getFov().getValue().floatValue());
 
         this.orbit.setup(camera);
-        this.camera.setup(BBSModClient.getCameraController().camera, 0F);
+
+        if (BBSModClient.getCameraController() != null && BBSModClient.getCameraController().camera != null)
+        {
+            this.camera.setup(BBSModClient.getCameraController().camera, 0F);
+        }
     }
 
     private void cyclePanels()
     {
-        List<UIDashboardPanel> panels = this.panels.panels;
+        List<UIDashboardPanel> panels = new ArrayList<>(this.panels.panels);
+
+        /* Offline, the cycle goes through the panels that work without a world only */
+        panels.removeIf((panel) -> UICentralHubScreen.isLocked(panel.getClass()));
+
+        if (panels.isEmpty())
+        {
+            return;
+        }
 
         int direction = Window.isShiftPressed() ? -1 : 1;
         int index = panels.indexOf(this.panels.panel);
@@ -246,6 +271,13 @@ public class UIDashboard extends UIBaseMenu
     /** A card of the Central Hub was picked: the hub tab being looked at becomes that editor. */
     public void openHubTarget(Class<? extends UIDashboardPanel> target)
     {
+        if (mchorse.bbs_mod.ui.dashboard.panels.landing.UICentralHubScreen.isLocked(target))
+        {
+            this.context.notifyError(mchorse.bbs_mod.l10n.L10n.lang("bbs.hub.locked.world_required"));
+
+            return;
+        }
+
         this.globalTabs.pick(target);
     }
 
@@ -408,6 +440,22 @@ public class UIDashboard extends UIBaseMenu
 
     public void setPanel(UIDashboardPanel panel)
     {
+        /* Without a world a panel that needs one stays shut: the hub is shown instead, with the reason */
+        if (panel != null && UICentralHubScreen.isLocked(panel.getClass()))
+        {
+            if (this.context != null)
+            {
+                this.context.notifyError(mchorse.bbs_mod.l10n.L10n.lang("bbs.hub.locked.world_required"));
+            }
+
+            if (this.panels.panel != null)
+            {
+                return;
+            }
+
+            panel = this.getPanel(UICentralHubPanel.class);
+        }
+
         this.panels.setPanel(panel);
     }
 

@@ -9,13 +9,20 @@ import mchorse.bbs_mod.forms.FormTranslucentQueue;
 import mchorse.bbs_mod.forms.FormUtilsClient;
 import mchorse.bbs_mod.forms.entities.IEntity;
 import mchorse.bbs_mod.forms.forms.Form;
+import mchorse.bbs_mod.forms.forms.ModelForm;
 import mchorse.bbs_mod.forms.forms.utils.FormMask;
 import mchorse.bbs_mod.forms.renderers.FormRenderType;
 import mchorse.bbs_mod.forms.renderers.FormRenderingContext;
+import mchorse.bbs_mod.forms.forms.ILatticeForm;
+import mchorse.bbs_mod.forms.renderers.LatticeGuide;
+import mchorse.bbs_mod.forms.renderers.VehicleCameraGuide;
+import mchorse.bbs_mod.forms.renderers.VehicleSeats;
 import mchorse.bbs_mod.graphics.Draw;
 import mchorse.bbs_mod.resources.Link;
 import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.forms.editors.panels.UIMaskFormPanel;
+import mchorse.bbs_mod.ui.forms.editors.panels.UILatticeFormPanel;
+import mchorse.bbs_mod.ui.forms.editors.panels.UIVehicleIkFormPanel;
 import mchorse.bbs_mod.ui.forms.editors.UIFormEditor;
 import mchorse.bbs_mod.ui.framework.UIBaseMenu;
 import mchorse.bbs_mod.ui.framework.UIContext;
@@ -108,6 +115,11 @@ public class UIPickableFormRenderer extends UIFormRenderer implements GizmoViewp
     public boolean subMouseClicked(UIContext context)
     {
         if (this.isEditingMask() && MaskEditing.mouseClicked(context, this.formEditor.form.mask))
+        {
+            return true;
+        }
+
+        if (this.formEditor.editor != null && this.formEditor.editor.view instanceof UILatticeFormPanel lattice && lattice.pickPoint(context))
         {
             return true;
         }
@@ -207,6 +219,8 @@ public class UIPickableFormRenderer extends UIFormRenderer implements GizmoViewp
             }
 
             this.renderMaskGuide(context);
+            this.renderVehicleCameraGuide(context);
+            this.renderLatticeGuide(context);
         }
 
         /* Keep the gizmo the same on-screen size as in the film preview (see
@@ -342,6 +356,61 @@ public class UIPickableFormRenderer extends UIFormRenderer implements GizmoViewp
         }
 
         stack.pop();
+    }
+
+    /** The control cage of the model's lattice, while its tab is open and the lattice is on */
+    private void renderLatticeGuide(UIContext context)
+    {
+        if (this.formEditor.editor != null && this.formEditor.editor.view instanceof UILatticeFormPanel panel
+            && this.formEditor.form instanceof ILatticeForm form && (form.getLattice().enabled.get() || form.getLattice().bulgeEnabled.get()))
+        {
+            /* In the frame the gizmo moves the points in (UILatticeFormPanel#getGizmoOrigin), so they stay together */
+            Matrix4f matrix = this.formEditor.editor.getBodyPartGizmoOrigin(context.getTransition(), TransformSpace.LOCAL);
+            MatrixStack stack = context.batcher.getContext().getMatrices();
+
+            stack.push();
+
+            if (matrix != null && matrix != Matrices.EMPTY_4F)
+            {
+                MatrixStackUtils.multiply(stack, matrix);
+            }
+
+            /* What a click works with: this very view, form space to the clip space of the viewport */
+            panel.setView(new Matrix4f(this.camera.projection).mul(stack.peek().getPositionMatrix()), this.area);
+            LatticeGuide.render(stack, form, panel.getSelected(), panel.getGizmoMode() == UILatticeFormPanel.GIZMO_CENTER);
+            stack.pop();
+        }
+    }
+
+    /**
+     * A vehicle's seats (their sitting planes) and, when it is set by hand, the driver's camera,
+     * while the vehicle IK tab is open
+     */
+    private void renderVehicleCameraGuide(UIContext context)
+    {
+        if (this.formEditor.editor != null && this.formEditor.editor.view instanceof UIVehicleIkFormPanel panel
+            && this.formEditor.form instanceof ModelForm form && form.vehicleIk.get())
+        {
+            /* In the frame the gizmo moves them in (UIVehicleIkFormPanel#getGizmoOrigin), so they stay together */
+            Matrix4f matrix = this.formEditor.editor.getBodyPartGizmoOrigin(context.getTransition(), TransformSpace.LOCAL);
+            MatrixStack stack = context.batcher.getContext().getMatrices();
+
+            stack.push();
+
+            if (matrix != null && matrix != Matrices.EMPTY_4F)
+            {
+                MatrixStackUtils.multiply(stack, matrix);
+            }
+
+            VehicleSeats.renderGuide(stack, form, panel.getGizmoSeat());
+
+            if (form.driverCamera.get())
+            {
+                VehicleCameraGuide.render(stack, form);
+            }
+
+            stack.pop();
+        }
     }
 
     private void renderFormHitbox(UIContext context)

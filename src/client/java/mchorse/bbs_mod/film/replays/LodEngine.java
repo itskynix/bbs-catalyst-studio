@@ -175,7 +175,10 @@ public class LodEngine
         {
             Form form = entity.getForm();
 
-            if (form == null || form.anchor.get().hasTarget())
+            /* A form that carries a sound is never hidden: hiding it takes its sound off the draw that
+             * places it, and the rank flips with every turn of the head - the sound jumped between
+             * two places and stuttered as the actor went in and out of the budget */
+            if (form == null || form.anchor.get().hasTarget() || carriesSound(form))
             {
                 continue;
             }
@@ -229,6 +232,24 @@ public class LodEngine
         {
             state.culled.add(state.candidates.get(i).form);
         }
+    }
+
+    private static boolean carriesSound(Form form)
+    {
+        if (form instanceof mchorse.bbs_mod.forms.forms.AudioForm)
+        {
+            return true;
+        }
+
+        for (mchorse.bbs_mod.forms.forms.BodyPart part : form.parts.getAllTyped())
+        {
+            if (part.getForm() != null && carriesSound(part.getForm()))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static void onShutdown(BaseFilmController controller)

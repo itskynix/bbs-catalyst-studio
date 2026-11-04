@@ -76,6 +76,9 @@ public abstract class UIKeyframeFactory<T> extends UIElement
         register(KeyframeFactories.POSE_TRANSFORM, UIPoseTransformKeyframeFactory::new);
         register(KeyframeFactories.BONE_CONSTRAINT, UIBoneConstraintKeyframeFactory::new);
         register(KeyframeFactories.JITTER, UIJitterKeyframeFactory::new);
+        register(KeyframeFactories.LATTICE, UILatticeKeyframeFactory::new);
+        register(KeyframeFactories.BULGE, UIBulgeKeyframeFactory::new);
+        register(KeyframeFactories.CENTER, UILatticeCenterKeyframeFactory::new);
         register(KeyframeFactories.STRING, UIStringKeyframeFactory::new);
         register(KeyframeFactories.TRANSFORM, UITransformKeyframeFactory::new);
         register(KeyframeFactories.VECTOR4F, UIVector4fKeyframeFactory::new);

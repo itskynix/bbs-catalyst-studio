@@ -17,6 +17,7 @@ import mchorse.bbs_mod.cubic.model.View;
 import mchorse.bbs_mod.cubic.model.bobj.BOBJModel;
 import mchorse.bbs_mod.cubic.model.config.ModelConfig;
 import mchorse.bbs_mod.cubic.render.CubicCubeRenderer;
+import mchorse.bbs_mod.cubic.render.LatticeDeform;
 import mchorse.bbs_mod.cubic.render.CubicMatrixRenderer;
 import mchorse.bbs_mod.cubic.render.CubicRenderer;
 import mchorse.bbs_mod.cubic.model.ModelSetupQueue;
@@ -224,6 +225,12 @@ public class ModelInstance implements IModelInstance
     public transient Matrix4f lastBaseTransform;
     public transient Form form;
 
+    /** The lattice the form being drawn bends the model with; set around each draw, never kept (instances are shared between forms) */
+    public transient LatticeDeform lattice;
+
+    /** The bent bones' baked VAOs, set around a draw the same way as {@link #lattice}; the rest of the bones ride their own */
+    public transient Map<ModelGroup, Map<String, ModelVAO>> bakedVaos;
+
     public ModelInstance(String id, IModel model, Animations animations, Link texture)
     {
         this.id = id;
@@ -282,6 +289,23 @@ public class ModelInstance implements IModelInstance
     public Map<ModelGroup, Map<String, ModelVAO>> getVaos()
     {
         return this.vaos;
+    }
+
+    /**
+     * The VAOs of one bone as the draw in hand has them: the lattice's baked, bent copy while a form
+     * draws through one (see {@link LatticeBake}), otherwise the model's own.
+     */
+    public Map<String, ModelVAO> getGroupVaos(ModelGroup group)
+    {
+        Map<String, ModelVAO> baked = this.bakedVaos == null ? null : this.bakedVaos.get(group);
+
+        return baked != null ? baked : this.vaos.get(group);
+    }
+
+    /** Whether a bent copy of this model's VAOs can stand in for them: it is drawn on the GPU all the way, no welds and no morphing bones */
+    public boolean canBake()
+    {
+        return this.model instanceof Model && !this.vaos.isEmpty() && !this.partialVaos && this.getWeldBindings().isEmpty();
     }
 
     /** Welds resolved against this model, built once. Empty when the model declares none or isn't cubic. */
@@ -984,11 +1008,11 @@ public class ModelInstance implements IModelInstance
 
             /* Welds and partially-baked (shape-keyed) models mix VAO and immediate rendering; a partial
              * model whose VAOs aren't baked yet falls through to the plain CPU path below. */
-            if (!bindings.isEmpty() || (this.partialVaos && !this.vaos.isEmpty()))
+            if (this.lattice == null && (!bindings.isEmpty() || (this.partialVaos && !this.vaos.isEmpty())))
             {
                 this.renderHybrid(stack, shader, color, light, overlay, stencilMap, keys, textureResolver, model, bindings);
             }
-            else if (this.isVAORendered())
+            else if (this.lattice == null && this.isVAORendered())
             {
                 CubicVAORenderer renderProcessor = new CubicVAORenderer(shader, this, light, overlay, stencilMap, keys, textureResolver);
 
@@ -1005,6 +1029,7 @@ public class ModelInstance implements IModelInstance
                 renderProcessor.setCpuOverlayActive(cpuOverlay != null);
                 renderProcessor.setColor(color.r, color.g, color.b, color.a);
                 renderProcessor.setShatter(this.shatterFx == null ? null : ShatterField.forBones(this.shatterFx, stack.peek().getPositionMatrix()));
+                renderProcessor.setLattice(this.lattice);
                 RenderSystem.setShader(() -> shader);
 
                 BufferBuilder builder;

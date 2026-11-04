@@ -8,6 +8,7 @@ import mchorse.bbs_mod.ui.forms.editors.forms.UIForm;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIButton;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIIcon;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIToggle;
+import mchorse.bbs_mod.ui.framework.elements.input.UIColor;
 import mchorse.bbs_mod.ui.framework.elements.input.UITrackpad;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UIOverlay;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UISoundOverlayPanel;
@@ -38,6 +39,11 @@ public class UIAudioFormPanel extends UIFormPanel<AudioForm>
     public UITrackpad radius;
     public UITrackpad occlusion;
     public UITrackpad dopplerScale;
+    public UIToggle waves;
+    public UITrackpad waveIntensity;
+    public UIColor waveColor;
+    public UITrackpad waveDistortion;
+    public UIToggle diagnostics;
 
     public UIAudioFormPanel(UIForm editor)
     {
@@ -138,6 +144,24 @@ public class UIAudioFormPanel extends UIFormPanel<AudioForm>
             .values(0.1D, 0.01D, 0.5D);
         this.dopplerScale.tooltip(UIKeys.FORMS_AUDIO_DOPPLER_SCALE_TOOLTIP);
 
+        this.waves = UIValues.toggle(UIKeys.FORMS_AUDIO_WAVES, () -> this.form.waves);
+        this.waves.tooltip(UIKeys.FORMS_AUDIO_WAVES_TOOLTIP);
+        this.waveIntensity = UIValues.trackpad(() -> this.form.waveIntensity)
+            .limit(0.0D, 4.0D)
+            .increment(0.1D)
+            .values(0.1D, 0.01D, 0.5D);
+        this.waveColor = UIValues.color(() -> this.form.waveColor);
+        this.waveDistortion = UIValues.trackpad(() -> this.form.waveDistortion)
+            .limit(0.0D, 4.0D)
+            .increment(0.1D)
+            .values(0.1D, 0.01D, 0.5D);
+        this.waveDistortion.tooltip(UIKeys.FORMS_AUDIO_WAVE_DISTORTION_TOOLTIP);
+
+        /* Not a property of the form: a switch for the session, so it is never saved or keyed */
+        this.diagnostics = new UIToggle(UIKeys.FORMS_AUDIO_DIAGNOSTICS, (b) -> mchorse.bbs_mod.forms.renderers.AudioFormRenderer.Diagnostics.enabled = b.getValue());
+        this.diagnostics.setValue(mchorse.bbs_mod.forms.renderers.AudioFormRenderer.Diagnostics.enabled);
+        this.diagnostics.tooltip(UIKeys.FORMS_AUDIO_DIAGNOSTICS_TOOLTIP);
+
         this.options.add(
             UI.row(this.pick, this.toggleWireframe, this.openFolder),
             this.loop,
@@ -150,7 +174,12 @@ public class UIAudioFormPanel extends UIFormPanel<AudioForm>
             UI.labelRow(UIKeys.FORMS_AUDIO_PAN, this.pan),
             UI.labelRow(UIKeys.FORMS_AUDIO_RADIUS, this.radius),
             UI.labelRow(UIKeys.FORMS_AUDIO_OCCLUSION, this.occlusion),
-            UI.labelRow(UIKeys.FORMS_AUDIO_DOPPLER_SCALE, this.dopplerScale)
+            UI.labelRow(UIKeys.FORMS_AUDIO_DOPPLER_SCALE, this.dopplerScale),
+            this.waves.marginTop(UIConstants.SECTION_GAP),
+            UI.labelRow(UIKeys.FORMS_AUDIO_WAVE_INTENSITY, this.waveIntensity),
+            UI.labelRow(UIKeys.FORMS_AUDIO_WAVE_COLOR, this.waveColor),
+            UI.labelRow(UIKeys.FORMS_AUDIO_WAVE_DISTORTION, this.waveDistortion),
+            this.diagnostics.marginTop(UIConstants.SECTION_GAP)
         );
     }
 

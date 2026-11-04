@@ -1,6 +1,7 @@
 package mchorse.bbs_mod.mixin.client;
 
-import mchorse.bbs_mod.ui.onboarding.welcome.UIWelcomeScreen;
+import mchorse.bbs_mod.ui.onboarding.UIStudioSquareButton;
+import mchorse.bbs_mod.ui.onboarding.oobe.UIOobeScreen;
 import mchorse.bbs_mod.ui.onboarding.welcome.WelcomeManager;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
@@ -37,13 +38,20 @@ public abstract class TitleScreenMixin extends Screen
 
             if (!WelcomeManager.hasSeenWelcomeScreen())
             {
-                this.client.setScreen(new UIWelcomeScreen(() ->
-                {
-                    WelcomeManager.setSeenWelcomeScreen(true);
-                    this.client.setScreen(new TitleScreen());
-                }));
+                this.client.setScreen(new UIOobeScreen(() -> UIOobeScreen.openHub(this.client)));
             }
         }
+    }
+
+    /** The studio's square button beside the menu: the Central Hub without a world */
+    @Inject(method = "init", at = @At("TAIL"))
+    private void bbs$addHubButton(CallbackInfo ci)
+    {
+        int size = 20;
+        int x = this.width / 2 + 104;
+        int y = this.height / 4 + 48;
+
+        this.addDrawableChild(new UIStudioSquareButton(x, y, size, () -> UIOobeScreen.openHub(this.client)));
     }
 
     @Inject(method = "render", at = @At("HEAD"), cancellable = true)
@@ -62,11 +70,7 @@ public abstract class TitleScreenMixin extends Screen
             {
                 ci.cancel();
 
-                this.client.setScreen(new UIWelcomeScreen(() ->
-                {
-                    WelcomeManager.setSeenWelcomeScreen(true);
-                    this.client.setScreen(new TitleScreen());
-                }));
+                this.client.setScreen(new UIOobeScreen(() -> UIOobeScreen.openHub(this.client)));
             }
         }
     }

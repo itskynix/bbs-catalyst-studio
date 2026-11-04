@@ -536,7 +536,8 @@ public class StubEntity implements IEntity
     public void update()
     {
         float delta = (float) MathHelper.magnitude(this.x - this.prevX, 0D, this.z - this.prevZ);
-        float speed = Math.min(delta * 4F, 1F);
+        /* A rider is carried, not walking: the legs stay folded on the seat however fast it goes */
+        float speed = this.riding ? 0F : Math.min(delta * 4F, 1F);
 
         this.limbAnimator.updateLimbs(speed, 0.4F);
 

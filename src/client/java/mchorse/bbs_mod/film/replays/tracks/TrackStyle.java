@@ -64,6 +64,10 @@ public class TrackStyle
         setupColors();
         setupIcons();
         LABELS.put("occlusionFactor", IKey.constant("occlusion"));
+        LABELS.put("waves", UIKeys.FORMS_AUDIO_WAVES);
+        LABELS.put("waveIntensity", UIKeys.FORMS_AUDIO_WAVE_INTENSITY);
+        LABELS.put("waveColor", UIKeys.FORMS_AUDIO_WAVE_COLOR);
+        LABELS.put("waveDistortion", UIKeys.FORMS_AUDIO_WAVE_DISTORTION);
         LABELS.put("jitter", UIKeys.FORMS_EDITORS_MODEL_JITTER);
         LABELS.put("shake_intensity", UIKeys.CAMERA_PANELS_SHAKE_AMOUNT);
         LABELS.put("shake_frequency", UIKeys.CAMERA_PANELS_SHAKE_FREQUENCY);
@@ -121,6 +125,10 @@ public class TrackStyle
         COLORS.put("pan", 0x9b59b6);
         COLORS.put("offset", 0x3498db);
         COLORS.put("occlusionFactor", 0xe67e22);
+        COLORS.put("waves", 0x7fd4ff);
+        COLORS.put("waveIntensity", 0x5bb8f0);
+        COLORS.put("waveColor", 0x9ad7ff);
+        COLORS.put("waveDistortion", 0x48a6e0);
         COLORS.put("jitter", 0xff7675);
 
         /* Camera Shake channels */
@@ -296,6 +304,10 @@ public class TrackStyle
         ICONS.put("radius", Icons.SPHERE);
         ICONS.put("pan", Icons.HORIZONTAL);
         ICONS.put("occlusionFactor", Icons.FILTER);
+        ICONS.put("waves", Icons.SOUND);
+        ICONS.put("waveIntensity", Icons.SOUND);
+        ICONS.put("waveColor", Icons.SOUND);
+        ICONS.put("waveDistortion", Icons.SOUND);
 
         /* Camera Shake channels */
         ICONS.put("shake_intensity", Icons.SOUND);

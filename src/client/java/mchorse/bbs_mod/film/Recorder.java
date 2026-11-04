@@ -19,6 +19,8 @@ import mchorse.bbs_mod.utils.MathUtils;
 import mchorse.bbs_mod.utils.PlayerUtils;
 import mchorse.bbs_mod.utils.joml.Matrices;
 import mchorse.bbs_mod.utils.joml.Vectors;
+import mchorse.bbs_mod.forms.entities.IEntity;
+import mchorse.bbs_mod.forms.entities.EntityState;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
@@ -209,7 +211,17 @@ public class Recorder extends WorldFilmController
         {
             Morph morph = Morph.getMorph(player);
 
-            this.keyframes.record(this.tick, morph.entity, null);
+            /* Driving the very replay this take records: what is recorded is the vehicle, not the driver */
+            IEntity vehicle = VehicleRide.getRecorded(this.film, this.exception);
+
+            this.keyframes.record(this.tick, vehicle != null ? vehicle : morph.entity, null);
+
+            /* The driver taken while sitting in a film's vehicle: no real vehicle under them, so the take
+             * says so itself - played back, the actor sits with its legs folded instead of walking on air */
+            if (vehicle == null && VehicleRide.isSeated(player))
+            {
+                this.keyframes.state(EntityState.RIDING).insert(this.tick, 1D);
+            }
             this.recordMobs();
         }
 

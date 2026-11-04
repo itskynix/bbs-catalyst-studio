@@ -54,6 +54,11 @@ public final class WelcomeManager
                 BaseType data = DataParser.parse(content);
                 if (data instanceof MapType map)
                 {
+                    if (map.has("firstTimeLaunch"))
+                    {
+                        return !map.getBool("firstTimeLaunch", true);
+                    }
+
                     if (map.has("hasSeenWelcomeScreen"))
                     {
                         return map.getByte("hasSeenWelcomeScreen") != 0;
@@ -65,6 +70,61 @@ public final class WelcomeManager
         }
 
         return false;
+    }
+
+    /** Whether the changelog of this version was shown in the Central Hub already (kept in bbs/config.json) */
+    public static boolean hasSeenChangelog(String version)
+    {
+        File file = getBbsConfigFile();
+
+        if (file.exists())
+        {
+            try
+            {
+                BaseType data = DataParser.parse(Files.readString(file.toPath(), StandardCharsets.UTF_8));
+
+                if (data instanceof MapType map)
+                {
+                    return version.equals(map.getString("changelogSeen", ""));
+                }
+            }
+            catch (Exception ignored)
+            {}
+        }
+
+        return false;
+    }
+
+    public static void setSeenChangelog(String version)
+    {
+        File file = getBbsConfigFile();
+
+        try
+        {
+            MapType map = new MapType();
+
+            if (file.exists())
+            {
+                try
+                {
+                    BaseType data = DataParser.parse(Files.readString(file.toPath(), StandardCharsets.UTF_8));
+
+                    if (data instanceof MapType m)
+                    {
+                        map = m;
+                    }
+                }
+                catch (Exception ignored)
+                {}
+            }
+
+            map.putString("changelogSeen", version);
+            Files.writeString(file.toPath(), DataToString.toString(map, true), StandardCharsets.UTF_8);
+        }
+        catch (Exception e)
+        {
+            System.err.println("[BBS] Failed to write config.json: " + e.getMessage());
+        }
     }
 
     public static void setSeenWelcomeScreen(boolean seen)
@@ -104,6 +164,7 @@ public final class WelcomeManager
             }
 
             map.putByte("hasSeenWelcomeScreen", (byte) (seen ? 1 : 0));
+            map.putBool("firstTimeLaunch", !seen);
             Files.writeString(file.toPath(), DataToString.toString(map, true), StandardCharsets.UTF_8);
         }
         catch (Exception e)

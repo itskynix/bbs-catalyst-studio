@@ -167,7 +167,13 @@ public class WaveReader extends BinaryReader
                 }
                 catch (EOFException e)
                 {
-                    e.printStackTrace();
+                    /* The end of the file is how this loop normally finishes: no chunk header is left to
+                     * read once the last one is done. Only a file that ended before its sound data is
+                     * worth reporting - the check below throws for that. */
+                    if (data == null)
+                    {
+                        e.printStackTrace();
+                    }
 
                     break;
                 }

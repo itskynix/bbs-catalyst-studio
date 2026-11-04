@@ -187,21 +187,45 @@ public class SoundPlayer
 
         float gain = MathUtils.clamp(volume, 0F, getGainLimit());
 
+        /* Written only when it really moves: a 3D source asks for its gain every frame, and the
+         * driver call is not free. Silence and full volume always land exactly, so a fade still ends
+         * where it should. */
+        boolean endpoint = (gain == 0F || gain == 1F) && gain != this.sentGain;
+
+        if (!endpoint && !changed(gain, this.sentGain))
+        {
+            return;
+        }
+
         /* AL_MAX_GAIN has to be lifted first, or the gain below gets clamped back to it */
-        if (gain > 1F)
+        if (gain > 1F && changed(gain, this.sentMaxGain))
         {
             AL10.alSourcef(this.source, AL10.AL_MAX_GAIN, gain);
+            this.sentMaxGain = gain;
         }
 
         AL10.alSourcef(this.source, AL10.AL_GAIN, gain);
+        this.sentGain = gain;
     }
 
     public void setPitch(float pitch)
     {
-        if (this.isValid())
+        if (this.isValid() && changed(pitch, this.sentPitch))
         {
             AL10.alSourcef(this.source, AL10.AL_PITCH, pitch);
+            this.sentPitch = pitch;
         }
+    }
+
+    /* What this source was last told, so unchanged values are not sent again (NaN: nothing sent yet) */
+    private float sentGain = Float.NaN;
+    private float sentMaxGain = Float.NaN;
+    private float sentPitch = Float.NaN;
+    private int sentLooping = -1;
+
+    private static boolean changed(float value, float sent)
+    {
+        return Float.isNaN(sent) || Math.abs(value - sent) > 0.001F;
     }
 
     public void setRelative(boolean relative)
@@ -278,9 +302,12 @@ public class SoundPlayer
 
     public void setLooping(boolean looping)
     {
-        if (this.isValid())
+        int value = looping ? AL10.AL_TRUE : AL10.AL_FALSE;
+
+        if (this.isValid() && value != this.sentLooping)
         {
-            AL10.alSourcei(this.source, AL10.AL_LOOPING, looping ? AL10.AL_TRUE : AL10.AL_FALSE);
+            AL10.alSourcei(this.source, AL10.AL_LOOPING, value);
+            this.sentLooping = value;
         }
     }
 

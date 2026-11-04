@@ -2,6 +2,7 @@ package mchorse.bbs_mod.mixin.client;
 
 import mchorse.bbs_mod.camera.WorldFreeCam;
 import mchorse.bbs_mod.forms.structure.StructureWand;
+import mchorse.bbs_mod.film.VehicleRide;
 import net.minecraft.client.MinecraftClient;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -30,6 +31,16 @@ public class MinecraftClientMixin
     public void wandUse(CallbackInfo ci)
     {
         if (StructureWand.onUse())
+        {
+            ci.cancel();
+        }
+    }
+
+    /* A vehicle in a film takes the right click on its doors and seats, and every click while seated */
+    @Inject(method = "doItemUse", at = @At("HEAD"), cancellable = true)
+    public void vehicleUse(CallbackInfo ci)
+    {
+        if (VehicleRide.onUse())
         {
             ci.cancel();
         }

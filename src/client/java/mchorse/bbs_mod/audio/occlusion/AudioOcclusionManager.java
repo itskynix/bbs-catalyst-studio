@@ -123,14 +123,19 @@ public class AudioOcclusionManager
             return 0.0F;
         }
 
-        /* Raymarch intervening voxels without duplicate BlockPos hits */
+        /* Raymarch intervening voxels without duplicate BlockPos hits. The last stretch at each end is
+         * left out: a source standing on the ground sits exactly on a block's top face, and the
+         * slightest rounding put the ray's last sample either in the air above or in the block below
+         * - so the muffle snapped on and off as the head turned. Only what lies between the two
+         * points can stand between them. */
         Set<BlockPos> visited = new LinkedHashSet<>();
         double stepSize = 0.35D;
+        double margin = Math.min(0.3D, distance * 0.25D) / distance;
         int steps = (int) Math.ceil(distance / stepSize);
 
         for (int i = 0; i <= steps; i++)
         {
-            double progress = steps == 0 ? 0.0D : (double) i / steps;
+            double progress = margin + (steps == 0 ? 0.0D : (double) i / steps) * (1.0D - margin * 2.0D);
             double x = listener.x + (soundPos.x - listener.x) * progress;
             double y = listener.y + (soundPos.y - listener.y) * progress;
             double z = listener.z + (soundPos.z - listener.z) * progress;

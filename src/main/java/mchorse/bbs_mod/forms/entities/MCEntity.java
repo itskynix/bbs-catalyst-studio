@@ -197,10 +197,16 @@ public class MCEntity implements IEntity
         this.mcEntity.setSwimming(swimming);
     }
 
+    /**
+     * Seats with no vanilla vehicle under them, answered by the client: a player sitting in a
+     * film's vehicle rides as far as the poses and a recorded take are concerned.
+     */
+    public static java.util.function.Predicate<net.minecraft.entity.Entity> ridingOverride = (entity) -> false;
+
     @Override
     public boolean isRiding()
     {
-        return this.mcEntity.hasVehicle();
+        return this.mcEntity.hasVehicle() || ridingOverride.test(this.mcEntity);
     }
 
     /**

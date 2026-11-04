@@ -113,7 +113,8 @@ public class UIMorphingPanel extends UIDashboardPanel
     {
         this.palette.list.forms.scroll.scrollSpeed = 40;
 
-        Morph morph = ((IMorphProvider) MinecraftClient.getInstance().player).getMorph();
+        /* No player (the studio opened from the title screen): there is no morph to show */
+        Morph morph = MinecraftClient.getInstance().player instanceof IMorphProvider provider ? provider.getMorph() : null;
         Form playerForm = morph != null ? morph.getForm() : null;
 
         this.palette.list.setupForms(BBSModClient.getFormCategories());

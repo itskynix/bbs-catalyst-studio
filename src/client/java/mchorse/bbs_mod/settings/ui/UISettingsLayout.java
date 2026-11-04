@@ -1,5 +1,7 @@
 package mchorse.bbs_mod.settings.ui;
 
+import mchorse.bbs_mod.ui.onboarding.oobe.UIOobeScreen;
+import net.minecraft.client.MinecraftClient;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.l10n.L10n;
 import mchorse.bbs_mod.l10n.keys.IKey;
@@ -173,7 +175,11 @@ public class UISettingsLayout
             UIButton tours = new UIButton(UIKeys.ONBOARDING_SETTINGS_RESET_TOURS, (b) -> this.leaveFor(ui, Onboarding::resetTours));
             tours.w(130);
 
-            return List.of(UI.label(UIKeys.ONBOARDING_SETTINGS_TITLE, 0).labelAnchor(0, 0.5F), tours);
+            UIButton wizard = new UIButton(L10n.lang("bbs.ui.oobe.settings.rerun"), (b) -> this.leaveFor(ui, (context) -> UIOobeScreen.rerun(MinecraftClient.getInstance())));
+
+            wizard.w(150);
+
+            return List.of(UI.label(UIKeys.ONBOARDING_SETTINGS_TITLE, 0).labelAnchor(0, 0.5F), wizard, tours);
         }
 
         private void leaveFor(UIElement ui, Consumer<UIContext> action)

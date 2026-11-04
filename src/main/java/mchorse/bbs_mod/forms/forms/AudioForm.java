@@ -4,6 +4,8 @@ import mchorse.bbs_mod.data.types.BaseType;
 import mchorse.bbs_mod.resources.Link;
 import mchorse.bbs_mod.settings.values.base.BaseValueGroup;
 import mchorse.bbs_mod.settings.values.core.ValueLink;
+import mchorse.bbs_mod.settings.values.core.ValueColor;
+import mchorse.bbs_mod.utils.colors.Color;
 import mchorse.bbs_mod.settings.values.numeric.ValueBoolean;
 import mchorse.bbs_mod.settings.values.numeric.ValueFloat;
 import mchorse.bbs_mod.ui.utils.icons.Icon;
@@ -41,6 +43,14 @@ public class AudioForm extends Form
     public final ValueFloat occlusionFactor = new ValueFloat("occlusionFactor", 1.0F, 0.0F, 2.0F);
     public final ValueFloat dopplerScale = new ValueFloat("dopplerScale", 1.0F, 0.0F, 5.0F);
 
+    /* Sound vibration waves: rings that ripple out of the source as loud as the sound is right now.
+     * All three are tracks, so the waves can be switched on for one shot and tuned over it. */
+    public final ValueBoolean waves = new ValueBoolean("waves", false);
+    public final ValueFloat waveIntensity = new ValueFloat("waveIntensity", 1.0F, 0.0F, 4.0F);
+    public final ValueColor waveColor = new ValueColor("waveColor", new Color(0.75F, 0.9F, 1F, 1F));
+    /** How hard the air bends at the crests and troughs of the waves (0: no bending, rings only) */
+    public final ValueFloat waveDistortion = new ValueFloat("waveDistortion", 1.0F, 0.0F, 4.0F);
+
     public AudioForm()
     {
         super();
@@ -67,6 +77,10 @@ public class AudioForm extends Form
         this.add(this.radius);
         this.add(this.occlusionFactor);
         this.add(this.dopplerScale);
+        this.add(this.waves);
+        this.add(this.waveIntensity);
+        this.add(this.waveColor);
+        this.add(this.waveDistortion);
     }
 
     public long getRuntimeInstanceId()

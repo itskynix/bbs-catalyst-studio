@@ -111,6 +111,14 @@ public class UIKeys
     public static final IKey FORMS_AUDIO_OCCLUSION = L10n.lang("bbs.ui.forms.audio.occlusion");
     public static final IKey FORMS_AUDIO_OCCLUSION_TOOLTIP = L10n.lang("bbs.ui.forms.audio.occlusion_tooltip");
     public static final IKey FORMS_AUDIO_DOPPLER = L10n.lang("bbs.ui.forms.audio.doppler");
+    public static final IKey FORMS_AUDIO_WAVES = L10n.lang("bbs.ui.forms.audio.waves");
+    public static final IKey FORMS_AUDIO_WAVES_TOOLTIP = L10n.lang("bbs.ui.forms.audio.waves_tooltip");
+    public static final IKey FORMS_AUDIO_WAVE_INTENSITY = L10n.lang("bbs.ui.forms.audio.wave_intensity");
+    public static final IKey FORMS_AUDIO_WAVE_COLOR = L10n.lang("bbs.ui.forms.audio.wave_color");
+    public static final IKey FORMS_AUDIO_WAVE_DISTORTION = L10n.lang("bbs.ui.forms.audio.wave_distortion");
+    public static final IKey FORMS_AUDIO_WAVE_DISTORTION_TOOLTIP = L10n.lang("bbs.ui.forms.audio.wave_distortion_tooltip");
+    public static final IKey FORMS_AUDIO_DIAGNOSTICS = L10n.lang("bbs.ui.forms.audio.diagnostics");
+    public static final IKey FORMS_AUDIO_DIAGNOSTICS_TOOLTIP = L10n.lang("bbs.ui.forms.audio.diagnostics_tooltip");
     public static final IKey FORMS_AUDIO_DOPPLER_SCALE = L10n.lang("bbs.ui.forms.audio.doppler_scale");
     public static final IKey FORMS_AUDIO_DOPPLER_SCALE_TOOLTIP = L10n.lang("bbs.ui.forms.audio.doppler_scale_tooltip");
     public static final IKey FORMS_AUDIO_CHANNELS = L10n.lang("bbs.ui.forms.audio.channels");
@@ -1027,6 +1035,8 @@ public class UIKeys
     public static final IKey FORMS_EDITORS_MODEL_IK_CONTEXT_SAVE = L10n.lang("bbs.ui.forms.editors.model.ik.context.save");
     public static final IKey FORMS_EDITORS_MODEL_IK_CONTEXT_NAME = L10n.lang("bbs.ui.forms.editors.model.ik.context.name");
     public static final IKey FORMS_EDITORS_MODEL_PHYSICS_TITLE = L10n.lang("bbs.ui.forms.editors.model.physics.title");
+    public static final IKey FORMS_EDITORS_VEHICLE_IK = L10n.lang("bbs.ui.forms.editors.vehicle_ik.title");
+    public static final IKey FORMS_EDITORS_LATTICE = L10n.lang("bbs.ui.forms.editors.lattice.title");
     public static final IKey FORMS_EDITORS_MODEL_PHYSICS_DEBUG = L10n.lang("bbs.ui.forms.editors.model.physics.debug");
     public static final IKey FORMS_EDITORS_MODEL_PHYSICS_CHAINS = L10n.lang("bbs.ui.forms.editors.model.physics.chains");
     public static final IKey FORMS_EDITORS_MODEL_PHYSICS_SETTINGS = L10n.lang("bbs.ui.forms.editors.model.physics.settings");

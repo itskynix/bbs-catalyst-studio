@@ -6,6 +6,9 @@ import java.util.IdentityHashMap;
 import java.util.Map;
 
 import mchorse.bbs_mod.client.BBSRendering;
+import mchorse.bbs_mod.forms.forms.utils.FormIllusionValues;
+import mchorse.bbs_mod.forms.renderers.utils.FormIllusions;
+import org.joml.Vector3f;
 import mchorse.bbs_mod.cubic.IBoneHierarchy;
 import mchorse.bbs_mod.forms.FormMasking;
 import mchorse.bbs_mod.forms.FormUtilsClient;
@@ -182,6 +185,11 @@ public abstract class FormRenderer <T extends Form>
             }
 
             this.renderBodyParts(context);
+
+            if (!isPicking)
+            {
+                this.renderIllusions(context);
+            }
         });
 
         context.stack.pop();
@@ -193,6 +201,106 @@ public abstract class FormRenderer <T extends Form>
         context.light = light;
 
         this.form.unapplyStates();
+    }
+
+    /**
+     * The form's illusions: the form drawn again {@code illusions_count} times, each copy one place
+     * further along the chosen pattern and one more of the offset transform on, fainter than the last.
+     * With a delay set, the copies are the film's business (they trail the actor in time), so none
+     * are laid out here.
+     */
+    private void renderIllusions(FormRenderingContext context)
+    {
+        FormIllusionValues illusions = this.form.illusions;
+
+        if (!illusions.isActive() || illusions.delay.get() > 0 || FormIllusions.isDrawing())
+        {
+            return;
+        }
+
+        List<FormIllusionValues.Placement> layout = illusions.layout();
+        Transform step = illusions.offset.get();
+        boolean cumulative = illusions.cumulative.get();
+        float jitter = illusions.jitter.get();
+        int color = context.color;
+        long moment = System.nanoTime() / 45_000_000L;
+
+        FormIllusions.begin();
+
+        try
+        {
+            for (int n = 1; n <= layout.size(); n++)
+            {
+                float opacity = illusions.opacityOf(n);
+
+                if (opacity <= 0.003F)
+                {
+                    continue;
+                }
+
+                FormIllusionValues.Placement place = layout.get(n - 1);
+
+                context.stack.push();
+
+                if (context.world != null)
+                {
+                    context.world.push();
+                }
+
+                this.illusionStep(context.stack, place, step, cumulative, jitter, n, moment);
+
+                if (context.world != null)
+                {
+                    this.illusionStep(context.world, place, step, cumulative, jitter, n, moment);
+                }
+
+                context.color = Colors.mulA(color, opacity);
+
+                this.render3D(context);
+                this.renderBodyParts(context);
+
+                context.stack.pop();
+
+                if (context.world != null)
+                {
+                    context.world.pop();
+                }
+            }
+        }
+        finally
+        {
+            FormIllusions.end();
+            context.color = color;
+        }
+    }
+
+    /** One copy's place: n steps along the direction, n of the offset transform, and a shiver off both */
+    private void illusionStep(MatrixStack stack, FormIllusionValues.Placement place, Transform step, boolean cumulative, float jitter, int n, long moment)
+    {
+        stack.translate(place.position().x, place.position().y, place.position().z);
+
+        /* A copy on a ring turned to look at the form, or away from it */
+        if (place.turned())
+        {
+            Vector3f axis = place.axis() == 0 ? new Vector3f(1F, 0F, 0F) : place.axis() == 2 ? new Vector3f(0F, 0F, 1F) : new Vector3f(0F, 1F, 0F);
+
+            stack.multiply(new org.joml.Quaternionf().fromAxisAngleRad(axis, place.angle()));
+        }
+
+        if (jitter > 0F)
+        {
+            stack.translate(FormIllusions.noise(n, 1, moment) * jitter, FormIllusions.noise(n, 2, moment) * jitter, FormIllusions.noise(n, 3, moment) * jitter);
+        }
+
+        /* The same on every copy, or growing with the copy's number; a copy with no transform is the form's own pose, untouched */
+        Transform total = new Transform();
+        int times = cumulative ? n : 1;
+
+        total.translate.set(step.translate).mul(times);
+        total.rotate.set(step.rotate).mul(times);
+        total.scale.set((float) Math.pow(step.scale.x, times), (float) Math.pow(step.scale.y, times), (float) Math.pow(step.scale.z, times));
+
+        MatrixStackUtils.applyTransform(stack, total);
     }
 
     protected void applyTransforms(MatrixStack stack, boolean origin, float transition)

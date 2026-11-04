@@ -6,6 +6,7 @@ import mchorse.bbs_mod.ui.dashboard.UIDashboard;
 import mchorse.bbs_mod.ui.film.UIFilmPanel;
 import mchorse.bbs_mod.ui.framework.UIBaseMenu;
 import mchorse.bbs_mod.ui.framework.UIScreen;
+import mchorse.bbs_mod.film.VehicleRide;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.input.KeyboardInput;
@@ -54,9 +55,10 @@ public class KeyboardInputMixin
     @Inject(method = "tick", at = @At("RETURN"))
     public void onTick(boolean slowDown, float slowDownFactor, CallbackInfo info)
     {
-        if (WorldFreeCam.isActive())
+        if (WorldFreeCam.isActive() || VehicleRide.isActive())
         {
-            /* The player stands still while the free camera flies */
+            /* The player stands still while the free camera flies, and sits still in a vehicle (the
+             * vehicle reads the keys itself) */
             KeyboardInput idle = (KeyboardInput) (Object) this;
 
             idle.pressingForward = idle.pressingBack = idle.pressingLeft = idle.pressingRight = false;

@@ -13,6 +13,7 @@ import mchorse.bbs_mod.cubic.data.model.ModelVertex;
 import mchorse.bbs_mod.utils.CollectionUtils;
 import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.client.util.math.MatrixStack;
+import org.joml.Matrix4f;
 import org.joml.Vector2f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
@@ -49,6 +50,20 @@ public class CubicVAOBuilderRenderer implements ICubicRenderer
         this.model = model;
     }
 
+    /* A lattice bakes the bent shape instead: only the bones it reaches get a VAO, with every point
+     * moved through it in the model's rest space (a bone's space turned into it by its initial pose) */
+    private LatticeDeform lattice;
+    private Matrix4f rest;
+    private Matrix4f restInverse;
+    private final Vector3f bent = new Vector3f();
+    private ModelVertex[] gridPoints;
+
+    public CubicVAOBuilderRenderer(Map<ModelGroup, Map<String, ModelVAO>> model, LatticeDeform lattice)
+    {
+        this.model = model;
+        this.lattice = lattice;
+    }
+
     /** Accumulated triangle data for a single material within a group. */
     private static class MaterialBucket
     {
@@ -64,6 +79,17 @@ public class CubicVAOBuilderRenderer implements ICubicRenderer
     @Override
     public boolean renderGroup(BufferBuilder builder, MatrixStack stack, ModelGroup group, Model model)
     {
+        if (this.lattice != null)
+        {
+            if (!this.lattice.affects(group))
+            {
+                return false;
+            }
+
+            this.rest = LatticeDeform.rest(group);
+            this.restInverse = new Matrix4f(this.rest).invert();
+        }
+
         /* A group with shape-keyed meshes morphs per frame, so it gets no VAO and renders immediate —
          * the rest of the model still bakes and rides the GPU (see ModelInstance#renderHybrid). */
         for (ModelMesh mesh : group.meshes)
@@ -135,6 +161,13 @@ public class CubicVAOBuilderRenderer implements ICubicRenderer
                 continue;
             }
 
+            if (this.lattice != null && count == 4 && this.lattice.split() > 1)
+            {
+                this.writeBentQuad(bucket, stack, group, quad);
+
+                continue;
+            }
+
             this.writeVertex(bucket, stack, group, quad.vertices.get(0));
             this.writeVertex(bucket, stack, group, quad.vertices.get(1));
             this.writeVertex(bucket, stack, group, quad.vertices.get(2));
@@ -202,10 +235,84 @@ public class CubicVAOBuilderRenderer implements ICubicRenderer
         this.writeVertex(bucket, stack, group, vertex, this.normal);
     }
 
+    /** A quad as a grid of small ones the lattice can curve; baked once, so it can be fine */
+    private void writeBentQuad(MaterialBucket bucket, MatrixStack stack, ModelGroup group, ModelQuad quad)
+    {
+        int n = this.lattice.split();
+        int side = n + 1;
+
+        if (this.gridPoints == null || this.gridPoints.length != side * side)
+        {
+            this.gridPoints = new ModelVertex[side * side];
+
+            for (int i = 0; i < this.gridPoints.length; i++)
+            {
+                this.gridPoints[i] = new ModelVertex();
+            }
+        }
+
+        ModelVertex v0 = quad.vertices.get(0);
+        ModelVertex v1 = quad.vertices.get(1);
+        ModelVertex v2 = quad.vertices.get(2);
+        ModelVertex v3 = quad.vertices.get(3);
+
+        for (int row = 0; row <= n; row++)
+        {
+            for (int column = 0; column <= n; column++)
+            {
+                float s = column / (float) n;
+                float t = row / (float) n;
+                float a = (1F - s) * (1F - t);
+                float b = s * (1F - t);
+                float c = s * t;
+                float d = (1F - s) * t;
+                ModelVertex point = this.gridPoints[row * side + column];
+
+                point.vertex.set(
+                    v0.vertex.x * a + v1.vertex.x * b + v2.vertex.x * c + v3.vertex.x * d,
+                    v0.vertex.y * a + v1.vertex.y * b + v2.vertex.y * c + v3.vertex.y * d,
+                    v0.vertex.z * a + v1.vertex.z * b + v2.vertex.z * c + v3.vertex.z * d
+                );
+                point.uv.set(
+                    v0.uv.x * a + v1.uv.x * b + v2.uv.x * c + v3.uv.x * d,
+                    v0.uv.y * a + v1.uv.y * b + v2.uv.y * c + v3.uv.y * d
+                );
+                point.normal.set(v0.normal);
+            }
+        }
+
+        for (int row = 0; row < n; row++)
+        {
+            for (int column = 0; column < n; column++)
+            {
+                ModelVertex p00 = this.gridPoints[row * side + column];
+                ModelVertex p10 = this.gridPoints[row * side + column + 1];
+                ModelVertex p11 = this.gridPoints[(row + 1) * side + column + 1];
+                ModelVertex p01 = this.gridPoints[(row + 1) * side + column];
+
+                this.writeVertex(bucket, stack, group, p00);
+                this.writeVertex(bucket, stack, group, p10);
+                this.writeVertex(bucket, stack, group, p11);
+                this.writeVertex(bucket, stack, group, p00);
+                this.writeVertex(bucket, stack, group, p11);
+                this.writeVertex(bucket, stack, group, p01);
+            }
+        }
+    }
+
     private void writeVertex(MaterialBucket bucket, MatrixStack stack, ModelGroup group, ModelVertex vertex, Vector3f normal)
     {
         this.vertex.set(vertex.vertex.x, vertex.vertex.y, vertex.vertex.z, 1);
         stack.peek().getPositionMatrix().transform(this.vertex);
+
+        if (this.lattice != null)
+        {
+            this.bent.set(this.vertex.x, this.vertex.y, this.vertex.z);
+            this.rest.transformPosition(this.bent);
+            this.lattice.apply(this.bent);
+            this.restInverse.transformPosition(this.bent);
+            this.vertex.set(this.bent.x, this.bent.y, this.bent.z, 1);
+        }
 
         bucket.vertices.add(this.vertex.x);
         bucket.vertices.add(this.vertex.y);

@@ -122,6 +122,7 @@ import mchorse.bbs_mod.utils.resources.CemSourcePack;
 import mchorse.bbs_mod.utils.resources.MinecraftSourcePack;
 import mchorse.bbs_mod.utils.resources.PlayerSkinSourcePack;
 import mchorse.bbs_mod.utils.resources.PlayerSkins;
+import mchorse.bbs_mod.film.VehicleRide;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -718,7 +719,6 @@ public class BBSModClient implements ClientModInitializer
         mchorse.bbs_mod.camera.pov.bootstrap.PovRegistries.register();
         mchorse.bbs_mod.camera.pov.bootstrap.PovLocalization.register();
         mchorse.bbs_mod.camera.pov.render.PovBlockOutlineRenderer.init();
-        mchorse.bbs_mod.copilot.ui.UICopilotSetting.register();
 
         /* Keybinds */
         keyDashboard = this.createKey("dashboard", GLFW.GLFW_KEY_0);
@@ -735,6 +735,8 @@ public class BBSModClient implements ClientModInitializer
         keyOpenMorphing = this.createKey("open_morphing", GLFW.GLFW_KEY_B);
         keyDemorph = this.createKey("demorph", GLFW.GLFW_KEY_PERIOD);
         keyTeleport = this.createKey("teleport", GLFW.GLFW_KEY_Y);
+        VehicleRide.doorKey = this.createKey("vehicle_door", GLFW.GLFW_KEY_G);
+        VehicleRide.init();
         keyZoom = this.createKeyMouse("zoom", 2);
 
         StructureWand.register();
@@ -809,6 +811,9 @@ public class BBSModClient implements ClientModInitializer
             FormPortals.flush();
 
             BBSRendering.captureWobbleDepth();
+
+            /* The air bending of the sound waves: over the finished world, under the hand */
+            mchorse.bbs_mod.forms.renderers.AudioFormRenderer.flushRipples();
 
             if (videoRecorder.isRecording() && BBSRendering.canRender)
             {
@@ -889,6 +894,8 @@ public class BBSModClient implements ClientModInitializer
 
             if (!mc.isPaused())
             {
+                /* Before the films: the vehicle being driven has moved by the time its actor ticks */
+                VehicleRide.tick(mc);
                 films.update();
                 modelBlockItemRenderer.update();
                 gunItemRenderer.update();

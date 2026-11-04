@@ -29,6 +29,7 @@ import mchorse.bbs_mod.forms.entities.IEntity;
 import mchorse.bbs_mod.forms.forms.Form;
 import mchorse.bbs_mod.cubic.IBoneHierarchy;
 import mchorse.bbs_mod.forms.FormUtilsClient;
+import mchorse.bbs_mod.forms.forms.ILatticeForm;
 import mchorse.bbs_mod.forms.forms.IPosedForm;
 import mchorse.bbs_mod.forms.forms.ModelForm;
 import mchorse.bbs_mod.forms.renderers.ModelFormRenderer;
@@ -47,6 +48,7 @@ import mchorse.bbs_mod.ui.framework.elements.input.keyframes.factories.UIPoseKey
 import mchorse.bbs_mod.ui.framework.elements.input.keyframes.factories.UIPoseTransformKeyframeFactory;
 import mchorse.bbs_mod.ui.framework.elements.input.keyframes.factories.UITransformKeyframeFactory;
 import mchorse.bbs_mod.ui.framework.elements.input.keyframes.graphs.IUIKeyframeGraph;
+import mchorse.bbs_mod.ui.utils.icons.Icon;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.utils.Pair;
 import mchorse.bbs_mod.utils.StringUtils;
@@ -65,6 +67,7 @@ import org.joml.Vector3f;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -203,39 +206,107 @@ public class UIReplaysEditorUtils
             }
         }
 
-        groupMaskAndSlice(sheets);
+        hideUnusedEffects(sheets);
+        groupSections(sheets);
     }
 
-    /** The form's own tracks that cut it: the 2D mask's turn, slide and stretch, and the 3D slice plane. */
-    private static final Set<String> MASK_SLICE_TRACKS = Set.of(
-        "mask_rotation_x", "mask_rotation_y", "mask_rotation_z",
-        "mask_pos_x", "mask_pos_y", "mask_scale_x", "mask_scale_y",
-        "slice_pos_x", "slice_pos_y", "slice_pos_z", "slice_yaw", "slice_pitch", "slice_roll", "slice_invert"
-    );
+    /** A fold of the form's own tracks: the row it draws, and which property tracks go under it */
+    private record TrackGroup(String id, IKey title, Icon icon, int color, Set<String> tracks) {}
 
     /**
-     * Folds every form's masking and slicing tracks under one "Mask & Slice" row of their own, so
-     * the dozen rows they make don't spread through the form's other properties. A section is a row
+     * The groups the form's effect and deformation tracks fold into, in the order they are told
+     * apart: the 2D mask and 3D slice, the burning away, the breaking apart, the wreck swap, and the
+     * lattice with its centre, points and bulge sphere.
+     */
+    private static final List<TrackGroup> TRACK_GROUPS = List.of(
+        new TrackGroup("mask_slice", UIKeys.FORMS_EDITORS_MASK_SLICE_SECTION, Icons.CUT, 0x8a6cff, Set.of(
+            "mask_rotation_x", "mask_rotation_y", "mask_rotation_z",
+            "mask_pos_x", "mask_pos_y", "mask_scale_x", "mask_scale_y",
+            "slice_pos_x", "slice_pos_y", "slice_pos_z", "slice_yaw", "slice_pitch", "slice_roll", "slice_invert")),
+        new TrackGroup("dissolve", L10n.lang("bbs.ui.film.track_groups.dissolve"), Icons.FADING, 0xff7a1a, Set.of(
+            "dissolveProgress", "dissolveMode", "dissolveEdge", "dissolveBurnColor")),
+        new TrackGroup("shatter", L10n.lang("bbs.ui.film.track_groups.shatter"), Icons.SHARD, 0x4cd7e0, Set.of(
+            "shatterProgress", "shatterSpread")),
+        new TrackGroup("damaged", L10n.lang("bbs.ui.film.track_groups.damaged"), Icons.SKULL, 0xff5a5a, Set.of(
+            "damaged", "damaged_model")),
+        new TrackGroup("lattice", L10n.lang("bbs.ui.film.track_groups.lattice"), Icons.OUTLINE, 0xffc21a, Set.of(
+            "lattice_center", "lattice_points", "lattice_bulge")),
+        new TrackGroup("illusions", L10n.lang("bbs.ui.film.track_groups.illusions"), Icons.FOUR_STAR, 0xb48cff, Set.of(
+            "illusions_count", "illusions_spread", "illusions_opacity", "illusions_pattern", "illusions_plane", "illusions_face", "illusions_front", "illusions_back", "illusions_left",
+            "illusions_right", "illusions_up", "illusions_down", "illusions_diagonal", "illusions_cumulative", "illusions_fade_out", "illusions_invert_fade", "illusions_offset",
+            "illusions_jitter", "illusions_delay"))
+    );
+
+    private static TrackGroup groupOf(UIKeyframeSheet sheet)
+    {
+        TrackDescriptor track = sheet.descriptor;
+
+        if (track == null || sheet.parent != null || !track.id().is(TrackKind.PROPERTY))
+        {
+            return null;
+        }
+
+        for (TrackGroup group : TRACK_GROUPS)
+        {
+            if (group.tracks().contains(track.id().subject()))
+            {
+                return group;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * A form that does not use a modification gets no rows for it: the lattice tracks of a model
+     * with neither the lattice nor the bulge on, and the wreck tracks of a model with no wrecked
+     * model picked. A track that already holds keyframes always stays, so nothing keyed is hidden.
+     */
+    private static void hideUnusedEffects(List<UIKeyframeSheet> sheets)
+    {
+        sheets.removeIf((sheet) ->
+        {
+            TrackGroup group = groupOf(sheet);
+
+            if (group == null || (sheet.channel != null && !sheet.channel.isEmpty()))
+            {
+                return false;
+            }
+
+            Form owner = sheet.descriptor.owner();
+
+            return switch (group.id())
+            {
+                case "lattice" -> !(owner instanceof ILatticeForm lattice) || (!lattice.getLattice().enabled.get() && !lattice.getLattice().bulgeEnabled.get());
+                case "damaged" -> !(owner instanceof ModelForm model) || model.damagedModel.get().isEmpty();
+                /* The count is always there to be keyed; the rest wait for a copy to exist */
+                case "illusions" -> !sheet.descriptor.id().subject().equals("illusions_count") && owner != null && owner.illusions.count.get() <= 0;
+                default -> false;
+            };
+        });
+    }
+
+    /**
+     * Folds every form's effect and deformation tracks under a row of their own per group, so the
+     * dozens of rows they make don't spread through the form's other properties. A section is a row
      * the dope sheet draws above its first member, so the members are gathered right after it.
      */
-    private static void groupMaskAndSlice(List<UIKeyframeSheet> sheets)
+    private static void groupSections(List<UIKeyframeSheet> sheets)
     {
         Map<String, UIKeyframeSheet.Section> sections = new HashMap<>();
-        Map<UIKeyframeSheet.Section, List<UIKeyframeSheet>> members = new HashMap<>();
+        Map<UIKeyframeSheet.Section, List<UIKeyframeSheet>> members = new LinkedHashMap<>();
 
         for (UIKeyframeSheet sheet : sheets)
         {
-            TrackDescriptor track = sheet.descriptor;
+            TrackGroup group = groupOf(sheet);
 
-            if (track == null || sheet.parent != null || !track.id().is(TrackKind.PROPERTY) || !MASK_SLICE_TRACKS.contains(track.id().subject()))
+            if (group == null)
             {
                 continue;
             }
 
-            String formPath = track.id().formPath();
-            UIKeyframeSheet.Section section = sections.computeIfAbsent(formPath, (path) -> new UIKeyframeSheet.Section(
-                "mask_slice/" + path, UIKeys.FORMS_EDITORS_MASK_SLICE_SECTION, Icons.CUT, 0x8a6cff
-            ));
+            String id = group.id() + "/" + sheet.descriptor.id().formPath();
+            UIKeyframeSheet.Section section = sections.computeIfAbsent(id, (key) -> new UIKeyframeSheet.Section(key, group.title(), group.icon(), group.color()));
 
             sheet.section = section;
             members.computeIfAbsent(section, (s) -> new ArrayList<>()).add(sheet);

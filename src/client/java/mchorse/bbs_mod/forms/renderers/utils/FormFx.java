@@ -207,6 +207,14 @@ public final class FormFx
 
     /* Shatter */
 
+    /** The substitute that bends what is drawn through it by a lattice, over the ones below it. */
+    public static Function<VertexConsumer, VertexConsumer> lattice(Function<VertexConsumer, VertexConsumer> inner, Matrix4f forward, mchorse.bbs_mod.cubic.render.LatticeDeform deform)
+    {
+        Matrix4f frame = new Matrix4f(forward);
+
+        return (buffer) -> new LatticeVertexConsumer(inner == null ? buffer : inner.apply(buffer), frame, deform);
+    }
+
     /** The substitute that breaks what is drawn through it into pieces, over the one that tints it. */
     public static Function<VertexConsumer, VertexConsumer> shatter(Function<VertexConsumer, VertexConsumer> inner, ShatterField field)
     {

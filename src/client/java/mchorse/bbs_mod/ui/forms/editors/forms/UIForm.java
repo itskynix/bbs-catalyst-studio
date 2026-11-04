@@ -17,6 +17,7 @@ import mchorse.bbs_mod.graphics.window.Window;
 import mchorse.bbs_mod.ui.Keys;
 import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.forms.editors.UIFormEditor;
+import mchorse.bbs_mod.l10n.L10n;
 import mchorse.bbs_mod.ui.forms.editors.panels.UIFormPanel;
 import mchorse.bbs_mod.ui.forms.editors.panels.UIGeneralFormPanel;
 import mchorse.bbs_mod.ui.forms.editors.panels.UIMaskFormPanel;
@@ -205,6 +206,7 @@ public abstract class UIForm <T extends Form> extends UIPanelBase<UIFormPanel<T>
         }
 
         this.registerPanel(new UIMaterialFormPanel(this), UIKeys.FORMS_EDITORS_MATERIAL, Icons.MATERIAL);
+        this.registerPanel(new mchorse.bbs_mod.ui.forms.editors.panels.UIIllusionsFormPanel<T>(this), L10n.lang("bbs.ui.forms.editors.illusions.title"), Icons.FOUR_STAR);
 
         UIGeneralFormPanel panel = new UIGeneralFormPanel(this);
 

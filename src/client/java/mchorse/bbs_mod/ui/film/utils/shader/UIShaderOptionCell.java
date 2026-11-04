@@ -17,7 +17,7 @@ import java.util.function.Consumer;
 
 /**
  * A single cell of the shader-options grid, mirroring the layout of the Iris shader-options menu but
- * built from the BBS FS button surfaces and controls.
+ * built from the BBS CS button surfaces and controls.
  *
  * <p>Value display by option kind:</p>
  * <ul>

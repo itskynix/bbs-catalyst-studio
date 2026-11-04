@@ -16,6 +16,7 @@ public class UIItemForm extends UIForm<ItemForm>
 
         this.registerPanel(this.defaultPanel, UIKeys.FORMS_EDITORS_ITEM_TITLE, ItemForm.ICON);
         this.registerDefaultPanels();
+        this.registerPanel(new mchorse.bbs_mod.ui.forms.editors.panels.UILatticeFormPanel<>(this), UIKeys.FORMS_EDITORS_LATTICE, Icons.BLOCK);
         this.registerMaskPanel();
         this.registerPanel(new UIFormEffectsPanel<ItemForm>(this, (f) -> f.fx), UIKeys.FORMS_EDITORS_EFFECTS, Icons.SHAPES);
     }

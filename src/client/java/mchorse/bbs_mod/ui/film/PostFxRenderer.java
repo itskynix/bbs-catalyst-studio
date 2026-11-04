@@ -131,6 +131,83 @@ public class PostFxRenderer
         }
     }
 
+    /**
+     * Bend the air around sounds (the audio form's vibration waves): one pass per source, drawn over
+     * the world once it is done and before the hand. Needs no film clip, so it runs in the world, in
+     * the editor's preview and in exports alike. Each overlay comes filled in except for the depth,
+     * which is taken here.
+     */
+    public static void renderRipples(List<FxOverlay> ripples)
+    {
+        if (failed || ripples.isEmpty())
+        {
+            return;
+        }
+
+        ShaderProgram program = BBSShaders.getPostFxProgram();
+        Framebuffer main = MinecraftClient.getInstance().getFramebuffer();
+
+        if (program == null || main == null || main.textureWidth <= 0 || main.textureHeight <= 0)
+        {
+            return;
+        }
+
+        captureDepth();
+
+        int prevRead = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+        int prevDraw = GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
+        int[] viewport = new int[4];
+
+        GL11.glGetIntegerv(GL11.GL_VIEWPORT, viewport);
+
+        try
+        {
+            if (scratch == null)
+            {
+                scratch = new SimpleFramebuffer(main.textureWidth, main.textureHeight, true, MinecraftClient.IS_SYSTEM_MAC);
+            }
+            else if (scratch.textureWidth != main.textureWidth || scratch.textureHeight != main.textureHeight)
+            {
+                scratch.resize(main.textureWidth, main.textureHeight, MinecraftClient.IS_SYSTEM_MAC);
+            }
+
+            /* Copied a moment ago, before the hand clears it: no need to read it back to know it holds the world */
+            boolean depth = depthCaptured;
+            float far = MinecraftClient.getInstance().gameRenderer.getFarPlaneDistance();
+
+            RenderSystem.disableDepthTest();
+            RenderSystem.disableBlend();
+            RenderSystem.depthMask(false);
+
+            for (FxOverlay ripple : ripples)
+            {
+                ripple.params[13] = 0.05F;
+                ripple.params[14] = far;
+                ripple.params[15] = depth ? 1F : 0F;
+
+                pass(program, main, ripple);
+            }
+        }
+        catch (Throwable e)
+        {
+            failed = true;
+
+            System.err.println("[BBS] Post-production effects failed and are switched off for this session:");
+            e.printStackTrace();
+        }
+        finally
+        {
+            /* depthCaptured stays: the copy is this frame's, and a world wobble clip later in the frame reads it too */
+
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, prevRead);
+            GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, prevDraw);
+            GlStateManager._viewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+
+            RenderSystem.depthMask(true);
+            RenderSystem.enableDepthTest();
+        }
+    }
+
     public static void render(MatrixStack stack, Batcher2D batcher, ClipContext context)
     {
         if (failed)
@@ -358,7 +435,9 @@ public class PostFxRenderer
 
         RenderSystem.setShader(() -> program);
         RenderSystem.setShaderTexture(0, scratch.getColorAttachment());
-        RenderSystem.setShaderTexture(1, wobble && worldDepth != null ? worldDepth.getDepthAttachment() : scratch.getColorAttachment());
+        boolean depthPass = wobble || overlay.kind == FxOverlay.RIPPLE;
+
+        RenderSystem.setShaderTexture(1, depthPass && worldDepth != null ? worldDepth.getDepthAttachment() : scratch.getColorAttachment());
 
         set(program, "Mode", overlay.kind);
         set(program, "Size", w, h);

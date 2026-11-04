@@ -210,6 +210,12 @@ public class UIFilmController extends UIElement implements GizmoViewport
         this.keys().register(Keys.FILM_CONTROLLER_PREV_REPLAY, () -> this.switchReplay(-1)).active(hasTwoOrMoreReplays).category(category);
         this.keys().register(Keys.FILM_CONTROLLER_NEXT_REPLAY, () -> this.switchReplay(1)).active(hasTwoOrMoreReplays).category(category);
 
+        /* The lattice's cage and handles in the viewport, built in */
+        FilmLatticeTool lattice = new FilmLatticeTool(this);
+
+        this.addonTools.add(lattice);
+        this.add(lattice);
+
         for (var factory : TOOL_FACTORIES)
         {
             var tool = Objects.requireNonNull(factory.apply(this));

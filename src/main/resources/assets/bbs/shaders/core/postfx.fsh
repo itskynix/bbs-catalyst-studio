@@ -483,6 +483,65 @@ vec3 worldWobble(vec2 uv)
     return scene(uv + wave * U0.y * w * vec2(1.0 / aspect(), 1.0));
 }
 
+/* 19: the air around a sound bending at its waves. U0 = (center u, center v, largest shift as a
+ * fraction of the frame height, ring half width in frame heights), U1 = the four ring radii and U2
+ * their weights (frame heights), U3 = (source distance in blocks, near, far, 1 when depth holds a
+ * scene), U4 = (seconds, rim tremble). Each ring pushes the picture out on one side of its rim and
+ * pulls it in on the other - a crest and a trough - and only what lies behind the source moves. */
+vec3 ripple(vec2 uv)
+{
+    float a = aspect();
+    vec2 p = (uv - U0.xy) * vec2(a, 1.0);
+    float r = length(p);
+
+    if (r < 0.00001)
+    {
+        return scene(uv);
+    }
+
+    float angle = atan(p.y, p.x);
+    float width = max(U0.w, 0.0001);
+    float shift = 0.0;
+
+    for (int i = 0; i < 4; i++)
+    {
+        float radius = U1[i] * (1.0 + U4.y * sin(angle * 6.0 + U4.x * 11.0 + float(i) * 1.7));
+        float d = (r - radius) / width;
+
+        if (abs(d) < 1.0)
+        {
+            shift += U2[i] * sin(d * 3.14159265) * (1.0 - abs(d));
+        }
+    }
+
+    if (abs(shift) < 0.00001)
+    {
+        return scene(uv);
+    }
+
+    if (U3.w > 0.5)
+    {
+        float depth = texture(Sampler1, uv).r;
+
+        if (depth < 0.99999)
+        {
+            float near = max(U3.y, 0.001);
+            float far = max(U3.z, near + 1.0);
+            float dist = 2.0 * near * far / (far + near - (depth * 2.0 - 1.0) * (far - near));
+
+            /* In front of the source: not in the bent air */
+            if (dist < U3.x - 0.5)
+            {
+                return scene(uv);
+            }
+        }
+    }
+
+    vec2 offset = (p / r) * shift * U0.z;
+
+    return scene(uv - offset / vec2(a, 1.0));
+}
+
 void main()
 {
     vec2 uv = texCoord0;
@@ -507,6 +566,7 @@ void main()
     else if (mode == 16) c = lensDistortion(uv);
     else if (mode == 17) c = screenShake(uv);
     else if (mode == 18) c = worldWobble(uv);
+    else if (mode == 19) c = ripple(uv);
     else c = scene(uv);
 
     fragColor = vec4(clamp(c, 0.0, 1.0), 1.0);

@@ -90,7 +90,7 @@ public class CubicVAORenderer extends CubicCubeRenderer
             return this.cpuGroups.contains(group);
         }
 
-        Map<String, ModelVAO> groupVaos = this.model.getVaos().get(group);
+        Map<String, ModelVAO> groupVaos = this.model.getGroupVaos(group);
 
         /* A welded bone tessellates on the CPU only while its seam actually bends — at rest it rides
          * its VAO like everything else. Groups with no VAO (shape-keyed meshes) always render immediate. */
@@ -102,7 +102,7 @@ public class CubicVAORenderer extends CubicCubeRenderer
     @Override
     public boolean renderGroup(BufferBuilder builder, MatrixStack stack, ModelGroup group, Model model)
     {
-        Map<String, ModelVAO> groupVaos = this.model.getVaos().get(group);
+        Map<String, ModelVAO> groupVaos = this.model.getGroupVaos(group);
 
         if (this.weldedGroups != null)
         {

@@ -504,12 +504,6 @@ public class UISettingsOverlayPanel extends UIOverlayPanel
 
             for (UIElement element : row == null ? UIValueMap.create(value, this) : row.create(this))
             {
-                /* The AI settings are work in progress: shown, read only */
-                if ("copilot".equals(category.getId()))
-                {
-                    element.setEnabled(false);
-                }
-
                 this.options.add(element);
             }
         }

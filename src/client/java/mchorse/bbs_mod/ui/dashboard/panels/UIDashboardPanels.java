@@ -256,6 +256,12 @@ public class UIDashboardPanels extends UIElement
 
     public void setPanel(UIDashboardPanel panel)
     {
+        /* A panel that needs a world is never put on screen without one: it would reach for the player and the world */
+        if (panel != null && mchorse.bbs_mod.ui.dashboard.panels.landing.UICentralHubScreen.isLocked(panel.getClass()))
+        {
+            return;
+        }
+
         UIDashboardPanel lastPanel = this.panel;
 
         if (this.panel != null)

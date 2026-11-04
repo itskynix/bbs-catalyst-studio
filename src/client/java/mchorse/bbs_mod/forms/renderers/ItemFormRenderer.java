@@ -2,6 +2,7 @@ package mchorse.bbs_mod.forms.renderers;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.client.BBSRendering;
+import mchorse.bbs_mod.cubic.render.LatticeDeform;
 import mchorse.bbs_mod.client.BBSShaders;
 import mchorse.bbs_mod.forms.CustomVertexConsumerProvider;
 import mchorse.bbs_mod.forms.FormTranslucentQueue;
@@ -69,6 +70,8 @@ public class ItemFormRenderer extends FormRenderer<ItemForm>
         int light = context.light;
 
         context.stack.push();
+        /* The form's own frame: what the lattice is laid in */
+        Matrix4f frame = new Matrix4f(context.stack.peek().getPositionMatrix());
 
         if (context.isPicking())
         {
@@ -103,6 +106,14 @@ public class ItemFormRenderer extends FormRenderer<ItemForm>
         if (!context.isPicking() && fx.isShattering())
         {
             substitute = FormFx.shatter(substitute, new ShatterField(fx, context.stack.peek().getPositionMatrix(), ShatterField.CELL, false));
+        }
+
+        /* The lattice bends the geometry first, so it is the outermost: shattering and tinting see it bent */
+        LatticeDeform bend = context.isPicking() ? null : LatticeDeform.forPlain(this.form);
+
+        if (bend != null)
+        {
+            substitute = FormFx.lattice(substitute, frame, bend);
         }
 
         /* Publishing the form's camera-space origin opts its translucent layers into the

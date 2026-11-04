@@ -12,6 +12,7 @@ import mchorse.bbs_mod.camera.controller.PlayCameraController;
 import mchorse.bbs_mod.api.events.ModelBlockEntityUpdateCallback;
 import mchorse.bbs_mod.film.BaseFilmController;
 import mchorse.bbs_mod.film.WorldFilmController;
+import mchorse.bbs_mod.film.VehicleRide;
 import mchorse.bbs_mod.forms.FormRenderLast;
 import mchorse.bbs_mod.forms.renderers.utils.RecolorVertexConsumer;
 import mchorse.bbs_mod.forms.structure.StructureWand;
@@ -640,6 +641,9 @@ public class BBSRendering
             menu.startRenderFrame(mc./*$ gtd*/getTickDelta()/**/);
         }
 
+        mchorse.bbs_mod.forms.renderers.AudioFormRenderer.reapOrphans();
+        mchorse.bbs_mod.forms.renderers.AudioFormRenderer.clearRipples();
+
         renderingWorld = true;
         frameCapturedThisRender = false;
 
@@ -896,6 +900,7 @@ public class BBSRendering
 
         BBSModClient.getFilms().renderHud(batcher2D, tickDelta);
         StructureWand.renderHud(batcher2D);
+        VehicleRide.renderHud(batcher2D, tickDelta);
     }
 
     /**

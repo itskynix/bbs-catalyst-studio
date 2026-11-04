@@ -269,7 +269,8 @@ public class Films
             ClientNetwork.sendActionRecording(film.getId(), replayId, this.recorder.getTick(), this.recorder.countdown, true);
         }
 
-        if (replay != null)
+        /* Taking the vehicle one is driving: the player stays themselves, sitting in it */
+        if (replay != null && !VehicleRide.isRidden(film, replay))
         {
             ClientNetwork.sendPlayerForm(replay.form.get());
         }

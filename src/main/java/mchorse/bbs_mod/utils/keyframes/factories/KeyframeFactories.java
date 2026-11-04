@@ -30,6 +30,9 @@ public class KeyframeFactories
     public static final ParticleSettingsKeyframeFactory PARTICLE_SETTINGS = new ParticleSettingsKeyframeFactory();
     public static final BoneConstraintKeyframeFactory BONE_CONSTRAINT = new BoneConstraintKeyframeFactory();
     public static final JitterKeyframeFactory JITTER = new JitterKeyframeFactory();
+    public static final LatticeKeyframeFactory LATTICE = new LatticeKeyframeFactory(LatticeKeyframeFactory.LENGTH);
+    public static final LatticeKeyframeFactory BULGE = new LatticeKeyframeFactory(LatticeKeyframeFactory.BULGE_LENGTH);
+    public static final LatticeKeyframeFactory CENTER = new LatticeKeyframeFactory(LatticeKeyframeFactory.CENTER_LENGTH);
 
     /** Transform-like values, which the graph editor opens as one curve per component. */
     public static boolean isComposite(IKeyframeFactory factory)
@@ -85,5 +88,8 @@ public class KeyframeFactories
         FACTORIES.put("particle_settings", PARTICLE_SETTINGS);
         FACTORIES.put("bone_constraint", BONE_CONSTRAINT);
         FACTORIES.put("jitter", JITTER);
+        FACTORIES.put("lattice", LATTICE);
+        FACTORIES.put("lattice_bulge", BULGE);
+        FACTORIES.put("lattice_center", CENTER);
     }
 }

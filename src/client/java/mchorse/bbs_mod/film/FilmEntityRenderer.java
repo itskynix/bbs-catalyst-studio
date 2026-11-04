@@ -208,6 +208,11 @@ public class FilmEntityRenderer
 
         FormUtilsClient.render(form, formContext);
 
+        if (context.map == null && !relative)
+        {
+            mchorse.bbs_mod.ui.film.controller.FilmLatticeTool.renderGuide(entity, form, stack, transition);
+        }
+
         /* A second, post-render span: the gizmo, the axes preview and the anchor gizmo are adjacent and all
          * read the pose the form just rendered with (states applied), so they share one evaluation — the
          * gizmo and the preview resolve the very same form and entity, which in the editor is every frame,
