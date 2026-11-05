@@ -167,6 +167,8 @@ public class FormUtilsClient
         register(FramebufferForm.class, FramebufferFormRenderer::new);
         register(StructureForm.class, StructureFormRenderer::new);
         register(AudioForm.class, AudioFormRenderer::new);
+        register(qualet.irlite.forms.PointLightForm.class, qualet.irlite.client.forms.PointLightFormRenderer::new);
+        register(qualet.irlite.forms.SpotlightForm.class, qualet.irlite.client.forms.SpotlightFormRenderer::new);
         register(DecalForm.class, DecalFormRenderer::new);
         register(HeightFogForm.class, HeightFogFormRenderer::new);
     }
@@ -306,7 +308,7 @@ public class FormUtilsClient
 
             try
             {
-                renderer.render(context);
+                qualet.irlite.client.light.ReplayOutlineContext.render(renderer, context);
             }
             catch (Exception e)
             {

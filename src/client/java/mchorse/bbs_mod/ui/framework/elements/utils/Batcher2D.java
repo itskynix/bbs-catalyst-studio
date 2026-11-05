@@ -138,12 +138,28 @@ public class Batcher2D
 
     public void drawGuiTexture(net.minecraft.util.Identifier texture, int x, int y, int width, int height)
     {
-        mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(this.context, texture, x, y, width, height);
+        if (texture != null)
+        {
+            //? if >=1.20.4 {
+            this.context.drawGuiTexture(texture, x, y, width, height);
+            //?} else {
+            /*net.minecraft.util.Identifier sprite = mchorse.bbs_mod.utils.Ids.of(texture.getNamespace(), "textures/gui/sprites/" + texture.getPath() + ".png");
+            this.context.drawTexture(sprite, x, y, 0F, 0F, width, height, width, height);
+            *///?}
+        }
     }
 
     public void drawGuiTexture(net.minecraft.util.Identifier texture, int i, int j, int k, int l, int x, int y, int width, int height)
     {
-        mchorse.bbs_mod.camera.pov.utils.PovDrawHelper.drawGuiTexture(this.context, texture, i, j, k, l, x, y, width, height);
+        if (texture != null)
+        {
+            //? if >=1.20.4 {
+            this.context.drawGuiTexture(texture, i, j, k, l, x, y, width, height);
+            //?} else {
+            /*net.minecraft.util.Identifier sprite = mchorse.bbs_mod.utils.Ids.of(texture.getNamespace(), "textures/gui/sprites/" + texture.getPath() + ".png");
+            this.context.drawTexture(sprite, x, y, (float) k, (float) l, width, height, i, j);
+            *///?}
+        }
     }
 
     public FontRenderer getFont()

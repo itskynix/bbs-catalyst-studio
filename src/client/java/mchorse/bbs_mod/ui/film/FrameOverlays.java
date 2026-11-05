@@ -35,6 +35,8 @@ public class FrameOverlays
         /* The full-screen passes go first, so the images and subtitles are drawn over the graded frame */
         register(PostFxRenderer::render);
         register(DebrisSpawner::render);
+        /* The interface of the replay a Point of View clip looks out of: over the hands, under the images */
+        register(mchorse.bbs_mod.film.eye.PovHud::render);
         register((stack, batcher, context) -> UIImageRenderer.renderImages(stack, batcher, ImageClip.getImages(context)));
         register((stack, batcher, context) -> UISubtitleRenderer.renderSubtitles(stack, batcher, SubtitleClip.getSubtitles(context)));
     }

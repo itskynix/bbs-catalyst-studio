@@ -75,7 +75,8 @@ public class UISettingsOverlayPanel extends UIOverlayPanel
 
     public static final int GROUP_CORE = 0;
     public static final int GROUP_KEYBINDS = 1;
-    public static final int GROUP_ADDONS = 2;
+    public static final int GROUP_LIGHTING = 2;
+    public static final int GROUP_ADDONS = 3;
 
     public UITextbox search;
     public UIScrollView sections;
@@ -202,20 +203,22 @@ public class UISettingsOverlayPanel extends UIOverlayPanel
 
     private void buildEntries()
     {
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < 4; i++)
         {
             this.groups.add(new ArrayList<>());
         }
 
         Settings main = BBSMod.getSettings().modules.get("bbs");
         Settings keybinds = BBSMod.getSettings().modules.get("keybinds");
+        Settings irlights = BBSMod.getSettings().modules.get("irlights");
 
         this.addCategories(GROUP_CORE, main);
         this.addCategories(GROUP_KEYBINDS, keybinds);
+        this.addCategories(GROUP_LIGHTING, irlights);
 
         for (Settings settings : BBSMod.getSettings().modules.values())
         {
-            if (settings != main && settings != keybinds)
+            if (settings != main && settings != keybinds && settings != irlights)
             {
                 this.addCategories(GROUP_ADDONS, settings);
             }
@@ -407,6 +410,11 @@ public class UISettingsOverlayPanel extends UIOverlayPanel
                     this.options.add(new UIDeliverBanner(this));
                 }
                 this.appendValues(this.current.category, false);
+
+                if (this.group == GROUP_CORE && this.current.category.getId().equals("general"))
+                {
+                    this.options.add(new UICreditsBanner());
+                }
             }
             else if (this.group == GROUP_ADDONS)
             {
@@ -684,8 +692,8 @@ public class UISettingsOverlayPanel extends UIOverlayPanel
         private static final int PADDING = 10;
         private static final int GAP = 4;
 
-        private static final IKey[] LABELS = {UIKeys.SETTINGS_TAB_CORE, UIKeys.SETTINGS_TAB_KEYBINDS, UIKeys.SETTINGS_ADDONS};
-        private static final Icon[] ICONS = {Icons.SETTINGS, Icons.KEY_CAP, Icons.MORE};
+        private static final IKey[] LABELS = {UIKeys.SETTINGS_TAB_CORE, UIKeys.SETTINGS_TAB_KEYBINDS, UIKeys.SETTINGS_TAB_LIGHTING, UIKeys.SETTINGS_ADDONS};
+        private static final Icon[] ICONS = {Icons.SETTINGS, Icons.KEY_CAP, Icons.LIGHT, Icons.MORE};
 
         private final UISettingsOverlayPanel panel;
 
@@ -895,6 +903,50 @@ public class UISettingsOverlayPanel extends UIOverlayPanel
 
             context.batcher.text(line, this.area.x, this.area.y + 26, Colors.GRAY, false);
             context.batcher.box(this.area.x, this.area.ey() - 1, this.area.ex(), this.area.ey(), BBSSettings.dividerColor());
+
+            super.render(context);
+        }
+    }
+
+    /**
+     * Card displaying creator, contributor and third-party credits in the General settings page.
+     */
+    public static class UICreditsBanner extends UIElement
+    {
+        private static final int PAD = 10;
+
+        public UICreditsBanner()
+        {
+            this.h(92);
+            this.marginTop(14);
+            this.marginBottom(8);
+        }
+
+        @Override
+        public void render(UIContext context)
+        {
+            FontRenderer font = context.batcher.getFont();
+
+            pill(context.batcher, this.area.x, this.area.y, this.area.ex(), this.area.ey(), 6, Colors.setA(BBSSettings.primaryColor.get(), 0.12F));
+            context.batcher.box(this.area.x, this.area.y + 6, this.area.x + 2, this.area.ey() - 6, Colors.A100 | BBSSettings.primaryColor.get());
+
+            int y = this.area.y + PAD;
+
+            context.batcher.icon(Icons.USER, Colors.WHITE, this.area.x + PAD, y + 4, 0F, 0.5F);
+            context.batcher.text(UIKeys.SETTINGS_CREDITS_TITLE.get(), this.area.x + PAD + 18, y, Colors.WHITE, true);
+
+            y += font.getHeight() + 6;
+
+            context.batcher.text("• " + UIKeys.SETTINGS_CREDITS_KYNIX.get(), this.area.x + PAD + 8, y, 0xFFE0E0E0, true);
+            y += font.getHeight() + 3;
+
+            context.batcher.text("• " + UIKeys.SETTINGS_CREDITS_MCHORSE.get(), this.area.x + PAD + 8, y, Colors.GRAY, false);
+            y += font.getHeight() + 2;
+
+            context.batcher.text("• " + UIKeys.SETTINGS_CREDITS_WEMPPY.get() + "  |  " + UIKeys.SETTINGS_CREDITS_QUALETT.get(), this.area.x + PAD + 8, y, Colors.GRAY, false);
+            y += font.getHeight() + 2;
+
+            context.batcher.text("• " + UIKeys.SETTINGS_CREDITS_GLAXIUM.get(), this.area.x + PAD + 8, y, Colors.GRAY, false);
 
             super.render(context);
         }

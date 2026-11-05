@@ -20,6 +20,20 @@
 			}
 		}
 	],
+	"fp_main": {
+		"group": "right_arm",
+		"transform": {
+			"t": [0.13875, 1.525, 0],
+			"r": [180, 0, -5.729]
+		}
+	},
+	"fp_offhand": {
+		"group": "left_arm",
+		"transform": {
+			"t": [-0.13875, 1.525, 0],
+			"r": [180, 0, 5.729]
+		}
+	},
 	"disabledBones": [
 		"body",
 		"misc_bone_1",

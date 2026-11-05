@@ -15,6 +15,7 @@ import mchorse.bbs_mod.mixin.client.WorldRendererAccessor;
 import mchorse.bbs_mod.network.ClientNetwork;
 import mchorse.bbs_mod.utils.colors.Color;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gl.Framebuffer;
@@ -114,6 +115,9 @@ public class FormPortals
     private static boolean wantStencil;
     private static boolean warned;
     private static boolean terrainFailed;
+
+    /* Sodium owns the chunk rendering when it is loaded; its bridge is never touched otherwise */
+    private static final boolean SODIUM_LOADED = FabricLoader.getInstance().isModLoaded("sodium");
     private static long ticks;
     private static PortalForm guard;
     private static int guardAge;
@@ -1547,6 +1551,23 @@ public class FormPortals
         try
         {
             MinecraftClient mc = MinecraftClient.getInstance();
+
+            /* With Sodium the vanilla chunk storage is empty: its own sections are drawn through the bridge */
+            if (SODIUM_LOADED)
+            {
+                if (context.camera() != null)
+                {
+                    float reach = Math.min(mc.options.getClampedViewDistance(), TERRAIN_CHUNKS) * 16F + 14F;
+
+                    SodiumPortalBridge.drawTerrain(view, modelView, source, passProjection, context.camera().getPos(), reach);
+                }
+
+                RenderSystem.activeTexture(GL13.GL_TEXTURE0);
+                RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+
+                return;
+            }
+
             BuiltChunkStorage storage = mc.worldRenderer == null ? null : ((WorldRendererAccessor) mc.worldRenderer).bbs$getChunks();
 
             /* A replaced terrain renderer keeps its chunks to itself; there is nothing to draw then */

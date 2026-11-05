@@ -626,7 +626,7 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
 
             for (Map.Entry<ArmorType, ArmorSlot> entry : model.getArmorSlots().entrySet())
             {
-                this.renderArmor(target, stack, entry.getKey(), entry.getValue(), finalColor, overlay, light);
+                this.renderArmor(target, stack, entry.getKey(), entry.getValue(), finalColor, overlay, light, null);
             }
         }
 
@@ -756,7 +756,8 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
         ModelConstraintsRuntime.apply(model, target, transition);
     }
 
-    private void renderArmor(IEntity target, MatrixStack stack, ArmorType type, ArmorSlot armorSlot, Color color, int overlay, int light)
+    /** @param offset moves the piece on its bone, before the slot's own placement; null for none */
+    private void renderArmor(IEntity target, MatrixStack stack, ArmorType type, ArmorSlot armorSlot, Color color, int overlay, int light, mchorse.bbs_mod.utils.pose.Transform offset)
     {
         Matrix4f matrix = this.getArmorBoneMatrix(armorSlot.group, type);
 
@@ -766,6 +767,12 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
 
             stack.push();
             MatrixStackUtils.multiply(stack, matrix);
+
+            if (offset != null)
+            {
+                MatrixStackUtils.applyTransform(stack, offset);
+            }
+
             MatrixStackUtils.applyTransform(stack, armorSlot.transform);
             stack.multiply(RotationAxis.POSITIVE_X.rotationDegrees(180F));
 
@@ -1025,6 +1032,39 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
         stack.multiply(RotationAxis.POSITIVE_X.rotationDegrees(200F));
         stack.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(f * -135F));
         stack.translate(f * 5.6F, 0F, 0F);
+    }
+
+    /**
+     * The armor sleeve over a first-person hand: the chestplate's arm piece on the model's arm
+     * slot, in the frame {@link #renderFirstPersonHand} drew the hand in and right after it, since it
+     * reads the bones that pass captured. The vanilla first person has no sleeve; the POV hands do.
+     * False when the model has no first-person or armor slot for that arm.
+     */
+    public boolean renderFirstPersonArmor(IEntity target, MatrixStack matrices, int light, Hand hand, mchorse.bbs_mod.utils.pose.Transform offset)
+    {
+        ModelInstance model = this.getModel();
+
+        if (model == null || target == null)
+        {
+            return false;
+        }
+
+        ArmorType type = hand == Hand.MAIN_HAND ? ArmorType.RIGHT_ARM : ArmorType.LEFT_ARM;
+        ArmorSlot armorSlot = model.getArmorSlots().get(type);
+        ArmorSlot fpSlot = hand == Hand.MAIN_HAND ? model.getFpMain() : model.getFpOffhand();
+
+        if (armorSlot == null || fpSlot == null)
+        {
+            return false;
+        }
+
+        matrices.push();
+        matrices.multiply(RotationAxis.POSITIVE_Y.rotation(MathUtils.PI));
+        MatrixStackUtils.applyTransform(matrices, fpSlot.transform);
+        this.renderArmor(target, matrices, type, armorSlot, Color.white(), OverlayTexture.DEFAULT_UV, light, offset);
+        matrices.pop();
+
+        return true;
     }
 
     /**

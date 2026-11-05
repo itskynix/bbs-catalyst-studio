@@ -129,6 +129,7 @@ public abstract class UIClip <T extends Clip> extends UIElement
         register(MathClip.class, UIMathClip::new);
         register(LookClip.class, UILookClip::new);
         register(TrackerClientClip.class, UITrackerClip::new);
+        register(mchorse.bbs_mod.camera.clips.misc.ActorEyeClientClip.class, UIActorEyeClip::new);
         register(OrbitClip.class, UIOrbitClip::new);
         register(RemapperClip.class, UIRemapperClip::new);
         register(AudioClientClip.class, UIAudioClip::new);
@@ -151,6 +152,16 @@ public abstract class UIClip <T extends Clip> extends UIElement
         register(mchorse.bbs_mod.camera.clips.fx.DebrisClip.class, UIFxClips.UIDebrisClip::new);
         register(mchorse.bbs_mod.camera.clips.fx.ScreenShaderGraphClip.class, UIFxClips.UIScreenShaderGraphClip::new);
         register(mchorse.bbs_mod.camera.clips.fx.CompoundFxClip.class, UICompoundFxClip::new);
+
+        /* The POV action clips, on a replay's POV action timeline */
+        register(mchorse.bbs_mod.film.pov.PovGuiClip.class, mchorse.bbs_mod.ui.film.clips.pov.UIPovGuiClip::new);
+        register(mchorse.bbs_mod.film.pov.PovShakeClip.class, mchorse.bbs_mod.ui.film.clips.pov.UIPovShakeClip::new);
+        register(mchorse.bbs_mod.film.pov.PovParticleClip.class, mchorse.bbs_mod.ui.film.clips.pov.UIPovParticleClip::new);
+        register(mchorse.bbs_mod.film.pov.PovBossBarClip.class, mchorse.bbs_mod.ui.film.clips.pov.UIPovBossBarClip::new);
+        register(mchorse.bbs_mod.film.pov.PovStatusEffectsClip.class, mchorse.bbs_mod.ui.film.clips.pov.UIPovStatusEffectsClip::new);
+        register(mchorse.bbs_mod.film.pov.PovToastClip.class, mchorse.bbs_mod.ui.film.clips.pov.UIPovToastClip::new);
+        register(mchorse.bbs_mod.film.pov.PovChatClip.class, mchorse.bbs_mod.ui.film.clips.pov.UIPovChatClip::new);
+        register(mchorse.bbs_mod.film.pov.PovScreenEffectsClip.class, mchorse.bbs_mod.ui.film.clips.pov.UIPovScreenEffectsClip::new);
 
         register(ChatActionClip.class, UIChatActionClip::new);
         register(CommandActionClip.class, UICommandActionClip::new);

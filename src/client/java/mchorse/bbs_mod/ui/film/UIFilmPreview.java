@@ -15,6 +15,7 @@ import mchorse.bbs_mod.camera.utils.TimeUtils;
 import mchorse.bbs_mod.client.BBSRendering;
 import mchorse.bbs_mod.ui.framework.UIScreen;
 import mchorse.bbs_mod.film.Films;
+import mchorse.bbs_mod.film.eye.PovGuiRenderer;
 import mchorse.bbs_mod.graphics.texture.Texture;
 import mchorse.bbs_mod.graphics.window.Window;
 import net.minecraft.client.gl.Framebuffer;
@@ -640,6 +641,12 @@ public class UIFilmPreview extends UIElement
 
         if (area.isInside(context))
         {
+            /* The arrows and tabs of a POV screen in the frame turn its pages and tabs, as in the game */
+            if (context.mouseButton == 0 && PovGuiRenderer.click((context.mouseX - area.x) / (float) area.w, (context.mouseY - area.y) / (float) area.h))
+            {
+                return true;
+            }
+
             if (this.panel.getController().picker.pickTarget(context))
             {
                 return true;

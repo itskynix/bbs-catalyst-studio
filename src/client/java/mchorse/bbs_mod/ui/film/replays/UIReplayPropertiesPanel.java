@@ -8,7 +8,17 @@ import java.util.function.Supplier;
 
 import mchorse.bbs_mod.film.Film;
 import mchorse.bbs_mod.film.ReplayLookAt;
+import mchorse.bbs_mod.film.replays.PovBodyParts;
+import mchorse.bbs_mod.film.replays.PovRig;
 import mchorse.bbs_mod.film.replays.Replay;
+import mchorse.bbs_mod.film.replays.ReplayPov;
+import mchorse.bbs_mod.forms.FormUtils;
+import mchorse.bbs_mod.ui.film.replays.pov.UIPovBodyPartList;
+import mchorse.bbs_mod.ui.film.replays.pov.UIPovModelEditor;
+import mchorse.bbs_mod.ui.forms.UIFormPalette;
+import mchorse.bbs_mod.ui.framework.elements.buttons.UIIcon;
+import mchorse.bbs_mod.ui.framework.elements.input.UIPropTransform;
+import mchorse.bbs_mod.ui.framework.elements.overlay.UIOverlay;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UICirculate;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
@@ -75,6 +85,22 @@ public class UIReplayPropertiesPanel extends UIElement
     public UITrackpad lookAtY;
     public UITrackpad lookAtZ;
     public UIElement lookAtPoint;
+
+    /* Point of view: the hand model, how the head and the hurt jolt behave, and the POV body parts */
+    public UISection povSection;
+    public UINestedEdit povHand;
+    public UIButton povHandReset;
+    public UIToggle povHardcoreLook;
+    public UIToggle povCameraShake;
+    public UIPovBodyPartList povParts;
+    public UINestedEdit povPartForm;
+    public UIButton povPartBone;
+    public UIToggle povPartEnabled;
+    public UIPropTransform povPartTransform;
+    private UIElement povPartFields;
+
+    /** Whether the section is laid out as shown; it is only for replays with a point of view */
+    private boolean shownPov = true;
 
     /** The look-at mode the section is laid out for; the fields of the other modes are hidden */
     private int shownLookAtMode = -1;
@@ -212,6 +238,8 @@ public class UIReplayPropertiesPanel extends UIElement
             trackpad.context((menu) -> menu.action(Icons.BLOCK, UIKeys.FILM_REPLAY_LOOK_AT_FROM_LOOK, this::pasteLookAtFromLook));
         }
 
+        this.createPovSection();
+
         UISection lookAtSection = new UISection(UIKeys.FILM_REPLAY_LOOK_AT);
 
         lookAtSection.fields.add(
@@ -239,11 +267,13 @@ public class UIReplayPropertiesPanel extends UIElement
 
         this.properties = UI.scrollView(UIConstants.MARGIN, UIConstants.SCROLL_PADDING,
             this.pickEdit, this.enabled, this.label, this.nameTag,
+            this.povSection,
             lookAtSection,
             shadowSection,
             other
         );
         this.properties.relative(this).x(0).y(0).w(1F).h(1F);
+        this.bound(this.povSection, this::showPovSection);
 
         for (var factory : ACTIONS)
         {
@@ -255,6 +285,197 @@ public class UIReplayPropertiesPanel extends UIElement
         this.add(this.properties);
         this.showLookAtFields(ReplayLookAt.OFF);
         this.setReplay(null);
+    }
+
+    /**
+     * The POV section, as in the replay list's own POV category: the hand model picked (Pick) or
+     * placed in the POV model editor (Edit), Hardcore Look and Camera Shake, and the POV body
+     * parts with the picked one's form, bone, switch and transform.
+     */
+    private void createPovSection()
+    {
+        this.povHand = new UINestedEdit((editing) ->
+        {
+            if (this.replay == null)
+            {
+                return;
+            }
+
+            if (editing)
+            {
+                UIOverlay.addOverlay(this.getContext(), new UIPovModelEditor(this.filmPanel, this.replay), 0.9F, 0.9F).instant();
+            }
+            else
+            {
+                Replay replay = this.replay;
+
+                UIFormPalette.open(this.getParentContainer(), false, PovHandsForm.of(replay), (f) ->
+                {
+                    replay.pov.handForm.set(FormUtils.copy(f));
+                    this.povHand.setForm(PovHandsForm.of(replay));
+                });
+            }
+        });
+        this.povHand.pick.tooltip(UIKeys.FILM_REPLAY_POV_HAND_PICK);
+        this.povHand.edit.tooltip(UIKeys.FILM_REPLAY_POV_HAND_EDIT);
+
+        this.povHandReset = new UIButton(UIKeys.FILM_REPLAY_POV_HAND_RESET, (b) ->
+        {
+            if (this.replay != null)
+            {
+                this.replay.pov.handForm.set(null);
+                this.povHand.setForm(PovHandsForm.of(this.replay));
+            }
+        });
+        this.povHandReset.tooltip(UIKeys.FILM_REPLAY_POV_HAND_RESET);
+
+        this.povHardcoreLook = this.bound(new UIToggle(UIKeys.FILM_REPLAY_POV_HARDCORE_LOOK, (b) -> this.edit((replay) -> replay.pov.hardcoreLook.set(b.getValue()))), (r) -> this.povHardcoreLook.setValue(r.pov.hardcoreLook.get()));
+        this.povHardcoreLook.tooltip(UIKeys.FILM_REPLAY_POV_HARDCORE_LOOK_TOOLTIP);
+        this.povCameraShake = this.bound(new UIToggle(UIKeys.FILM_REPLAY_POV_CAMERA_SHAKE, (b) -> this.edit((replay) -> replay.pov.cameraShake.set(b.getValue()))), (r) -> this.povCameraShake.setValue(r.pov.cameraShake.get()));
+        this.povCameraShake.tooltip(UIKeys.FILM_REPLAY_POV_CAMERA_SHAKE_TOOLTIP);
+
+        this.povParts = new UIPovBodyPartList((l) -> this.fillPovPart(l.isEmpty() ? null : l.get(0)));
+        this.povParts.background();
+        this.povParts.h(16 * 4);
+
+        UIIcon add = new UIIcon(Icons.ADD, (b) ->
+        {
+            if (this.replay != null)
+            {
+                PovBodyParts.Part part = this.replay.pov.bodyParts.add(null, PovRig.endOf(true));
+
+                this.povParts.setList(this.replay.pov.bodyParts.getAllTyped());
+                this.povParts.setCurrentScroll(part);
+                this.fillPovPart(part);
+            }
+        });
+        add.tooltip(UIKeys.FILM_REPLAY_POV_BODY_PARTS_ADD);
+
+        UIIcon remove = new UIIcon(Icons.REMOVE, (b) ->
+        {
+            PovBodyParts.Part part = this.povParts.getCurrentFirst();
+
+            if (this.replay != null && part != null)
+            {
+                this.replay.pov.bodyParts.remove(part);
+                this.povParts.setList(this.replay.pov.bodyParts.getAllTyped());
+                this.fillPovPart(null);
+            }
+        });
+        remove.tooltip(UIKeys.FILM_REPLAY_POV_BODY_PARTS_REMOVE);
+
+        this.povPartForm = new UINestedEdit((editing) ->
+        {
+            PovBodyParts.Part part = this.povParts.getCurrentFirst();
+
+            if (part != null)
+            {
+                UIFormPalette.open(this.getParentContainer(), editing, part.form.get(), (f) ->
+                {
+                    part.form.set(FormUtils.copy(f));
+                    this.povPartForm.setForm(part.form.get());
+                });
+            }
+        });
+
+        this.povPartBone = new UIButton(UIKeys.FILM_REPLAY_POV_BODY_PARTS_BONE, (b) ->
+        {
+            PovBodyParts.Part part = this.povParts.getCurrentFirst();
+
+            if (part == null)
+            {
+                return;
+            }
+
+            this.getContext().replaceContextMenu((menu) ->
+            {
+                for (String bone : PovRig.BONES)
+                {
+                    menu.action(PovRig.isArm(bone) ? Icons.LIMB : Icons.POINTER, IKey.constant(bone), bone.equals(part.bone.get()), () ->
+                    {
+                        part.bone.set(bone);
+                        this.povPartBone.label = IKey.constant(bone);
+                    });
+                }
+            });
+        });
+        this.povPartBone.tooltip(UIKeys.FILM_REPLAY_POV_BODY_PARTS_BONE);
+
+        this.povPartEnabled = new UIToggle(UIKeys.FILM_REPLAY_POV_BODY_PARTS_ENABLED, (b) ->
+        {
+            PovBodyParts.Part part = this.povParts.getCurrentFirst();
+
+            if (part != null)
+            {
+                part.enabled.set(b.getValue());
+            }
+        });
+
+        this.povPartTransform = new UIPropTransform().callbacks(() ->
+        {
+            PovBodyParts.Part part = this.povParts.getCurrentFirst();
+
+            return part == null ? null : part.transform;
+        });
+
+        this.povPartFields = UI.column(this.povPartForm, this.povPartBone, this.povPartEnabled, this.povPartTransform);
+
+        /* The list's header: its name, and the add and remove icons pinned at the right */
+        UIElement partsHeader = new UIElement();
+        UIElement partsLabel = UI.label(UIKeys.FILM_REPLAY_POV_BODY_PARTS).labelAnchor(0F, 0.5F);
+
+        partsHeader.h(20);
+        partsLabel.relative(partsHeader).w(1F, -40).h(1F);
+        add.relative(partsHeader).x(1F, -40).wh(20, 20);
+        remove.relative(partsHeader).x(1F, -20).wh(20, 20);
+        partsHeader.add(partsLabel, add, remove);
+
+        this.povSection = new UISection(UIKeys.FILM_REPLAY_POV_SECTION);
+        this.povSection.fields.add(
+            this.povHand, this.povHandReset,
+            this.povHardcoreLook, this.povCameraShake,
+            partsHeader,
+            this.povParts, this.povPartFields
+        );
+        this.povSection.setExpanded(false);
+    }
+
+    /** The picked POV body part's fields, or none of them without one. */
+    private void fillPovPart(PovBodyParts.Part part)
+    {
+        this.povPartFields.setVisible(part != null);
+
+        if (part != null)
+        {
+            this.povPartForm.setForm(part.form.get());
+            this.povPartBone.label = IKey.constant(part.bone.get());
+            this.povPartEnabled.setValue(part.enabled.get());
+            this.povPartTransform.setTransform(part.transform.get());
+        }
+
+        if (this.properties != null && this.properties.hasParent())
+        {
+            this.properties.resize();
+        }
+    }
+
+    /** The section only for a replay with a point of view; laid out again only when that changes. */
+    private void showPovSection(Replay replay)
+    {
+        boolean shown = ReplayPov.supports(replay);
+
+        if (shown == this.shownPov)
+        {
+            return;
+        }
+
+        this.shownPov = shown;
+        this.povSection.setVisible(shown);
+
+        if (this.properties != null && this.properties.hasParent())
+        {
+            this.properties.resize();
+        }
     }
 
     /** Only the fields of the chosen mode: the replay picker for a replay, X/Y/Z for a point. */
@@ -386,6 +607,23 @@ public class UIReplayPropertiesPanel extends UIElement
         if (replay != null)
         {
             this.pickEdit.setForm(replay.form.get());
+            this.povHand.setForm(PovHandsForm.of(replay));
+            this.povParts.setList(replay.pov.bodyParts.getAllTyped());
+            this.povParts.deselect();
+        }
+
+        this.fillPovPart(null);
+        this.showPovSection(replay);
+    }
+
+    /** The form whose arms the POV shows: its own hand model, else the replay's form. */
+    private static final class PovHandsForm
+    {
+        static Form of(Replay replay)
+        {
+            Form hand = replay.pov.handForm.get();
+
+            return hand != null ? hand : replay.form.get();
         }
     }
 }

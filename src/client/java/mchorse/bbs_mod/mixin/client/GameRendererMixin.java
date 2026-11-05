@@ -77,6 +77,9 @@ public abstract class GameRendererMixin
         {
             matrices.multiply(RotationAxis.POSITIVE_Z.rotationDegrees(controller.getRoll()));
 
+            /* The nausea of a replay looked out of, on the same projection, as the game warps it */
+            mchorse.bbs_mod.film.eye.PovActions.applyNausea(matrices);
+
             info.cancel();
         }
     }
@@ -89,12 +92,38 @@ public abstract class GameRendererMixin
     public void onRenderHand(MatrixStack matrices, net.minecraft.client.render.Camera camera, float tickDelta, CallbackInfo info)
     //?}
     {
+        if (mchorse.bbs_mod.film.eye.ActorEyeHands.render(camera, tickDelta))
+        {
+            info.cancel();
+
+            return;
+        }
+
         ICameraController current = BBSModClient.getCameraController().getCurrent();
 
         if (current instanceof PlayCameraController)
         {
             info.cancel();
         }
+    }
+
+    /** The floating item the game pops up (a totem of undying saving the player) goes into a live take */
+    @Inject(method = "showFloatingItem", at = @At("HEAD"))
+    private void bbs$recordFloatingItem(net.minecraft.item.ItemStack floatingItem, CallbackInfo info)
+    {
+        mchorse.bbs_mod.film.Recorder recorder = BBSModClient.getFilms() == null ? null : BBSModClient.getFilms().getRecorder();
+
+        if (recorder != null && !recorder.hasNotStarted() && recorder.tick >= 0)
+        {
+            recorder.pov.recordTotem(floatingItem, recorder.tick);
+        }
+    }
+
+    /** Once a frame, before the world and its camera: the Point of View reports of the last frame are done with */
+    @Inject(method = "render", at = @At("HEAD"))
+    private void bbs$beginPovFrame(/*$ hudp*/float tickDelta, long startTime, boolean tick/**/, CallbackInfo info)
+    {
+        mchorse.bbs_mod.film.eye.ActorEyeState.beginFrame();
     }
 
     @Inject(at = @At("HEAD"), method = "renderWorld")

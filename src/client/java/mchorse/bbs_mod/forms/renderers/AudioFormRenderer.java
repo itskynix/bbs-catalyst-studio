@@ -1418,7 +1418,7 @@ public class AudioFormRenderer extends FormRenderer<AudioForm> implements ITicka
         return false;
     }
 
-    private static boolean isAnyFilmPlaying() {
+    static boolean isAnyFilmPlaying() {
         UIDashboard dashboard = BBSModClient.getDashboardIfCreated();
 
         if (dashboard != null && dashboard.getPanels() != null

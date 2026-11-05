@@ -15,15 +15,26 @@ public class UITimelineCategoryBar extends UIElement
 
     private final int bottomSpace;
 
+    /** The rule under the first button, for a bar headed by a view that is not one of its categories. */
+    private boolean separator = true;
+
     public UITimelineCategoryBar(int bottomSpace)
     {
         this.bottomSpace = bottomSpace;
         this.w(BUTTON_SIZE).h(1F);
     }
 
+    /** A bar of equals: no rule under the first button. */
+    public UITimelineCategoryBar noSeparator()
+    {
+        this.separator = false;
+
+        return this;
+    }
+
     public int getWidthForHeight(int height)
     {
-        int required = this.getChildren(UIIcon.class).size() * BUTTON_SIZE + SEPARATOR_HEIGHT + this.bottomSpace;
+        int required = this.getChildren(UIIcon.class).size() * BUTTON_SIZE + (this.separator ? SEPARATOR_HEIGHT : 0) + this.bottomSpace;
 
         if (height >= required) return BUTTON_SIZE;
 
@@ -43,7 +54,7 @@ public class UITimelineCategoryBar extends UIElement
         {
             int y = (i / columns) * BUTTON_SIZE;
 
-            if (columns == 1 && i > 0)
+            if (this.separator && columns == 1 && i > 0)
             {
                 y += SEPARATOR_HEIGHT;
             }
@@ -57,7 +68,7 @@ public class UITimelineCategoryBar extends UIElement
     {
         this.area.render(context.batcher, BBSSettings.chromeSurface());
 
-        if (this.area.w == BUTTON_SIZE)
+        if (this.separator && this.area.w == BUTTON_SIZE)
         {
             int y = this.area.y + BUTTON_SIZE + SEPARATOR_HEIGHT / 2;
 

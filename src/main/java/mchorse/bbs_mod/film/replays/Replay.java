@@ -32,6 +32,8 @@ public class Replay extends ValueGroup
     public final ReplayKeyframes keyframes = new ReplayKeyframes("keyframes");
     public final FormProperties properties = new FormProperties("properties");
     public final Clips actions = new Clips("actions", BBSMod.getFactoryActionClips());
+    /** The replay seen from inside its own head; see {@link ReplayPov}. */
+    public final ReplayPov pov = new ReplayPov("pov");
 
     public final ValueBoolean enabled = new ValueBoolean("enabled", true);
     /**
@@ -74,6 +76,7 @@ public class Replay extends ValueGroup
         this.add(this.keyframes);
         this.add(this.properties);
         this.add(this.actions);
+        this.add(this.pov);
 
         this.add(this.enabled);
         this.add(this.category);
@@ -160,6 +163,7 @@ public class Replay extends ValueGroup
         this.keyframes.shift(tick);
         this.properties.shift(tick);
         this.actions.shift(tick);
+        this.pov.shift(tick);
     }
 
     /**
@@ -176,6 +180,11 @@ public class Replay extends ValueGroup
         }
 
         for (KeyframeChannel<?> channel : this.properties.tracks.values())
+        {
+            last = Math.max(last, lastTick(channel));
+        }
+
+        for (KeyframeChannel<?> channel : this.pov.getChannels())
         {
             last = Math.max(last, lastTick(channel));
         }

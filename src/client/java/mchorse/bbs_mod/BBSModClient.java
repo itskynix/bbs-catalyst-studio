@@ -521,6 +521,8 @@ public class BBSModClient implements ClientModInitializer
             {
                 BBSMod.events.register(container.getEntrypoint());
             });
+        BBSMod.events.register(new qualet.irlite.client.IrlightsClientAddon());
+        new qualet.irlite.client.IrliteClient().onInitializeClient();
 
         AssetProvider provider = BBSMod.getProvider();
 
@@ -679,6 +681,7 @@ public class BBSModClient implements ClientModInitializer
             .register(Link.bbs("audio"), AudioClientClip.class, new ClipFactoryData(Icons.SOUND, 0xffc825))
             .register(Link.bbs("video"), VideoClientClip.class, new ClipFactoryData(Icons.VIDEO_CAMERA, 0xd21f3c))
             .register(Link.bbs("tracker"), TrackerClientClip.class, new ClipFactoryData(Icons.USER, 0x4cedfc))
+            .register(Link.bbs("actor_eye"), mchorse.bbs_mod.camera.clips.misc.ActorEyeClientClip.class, new ClipFactoryData(Icons.CAMERA, 0x2fa8a0))
             .register(Link.bbs("curve"), CurveClientClip.class, new ClipFactoryData(Icons.ARC, 0xff1493));
 
         /* The client-side registries, each followed by the event that lets addons add to it.
@@ -716,9 +719,6 @@ public class BBSModClient implements ClientModInitializer
         BBSMod.events.post(new RegisterPreviewOverlaysEvent());
         BBSMod.events.post(new RegisterFilmToolsEvent());
 
-        mchorse.bbs_mod.camera.pov.bootstrap.PovRegistries.register();
-        mchorse.bbs_mod.camera.pov.bootstrap.PovLocalization.register();
-        mchorse.bbs_mod.camera.pov.render.PovBlockOutlineRenderer.init();
 
         /* Keybinds */
         keyDashboard = this.createKey("dashboard", GLFW.GLFW_KEY_0);
@@ -741,7 +741,11 @@ public class BBSModClient implements ClientModInitializer
 
         StructureWand.register();
 
-        WorldRenderEvents.START.register((context) -> mchorse.bbs_mod.utils.InverseViewRotation.setOverride(null));
+        WorldRenderEvents.START.register((context) ->
+        {
+            mchorse.bbs_mod.utils.InverseViewRotation.setOverride(null);
+            mchorse.bbs_mod.graphics.lights.LightManager.beginFrame();
+        });
 
         WorldRenderEvents.BEFORE_ENTITIES.register((context) -> BBSRendering.beginEntityPass());
 
@@ -804,6 +808,10 @@ public class BBSModClient implements ClientModInitializer
          * (a drawn bow, a raised shield), and that state is computed here on
          * the client - hand it the lookup. */
         ItemUsePose.setSource(ThirdPersonItemUse::get);
+
+        /* Through an actor's eyes the game would outline the player's target; the actor's is drawn instead */
+        WorldRenderEvents.BEFORE_BLOCK_OUTLINE.register((context, hit) -> mchorse.bbs_mod.film.eye.PovBlockOutline.allowVanilla());
+        WorldRenderEvents.AFTER_TRANSLUCENT.register(mchorse.bbs_mod.film.eye.PovBlockOutline::render);
 
         WorldRenderEvents.LAST.register((context) ->
         {

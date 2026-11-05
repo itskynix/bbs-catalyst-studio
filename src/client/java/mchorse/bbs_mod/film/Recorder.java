@@ -48,6 +48,8 @@ public class Recorder extends WorldFilmController
     private static final Logger LOGGER = LogUtils.getLogger();
 
     public ReplayKeyframes keyframes = new ReplayKeyframes("keyframes");
+    /** The take's point of view: the interface, the hands, the cursor and the screens opened */
+    public final mchorse.bbs_mod.film.eye.PovRecorder pov = new mchorse.bbs_mod.film.eye.PovRecorder();
 
     /**
      * Mobs captured within {@link Film#mobRecordingRadius} when recording started.
@@ -223,9 +225,16 @@ public class Recorder extends WorldFilmController
                 this.keyframes.state(EntityState.RIDING).insert(this.tick, 1D);
             }
             this.recordMobs();
+            this.pov.record(this.tick, player);
         }
 
         super.update();
+    }
+
+    /** The take is over: the screen still open is closed on its last tick */
+    public void finishPov()
+    {
+        this.pov.finish(this.tick);
     }
 
     /** Let go of the mark once the player is standing on it: the teleport has landed. */

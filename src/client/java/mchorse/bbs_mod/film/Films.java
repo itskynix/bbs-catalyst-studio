@@ -330,6 +330,8 @@ public class Films
                 channel.simplify();
             }
 
+            recorder.finishPov();
+
             for (Recorder.RecordedMob mob : recorder.mobs)
             {
                 for (KeyframeChannel<?> channel : mob.keyframes.getChannels())

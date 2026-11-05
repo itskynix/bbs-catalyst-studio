@@ -32,3 +32,9 @@
 * **Locale Invariance:** Complete immunity to MoLang and file extension parsing crashes on Turkish and non-English Windows locales.
 * **Network & Stability:** Large-packet memory threshold protections against DoS attacks, along with automatic corrupt project backups.
 * **BBS Hub Foundation:** In-game marketplace framework for browsing and hot-reloading community models, presets, and rigs. *(Experimental)*
+
+### Special Thanks & Credits
+- **McHorse:** Original creator of BBS (Blockbuster Studio).
+- **Wemppy:** Creator of BBS FS (Fabric Studio) and Fabric port foundation.
+- **qualett:** Creator of IRLights & `irl-core` dynamic GPU shader lighting engine.
+- **Glaxium:** For the original BBS POV add-on concept, inspiration, and permission regarding the POV system.

@@ -183,6 +183,7 @@ public class BBSMod implements ModInitializer
 
     private static MapFactory<Clip, ClipFactoryData> factoryCameraClips;
     private static MapFactory<Clip, ClipFactoryData> factoryActionClips;
+    private static MapFactory<Clip, ClipFactoryData> factoryPovActionClips;
 
     public static final EntityType<ActorEntity> ACTOR_ENTITY = Registry.register(
         Registries.ENTITY_TYPE,
@@ -408,6 +409,12 @@ public class BBSMod implements ModInitializer
         return factoryActionClips;
     }
 
+    /** The overlay clips of a replay's point of view, on the POV action timeline. */
+    public static MapFactory<Clip, ClipFactoryData> getFactoryPovActionClips()
+    {
+        return factoryPovActionClips;
+    }
+
     @Override
     public void onInitialize()
     {
@@ -424,6 +431,7 @@ public class BBSMod implements ModInitializer
             {
                 events.register(container.getEntrypoint());
             });
+        events.register(new qualet.irlite.IrlightsAddon());
 
         actions = new ActionManager();
 
@@ -460,6 +468,8 @@ public class BBSMod implements ModInitializer
             .register(Link.bbs("framebuffer"), FramebufferForm.class, null)
             .register(Link.bbs("structure"), StructureForm.class, null)
             .register(Link.bbs("audio"), AudioForm.class, null)
+            .register(qualet.irlite.forms.PointLightForm.FORM_ID, qualet.irlite.forms.PointLightForm.class, null)
+            .register(qualet.irlite.forms.SpotlightForm.FORM_ID, qualet.irlite.forms.SpotlightForm.class, null)
             .register(Link.bbs("decal"), DecalForm.class, null)
             .register(Link.bbs("height_fog"), HeightFogForm.class, null);
 
@@ -500,6 +510,7 @@ public class BBSMod implements ModInitializer
             .register(Link.bbs("video"), VideoClip.class, new ClipFactoryData(Icons.VIDEO_CAMERA, 0xd21f3c))
             .register(Link.bbs("curve"), CurveClip.class, new ClipFactoryData(Icons.ARC, 0xff1493))
             .register(Link.bbs("tracker"), TrackerClip.class, new ClipFactoryData(Icons.USER, 0xffffff))
+            .register(Link.bbs("actor_eye"), mchorse.bbs_mod.camera.clips.modifiers.ActorEyeClip.class, new ClipFactoryData(Icons.CAMERA, 0x2fa8a0))
             .register(Link.bbs("dolly_zoom"), DollyZoomClip.class, new ClipFactoryData(Icons.FILTER, 0x7d56c9))
             .register(Link.bbs("fov_punch"), FovPunchClip.class, new ClipFactoryData(Icons.SEARCH, 0xe0457b))
             .register(Link.bbs("color_grade"), ColorGradeClip.class, new ClipFactoryData(Icons.FILTER, 0xe8542a))
@@ -533,6 +544,17 @@ public class BBSMod implements ModInitializer
             .register(Link.bbs("swipe"), SwipeActionClip.class, new ClipFactoryData(Icons.LIMB, Colors.ORANGE));
 
         events.post(new RegisterActionClipsEvent(factoryActionClips));
+
+        /* The POV action clips: what is laid over a replay's own view, or done to it */
+        factoryPovActionClips = new ClipFactory()
+            .register(Link.bbs("pov_gui"), mchorse.bbs_mod.film.pov.PovGuiClip.class, new ClipFactoryData(Icons.FULLSCREEN, 0x3d8eff))
+            .register(Link.bbs("pov_camera_shake"), mchorse.bbs_mod.film.pov.PovShakeClip.class, new ClipFactoryData(Icons.EXCHANGE, 0xc2562f))
+            .register(Link.bbs("pov_particle"), mchorse.bbs_mod.film.pov.PovParticleClip.class, new ClipFactoryData(Icons.PARTICLE, 0x9b59b6))
+            .register(Link.bbs("pov_boss_bar"), mchorse.bbs_mod.film.pov.PovBossBarClip.class, new ClipFactoryData(Icons.SKULL, 0xd63384))
+            .register(Link.bbs("pov_status_effects"), mchorse.bbs_mod.film.pov.PovStatusEffectsClip.class, new ClipFactoryData(Icons.DROP, 0x2fa84f))
+            .register(Link.bbs("pov_toast"), mchorse.bbs_mod.film.pov.PovToastClip.class, new ClipFactoryData(Icons.CUP, 0xe0b020))
+            .register(Link.bbs("pov_chat"), mchorse.bbs_mod.film.pov.PovChatClip.class, new ClipFactoryData(Icons.BUBBLE, 0xcccccc))
+            .register(Link.bbs("pov_screen_effects"), mchorse.bbs_mod.film.pov.PovScreenEffectsClip.class, new ClipFactoryData(Icons.SUN, 0x6a4fb5));
 
         setupConfig(Icons.SETTINGS, "bbs", new File(settingsFolder, "bbs.json"), BBSSettings::register);
 

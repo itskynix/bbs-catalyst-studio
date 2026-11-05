@@ -28,6 +28,9 @@ import java.util.function.Consumer;
  * <p>Types are sorted into tabs by their id; one a tab does not name lands in the last, general
  * tab, so whatever an addon registers is still on offer. Types that belong to other overlays of
  * the film (subtitles, HUD pieces) are not offered here at all.</p>
+ *
+ * <p>The camera clips have their tabs; a replay's POV action clips have theirs (the interface, the
+ * camera, the effects, the rest), in the same menu.</p>
  */
 public class UIClipTypeMenu extends UIContextMenu
 {
@@ -43,11 +46,25 @@ public class UIClipTypeMenu extends UIContextMenu
         {"idle", "dolly", "path", "keyframe", "pro_camera", "pov"},
         {"audio", "video", "image"},
         {"color_grade", "compound_fx", "cinematic_effects", "motion_blur", "vignette", "letterbox", "grain", "lens_distortion", "screen_shake", "world_wobble", "debris", "screen_shader_graph", "eye"},
-        {"translate", "angle", "drag", "shake", "math", "look", "orbit", "remapper", "tracker", "dolly_zoom", "fov_punch"},
+        {"translate", "angle", "drag", "shake", "math", "look", "orbit", "remapper", "tracker", "actor_eye", "dolly_zoom", "fov_punch"},
         {}
     };
 
     private static final Icon[] TAB_ICONS = {Icons.CAMERA, Icons.FOLDER, Icons.CODE, Icons.REFRESH, Icons.MORE};
+
+    /* The POV action clips: what is laid over the interface, what is done to the camera, the effects, and the rest */
+    private static final String[][] POV_CATEGORIES = {
+        {"pov_gui", "pov_boss_bar", "pov_status_effects", "pov_toast", "pov_chat"},
+        {"pov_camera_shake"},
+        {"pov_screen_effects", "pov_particle"},
+        {}
+    };
+
+    private static final Icon[] POV_TAB_ICONS = {Icons.FULLSCREEN, Icons.CAMERA, Icons.SUN, Icons.MORE};
+
+    private final String[][] categories;
+    private final Icon[] tabIcons;
+    private final String tabKey;
 
     private final IFactory<Clip, ClipFactoryData> factory;
     private final Consumer<Link> pick;
@@ -58,10 +75,15 @@ public class UIClipTypeMenu extends UIContextMenu
     private int tab;
     private int scroll;
 
-    /** Whether this factory is the camera clips one, the only one the tabs are about. */
+    /** Whether this factory is one the tabs are about: the camera clips' or the POV action clips'. */
     public static boolean applies(IFactory<Clip, ClipFactoryData> factory)
     {
-        return factory.getKeys().contains(Link.bbs("keyframe"));
+        return factory.getKeys().contains(Link.bbs("keyframe")) || isPov(factory);
+    }
+
+    private static boolean isPov(IFactory<Clip, ClipFactoryData> factory)
+    {
+        return factory.getKeys().contains(Link.bbs("pov_gui"));
     }
 
     /** The "Post-Production and Overlay" tab's clips, in the tab's own order: what everything that lists effects is fed from. */
@@ -92,10 +114,15 @@ public class UIClipTypeMenu extends UIContextMenu
 
     public UIClipTypeMenu(IFactory<Clip, ClipFactoryData> factory, Consumer<Link> pick)
     {
+        boolean pov = isPov(factory);
+
         this.factory = factory;
         this.pick = pick;
+        this.categories = pov ? POV_CATEGORIES : CATEGORIES;
+        this.tabIcons = pov ? POV_TAB_ICONS : TAB_ICONS;
+        this.tabKey = pov ? "bbs.ui.film.pov_clips.tab." : "bbs.ui.camera.fx.tab.";
 
-        for (int i = 0; i < CATEGORIES.length; i++)
+        for (int i = 0; i < this.categories.length; i++)
         {
             this.tabs.add(new ArrayList<>());
         }
@@ -104,7 +131,8 @@ public class UIClipTypeMenu extends UIContextMenu
 
         for (Link type : factory.getKeys())
         {
-            if (!excluded(type))
+            /* The POV clips have a boss bar of their own, which is no film overlay */
+            if (pov || !excluded(type))
             {
                 unsorted.add(type);
             }
@@ -112,9 +140,9 @@ public class UIClipTypeMenu extends UIContextMenu
 
         List<Link> sorted = new ArrayList<>();
 
-        for (int i = 0; i < CATEGORIES.length - 1; i++)
+        for (int i = 0; i < this.categories.length - 1; i++)
         {
-            for (String id : CATEGORIES[i])
+            for (String id : this.categories[i])
             {
                 for (Link type : unsorted)
                 {
@@ -131,7 +159,7 @@ public class UIClipTypeMenu extends UIContextMenu
         {
             if (!sorted.contains(type))
             {
-                this.tabs.get(CATEGORIES.length - 1).add(type);
+                this.tabs.get(this.categories.length - 1).add(type);
             }
         }
 
@@ -210,7 +238,7 @@ public class UIClipTypeMenu extends UIContextMenu
             return -1;
         }
 
-        return x * TAB_ICONS.length / width;
+        return x * this.tabIcons.length / width;
     }
 
     private boolean onBack(UIContext context)
@@ -309,14 +337,14 @@ public class UIClipTypeMenu extends UIContextMenu
         FontRenderer font = context.batcher.getFont();
         int primary = Colors.A100 | BBSSettings.primaryColor.get();
         int hoverTab = this.tabAt(context);
-        int tabW = (this.area.w - BACK_W) / TAB_ICONS.length;
+        int tabW = (this.area.w - BACK_W) / this.tabIcons.length;
         boolean searching = !this.query().isEmpty();
 
         /* The tab strip */
         context.batcher.box(this.area.x, this.area.y, this.area.ex(), this.area.y + TAB_H, Colors.setA(0, 0.25F));
         context.batcher.icon(Icons.ARROW_LEFT, this.onBack(context) ? Colors.WHITE : Colors.LIGHTER_GRAY, this.area.x + BACK_W / 2, this.area.y + TAB_H / 2, 0.5F, 0.5F);
 
-        for (int i = 0; i < TAB_ICONS.length; i++)
+        for (int i = 0; i < this.tabIcons.length; i++)
         {
             int x = this.area.x + BACK_W + i * tabW;
             boolean active = i == this.tab && !searching;
@@ -331,11 +359,11 @@ public class UIClipTypeMenu extends UIContextMenu
                 context.batcher.box(x, this.area.y, x + tabW, this.area.y + TAB_H, Colors.setA(Colors.WHITE, 0.08F));
             }
 
-            context.batcher.icon(TAB_ICONS[i], active ? Colors.WHITE : Colors.LIGHTER_GRAY, x + tabW / 2, this.area.y + TAB_H / 2, 0.5F, 0.5F);
+            context.batcher.icon(this.tabIcons[i], active ? Colors.WHITE : Colors.LIGHTER_GRAY, x + tabW / 2, this.area.y + TAB_H / 2, 0.5F, 0.5F);
         }
 
         /* The name of the open tab, or that these are search results */
-        IKey title = searching ? L10n.lang("bbs.ui.camera.fx.results") : L10n.lang("bbs.ui.camera.fx.tab." + this.tab);
+        IKey title = searching ? L10n.lang("bbs.ui.camera.fx.results") : L10n.lang(this.tabKey + this.tab);
 
         context.batcher.text(title.get(), this.area.x + PAD * 2, this.area.y + TAB_H + SEARCH_H + 4 + (HEADER_H - font.getHeight()) / 2, Colors.LIGHTER_GRAY);
 

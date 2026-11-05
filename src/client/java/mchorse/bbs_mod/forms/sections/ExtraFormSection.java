@@ -80,6 +80,8 @@ public class ExtraFormSection extends FormSection
         extra.addForm(video);
         extra.addForm(new FramebufferForm());
         extra.addForm(new AudioForm());
+        extra.addForm(new qualet.irlite.forms.PointLightForm());
+        extra.addForm(new qualet.irlite.forms.SpotlightForm());
         extra.addForm(new DecalForm());
         extra.addForm(new HeightFogForm());
 

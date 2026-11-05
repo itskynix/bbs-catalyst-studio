@@ -560,6 +560,13 @@ public class UIKeys
     public static final IKey SETTINGS_DELIVER_OPEN = L10n.lang("bbs.ui.settings.deliver_open");
     public static final IKey SETTINGS_DELIVER_UNAVAILABLE = L10n.lang("bbs.ui.settings.deliver_unavailable");
     public static final IKey SETTINGS_TAB_KEYBINDS = L10n.lang("bbs.ui.settings.tab_keybinds");
+    public static final IKey SETTINGS_TAB_LIGHTING = L10n.lang("bbs.ui.settings.tab_lighting");
+    public static final IKey SETTINGS_CREDITS_TITLE = L10n.lang("bbs.credits.title");
+    public static final IKey SETTINGS_CREDITS_MCHORSE = L10n.lang("bbs.credits.mchorse");
+    public static final IKey SETTINGS_CREDITS_WEMPPY = L10n.lang("bbs.credits.wemppy");
+    public static final IKey SETTINGS_CREDITS_QUALETT = L10n.lang("bbs.credits.qualett");
+    public static final IKey SETTINGS_CREDITS_GLAXIUM = L10n.lang("bbs.credits.glaxium");
+    public static final IKey SETTINGS_CREDITS_KYNIX = L10n.lang("bbs.credits.kynix");
     public static final IKey SETTINGS_ADDONS_EMPTY = L10n.lang("bbs.ui.settings.addons_empty");
     public static final IKey SETTINGS_ADDONS_EMPTY_DESCRIPTION = L10n.lang("bbs.ui.settings.addons_empty_description");
     public static final IKey CONTEXT_MENU_KEY = L10n.lang("bbs.ui.context.key");
@@ -599,6 +606,7 @@ public class UIKeys
     public static final IKey FILM_CONTROLLER_KEYS_MOVE_REPLAY_TO_CURSOR = L10n.lang("bbs.ui.film.controller.keys.move_replay_to_cursor");
     public static final IKey FILM_CONTROLLER_KEYS_NEXT_REPLAY = L10n.lang("bbs.ui.film.controller.keys.next_replay");
     public static final IKey FILM_CONTROLLER_KEYS_TOGGLE_ACTIONS = L10n.lang("bbs.ui.film.controller.keys.toggle_actions");
+    public static final IKey FILM_CONTROLLER_KEYS_OPEN_POV = L10n.lang("bbs.ui.film.controller.keys.open_pov");
     public static final IKey FILM_CONTROLLER_KEYS_OPEN_REPLAYS = L10n.lang("bbs.ui.film.controller.keys.open_replays");
     public static final IKey FILM_CONTROLLER_KEYS_PREV_REPLAY = L10n.lang("bbs.ui.film.controller.keys.prev_replay");
     public static final IKey FILM_CONTROLLER_KEYS_RESTART_ACTIONS = L10n.lang("bbs.ui.film.controller.keys.restart_actions");
@@ -711,6 +719,7 @@ public class UIKeys
     public static final IKey FILM_LANDING_NEW = L10n.lang("bbs.ui.film.landing.new");
     public static final IKey FILM_LANDING_LIST = L10n.lang("bbs.ui.film.landing.list");
     public static final IKey FILM_OPEN_REPLAY_EDITOR = L10n.lang("bbs.ui.film.open_replay_editor");
+    public static final IKey FILM_OPEN_POV_EDITOR = L10n.lang("bbs.ui.film.open_pov_editor");
     public static final IKey FILM_RECORDING = L10n.lang("bbs.ui.film.recording");
     public static final IKey FILM_RENDER_AUDIO = L10n.lang("bbs.ui.film.render_audio");
     public static final IKey FILM_RENDER_AUDIO_ERROR = L10n.lang("bbs.ui.film.render_audio.error");
@@ -802,6 +811,30 @@ public class UIKeys
     public static final IKey FILM_REPLAY_TAB_5 = L10n.lang("bbs.ui.film.replay.tab.5");
     public static final IKey FILM_REPLAY_TITLE = L10n.lang("bbs.ui.film.replay.title");
     public static final IKey FILM_REPLAY_ACTIONS_TIMELINE = L10n.lang("bbs.ui.film.replays.actions_timeline");
+    public static final IKey FILM_REPLAY_POV_TIMELINE = L10n.lang("bbs.ui.film.replays.pov.timeline");
+    public static final IKey FILM_REPLAY_POV_ACTIONS_TIMELINE = L10n.lang("bbs.ui.film.replays.pov.actions_timeline");
+    public static final IKey FILM_REPLAY_POV_BACK = L10n.lang("bbs.ui.film.replays.pov.back");
+    public static final IKey FILM_REPLAY_POV_UNAVAILABLE = L10n.lang("bbs.ui.film.replays.pov.unavailable");
+    public static final IKey FILM_REPLAY_POV_SECTION = L10n.lang("bbs.ui.film.replays.pov.section");
+    public static final IKey FILM_REPLAY_POV_HAND_PICK = L10n.lang("bbs.ui.film.replays.pov.hand_pick");
+    public static final IKey FILM_REPLAY_POV_HAND_EDIT = L10n.lang("bbs.ui.film.replays.pov.hand_edit");
+    public static final IKey FILM_REPLAY_POV_HAND_RESET = L10n.lang("bbs.ui.film.replays.pov.hand_reset");
+    public static final IKey FILM_REPLAY_POV_HARDCORE_LOOK = L10n.lang("bbs.ui.film.replays.pov.hardcore_look");
+    public static final IKey FILM_REPLAY_POV_HARDCORE_LOOK_TOOLTIP = L10n.lang("bbs.ui.film.replays.pov.hardcore_look_tooltip");
+    public static final IKey FILM_REPLAY_POV_CAMERA_SHAKE = L10n.lang("bbs.ui.film.replays.pov.camera_shake");
+    public static final IKey FILM_REPLAY_POV_CAMERA_SHAKE_TOOLTIP = L10n.lang("bbs.ui.film.replays.pov.camera_shake_tooltip");
+    public static final IKey FILM_REPLAY_POV_BODY_PARTS = L10n.lang("bbs.ui.film.replays.pov.body_parts");
+    public static final IKey FILM_REPLAY_POV_BODY_PARTS_ADD = L10n.lang("bbs.ui.film.replays.pov.body_parts_add");
+    public static final IKey FILM_REPLAY_POV_BODY_PARTS_REMOVE = L10n.lang("bbs.ui.film.replays.pov.body_parts_remove");
+    public static final IKey FILM_REPLAY_POV_BODY_PARTS_BONE = L10n.lang("bbs.ui.film.replays.pov.body_parts_bone");
+    public static final IKey FILM_REPLAY_POV_BODY_PARTS_ENABLED = L10n.lang("bbs.ui.film.replays.pov.body_parts_enabled");
+    public static final IKey FILM_REPLAY_POV_EDITOR_TITLE = L10n.lang("bbs.ui.film.replays.pov.editor.title");
+    public static final IKey FILM_REPLAY_POV_EDITOR_VISIBLE = L10n.lang("bbs.ui.film.replays.pov.editor.visible");
+    public static final IKey FILM_REPLAY_POV_EDITOR_FREE = L10n.lang("bbs.ui.film.replays.pov.editor.free_camera");
+    public static final IKey FILM_REPLAY_POV_EDITOR_LOCKED = L10n.lang("bbs.ui.film.replays.pov.editor.locked_camera");
+    public static final IKey FILM_REPLAY_POV_EDITOR_RESET = L10n.lang("bbs.ui.film.replays.pov.editor.reset");
+    public static final IKey FILM_REPLAY_POV_EDITOR_TRANSLATE = L10n.lang("bbs.ui.film.replays.pov.editor.translate");
+    public static final IKey FILM_REPLAY_POV_EDITOR_ROTATE = L10n.lang("bbs.ui.film.replays.pov.editor.rotate");
     public static final IKey FILM_REPLAY_ALL_TRACKS = L10n.lang("bbs.ui.film.replays.all_tracks");
     public static final IKey FILM_RESET_REPLAYS = L10n.lang("bbs.ui.film.reset_replays");
     public static final IKey FILM_SCREENSHOT = L10n.lang("bbs.ui.film.screenshot");
@@ -2460,7 +2493,8 @@ public class UIKeys
     /* Key collections */
     public static final KeyCollection C_CLIP = new KeyCollection("bbs.ui.camera.clips.^")
         .load(BBSMod.getFactoryCameraClips().getStringKeys())
-        .load(BBSMod.getFactoryActionClips().getStringKeys());
+        .load(BBSMod.getFactoryActionClips().getStringKeys())
+        .load(BBSMod.getFactoryPovActionClips().getStringKeys());
 
     public static final KeyCollection C_BILLBOARD_DIRECTION = new KeyCollection("bbs.ui.snowstorm.general.direction.^")
         .load(EnumUtils.getKeys(BillboardDirection.class, (c) -> c.id));

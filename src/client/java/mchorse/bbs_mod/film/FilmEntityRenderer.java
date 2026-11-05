@@ -111,6 +111,13 @@ public class FilmEntityRenderer
             return;
         }
 
+        /* Looked out of by a Point of View clip: none of the body in its own eyes, as the game
+         * draws none of the player's in first person; the arms are the hand pass's */
+        if (mchorse.bbs_mod.film.eye.ActorEyeState.hidesBody(entity))
+        {
+            return;
+        }
+
         Vector3d position = Vectors.TEMP_3D.set(
             Lerps.lerp(entity.getPrevX(), entity.getX(), transition),
             Lerps.lerp(entity.getPrevY(), entity.getY(), transition),

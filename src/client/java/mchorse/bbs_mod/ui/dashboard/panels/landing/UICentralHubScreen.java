@@ -115,6 +115,8 @@ public class UICentralHubScreen extends UIElement
     private final List<int[]> rects = new ArrayList<>();
 
     private HubChangelog changelog;
+    /** The "Credits" link along the bottom: where it was drawn, for the click */
+    private final int[] creditsRect = new int[4];
     /** The cursor is on a card that is shut; the reason is drawn over everything once the cards are */
     private boolean lockedHover;
     private boolean changelogChecked;
@@ -144,6 +146,13 @@ public class UICentralHubScreen extends UIElement
         if (this.changelog != null)
         {
             this.changelog.mouseClicked(context);
+
+            return true;
+        }
+
+        if (context.mouseButton == 0 && context.mouseX >= this.creditsRect[0] && context.mouseX < this.creditsRect[2] && context.mouseY >= this.creditsRect[1] && context.mouseY < this.creditsRect[3])
+        {
+            mchorse.bbs_mod.ui.framework.elements.overlay.UIOverlay.addOverlay(context, new UICreditsOverlayPanel(), 440, 330);
 
             return true;
         }
@@ -226,6 +235,18 @@ public class UICentralHubScreen extends UIElement
             this.rects.add(new int[] {x, y, x + CARD_W, y + CARD_H});
             this.renderCard(context, CARDS.get(i), x, y, primary);
         }
+
+        String credits = mchorse.bbs_mod.l10n.L10n.lang("bbs.credits.link").get();
+        int creditsW = context.batcher.getFont().getWidth(credits);
+        int creditsX = this.area.mx() - creditsW / 2;
+        int creditsY = this.area.ey() - 16;
+        boolean creditsHover = context.mouseX >= creditsX - 4 && context.mouseX < creditsX + creditsW + 4 && context.mouseY >= creditsY - 3 && context.mouseY < creditsY + 12;
+
+        context.batcher.text(credits, creditsX, creditsY, creditsHover ? Colors.WHITE : MUTED, false);
+        this.creditsRect[0] = creditsX - 4;
+        this.creditsRect[1] = creditsY - 3;
+        this.creditsRect[2] = creditsX + creditsW + 4;
+        this.creditsRect[3] = creditsY + 12;
 
         if (this.lockedHover)
         {

@@ -23,6 +23,7 @@ import mchorse.bbs_mod.film.replays.tracks.TrackId;
 import mchorse.bbs_mod.film.replays.tracks.TrackStyle;
 import mchorse.bbs_mod.film.replays.Replay;
 import mchorse.bbs_mod.film.replays.ReplayKeyframes;
+import mchorse.bbs_mod.film.replays.ReplayPov;
 import mchorse.bbs_mod.forms.FormUtils;
 import mchorse.bbs_mod.forms.entities.IEntity;
 import mchorse.bbs_mod.forms.forms.Form;
@@ -80,6 +81,7 @@ import org.joml.Vector3f;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -133,6 +135,21 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
     private UIIcon allToggle;
     private UIIcon sectionsToggle;
     private boolean allMode;
+
+    /*
+     * The POV timeline: the replay seen from inside its own head. Its pages sit on a bar of their own
+     * in place of the categories, and its overlay clips share the area the way the action clips do.
+     * Only player-shaped replays have one (see ReplayPov.supports).
+     */
+    private UITimelineCategoryBar povBar;
+    private final Map<PovPage, UIIcon> povButtons = new EnumMap<>(PovPage.class);
+    private UIClipsPanel povActionTimeline;
+    private UIIcon povToggle;
+    private UIIcon povActionsToggle;
+    private UIIcon povBack;
+    private boolean povMode;
+    private boolean povActionsMode;
+    private PovPage povPage = PovPage.HOTBAR;
 
     /* Clips */
     private UIFilmPanel filmPanel;
@@ -318,7 +335,7 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
         this.replaysList = new UIReplaysListPanel(filmPanel, (l) -> this.setReplay(l.isEmpty() ? null : l.get(0), false, OrbitReaction.SWITCH), this.replayProperties.getFormConsumer(), this::selectBodyPart);
         this.replayProperties.attachReplayList(this.replaysList.replays);
 
-        this.iconBar = new UITimelineCategoryBar(CATEGORY_BAR_WIDTH * 2);
+        this.iconBar = new UITimelineCategoryBar(CATEGORY_BAR_WIDTH * 3);
         this.iconBar.relative(this);
 
         /* «All tracks» heads the bar: it is not one of the categories but what you see instead of
@@ -351,6 +368,31 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
         this.graphToggle = new UIIcon(Icons.CURVES, b -> this.toggleGraphEditor());
         this.graphToggle.tooltip(UIKeys.KEYFRAMES_GRAPH_EDITOR, Direction.RIGHT);
         this.graphToggle.highlight(() -> this.keyframeEditor != null && this.keyframeEditor.view.isEditing(), Direction.LEFT);
+
+        /* Into the POV timeline, right above the action clips */
+        this.povToggle = new UIIcon(Icons.USER, b -> this.setPovMode(true));
+        this.povToggle.tooltip(UIKeys.FILM_REPLAY_POV_TIMELINE, Direction.RIGHT);
+
+        this.povBar = new UITimelineCategoryBar(CATEGORY_BAR_WIDTH * 4).noSeparator();
+        this.povBar.relative(this);
+
+        for (PovPage page : PovPage.values())
+        {
+            UIIcon button = new UIIcon(page.icon, b -> this.setPovPage(page));
+
+            button.tooltip(L10n.lang("bbs.ui.film.replays.pov.pages." + page.id()), Direction.RIGHT);
+            button.highlight(() -> this.povMode && !this.povActionsMode && this.povPage == page, Direction.LEFT);
+            this.povBar.add(button);
+            this.povButtons.put(page, button);
+        }
+
+        /* Inside it: its overlay clips, and below them the way back to the replay's tracks */
+        this.povActionsToggle = new UIIcon(Icons.ACTION, b -> this.setPovActionsMode(!this.povActionsMode));
+        this.povActionsToggle.tooltip(UIKeys.FILM_REPLAY_POV_ACTIONS_TIMELINE, Direction.RIGHT);
+        this.povActionsToggle.highlight(() -> this.povMode && this.povActionsMode, Direction.LEFT);
+
+        this.povBack = new UIIcon(Icons.ARROW_LEFT, b -> this.setPovMode(false));
+        this.povBack.tooltip(UIKeys.FILM_REPLAY_POV_BACK, Direction.RIGHT);
         this.layoutActionsToggle();
 
         /* Everything at once is the view to open on: a category is a way to narrow down, and
@@ -360,7 +402,7 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
         TrackCategories.registerShortcuts(this.keys(), () -> TrackCategories.values().stream()
             .filter(category -> this.tabButtons.get(category).getParent() != null).toList(), this::setCategory);
 
-        this.add(this.iconBar, this.sectionsToggle, this.graphToggle, this.actionsToggle, this.replayTransform);
+        this.add(this.iconBar, this.povBar, this.sectionsToggle, this.graphToggle, this.actionsToggle, this.povToggle, this.povActionsToggle, this.povBack, this.replayTransform);
         this.partHeader.relative(this).x(CATEGORY_BAR_WIDTH).y(0).w(120).h(TimelineRulerRenderer.RULER_BLOCK_HEIGHT);
         this.partHeader.add(new UIRenderable(context ->
         {
@@ -389,6 +431,8 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
     {
         this.actionsMode = false;
         this.allMode = false;
+        this.povMode = false;
+        this.povActionsMode = false;
         this.category = c;
         this.updateChannelsList();
     }
@@ -403,7 +447,7 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
      */
     public void showReplayTracks()
     {
-        if (this.actionsMode || (!this.allMode && this.category != TrackCategory.REPLAY))
+        if (this.povMode || this.actionsMode || (!this.allMode && this.category != TrackCategory.REPLAY))
         {
             this.setCategory(TrackCategory.REPLAY);
         }
@@ -414,6 +458,8 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
     {
         this.actionsMode = false;
         this.allMode = true;
+        this.povMode = false;
+        this.povActionsMode = false;
         this.updateChannelsList();
     }
 
@@ -551,6 +597,12 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
 
             this.replayProperties.setReplay(replay);
             this.filmPanel.actionEditor.setClips(replay == null ? null : replay.actions);
+
+            if (this.povActionTimeline != null)
+            {
+                this.povActionTimeline.setClips(ReplayPov.supports(replay) ? replay.pov.actions : null);
+            }
+
             this.updateChannelsList();
 
             if (select && replay != null)
@@ -592,6 +644,16 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
             this.keyframeEditor = null;
         }
 
+        /* Another replay picked, or its form changed, and there is no point of view left to show */
+        if (this.povMode && !ReplayPov.supports(this.replay))
+        {
+            this.povMode = false;
+            this.povActionsMode = false;
+            this.updateTimelineModeVisibility();
+        }
+
+        this.layoutActionsToggle();
+
         if (this.replay == null)
         {
             this.lastSelectedTargetForm = null;
@@ -613,23 +675,31 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
 
         List<UIKeyframeSheet> sheets = new ArrayList<>();
 
-        /* Replay channels remain accessible alongside any selected part's own properties. */
-        this.collectCuratedSheets(sheets);
-        UIReplaysEditorUtils.buildSheets(catalog, sheets);
-
-        for (TrackCategory category : TrackCategories.values())
+        if (this.povMode)
         {
-            if (category != TrackCategory.REPLAY && category != TrackCategory.FORM && category != TrackCategory.POSE)
-                this.updateTab(category, sheets);
+            /* The POV timeline shows its page and nothing else; the category tabs are put away with their bar */
+            this.collectPovSheets(sheets);
         }
-        /* Reattach in registry order, including tabs which became visible again. */
-        for (TrackCategory category : TrackCategories.values())
+        else
         {
-            UIIcon button = this.tabButtons.get(category);
-            if (button.getParent() != null)
+            /* Replay channels remain accessible alongside any selected part's own properties. */
+            this.collectCuratedSheets(sheets);
+            UIReplaysEditorUtils.buildSheets(catalog, sheets);
+
+            for (TrackCategory category : TrackCategories.values())
             {
-                button.removeFromParent();
-                this.iconBar.add(button);
+                if (category != TrackCategory.REPLAY && category != TrackCategory.FORM && category != TrackCategory.POSE)
+                    this.updateTab(category, sheets);
+            }
+            /* Reattach in registry order, including tabs which became visible again. */
+            for (TrackCategory category : TrackCategories.values())
+            {
+                UIIcon button = this.tabButtons.get(category);
+                if (button.getParent() != null)
+                {
+                    button.removeFromParent();
+                    this.iconBar.add(button);
+                }
             }
         }
 
@@ -643,7 +713,7 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
         Set<String> disabled = BBSSettings.disabledSheets.get();
 
         /* The body-part tree already chose the owner; tabs narrow down its properties. */
-        sheets.removeIf((v) -> !this.allMode && categoryOf(v) != this.category);
+        sheets.removeIf((v) -> !this.povMode && !this.allMode && categoryOf(v) != this.category);
 
         /* The tab isn't empty by itself - so if the filter empties it, the timeline has to stay (see below). */
         boolean hadTracks = !sheets.isEmpty();
@@ -867,6 +937,88 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
         }
     }
 
+    /**
+     * One page of the POV timeline, folded into sections. Its own channels go by their ids like the
+     * replay's do, and the hotbar slots and the head rotation are the replay's own channels, borrowed
+     * under the names they already have — a slot keyed here is the slot the replay plays.
+     */
+    private void collectPovSheets(List<UIKeyframeSheet> sheets)
+    {
+        ReplayPov pov = this.replay.pov;
+        ReplayKeyframes keyframes = this.replay.keyframes;
+
+        switch (this.povPage)
+        {
+            case HOTBAR ->
+            {
+                List<KeyframeChannel<?>> slots = new ArrayList<>();
+
+                slots.add(keyframes.selectedSlot);
+                slots.addAll(keyframes.hotbar);
+                slots.add(keyframes.offHand);
+                slots.add(pov.inventorySlots);
+
+                this.addPovSection(sheets, "layout", Icons.HOTBAR, Colors.YELLOW, List.of(pov.hudVisible, pov.statusBars, pov.crosshair, pov.gameMode));
+                this.addPovSection(sheets, "cursor", Icons.POINTER, 0xb580ff, List.of(pov.cursorVisible, pov.cursorX, pov.cursorY, pov.cursorItem));
+                this.addPovSection(sheets, "slots", getIcon("item_slot_0"), Colors.ORANGE, slots);
+                this.addPovSection(sheets, "status", Icons.HEART, Colors.RED, List.of(pov.health, pov.maxHealth, pov.absorption, pov.hardcore,
+                    pov.armor, pov.hunger, pov.air, pov.mountHealth, pov.experience, pov.experienceLevel));
+            }
+            case HANDS ->
+            {
+                this.addPovSection(sheets, "visibility", Icons.VISIBLE, Colors.GREEN, List.of(pov.rightHandVisible, pov.leftHandVisible));
+                this.addPovSection(sheets, "swing", Icons.LIMB, Colors.ORANGE, List.of(pov.rightSwing, pov.leftSwing, pov.mainEquip, pov.offhandEquip));
+                this.addPovSection(sheets, "bobbing", Icons.ARC, 0x40bfff, List.of(pov.bobPhase, pov.bobStrength));
+                this.addPovSection(sheets, "render", Icons.ORBIT, 0xb580ff, List.of(pov.renderPitch, pov.renderYaw));
+            }
+            case VISION ->
+            {
+                this.addPovSection(sheets, "eye", Icons.VISIBLE, 0x2fa8a0, List.of(pov.eyePitch, pov.eyeYaw, pov.eyeRoll, pov.eyeOffsetX, pov.eyeOffsetY, pov.eyeOffsetZ));
+                this.addPovSection(sheets, "lens", Icons.CAMERA, Colors.YELLOW, List.of(pov.fov));
+                this.addPovSection(sheets, "head", Icons.PLAYER, 0x40bfff, List.of(keyframes.pitch, keyframes.headYaw));
+            }
+        }
+    }
+
+    private void addPovSection(List<UIKeyframeSheet> sheets, String group, Icon icon, int color, List<? extends KeyframeChannel<?>> channels)
+    {
+        UIKeyframeSheet.Section section = new UIKeyframeSheet.Section("pov_section/" + this.povPage.id() + "/" + group,
+            L10n.lang("bbs.ui.film.replays.pov.sections." + group), icon, color);
+        List<KeyframeChannel<?>> own = this.replay.pov.getChannels();
+
+        for (KeyframeChannel<?> channel : channels)
+        {
+            String key = channel.getId();
+            boolean borrowed = !own.contains(channel);
+            UIKeyframeSheet sheet = new UIKeyframeSheet(borrowed ? getColor(key) : color, channel, null).icon(borrowed ? getIcon(key) : icon);
+            Object seed = povSeed(key);
+
+            if (seed != null)
+            {
+                sheet.seed(() -> seed);
+            }
+
+            sheet.section = section;
+            sheets.add(sheet);
+        }
+    }
+
+    /** What a fresh keyframe holds on a POV channel: the value the game would show unanimated. */
+    private static Object povSeed(String key)
+    {
+        return switch (key)
+        {
+            case "hud_visible", "status_bars", "crosshair", "cursor_visible", "right_hand_visible", "left_hand_visible" -> true;
+            case "game_mode" -> 0;
+            case "inventory_slots" -> mchorse.bbs_mod.film.pov.PovSlotSet.ofSize(27);
+            case "health", "max_health", "hunger" -> 20D;
+            case "air" -> 300D;
+            case "fov" -> 70D;
+            case "bob_strength" -> 1D;
+            default -> null;
+        };
+    }
+
     private static String replaySection(String key)
     {
         if (key.startsWith("item_slot_") || key.equals("selected_slot") || key.equals("item_off_hand")) return "hotbar";
@@ -942,6 +1094,9 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
         {
             FoldState<String> folds = new FoldState<>();
             folds.set("replay_section/position_rotation", true);
+            folds.set("pov_section/hotbar/slots", true);
+            folds.set("pov_section/hands/visibility", true);
+            folds.set("pov_section/vision/eye", true);
             return folds;
         });
     }
@@ -974,6 +1129,96 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
         this.updateTimelineModeVisibility();
     }
 
+    /** The POV overlay clips share this editor's timeline area too; the POV timeline's own toggle switches to them. */
+    public void attachPovActionTimeline(UIClipsPanel povActionTimeline)
+    {
+        this.povActionTimeline = povActionTimeline;
+        povActionTimeline.relative(this).x(CATEGORY_BAR_WIDTH).y(0).w(1F, -CATEGORY_BAR_WIDTH).h(1F);
+        this.add(povActionTimeline);
+        this.bringBarToFront();
+        this.updateTimelineModeVisibility();
+    }
+
+    public boolean isPovMode()
+    {
+        return this.povMode;
+    }
+
+    /** Open or close the POV timeline; only a replay with a point of view has one to open. */
+    public void setPovMode(boolean povMode)
+    {
+        if (povMode && !ReplayPov.supports(this.replay))
+        {
+            return;
+        }
+
+        if (this.povMode == povMode && !this.povActionsMode)
+        {
+            return;
+        }
+
+        this.povMode = povMode;
+        this.povActionsMode = false;
+        this.actionsMode = false;
+        this.updateChannelsList();
+        this.updateTimelineModeVisibility();
+    }
+
+    private void setPovPage(PovPage page)
+    {
+        this.povPage = page;
+        this.povActionsMode = false;
+        this.updateChannelsList();
+        this.updateTimelineModeVisibility();
+    }
+
+    public void setPovActionsMode(boolean povActionsMode)
+    {
+        if (!this.povMode || this.povActionsMode == povActionsMode)
+        {
+            return;
+        }
+
+        this.povActionsMode = povActionsMode;
+        this.updateTimelineModeVisibility();
+    }
+
+    /**
+     * The POV editor button: the POV timeline of the picked replay, or of the first replay in the
+     * film with a point of view when the picked one has none. False when the film has none at all.
+     */
+    public boolean openPov()
+    {
+        if (!ReplayPov.supports(this.replay) && this.film != null)
+        {
+            for (Replay replay : this.film.replays.getList())
+            {
+                if (ReplayPov.supports(replay))
+                {
+                    this.setReplay(replay);
+
+                    break;
+                }
+            }
+        }
+
+        if (!ReplayPov.supports(this.replay))
+        {
+            return false;
+        }
+
+        this.povMode = false;
+        this.setPovMode(true);
+
+        return true;
+    }
+
+    /** Whether the timeline area is showing clips (the replay's actions or the POV's overlays) rather than keyframes. */
+    private boolean isClipsView()
+    {
+        return this.povMode ? this.povActionsMode : this.actionsMode;
+    }
+
     public boolean isActionsMode()
     {
         return this.actionsMode;
@@ -992,6 +1237,15 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
         }
 
         this.actionsMode = actionsMode;
+
+        /* The replay's action clips are the replay timeline's, so asking for them leaves the POV one */
+        if (actionsMode && this.povMode)
+        {
+            this.povMode = false;
+            this.povActionsMode = false;
+            this.updateChannelsList();
+        }
+
         this.updateTimelineModeVisibility();
     }
 
@@ -1001,7 +1255,9 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
      */
     private void updateTimelineModeVisibility()
     {
-        boolean keyframes = !this.actionsMode;
+        boolean keyframes = !this.isClipsView();
+        boolean actions = this.actionsMode && !this.povMode;
+        boolean povActions = this.povMode && this.povActionsMode;
 
         if (this.keyframeEditor != null)
         {
@@ -1011,42 +1267,56 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
 
         if (this.actionTimeline != null)
         {
-            this.actionTimeline.setVisible((this.timelineVisible || this.propertiesVisible) && this.actionsMode);
-            this.actionTimeline.setTimelineVisible(this.timelineVisible && this.actionsMode);
-            this.actionTimeline.setPropertiesVisible(this.propertiesVisible && this.actionsMode);
+            this.actionTimeline.setVisible((this.timelineVisible || this.propertiesVisible) && actions);
+            this.actionTimeline.setTimelineVisible(this.timelineVisible && actions);
+            this.actionTimeline.setPropertiesVisible(this.propertiesVisible && actions);
+        }
+
+        if (this.povActionTimeline != null)
+        {
+            this.povActionTimeline.setVisible((this.timelineVisible || this.propertiesVisible) && povActions);
+            this.povActionTimeline.setTimelineVisible(this.timelineVisible && povActions);
+            this.povActionTimeline.setPropertiesVisible(this.propertiesVisible && povActions);
         }
     }
 
     /** Keep the category bar and the actions toggle above the timelines. */
     private void bringBarToFront()
     {
-        if (this.iconBar.getParent() != null)
+        UIElement[] front = {this.iconBar, this.povBar, this.sectionsToggle, this.graphToggle, this.actionsToggle,
+            this.povToggle, this.povActionsToggle, this.povBack, this.partHeader};
+
+        for (UIElement element : front)
         {
-            this.iconBar.removeFromParent();
+            if (element.getParent() != null)
+            {
+                element.removeFromParent();
+            }
         }
 
-        if (this.actionsToggle.getParent() != null)
-        {
-            this.actionsToggle.removeFromParent();
-        }
-
-        this.partHeader.removeFromParent();
-        this.sectionsToggle.removeFromParent();
-        this.graphToggle.removeFromParent();
-        this.add(this.iconBar, this.sectionsToggle, this.graphToggle, this.actionsToggle, this.partHeader);
+        this.add(front);
     }
 
-    /** Pin the actions toggle below the category buttons. */
+    /**
+     * Pin the timeline switches below the category buttons: the action clips at the very bottom and
+     * the POV timeline above them — or, inside the POV timeline, the way back at the bottom and its
+     * overlay clips above it. Folding and the graph stack on top of whichever pair is there.
+     */
     private void layoutActionsToggle()
     {
-        this.sectionsToggle.relative(this).x(0).y(1F, -40).wh(CATEGORY_BAR_WIDTH, 20);
+        int bottom = this.povMode || ReplayPov.supports(this.replay) ? 40 : 20;
+
         this.actionsToggle.relative(this).x(0).y(1F, -20).wh(CATEGORY_BAR_WIDTH, 20);
-        this.graphToggle.relative(this).x(0).y(1F, -60).wh(CATEGORY_BAR_WIDTH, 20);
+        this.povBack.relative(this).x(0).y(1F, -20).wh(CATEGORY_BAR_WIDTH, 20);
+        this.povToggle.relative(this).x(0).y(1F, -40).wh(CATEGORY_BAR_WIDTH, 20);
+        this.povActionsToggle.relative(this).x(0).y(1F, -40).wh(CATEGORY_BAR_WIDTH, 20);
+        this.sectionsToggle.relative(this).x(0).y(1F, -bottom - 20).wh(CATEGORY_BAR_WIDTH, 20);
+        this.graphToggle.relative(this).x(0).y(1F, -bottom - 40).wh(CATEGORY_BAR_WIDTH, 20);
     }
 
     private void toggleGraphEditor()
     {
-        if (this.keyframeEditor != null && !this.actionsMode)
+        if (this.keyframeEditor != null && !this.isClipsView())
         {
             this.keyframeEditor.view.toggleGraphEditor();
         }
@@ -1093,6 +1363,12 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
 
         if (!(form instanceof IPosedForm) || (bone != null && !bone.isEmpty()))
         {
+            /* A bone is posed on the replay timeline, not the POV one */
+            if (this.povMode)
+            {
+                this.setPovMode(false);
+            }
+
             if (this.allMode)
             {
                 this.setActionsMode(false);
@@ -1254,16 +1530,23 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
         /* Hide category bar + actions toggle while the "edit track" overlay is open */
         boolean notEditing = this.keyframeEditor == null || !this.keyframeEditor.view.isEditing();
 
-        this.iconBar.setVisible(this.timelineVisible && notEditing);
-        this.actionsToggle.setVisible(this.timelineVisible && notEditing);
-        this.graphToggle.setVisible(this.timelineVisible && !this.actionsMode && this.keyframeEditor != null);
-        boolean sectionsAvailable = !this.actionsMode && this.keyframeEditor != null
+        boolean bar = this.timelineVisible && notEditing;
+        boolean clips = this.isClipsView();
+
+        this.iconBar.setVisible(bar && !this.povMode);
+        this.povBar.setVisible(bar && this.povMode);
+        this.actionsToggle.setVisible(bar && !this.povMode);
+        this.povToggle.setVisible(bar && !this.povMode && ReplayPov.supports(this.replay));
+        this.povActionsToggle.setVisible(bar && this.povMode);
+        this.povBack.setVisible(bar && this.povMode);
+        this.graphToggle.setVisible(this.timelineVisible && !clips && this.keyframeEditor != null);
+        boolean sectionsAvailable = !clips && this.keyframeEditor != null
             && this.keyframeEditor.view.getGraph() == this.keyframeEditor.view.getDopeSheet()
             && this.keyframeEditor.view.getDopeSheet().hasSections();
 
         boolean foldingButtonFits = true;
 
-        for (UIIcon button : this.iconBar.getChildren(UIIcon.class))
+        for (UIIcon button : (this.povMode ? this.povBar : this.iconBar).getChildren(UIIcon.class))
         {
             if (button.isVisible() && button.area.ey() >= this.sectionsToggle.area.y)
             {
@@ -1279,7 +1562,7 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
         this.sectionsToggle.both(collapseSections ? Icons.COLLAPSE_ALL : Icons.EXPAND_ALL);
         this.sectionsToggle.tooltip(L10n.lang(collapseSections
             ? "bbs.ui.film.replays.collapse_all" : "bbs.ui.film.replays.expand_all"), Direction.RIGHT);
-        this.partHeader.setVisible(this.timelineVisible && notEditing && !this.actionsMode && this.replay != null
+        this.partHeader.setVisible(this.timelineVisible && notEditing && !clips && !this.povMode && this.replay != null
             && this.keyframeEditor != null && this.keyframeEditor.view.getGraph() == this.keyframeEditor.view.getDopeSheet());
 
         if (this.partHeader.isVisible())
@@ -1302,9 +1585,10 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
     {
         super.afterResizeApplied();
 
-        int width = this.iconBar.getWidthForHeight(this.area.h);
+        int width = (this.povMode ? this.povBar : this.iconBar).getWidthForHeight(this.area.h);
 
         this.iconBar.w(width);
+        this.povBar.w(width);
         this.partHeader.x(width);
 
         if (this.keyframeEditor != null)
@@ -1315,6 +1599,11 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
         if (this.actionTimeline != null)
         {
             this.actionTimeline.x(width).w(1F, -width);
+        }
+
+        if (this.povActionTimeline != null)
+        {
+            this.povActionTimeline.x(width).w(1F, -width);
         }
 
         this.layoutActionsToggle();
@@ -1363,6 +1652,24 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
         data.putInt("replay", index);
         data.putString("body_part", this.selectedPart);
         data.put("selection", DataStorageUtils.intListToData(this.replaysList.replays.getCurrentIndices()));
+    }
+
+    /** A page of the POV timeline, each with its own channels. */
+    public enum PovPage
+    {
+        HOTBAR(Icons.HOTBAR), HANDS(Icons.LIMB), VISION(Icons.VISIBLE);
+
+        public final Icon icon;
+
+        PovPage(Icon icon)
+        {
+            this.icon = icon;
+        }
+
+        public String id()
+        {
+            return this.name().toLowerCase(java.util.Locale.ROOT);
+        }
     }
 
     /**

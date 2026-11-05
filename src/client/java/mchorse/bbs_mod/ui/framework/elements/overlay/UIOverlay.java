@@ -36,6 +36,8 @@ public class UIOverlay extends UIElement
     private final long animationStart = System.nanoTime();
     private long closeStart;
     private boolean closing;
+    /** Opened and closed without the animation; see {@link #instant()} */
+    private boolean instant;
 
     public static UIOverlay addOverlay(UIContext context, UIOverlayPanel panel)
     {
@@ -201,6 +203,18 @@ public class UIOverlay extends UIElement
      * its place is remembered - and then fades out, being taken off the screen when the animation
      * has run. Without animations it simply goes.
      */
+    /**
+     * Open and close without the animation. For a window drawing a 3D view of its own (its own
+     * viewport and lens): the animation scales the window's drawing about its middle, which that
+     * view is outside of, so it would sit still while its frame grew around it, and then jump.
+     */
+    public UIOverlay instant()
+    {
+        this.instant = true;
+
+        return this;
+    }
+
     public void closeItself()
     {
         if (this.closing)
@@ -210,7 +224,7 @@ public class UIOverlay extends UIElement
 
         UIUtils.playClick();
 
-        boolean animated = OverlayAnimation.isEnabled() && this.hasParent();
+        boolean animated = OverlayAnimation.isEnabled() && this.hasParent() && !this.instant;
 
         if (animated)
         {
@@ -280,7 +294,7 @@ public class UIOverlay extends UIElement
     public void render(UIContext context)
     {
         int background = this.background == null ? BBSSettings.overlayBackground() : this.background;
-        boolean animated = OverlayAnimation.isEnabled();
+        boolean animated = OverlayAnimation.isEnabled() && !this.instant;
         double progress = 1D;
 
         if (animated)
