@@ -71,7 +71,7 @@ public class UIAudioHubScreen extends UILandingScreen
         this.card = new UIElement();
         this.card.relative(this).xy(0.5F, 0.5F).anchor(0.5F);
 
-        /* 1. Header: Blockbuster Catalyst Studio & version c1.3 */
+        /* 1. Header: Blockbuster Catalyst Studio & version c1.4 */
         UIElement header = new UIElement();
         header.relative(this.card).x(0).y(8).w(1F).h(34);
         header.add(new UIRenderable((context) -> this.renderHeader(context, header.area)));
@@ -348,7 +348,7 @@ public class UIAudioHubScreen extends UILandingScreen
         context.batcher.text(title, 0, 0, Colors.WHITE, true);
         stack.pop();
 
-        String version = "version c1.3";
+        String version = "version c1.4";
         int verW = font.getWidth(version);
         int verY = area.y + titleH + 2;
         context.batcher.text(version, area.mx() - verW / 2, verY, Colors.setA(Colors.WHITE, 0.55F), false);

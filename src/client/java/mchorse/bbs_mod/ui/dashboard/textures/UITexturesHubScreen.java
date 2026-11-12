@@ -151,7 +151,7 @@ public class UITexturesHubScreen extends UILandingScreen
         this.card = new UIElement();
         this.card.relative(this).xy(0.5F, 0.5F).anchor(0.5F);
 
-        /* 1. Header: Blockbuster Catalyst Studio & version c1.3 */
+        /* 1. Header: Blockbuster Catalyst Studio & version c1.4 */
         UIElement header = new UIElement();
         header.relative(this.card).x(0).y(6).w(1F).h(28);
         header.add(new UIRenderable((context) -> this.renderHeader(context, header.area)));
@@ -505,7 +505,7 @@ public class UITexturesHubScreen extends UILandingScreen
         int titleW = (int) (font.getWidth(title) * scale);
         int titleH = (int) (font.getHeight() * scale);
 
-        String ver = "version c1.3";
+        String ver = "version c1.4";
         int verW = font.getWidth(ver);
 
         stack.push();

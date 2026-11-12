@@ -411,7 +411,7 @@ public class UIMMotionHubScreen extends UILandingScreen
         context.batcher.text(title, 0, 0, Colors.WHITE, true);
         stack.pop();
 
-        String version = "version c1.3";
+        String version = "version c1.4";
         int verW = font.getWidth(version);
         int verY = area.y + titleH + 2;
         context.batcher.text(version, area.mx() - verW / 2, verY, Colors.setA(Colors.WHITE, 0.55F), false);
