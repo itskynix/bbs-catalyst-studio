@@ -47,6 +47,7 @@ import mchorse.bbs_mod.ui.model_blocks.UIModelBlockEntityList;
 import mchorse.bbs_mod.ui.textures.TextureFiles;
 import mchorse.bbs_mod.ui.utils.context.MenuVerb;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
+import mchorse.bbs_mod.ui.utils.UIUtils;
 import mchorse.bbs_mod.ui.utils.presets.UICopyPasteController;
 import mchorse.bbs_mod.utils.CollectionUtils;
 import mchorse.bbs_mod.utils.categories.Category;
@@ -97,6 +98,9 @@ public class UIReplayList extends UIList<ReplayListEntry>
 
     /** The box a row's form is drawn in, centred on the row however tall the row is. */
     private static final int PREVIEW = 40;
+
+    /** The eye at the right of a replay row, left of the form preview: shown in the preview and the render, or not. */
+    private static final int EYE_SLOT = 16;
 
     /** Set while building the context menu when the cursor is on a folder row. */
     private String contextFolderPath;
@@ -1005,6 +1009,15 @@ public class UIReplayList extends UIList<ReplayListEntry>
     {
         ReplayListEntry entry = this.visible().get(index);
 
+        if (!entry.isFolder() && context.mouseButton == 0 && this.isOverEye(context.mouseX))
+        {
+            entry.replay.enabled.set(!entry.replay.enabled.get());
+            this.updateFilmEditor();
+            UIUtils.playClick();
+
+            return true;
+        }
+
         return entry.isFolder() ? this.pressFolder(entry, index, context) : super.pressItem(index, context);
     }
 
@@ -1889,7 +1902,7 @@ public class UIReplayList extends UIList<ReplayListEntry>
             return element.folderName();
         }
 
-        int w = this.area.w - 20 - this.indent(element);
+        int w = this.area.w - 20 - EYE_SLOT - this.indent(element);
 
         return context.batcher.getFont().limitToWidth(element.replay.getName(), w);
     }
@@ -1964,7 +1977,38 @@ public class UIReplayList extends UIList<ReplayListEntry>
             }
         }
 
+        this.renderEye(context, replay, y, rowHeight, hover);
         this.renderRecordingBadge(context, replay, y, rowHeight);
+    }
+
+    /** Left edge of a replay row's eye. */
+    private int eyeX()
+    {
+        return this.area.x + this.area.w - 30 - EYE_SLOT - 2;
+    }
+
+    /**
+     * The eye of a replay row. It is the replay's own {@link Replay#enabled}: a hidden replay is not
+     * made into an actor at all, so it is gone from the preview and from the exported video alike,
+     * and the switch is saved with the film.
+     */
+    private void renderEye(UIContext context, Replay replay, int y, int rowHeight, boolean hover)
+    {
+        boolean visible = replay.enabled.get();
+        int x = this.eyeX();
+        int iconY = y + (rowHeight - 16) / 2;
+        boolean over = context.mouseX >= x && context.mouseX < x + EYE_SLOT && context.mouseY >= y && context.mouseY < y + rowHeight;
+        int color = over ? Colors.WHITE : (visible ? RowStyle.iconColor(hover) : Colors.setA(Colors.GRAY, 0.6F));
+
+        context.batcher.icon(visible ? Icons.VISIBLE : Icons.INVISIBLE, color, x, iconY);
+    }
+
+    /** Whether a press at this x lands on a replay row's eye. */
+    private boolean isOverEye(int mouseX)
+    {
+        int x = this.eyeX();
+
+        return mouseX >= x && mouseX < x + EYE_SLOT;
     }
 
     /**
@@ -1990,7 +2034,7 @@ public class UIReplayList extends UIList<ReplayListEntry>
         String rec = "\u25CF REC";
         int head = 10;
         int textW = context.batcher.getFont().getWidth(rec);
-        int right = this.area.x + this.area.w - 30 - 4;
+        int right = this.eyeX() - 4;
         int headX = right - head;
         int textX = headX - 4 - textW;
         int my = y + rowHeight / 2;

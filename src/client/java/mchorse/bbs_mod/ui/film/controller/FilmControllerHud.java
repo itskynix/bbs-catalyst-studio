@@ -9,6 +9,8 @@ import mchorse.bbs_mod.forms.FormUtilsClient;
 import mchorse.bbs_mod.forms.forms.Form;
 import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.film.PreviewHud;
+import mchorse.bbs_mod.ui.film.UIFilmPreview;
+import net.minecraft.client.util.math.MatrixStack;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.input.keyframes.UIKeyframeEditor;
 import mchorse.bbs_mod.ui.utils.Area;
@@ -29,6 +31,9 @@ public class FilmControllerHud
     private static final int FORM_SIZE = 40;
 
     private final UIFilmController controller;
+
+    /** Lays the selection card out against the fitted frame while the preview is zoomed. */
+    private final PreviewHud cardHud = new PreviewHud();
 
     public FilmControllerHud(UIFilmController controller)
     {
@@ -80,52 +85,19 @@ public class FilmControllerHud
         }
 
         Replay replay = this.controller.panel.replayEditor.getReplay();
+        UIFilmPreview preview = this.controller.panel.preview;
+        Area image = preview.getViewport();
+        boolean zoomed = image.x != area.x || image.y != area.y || image.w != area.w || image.h != area.h;
 
         if (replay != null && BBSSettings.editorPreviewSelectionHud.get())
         {
-            Form form = replay.form.get();
-
-            /* The thumbnail stands to the right of the whole stack, so the lines are laid out
-             * in what is left of the corner rather than running under it. */
-            if (form != null)
+            if (zoomed)
             {
-                hud.inset(PreviewHud.Anchor.TOP_RIGHT, FORM_SIZE + PreviewHud.GAP);
+                this.renderSelectionZoomed(context, area, image, preview.area, replay);
             }
-
-            Area block = hud.text(context, PreviewHud.Anchor.TOP_RIGHT, replay.getName(), Colors.WHITE);
-            Area last = block;
-
-            /* What the gizmo is on, under the actor's name — the gizmo's position in the scene
-             * is the only other clue, and a root gizmo standing at a bone's height is not one.
-             * Only while a gizmo is actually shown: with nothing selected the line would be
-             * answering a question nobody asked. */
-            String targetLabel = this.editTargetLabel();
-
-            if (targetLabel != null)
+            else
             {
-                last = hud.text(context, PreviewHud.Anchor.TOP_RIGHT, targetLabel, Colors.LIGHTEST_GRAY);
-            }
-
-            if (form != null)
-            {
-                /* Centred on the lines it belongs to, but never pushed out through the top. */
-                Area thumbnail = new Area();
-
-                thumbnail.setSize(FORM_SIZE, FORM_SIZE);
-                thumbnail.setPos(
-                    area.ex() - PreviewHud.MARGIN - FORM_SIZE,
-                    Math.max(area.y, (block.y + last.ey()) / 2 - FORM_SIZE / 2)
-                );
-
-                hud.backdrop(thumbnail);
-                hud.include(PreviewHud.Anchor.TOP_RIGHT, thumbnail, (c) ->
-                {
-                    c.batcher.clip(thumbnail.x, thumbnail.y, thumbnail.w, thumbnail.h, c);
-                    /* renderPreview, not renderUI: the form's own name card would repeat the
-                     * replay's name standing right beside it. */
-                    FormUtilsClient.renderPreview(form, c, thumbnail.x, thumbnail.y, thumbnail.ex(), thumbnail.ey());
-                    c.batcher.unclip(c);
-                });
+                this.renderSelection(context, hud, area, replay, null);
             }
         }
 
@@ -184,7 +156,11 @@ public class FilmControllerHud
         }
 
         BBSProfiler.begin(BBSProfiler.Timer.PICK_PREVIEW);
-        this.controller.picker.renderPreview(context, area);
+        /* The highlight is the pick buffer laid over the picture: over the zoomed and panned one,
+         * which is also what the pick read the cursor against, cut to the preview */
+        context.batcher.clip(preview.area, context);
+        this.controller.picker.renderPreview(context, image);
+        context.batcher.unclip(context);
         BBSProfiler.end(BBSProfiler.Timer.PICK_PREVIEW);
 
         this.controller.orbitGizmo.render(context, navBlock);
@@ -217,6 +193,119 @@ public class FilmControllerHud
         {
             hud.text(context, PreviewHud.Anchor.BOTTOM_LEFT, section.name().toLowerCase() + ": " + BBSProfiler.get(section), Colors.LIGHTEST_GRAY);
         }
+    }
+
+    /**
+     * The selected replay's name, what the gizmo is on, and its form's thumbnail, in the top right
+     * of {@code area}. With {@code thumbOut} the thumbnail is not drawn but handed back, for a caller
+     * that draws the rest under a transform the 3D thumbnail cannot follow.
+     */
+    private void renderSelection(UIContext context, PreviewHud hud, Area area, Replay replay, Area[] thumbOut)
+    {
+        Form form = replay.form.get();
+
+        /* The thumbnail stands to the right of the whole stack, so the lines are laid out
+         * in what is left of the corner rather than running under it. */
+        if (form != null)
+        {
+            hud.inset(PreviewHud.Anchor.TOP_RIGHT, FORM_SIZE + PreviewHud.GAP);
+        }
+
+        Area block = hud.text(context, PreviewHud.Anchor.TOP_RIGHT, replay.getName(), Colors.WHITE);
+        Area last = block;
+
+        /* What the gizmo is on, under the actor's name — the gizmo's position in the scene
+         * is the only other clue, and a root gizmo standing at a bone's height is not one.
+         * Only while a gizmo is actually shown: with nothing selected the line would be
+         * answering a question nobody asked. */
+        String targetLabel = this.editTargetLabel();
+
+        if (targetLabel != null)
+        {
+            last = hud.text(context, PreviewHud.Anchor.TOP_RIGHT, targetLabel, Colors.LIGHTEST_GRAY);
+        }
+
+        if (form != null)
+        {
+            /* Centred on the lines it belongs to, but never pushed out through the top. */
+            Area thumbnail = new Area();
+
+            thumbnail.setSize(FORM_SIZE, FORM_SIZE);
+            thumbnail.setPos(
+                area.ex() - PreviewHud.MARGIN - FORM_SIZE,
+                Math.max(area.y, (block.y + last.ey()) / 2 - FORM_SIZE / 2)
+            );
+
+            hud.backdrop(thumbnail);
+
+            if (thumbOut != null)
+            {
+                thumbOut[0] = thumbnail;
+
+                return;
+            }
+
+            hud.include(PreviewHud.Anchor.TOP_RIGHT, thumbnail, (c) ->
+            {
+                c.batcher.clip(thumbnail.x, thumbnail.y, thumbnail.w, thumbnail.h, c);
+                /* renderPreview, not renderUI: the form's own name card would repeat the
+                 * replay's name standing right beside it. */
+                FormUtilsClient.renderPreview(form, c, thumbnail.x, thumbnail.y, thumbnail.ex(), thumbnail.ey());
+                c.batcher.unclip(c);
+            });
+        }
+    }
+
+    /**
+     * The selection card while the preview is zoomed or panned: it belongs to the picture, so it is
+     * laid out against the fitted frame as usual and then drawn through the same scale and shift
+     * that put the picture where it is - text, wash and thumbnail alike - cut to the preview.
+     */
+    private void renderSelectionZoomed(UIContext context, Area frame, Area image, Area preview, Replay replay)
+    {
+        this.cardHud.begin(frame);
+
+        Area[] thumb = new Area[1];
+
+        this.renderSelection(context, this.cardHud, frame, replay, thumb);
+
+        float scale = image.w / (float) Math.max(1, frame.w);
+        float dx = image.x - frame.x * scale;
+        float dy = image.y - frame.y * scale;
+        MatrixStack matrices = context.batcher.getContext().getMatrices();
+
+        context.batcher.clip(preview, context);
+        context.batcher.flush();
+        matrices.push();
+        matrices.translate(dx, dy, 0F);
+        matrices.scale(scale, scale, 1F);
+
+        try
+        {
+            this.cardHud.flush(context);
+            context.batcher.flush();
+        }
+        finally
+        {
+            matrices.pop();
+        }
+
+        Form form = replay.form.get();
+
+        if (thumb[0] != null && form != null)
+        {
+            /* The 3D thumbnail is drawn into a rectangle of the screen, so it gets the mapped one */
+            int x1 = Math.round(dx + thumb[0].x * scale);
+            int y1 = Math.round(dy + thumb[0].y * scale);
+            int x2 = Math.round(dx + thumb[0].ex() * scale);
+            int y2 = Math.round(dy + thumb[0].ey() * scale);
+
+            context.batcher.clip(x1, y1, x2 - x1, y2 - y1, context);
+            FormUtilsClient.renderPreview(form, context, x1, y1, x2, y2);
+            context.batcher.unclip(context);
+        }
+
+        context.batcher.unclip(context);
     }
 
     private String editTargetLabel()

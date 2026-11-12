@@ -760,7 +760,7 @@ public class BBSModClient implements ClientModInitializer
 
             BBSRendering.endEntityPass();
 
-            if (BBSSettings.chromaSkyEnabled.get())
+            if (BBSRendering.isChromaSky())
             {
                 float d = BBSSettings.chromaSkyBillboard.get();
 
@@ -768,7 +768,7 @@ public class BBSModClient implements ClientModInitializer
                 {
                     MatrixStack stack = context.matrixStack();
                     Integer fromCurve = BBSRendering.getChromaSkyColorArgb();
-                    Color color = Colors.COLOR.set(fromCurve != null ? fromCurve : BBSSettings.chromaSkyColor.get());
+                    Color color = Colors.COLOR.set(BBSRendering.getChromaArgb());
 
                     stack.push();
 

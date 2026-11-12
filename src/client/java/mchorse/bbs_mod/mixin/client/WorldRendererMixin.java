@@ -60,11 +60,9 @@ public class WorldRendererMixin
     @Inject(method = "renderSky(Lnet/minecraft/client/util/math/MatrixStack;Lorg/joml/Matrix4f;FLnet/minecraft/client/render/Camera;ZLjava/lang/Runnable;)V", at = @At("HEAD"), cancellable = true)
     public void onRenderSky(CallbackInfo info)
     {
-        if (BBSSettings.chromaSkyEnabled.get())
+        if (BBSRendering.isChromaSky())
         {
-            Integer fromCurve = BBSRendering.getChromaSkyColorArgb();
-            int argb = fromCurve != null ? fromCurve : BBSSettings.chromaSkyColor.get();
-            Color color = Color.rgba(argb);
+            Color color = Color.rgba(BBSRendering.getChromaArgb());
 
             GL11.glClearColor(color.r, color.g, color.b, 1F);
             GL11.glClear(GL11.GL_COLOR_BUFFER_BIT);
@@ -73,6 +71,28 @@ public class WorldRendererMixin
             info.cancel();
         }
     }
+
+    /* The green screen leaves nothing of the world behind the actors: no clouds and no rain or
+     * snow on the chroma colour either */
+    //? if <1.21 {
+    @Inject(method = "renderClouds(Lnet/minecraft/client/util/math/MatrixStack;Lorg/joml/Matrix4f;FDDD)V", at = @At("HEAD"), cancellable = true)
+    public void onRenderClouds(CallbackInfo info)
+    {
+        if (BBSRendering.isGreenScreen())
+        {
+            info.cancel();
+        }
+    }
+
+    @Inject(method = "renderWeather(Lnet/minecraft/client/render/LightmapTextureManager;FDDD)V", at = @At("HEAD"), cancellable = true)
+    public void onRenderWeather(CallbackInfo info)
+    {
+        if (BBSRendering.isGreenScreen())
+        {
+            info.cancel();
+        }
+    }
+    //?}
 
     //? if >=1.21 {
     /*@Inject(method = "renderLayer", at = @At("HEAD"), cancellable = true)
@@ -94,7 +114,7 @@ public class WorldRendererMixin
             FormTranslucentQueue.flush();
         }
 
-        if (BBSSettings.chromaSkyEnabled.get() && !BBSSettings.chromaSkyTerrain.get())
+        if (BBSRendering.isChromaHidingTerrain())
         {
             BBSRendering.onRenderChunkLayer(matrices);
 

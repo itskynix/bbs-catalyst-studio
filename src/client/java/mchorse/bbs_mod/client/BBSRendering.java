@@ -439,11 +439,9 @@ public class BBSRendering
             float g;
             float b;
 
-            if (BBSSettings.chromaSkyEnabled.get())
+            if (BBSRendering.isChromaSky())
             {
-                Integer fromCurve = BBSRendering.getChromaSkyColorArgb();
-                int argb = fromCurve != null ? fromCurve : BBSSettings.chromaSkyColor.get();
-                Color color = Color.rgba(argb);
+                Color color = Color.rgba(BBSRendering.getChromaArgb());
 
                 r = color.r;
                 g = color.g;
@@ -833,11 +831,9 @@ public class BBSRendering
         float g;
         float b;
 
-        if (BBSSettings.chromaSkyEnabled.get())
+        if (BBSRendering.isChromaSky())
         {
-            Integer fromCurve = BBSRendering.getChromaSkyColorArgb();
-            int argb = fromCurve != null ? fromCurve : BBSSettings.chromaSkyColor.get();
-            Color color = Color.rgba(argb);
+            Color color = Color.rgba(BBSRendering.getChromaArgb());
 
             r = color.r;
             g = color.g;
@@ -1266,6 +1262,53 @@ public class BBSRendering
     public static Integer getChromaSkyColorArgb()
     {
         return getCurveValue(CurveClip.CHROMA_SKY_COLOR, CurveClip::getColorValues);
+    }
+
+    /* Green screen */
+
+    /** Pure chroma green: what the green screen paints behind the actors. */
+    public static final int GREEN_SCREEN_COLOR = 0xFF00FF00;
+
+    /**
+     * The film editor's one-click green screen. It lays itself over the chroma sky settings without
+     * touching them - nothing is saved, so turning it off (or leaving the editor, or quitting the
+     * game with it on) leaves the sky, the terrain and the chroma colour exactly as they were.
+     */
+    private static boolean greenScreen;
+
+    public static boolean isGreenScreen()
+    {
+        return greenScreen;
+    }
+
+    public static void setGreenScreen(boolean enabled)
+    {
+        greenScreen = enabled;
+    }
+
+    /** Whether the sky is replaced by a flat chroma colour: the chroma sky setting or the green screen. */
+    public static boolean isChromaSky()
+    {
+        return greenScreen || BBSSettings.chromaSkyEnabled.get();
+    }
+
+    /** Whether the world's terrain, block entities, clouds and weather are left out. */
+    public static boolean isChromaHidingTerrain()
+    {
+        return greenScreen || (BBSSettings.chromaSkyEnabled.get() && !BBSSettings.chromaSkyTerrain.get());
+    }
+
+    /** The chroma colour in use: pure green under the green screen, else the curve's or the setting's. */
+    public static int getChromaArgb()
+    {
+        if (greenScreen)
+        {
+            return GREEN_SCREEN_COLOR;
+        }
+
+        Integer fromCurve = getChromaSkyColorArgb();
+
+        return fromCurve != null ? fromCurve : BBSSettings.chromaSkyColor.get();
     }
 
     /** Camera work takes priority; films played without a camera supply missing values. */

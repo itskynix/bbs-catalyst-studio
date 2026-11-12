@@ -98,6 +98,26 @@ public class UIFilmPreview extends UIElement
     public UIIcon control;
     public UIIcon perspective;
 
+    /** Shows the actors on pure chroma green, the world taken away (see BBSRendering.setGreenScreen). */
+    public UIIcon greenScreen;
+    /** Iris's shaders on and off; null without Iris, and then the wing has no slot for it. */
+    public UIIcon shaders;
+
+    private static final boolean IRIS_LOADED = net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("iris");
+
+    /* Preview zoom and pan: only the picture on the screen is scaled and moved. The camera, its FOV
+     * and the render size stay as they are, and everything that maps the mouse into the scene reads
+     * getViewport(), which is the zoomed and panned picture - so picking and gizmos follow along. */
+    private static final float MIN_ZOOM = 0.25F;
+    private static final float MAX_ZOOM = 4F;
+
+    private float zoom = 1F;
+    private float panX;
+    private float panY;
+    private boolean panning;
+    private int panLastX;
+    private int panLastY;
+
     /** Whether the icon bar is currently shown - see {@link #updateIconsVisibility(UIContext)} */
     private boolean iconsVisible = true;
 
@@ -213,6 +233,9 @@ public class UIFilmPreview extends UIElement
         this.flight.tooltip(UIKeys.CAMERA_EDITOR_KEYS_MODES_FLIGHT);
         this.flight.context((menu) ->
         {
+            menu.action(Icons.CAMERA, UIKeys.FILM_SCENE_CAMERA_TOGGLE, this.panel.isSceneCamera(), this.panel::toggleSceneCamera);
+            menu.action(Icons.KEY, UIKeys.FILM_ADD_CAMERA_POSE, this.panel::addCameraPose);
+            menu.action(Icons.FULLSCREEN, UIKeys.FILM_PREVIEW_RESET_ZOOM, this::resetZoom);
             menu.action(Icons.POSE, UIKeys.FILM_CONTROLLER_KEYS_TOGGLE_CONTROL, this.panel.getController().isControlling(), () -> this.panel.getController().toggleControl());
             menu.action(this.panel.getController().getOrbitModeIcon(), UIKeys.FILM_CONTROLLER_KEYS_CHANGE_CAMERA_MODE, () -> this.panel.getController().toggleOrbitMode());
 
@@ -381,6 +404,29 @@ public class UIFilmPreview extends UIElement
             }
         });
 
+        this.greenScreen = new UIIcon(Icons.BUCKET, (b) ->
+        {
+            BBSRendering.setGreenScreen(!BBSRendering.isGreenScreen());
+            UIUtils.playClick();
+        });
+        this.greenScreen.highlight(BBSRendering::isGreenScreen, Direction.BOTTOM);
+        this.greenScreen.tooltip(UIKeys.FILM_GREEN_SCREEN);
+        this.greenScreen.noCulling();
+
+        if (IRIS_LOADED)
+        {
+            this.shaders = new UIIcon(Icons.SUN, (b) ->
+            {
+                if (mchorse.bbs_mod.utils.iris.IrisUtils.toggleShaders())
+                {
+                    UIUtils.playClick();
+                }
+            });
+            this.shaders.highlight(mchorse.bbs_mod.utils.iris.IrisUtils::areShadersEnabled, Direction.BOTTOM);
+            this.shaders.tooltip(UIKeys.FILM_TOGGLE_SHADERS);
+            this.shaders.noCulling();
+        }
+
         /* Prevent culling on toolbar buttons */
         this.onionSkin.noCulling();
         this.teleport.noCulling();
@@ -392,9 +438,14 @@ public class UIFilmPreview extends UIElement
         this.recordVideo.noCulling();
 
         /* Assemble the 3-part symmetric control center */
-        this.leftWing.add(this.onionSkin, this.teleport, this.motionPath, this.flight);
+        this.leftWing.add(this.onionSkin, this.teleport, this.motionPath, this.flight, this.greenScreen);
         this.centerCapsule.add(this.plause);
         this.rightWing.add(this.screenshot, this.recordReplay, this.loop, this.recordVideo);
+
+        if (this.shaders != null)
+        {
+            this.rightWing.add(this.shaders);
+        }
 
         this.icons.add(this.leftWing, this.centerCapsule, this.rightWing);
         this.add(this.icons);
@@ -613,19 +664,15 @@ public class UIFilmPreview extends UIElement
         }
     }
 
-    public Area getViewport()
+    /** The picture fitted into the preview at the render's aspect ratio, before any zoom or pan. */
+    public Area getFrameArea()
     {
         int width = BBSRendering.getVideoWidth();
         int height = BBSRendering.getVideoHeight();
         int w = this.area.w;
         int h = this.area.h;
 
-        Camera camera = new Camera();
-
-        camera.copy(this.panel.getWorldCamera());
-        camera.updatePerspectiveProjection(width, height);
-
-        Vector2i size = Vectors.resize(width / (float) height, w, h);
+        Vector2i size = Vectors.resize(width / (float) Math.max(1, height), w, h);
         Area area = new Area();
 
         area.setSize(size.x, size.y);
@@ -634,12 +681,119 @@ public class UIFilmPreview extends UIElement
         return area;
     }
 
+    /**
+     * Where the picture is on the screen: the fitted frame, scaled by the preview zoom around its
+     * centre and moved by the pan. It may reach past the preview, which clips it when drawing.
+     */
+    public Area getViewport()
+    {
+        Area frame = this.getFrameArea();
+
+        if (this.zoom == 1F && this.panX == 0F && this.panY == 0F)
+        {
+            return frame;
+        }
+
+        int w = Math.max(1, Math.round(frame.w * this.zoom));
+        int h = Math.max(1, Math.round(frame.h * this.zoom));
+        Area area = new Area();
+
+        area.setSize(w, h);
+        area.setPos(frame.mx() - w / 2 + Math.round(this.panX), frame.my() - h / 2 + Math.round(this.panY));
+
+        return area;
+    }
+
+    public float getZoom()
+    {
+        return this.zoom;
+    }
+
+    /** Back to the whole frame fitted into the preview, at 100%. */
+    public void resetZoom()
+    {
+        this.zoom = 1F;
+        this.panX = this.panY = 0F;
+        this.panning = false;
+    }
+
+    /** Zooms by wheel steps around a point of the screen, which stays where it is under the cursor. */
+    private void zoomAt(int mouseX, int mouseY, double wheel)
+    {
+        Area frame = this.getFrameArea();
+        float old = this.zoom;
+        float next = MathHelperCompat.clamp(old * (float) Math.pow(1.15D, wheel), MIN_ZOOM, MAX_ZOOM);
+
+        /* Snap through 100% so that the fitted frame is easy to land on again */
+        if ((old < 1F && next > 1F) || (old > 1F && next < 1F) || Math.abs(next - 1F) < 0.02F)
+        {
+            next = 1F;
+        }
+
+        float k = next / old;
+        float cx = frame.mx() + this.panX;
+        float cy = frame.my() + this.panY;
+
+        this.panX = mouseX - (mouseX - cx) * k - frame.mx();
+        this.panY = mouseY - (mouseY - cy) * k - frame.my();
+        this.zoom = next;
+
+        this.clampPan();
+    }
+
+    /** Keeps at least a quarter of the frame on the preview, and centres it at 100% and below. */
+    private void clampPan()
+    {
+        if (this.zoom <= 1F)
+        {
+            this.panX = this.panY = 0F;
+
+            return;
+        }
+
+        Area frame = this.getFrameArea();
+        float maxX = frame.w * this.zoom / 2F + frame.w / 4F;
+        float maxY = frame.h * this.zoom / 2F + frame.h / 4F;
+
+        this.panX = MathHelperCompat.clamp(this.panX, -maxX, maxX);
+        this.panY = MathHelperCompat.clamp(this.panY, -maxY, maxY);
+    }
+
+    /**
+     * Whether the wheel and the middle button are already the camera's: the orbit zooms and pans
+     * with them, and flight uses them too. Then the preview takes them only with Alt held.
+     */
+    private boolean cameraOwnsMouse()
+    {
+        UIFilmController controller = this.panel.getController();
+
+        return this.panel.isFlying() || controller.orbit.enabled;
+    }
+
+    private static final class MathHelperCompat
+    {
+        static float clamp(float value, float min, float max)
+        {
+            return value < min ? min : Math.min(value, max);
+        }
+    }
+
     @Override
     protected boolean subMouseClicked(UIContext context)
     {
         Area area = this.getViewport();
 
-        if (area.isInside(context))
+        /* Panning the zoomed picture: the middle button, unless the camera has it */
+        if (context.mouseButton == 2 && this.area.isInside(context) && (Window.isAltPressed() || !this.cameraOwnsMouse()))
+        {
+            this.panning = true;
+            this.panLastX = context.mouseX;
+            this.panLastY = context.mouseY;
+
+            return true;
+        }
+
+        if (area.isInside(context) && this.area.isInside(context))
         {
             /* The arrows and tabs of a POV screen in the frame turn its pages and tabs, as in the game */
             if (context.mouseButton == 0 && PovGuiRenderer.click((context.mouseX - area.x) / (float) area.w, (context.mouseY - area.y) / (float) area.h))
@@ -671,6 +825,13 @@ public class UIFilmPreview extends UIElement
     @Override
     protected boolean subMouseReleased(UIContext context)
     {
+        if (this.panning && context.mouseButton == 2)
+        {
+            this.panning = false;
+
+            return true;
+        }
+
         if (this.placementGizmo.mouseReleased(context))
         {
             return true;
@@ -682,6 +843,19 @@ public class UIFilmPreview extends UIElement
     @Override
     protected boolean subMouseScrolled(UIContext context)
     {
+        if (!this.area.isInside(context) || context.mouseWheel == 0D)
+        {
+            return super.subMouseScrolled(context);
+        }
+
+        /* Alt always zooms the picture; without it the camera keeps the wheel where it uses it */
+        if (Window.isAltPressed() || !this.cameraOwnsMouse())
+        {
+            this.zoomAt(context.mouseX, context.mouseY, context.mouseWheel);
+
+            return true;
+        }
+
         Area area = this.getViewport();
 
         if (area.isInside(context) && !this.panel.isFlying() && this.panel.getController().getPovMode() == UIFilmController.CAMERA_MODE_ORBIT)
@@ -692,10 +866,35 @@ public class UIFilmPreview extends UIElement
         return super.subMouseScrolled(context);
     }
 
+    /** Lays the wing's buttons out side by side, centred in it. */
+    private static void layoutWing(UIElement wing, int x, int width, int y, int size)
+    {
+        List<UIIcon> buttons = new ArrayList<>();
+
+        for (IUIElement child : wing.getChildren())
+        {
+            if (child instanceof UIIcon icon)
+            {
+                buttons.add(icon);
+            }
+        }
+
+        int bx = x + (width - buttons.size() * size) / 2;
+
+        for (UIIcon button : buttons)
+        {
+            button.area.set(bx, y, size, size);
+            bx += size;
+        }
+    }
+
     public void updateToolbarLayout()
     {
-        int leftWingW = 74;
-        int rightWingW = 74;
+        /* Both wings as wide as the fuller one, so the bar stays symmetric around the play
+         * button whichever buttons there are (the shader one only comes with Iris) */
+        int slots = Math.max(this.leftWing.getChildren().size(), this.rightWing.getChildren().size());
+        int leftWingW = slots * 18 + 2;
+        int rightWingW = leftWingW;
         int playW = 26;
         int playH = 26;
         int wingH = 20;
@@ -719,30 +918,16 @@ public class UIFilmPreview extends UIElement
         int btnH = 18;
         int btnY = wingY + (wingH - btnH) / 2;
 
-        /* Left wing buttons: [Onion Skin, Teleport, Motion Path, Flight Mode] */
-        int bx = toolbarX + 1;
-        this.onionSkin.area.set(bx, btnY, btnW, btnH);
-        bx += btnW;
-        this.teleport.area.set(bx, btnY, btnW, btnH);
-        bx += btnW;
-        this.motionPath.area.set(bx, btnY, btnW, btnH);
-        bx += btnW;
-        this.flight.area.set(bx, btnY, btnW, btnH);
+        /* Left wing: [Onion Skin, Teleport, Motion Path, Flight Mode, Green Screen] */
+        layoutWing(this.leftWing, toolbarX, leftWingW, btnY, btnW);
 
         /* Center play button: 22x22 centered inside 26x26 */
         int px = playX + (playW - 22) / 2;
         int py = playY + (playH - 22) / 2;
         this.plause.area.set(px, py, 22, 22);
 
-        /* Right wing buttons: [Screenshot, Record/Replay, Loop, Video Export] */
-        bx = rightX + 1;
-        this.screenshot.area.set(bx, btnY, btnW, btnH);
-        bx += btnW;
-        this.recordReplay.area.set(bx, btnY, btnW, btnH);
-        bx += btnW;
-        this.loop.area.set(bx, btnY, btnW, btnH);
-        bx += btnW;
-        this.recordVideo.area.set(bx, btnY, btnW, btnH);
+        /* Right wing: [Screenshot, Record/Replay, Loop, Video Export, Shaders (Iris only)] */
+        layoutWing(this.rightWing, rightX, rightWingW, btnY, btnH);
     }
 
     @Override
@@ -801,6 +986,28 @@ public class UIFilmPreview extends UIElement
     {
         Framebuffer fb = BBSRendering.getFramebuffer();
         Texture texture = BBSRendering.getTexture();
+
+        /* The middle button is held: the picture follows the mouse */
+        if (this.panning)
+        {
+            if (context.mouseX >= 0 && context.mouseY >= 0)
+            {
+                this.panX += context.mouseX - this.panLastX;
+                this.panY += context.mouseY - this.panLastY;
+                this.panLastX = context.mouseX;
+                this.panLastY = context.mouseY;
+
+                this.clampPan();
+            }
+        }
+
+        /* Under a video export the frame is what is written: never zoomed */
+        if (BBSModClient.getVideoRecorder().isRecording() && this.zoom != 1F)
+        {
+            this.resetZoom();
+        }
+
+        Area frame = this.getFrameArea();
         Area area = this.getViewport();
         Camera camera = this.panel.getCamera();
 
@@ -808,6 +1015,10 @@ public class UIFilmPreview extends UIElement
         camera.view.set(this.panel.lastView);
         camera.projection.set(this.panel.lastProjection);
         int fogColor = new Color(BBSRendering.getFogRed(), BBSRendering.getFogGreen(), BBSRendering.getFogBlue(), 1F).getARGBColor();
+
+        /* A zoomed picture reaches past the preview; only the preview's part of it is drawn */
+        context.batcher.clip(this.area, context);
+
         context.batcher.box(area.x, area.y, area.ex(), area.ey(), fogColor);
 
         if (fb != null && fb.getColorAttachment() > 0)
@@ -821,11 +1032,14 @@ public class UIFilmPreview extends UIElement
 
         this.updateToolbarLayout();
         this.updateIconsVisibility(context);
-        this.hud.begin(area);
 
-        if (this.iconsVisible && this.icons.area.ey() > area.y)
+        /* The frame guides and the gizmos below belong to the picture and go with the zoom; the
+         * HUD belongs to the preview and stays on the fitted frame */
+        this.hud.begin(frame);
+
+        if (this.iconsVisible && this.icons.area.ey() > frame.y)
         {
-            this.hud.reserve(PreviewHud.Anchor.TOP_CENTER, this.icons.area.ey() - area.y);
+            this.hud.reserve(PreviewHud.Anchor.TOP_CENTER, this.icons.area.ey() - frame.y);
         }
 
         /* The navigation widget claims the bottom left corner before anything else does, so
@@ -925,13 +1139,22 @@ public class UIFilmPreview extends UIElement
 
         this.placementGizmo.render(context, area);
 
+        context.batcher.unclip(context);
+
         this.panel.getController().renderHUD(context, this.hud, this.navBlock);
+
+        if (this.zoom != 1F)
+        {
+            String zoomLabel = Math.round(this.zoom * 100F) + "%  (" + KeyCodes.getName(Keys.PREVIEW_RESET_ZOOM.getMainKey()) + ")";
+
+            this.hud.label(context, PreviewHud.Anchor.BOTTOM_RIGHT, zoomLabel, Colors.WHITE, Colors.A50);
+        }
 
         if (this.panel.replayEditor.isVisible() && BBSSettings.audioWaveformVisibleInPreview.get())
         {
             RunnerCameraController runner = this.panel.getRunner();
-            int w = (int) (area.w * BBSSettings.audioWaveformWidth.get());
-            int x = area.x(0.5F, w);
+            int w = (int) (frame.w * BBSSettings.audioWaveformWidth.get());
+            int x = frame.x(0.5F, w);
             float tick = this.panel.getCursor() + (runner.isRunning() ? context.getTransition() : 0);
 
             this.clips.clear();
@@ -948,7 +1171,7 @@ public class UIFilmPreview extends UIElement
             }
 
             int h = BBSSettings.audioWaveformHeight.get();
-            int waveY = area.y + (this.iconsVisible && this.icons.area.ey() > area.y ? Math.max(10, this.icons.area.ey() - area.y + 4) : 10);
+            int waveY = frame.y + (this.iconsVisible && this.icons.area.ey() > frame.y ? Math.max(10, this.icons.area.ey() - frame.y + 4) : 10);
 
             if (BBSSettings.audioWaveformPreviewCombined.get())
             {
@@ -980,7 +1203,7 @@ public class UIFilmPreview extends UIElement
         /* Everything the corners collected this frame goes down here, each zone's wash first. */
         this.hud.flush(context);
 
-        this.renderLoadingGate(context, area);
+        this.renderLoadingGate(context, frame);
 
         context.batcher.clip(this.area, context);
         super.render(context);

@@ -226,6 +226,32 @@ public class IrisUtils
         return IrisApi.getInstance().isShaderPackInUse();
     }
 
+    /** Whether shaders are switched on in Iris's own settings, a pack loaded or not. */
+    public static boolean areShadersEnabled()
+    {
+        return Iris.getIrisConfig().areShadersEnabled();
+    }
+
+    /**
+     * Turns shaders on or off the way Iris's own key does: the setting is flipped and saved, and the
+     * pipeline is rebuilt for the next frame. Returns false (and logs why) if Iris refused.
+     */
+    public static boolean toggleShaders()
+    {
+        try
+        {
+            Iris.toggleShaders(net.minecraft.client.MinecraftClient.getInstance(), !areShadersEnabled());
+
+            return true;
+        }
+        catch (Throwable e)
+        {
+            System.err.println("[BBS] Toggling Iris shaders failed: " + e);
+
+            return false;
+        }
+    }
+
     public static void setMainBound(boolean bound)
     {
         WorldRenderingPipeline pipeline = Iris.getPipelineManager().getPipelineNullable();

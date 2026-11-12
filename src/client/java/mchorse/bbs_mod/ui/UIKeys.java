@@ -896,6 +896,17 @@ public class UIKeys
     public static final IKey FILM_REPLAY_ALL_TRACKS = L10n.lang("bbs.ui.film.replays.all_tracks");
     public static final IKey FILM_RESET_REPLAYS = L10n.lang("bbs.ui.film.reset_replays");
     public static final IKey FILM_SCREENSHOT = L10n.lang("bbs.ui.film.screenshot");
+    public static final IKey FILM_SCENE_CAMERA_TOGGLE = L10n.lang("bbs.ui.film.scene_camera.toggle");
+    public static final IKey FILM_SCENE_CAMERA_ON = L10n.lang("bbs.ui.film.scene_camera.on");
+    public static final IKey FILM_SCENE_CAMERA_OFF = L10n.lang("bbs.ui.film.scene_camera.off");
+    public static final IKey FILM_ADD_CAMERA_POSE = L10n.lang("bbs.ui.film.add_camera_pose");
+    public static final IKey FILM_ADD_CAMERA_POSE_DONE = L10n.lang("bbs.ui.film.add_camera_pose.done");
+    public static final IKey FILM_ADD_CAMERA_POSE_NO_CLIP = L10n.lang("bbs.ui.film.add_camera_pose.no_clip");
+    public static final IKey FILM_PREVIEW_RESET_ZOOM = L10n.lang("bbs.ui.film.preview.reset_zoom");
+    public static final IKey FILM_PREVIEW_ZOOM_TOOLTIP = L10n.lang("bbs.ui.film.preview.zoom_tooltip");
+    public static final IKey FILM_TOGGLE_SHADERS = L10n.lang("bbs.ui.film.toggle_shaders");
+    public static final IKey FILM_GREEN_SCREEN = L10n.lang("bbs.ui.film.green_screen");
+    public static final IKey SCENE_REPLAYS_TOGGLE_VISIBILITY = L10n.lang("bbs.ui.film.replays.toggle_visibility");
     public static final IKey FILM_SCREENSHOT_DESCRIPTION = L10n.lang("bbs.ui.film.screenshot-description");
     public static final IKey FILM_SCREENSHOT_TITLE = L10n.lang("bbs.ui.film.screenshot-title");
     public static final IKey FILM_TELEPORT_CONTEXT_PLAYER = L10n.lang("bbs.ui.film.teleport.context.player");

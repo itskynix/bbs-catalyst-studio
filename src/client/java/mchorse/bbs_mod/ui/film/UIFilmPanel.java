@@ -345,6 +345,10 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.keys().register(Keys.REDO, this::redo).category(editor);
         this.keys().register(Keys.FLIGHT, this::toggleFlight).active(() -> this.data != null).category(modes);
         this.keys().register(Keys.FREE_CAM, mchorse.bbs_mod.camera.WorldFreeCam::toggle).active(() -> this.data != null).category(modes);
+        this.keys().register(Keys.SCENE_CAMERA, this::toggleSceneCamera).strict().active(() -> this.data != null).category(modes);
+        this.keys().register(Keys.SCENE_CAMERA_NUMPAD, this::toggleSceneCamera).strict().active(() -> this.data != null).category(modes);
+        this.keys().register(Keys.ADD_CAMERA_POSE, this::addCameraPose).active(() -> this.data != null).category(modes);
+        this.keys().register(Keys.PREVIEW_RESET_ZOOM, () -> this.preview.resetZoom()).active(() -> this.data != null).category(modes);
         this.keys().register(Keys.LOOPING, () ->
         {
             BBSSettings.editorLoop.set(!BBSSettings.editorLoop.get());
@@ -502,6 +506,8 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.onClose(this::leaveScreen);
         /* Out of the editor: the server lets go of what this player was working on */
         this.onClose(() -> StudioLocks.sendEditing("", -1));
+        /* The green screen is the editor's: the world comes back as the editor is left */
+        this.onClose(() -> BBSRendering.setGreenScreen(false));
     }
 
     private boolean isCursorOverTimeline(UIContext context)
@@ -3351,6 +3357,66 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         }
     }
 
+    /** The scene camera mode the 0 key goes back to: orbit until another one was used. */
+    private int sceneCameraMode = UIFilmController.CAMERA_MODE_ORBIT;
+
+    /** Whether the preview shows a scene camera of the editor's own rather than the render camera. */
+    public boolean isSceneCamera()
+    {
+        return this.controller.getPovMode() != UIFilmController.CAMERA_MODE_CAMERA;
+    }
+
+    /**
+     * Switches the preview between the render camera (the camera clips, what is exported) and the
+     * editor's scene camera. The scene camera keeps where it was left - the orbit holds its own pivot,
+     * distance and angles - and flying or turning it never writes into the camera clips.
+     */
+    public void toggleSceneCamera()
+    {
+        int mode = this.controller.getPovMode();
+
+        if (mode == UIFilmController.CAMERA_MODE_CAMERA)
+        {
+            this.controller.setPov(this.sceneCameraMode);
+            this.getContext().notifyInfo(UIKeys.FILM_SCENE_CAMERA_ON);
+        }
+        else
+        {
+            this.sceneCameraMode = mode;
+            this.controller.setPov(UIFilmController.CAMERA_MODE_CAMERA);
+            this.getContext().notifyInfo(UIKeys.FILM_SCENE_CAMERA_OFF);
+        }
+
+        UIUtils.playClick();
+    }
+
+    /**
+     * Keys what the preview looks through right now - position, yaw, pitch, roll and FOV - into the
+     * selected camera clip at the playhead, the same way flying the render camera does, but once
+     * and on request: the way to take a framing found with the scene camera into the render.
+     */
+    public void addCameraPose()
+    {
+        if (this.data == null || this.cameraEditor.getClip() == null)
+        {
+            this.getContext().notifyError(UIKeys.FILM_ADD_CAMERA_POSE_NO_CLIP);
+
+            return;
+        }
+
+        Position pose = new Position(this.getCamera());
+
+        if (this.undoHandler != null)
+        {
+            this.undoHandler.getUndoManager().markLastUndoNoMerging();
+        }
+
+        this.cameraEditor.editClip(pose);
+        this.lastPosition.set(pose);
+        this.getContext().notifySuccess(UIKeys.FILM_ADD_CAMERA_POSE_DONE);
+        UIUtils.playClick();
+    }
+
     private void persistFlightFov()
     {
         if (BBSSettings.fov != null)
@@ -3599,7 +3665,11 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
             Position current = new Position(this.getCamera());
             boolean check = this.flightEditTime.check();
 
-            if (!this.isRunning() && this.cameraEditor.getClip() != null && this.cameraEditor.isVisible() && this.controller.getPovMode() != UIFilmController.CAMERA_MODE_FREE)
+            /* Only flying the render camera keys its clip. Every other mode is a scene camera of
+             * the editor's own (orbit, free, an actor's eyes), and flying it must leave the
+             * render camera's keyframes exactly as they are - its pose is keyed on request only,
+             * through addCameraPose */
+            if (!this.isRunning() && this.cameraEditor.getClip() != null && this.cameraEditor.isVisible() && this.controller.getPovMode() == UIFilmController.CAMERA_MODE_CAMERA)
             {
                 if (!this.lastPosition.equals(current) && check)
                 {

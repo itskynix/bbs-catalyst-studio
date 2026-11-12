@@ -2226,6 +2226,9 @@ void main() {
         // Height fog: its own light goes in with the lights' beams, its opacity rides the alpha
         // and dims the scene behind it in composite1
         vec4 irliteFog = irlite_heightFog(eyePlayer, playerPos, dither);
+        // A dark fog also swallows the lights' beams that cross it (a bright one leaves them alone,
+        // as before): dimmed by the fog's opacity, the less the brighter its colour
+        irliteVL *= 1.0 - irliteFog.a * (1.0 - clamp(max(irlite_fogA.r, max(irlite_fogA.g, irlite_fogA.b)), 0.0, 1.0));
         irliteVL += irliteFog.rgb;
         irliteFogOpacity = irliteFog.a;
     #endif
@@ -2436,6 +2439,13 @@ after "    color = pow(color, vec3(2.2));"
         }
         // The height fog hides what lies behind it (opacity in a), then everything glows on top
         color = color * (1.0 - clamp(irliteVL.a, 0.0, 1.0)) + irliteVL.rgb;
+        // Dark fog: the pack adds its own sun and sky light shafts right after this, on top of the
+        // fog and through all of it, which washes a black fog out to grey. They are dimmed by what
+        // the fog hides, the less the brighter the fog's colour is: a fog with any channel at full
+        // (white, pure red, pure blue) leaves them exactly as they were, a black one hides them
+        // the way it hides the scene. With no fog a is 0 and nothing changes.
+        float irliteFogBright = clamp(max(irlite_fogA.r, max(irlite_fogA.g, irlite_fogA.b)), 0.0, 1.0);
+        volumetricEffect.rgb *= 1.0 - clamp(irliteVL.a, 0.0, 1.0) * (1.0 - irliteFogBright);
     #endif
 >>>
 
