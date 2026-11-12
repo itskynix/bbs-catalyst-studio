@@ -64,6 +64,9 @@ public class TrackStyle
         setupColors();
         setupIcons();
         LABELS.put("occlusionFactor", IKey.constant("occlusion"));
+        LABELS.put("aperture", UIKeys.CAMERA_PANELS_DOF_APERTURE);
+        LABELS.put("bokeh_intensity", UIKeys.CAMERA_PANELS_DOF_BOKEH_INTENSITY);
+        LABELS.put("general_blur", UIKeys.CAMERA_PANELS_DOF_GENERAL_BLUR);
         LABELS.put("waves", UIKeys.FORMS_AUDIO_WAVES);
         LABELS.put("waveIntensity", UIKeys.FORMS_AUDIO_WAVE_INTENSITY);
         LABELS.put("waveColor", UIKeys.FORMS_AUDIO_WAVE_COLOR);
@@ -79,6 +82,9 @@ public class TrackStyle
         LABELS.put("baseHeight", UIKeys.FORMS_EDITORS_HEIGHT_FOG_BASE_HEIGHT);
         LABELS.put("density", UIKeys.FORMS_EDITORS_HEIGHT_FOG_DENSITY);
         LABELS.put("falloff", UIKeys.FORMS_EDITORS_HEIGHT_FOG_FALLOFF);
+        LABELS.put("noise_intensity", UIKeys.FORMS_EDITORS_HEIGHT_FOG_NOISE_INTENSITY);
+        LABELS.put("noise_scale", UIKeys.FORMS_EDITORS_HEIGHT_FOG_NOISE_SCALE);
+        LABELS.put("wind_speed", UIKeys.FORMS_EDITORS_HEIGHT_FOG_WIND_SPEED);
     }
 
     /**
@@ -115,6 +121,9 @@ public class TrackStyle
         putColors(0xd9b23f, "smoothness", "metallic", "sss", "pixel_emission", "relief");
         COLORS.put("shape_keys", Colors.PINK);
         COLORS.put("focus_distance", 0x54a0ff);
+        COLORS.put("aperture", 0x2ecc71);
+        COLORS.put("bokeh_intensity", 0xf1c40f);
+        COLORS.put("general_blur", 0x9b59b6);
         COLORS.put("has_cape", 0xe84118);
         COLORS.put("cape_texture", 0xc23616);
         COLORS.put("model", MODEL_TRACK);
@@ -227,6 +236,11 @@ public class TrackStyle
         putIcons(Icons.VERTICAL, "yaw", "pitch", "scattering_pitch");
         putIcons(Icons.HORIZONTAL, "headYaw", "bodyYaw", "scattering_yaw", "max");
         ICONS.put("rotation", Icons.ORBIT);
+
+        /* The pro camera's depth of field. There is no interface icon in the atlas: the eye stands for the blur. */
+        ICONS.put("aperture", Icons.FULLSCREEN);
+        ICONS.put("bokeh_intensity", Icons.SPARKLES);
+        ICONS.put("general_blur", Icons.VISIBLE);
 
         /* Movement and state of the actor */
         for (EntityState state : EntityState.values())

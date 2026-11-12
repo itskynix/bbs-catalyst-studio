@@ -525,7 +525,8 @@ public class BBSMod implements ModInitializer
             .register(Link.bbs("world_wobble"), WorldWobbleClip.class, new ClipFactoryData(Icons.ARC, 0x6a4fb5))
             .register(Link.bbs("debris"), DebrisClip.class, new ClipFactoryData(Icons.SPARKLES, 0xd9822b))
             .register(Link.bbs("screen_shader_graph"), ScreenShaderGraphClip.class, new ClipFactoryData(Icons.CODE, 0x7a3fb0))
-            .register(Link.bbs("compound_fx"), CompoundFxClip.class, new ClipFactoryData(Icons.SPARKLES, 0x9b59b6));
+            .register(Link.bbs("compound_fx"), CompoundFxClip.class, new ClipFactoryData(Icons.SPARKLES, 0x9b59b6))
+            .register(Link.bbs("transform"), mchorse.bbs_mod.camera.clips.fx.TransformFxClip.class, new ClipFactoryData(Icons.FULLSCREEN, 0x3d7fd0));
 
         events.post(new RegisterCameraClipsEvent(factoryCameraClips));
 
@@ -557,6 +558,7 @@ public class BBSMod implements ModInitializer
             .register(Link.bbs("pov_screen_effects"), mchorse.bbs_mod.film.pov.PovScreenEffectsClip.class, new ClipFactoryData(Icons.SUN, 0x6a4fb5));
 
         setupConfig(Icons.SETTINGS, "bbs", new File(settingsFolder, "bbs.json"), BBSSettings::register);
+        setupConfig(Icons.POSE, "mtr", new File(settingsFolder, "mtr.json"), mchorse.bbs.compat.mtr.MtrConfig::register);
 
         events.post(new RegisterSettingsEvent());
 

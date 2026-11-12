@@ -953,13 +953,18 @@ public class UIFilmController extends UIElement implements GizmoViewport
 
             int povMode = this.panel.getController().getPovMode();
 
-            if (povMode != UIFilmController.CAMERA_MODE_CAMERA && BBSSettings.recordingCameraPreview.get())
+            boolean detached = this.panel.isFlying() && this.panel.isRunning();
+
+            if ((povMode != UIFilmController.CAMERA_MODE_CAMERA || detached) && BBSSettings.recordingCameraPreview.get())
             {
                 Recorder.renderCameraPreview(this.panel.getRunner().getPosition(), context.camera(), context.matrixStack());
             }
         }
 
         this.renderOrbitCenterMarker(context);
+
+        FocusPlaneGuide.render(this.panel, context);
+        RenderSystem.enableDepthTest();
 
         ValueMotionPath motionPath = this.getMotionPath();
 
@@ -978,6 +983,21 @@ public class UIFilmController extends UIElement implements GizmoViewport
 
         RenderSystem.disableDepthTest();
         for (var tool : this.addonTools) tool.renderTool(context);
+    }
+
+    /**
+     * The film being edited, drawn again for the scene seen through a portal: its actors only. The
+     * editor's film lives here and not among the playing films, which is all a portal's pass
+     * used to draw - so a window showed the terrain and nobody in it while the editor was open.
+     */
+    public void renderPortalPass(WorldRenderContext context)
+    {
+        if (this.editorController != null)
+        {
+            RenderSystem.enableDepthTest();
+
+            this.editorController.render(context);
+        }
     }
 
     private void renderOrbitCenterMarker(WorldRenderContext context)

@@ -3,10 +3,15 @@ package mchorse.bbs_mod.film;
 import mchorse.bbs_mod.utils.Bufs;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.logging.LogUtils;
+import mchorse.bbs.compat.mtr.MtrCompatHelper;
+import mchorse.bbs.compat.mtr.MtrConfig;
+import mchorse.bbs.compat.mtr.MtrEventTracker;
+import mchorse.bbs.compat.mtr.mixin.VehicleRidingMovementAccessor;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.camera.data.Position;
 import mchorse.bbs_mod.camera.utils.TimeUtils;
 import mchorse.bbs_mod.client.BBSRendering;
+import mchorse.bbs_mod.film.replays.RecordFrame;
 import mchorse.bbs_mod.film.replays.ReplayKeyframes;
 import mchorse.bbs_mod.forms.FormUtils;
 import mchorse.bbs_mod.forms.entities.MCEntity;
@@ -50,6 +55,8 @@ public class Recorder extends WorldFilmController
     public ReplayKeyframes keyframes = new ReplayKeyframes("keyframes");
     /** The take's point of view: the interface, the hands, the cursor and the screens opened */
     public final mchorse.bbs_mod.film.eye.PovRecorder pov = new mchorse.bbs_mod.film.eye.PovRecorder();
+    /** Automatic MTR world timeline event tracker for door, motion and horn events */
+    public final MtrEventTracker mtrTracker = new MtrEventTracker();
 
     /**
      * Mobs captured within {@link Film#mobRecordingRadius} when recording started.
@@ -207,6 +214,7 @@ public class Recorder extends WorldFilmController
             this.xpProgress = player.experienceProgress;
 
             this.captureMobs(player);
+            this.startRecording();
         }
 
         if (this.tick >= 0)
@@ -224,6 +232,25 @@ public class Recorder extends WorldFilmController
             {
                 this.keyframes.state(EntityState.RIDING).insert(this.tick, 1D);
             }
+
+            if (MtrConfig.isLocalSpaceRecord() && MtrCompatHelper.isPlayerInVehicle())
+            {
+                RecordFrame frame = new RecordFrame();
+
+                frame.isMtrRiding = true;
+                frame.mtrVehicleId = VehicleRidingMovementAccessor.getRidingVehicleId();
+                frame.mtrCarNumber = VehicleRidingMovementAccessor.getRidingVehicleCarNumber();
+                frame.mtrLocalX = (float) VehicleRidingMovementAccessor.getRidingVehicleX();
+                frame.mtrLocalY = (float) VehicleRidingMovementAccessor.getRidingVehicleY();
+                frame.mtrLocalZ = (float) VehicleRidingMovementAccessor.getRidingVehicleZ();
+                frame.mtrLocalYaw = MtrCompatHelper.getRelativeYaw(player.getYaw());
+                frame.mtrLocalPitch = player.getPitch();
+                MtrCompatHelper.populateRecordedVehicleProgress(frame);
+
+                this.keyframes.recordMtrFrame(this.tick, frame);
+            }
+
+            this.mtrTracker.update(this.film, this.tick);
             this.recordMobs();
             this.pov.record(this.tick, player);
         }
@@ -231,10 +258,21 @@ public class Recorder extends WorldFilmController
         super.update();
     }
 
+    public void startRecording()
+    {
+        this.mtrTracker.startRecording(this.film, Math.max(0, this.tick));
+    }
+
+    public void stopRecording()
+    {
+        this.mtrTracker.stopRecording(this.film, Math.max(0, this.tick));
+    }
+
     /** The take is over: the screen still open is closed on its last tick */
     public void finishPov()
     {
         this.pov.finish(this.tick);
+        this.stopRecording();
     }
 
     /** Let go of the mark once the player is standing on it: the teleport has landed. */

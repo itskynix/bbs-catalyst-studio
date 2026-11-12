@@ -1,8 +1,10 @@
 package mchorse.bbs_mod.settings.ui;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import mchorse.bbs.compat.mtr.MtrCompatHelper;
 import mchorse.bbs_mod.BBSMod;
 import mchorse.bbs_mod.BBSSettings;
+import mchorse.bbs_mod.dev.DevAccessGuard;
 import mchorse.bbs_mod.l10n.L10n;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.settings.Settings;
@@ -77,6 +79,7 @@ public class UISettingsOverlayPanel extends UIOverlayPanel
     public static final int GROUP_KEYBINDS = 1;
     public static final int GROUP_LIGHTING = 2;
     public static final int GROUP_ADDONS = 3;
+    public static final int GROUP_DEVELOPER = 4;
 
     public UITextbox search;
     public UIScrollView sections;
@@ -157,6 +160,8 @@ public class UISettingsOverlayPanel extends UIOverlayPanel
         this.options.column().scroll().vertical().stretch().padding(14).height(20);
         this.options.preRender(this::renderRowHover);
 
+        mchorse.bbs_mod.dev.DevAccessGuard.logDiagnostics();
+
         this.buildEntries();
 
         this.content.add(this.search, this.sortToggle, this.sections, this.options);
@@ -203,7 +208,7 @@ public class UISettingsOverlayPanel extends UIOverlayPanel
 
     private void buildEntries()
     {
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < 5; i++)
         {
             this.groups.add(new ArrayList<>());
         }
@@ -218,6 +223,11 @@ public class UISettingsOverlayPanel extends UIOverlayPanel
 
         for (Settings settings : BBSMod.getSettings().modules.values())
         {
+            if ("mtr".equals(settings.getId()) && !MtrCompatHelper.isMtrLoaded())
+            {
+                continue;
+            }
+
             if (settings != main && settings != keybinds && settings != irlights)
             {
                 this.addCategories(GROUP_ADDONS, settings);
@@ -299,7 +309,7 @@ public class UISettingsOverlayPanel extends UIOverlayPanel
             this.sections.add(new UISectionButton(this, entry));
         }
 
-        if (entries.isEmpty())
+        if (entries.isEmpty() && this.group != GROUP_DEVELOPER)
         {
             this.sections.add(new UISidebarHeading(UIKeys.SETTINGS_ADDONS_EMPTY));
         }
@@ -420,6 +430,15 @@ public class UISettingsOverlayPanel extends UIOverlayPanel
             {
                 this.options.add(new UIPageHeader(this, UIKeys.SETTINGS_ADDONS, UIKeys.SETTINGS_ADDONS_EMPTY_DESCRIPTION, null));
             }
+            else if (this.group == GROUP_DEVELOPER && DevAccessGuard.hasAccess())
+            {
+                this.options.add(new UIPageHeader(this, UIKeys.SETTINGS_TAB_DEVELOPER, UIKeys.SETTINGS_TAB_DEVELOPER_DESCRIPTION, null));
+
+                for (UIElement element : UIDevSettingsPage.create())
+                {
+                    this.options.add(element);
+                }
+            }
         }
         else
         {
@@ -427,6 +446,11 @@ public class UISettingsOverlayPanel extends UIOverlayPanel
 
             for (Settings settings : BBSMod.getSettings().modules.values())
             {
+                if ("mtr".equals(settings.getId()) && !MtrCompatHelper.isMtrLoaded())
+                {
+                    continue;
+                }
+
                 for (ValueGroup category : settings.categories.values())
                 {
                     if (!category.isVisible() || !this.hasMatch(category))
@@ -692,8 +716,14 @@ public class UISettingsOverlayPanel extends UIOverlayPanel
         private static final int PADDING = 10;
         private static final int GAP = 4;
 
-        private static final IKey[] LABELS = {UIKeys.SETTINGS_TAB_CORE, UIKeys.SETTINGS_TAB_KEYBINDS, UIKeys.SETTINGS_TAB_LIGHTING, UIKeys.SETTINGS_ADDONS};
-        private static final Icon[] ICONS = {Icons.SETTINGS, Icons.KEY_CAP, Icons.LIGHT, Icons.MORE};
+        private static final IKey[] LABELS = {UIKeys.SETTINGS_TAB_CORE, UIKeys.SETTINGS_TAB_KEYBINDS, UIKeys.SETTINGS_TAB_LIGHTING, UIKeys.SETTINGS_ADDONS, UIKeys.SETTINGS_TAB_DEVELOPER};
+        private static final Icon[] ICONS = {Icons.SETTINGS, Icons.KEY_CAP, Icons.LIGHT, Icons.MORE, Icons.CODE};
+
+        /** The developer tab is the last one and exists only behind the developer gate */
+        private static int count()
+        {
+            return DevAccessGuard.hasAccess() ? LABELS.length : LABELS.length - 1;
+        }
 
         private final UISettingsOverlayPanel panel;
 
@@ -729,7 +759,7 @@ public class UISettingsOverlayPanel extends UIOverlayPanel
             {
                 FontRenderer font = context.batcher.getFont();
 
-                for (int i = 0; i < LABELS.length; i++)
+                for (int i = 0; i < count(); i++)
                 {
                     int[] tab = this.tab(font, i);
 
@@ -755,7 +785,7 @@ public class UISettingsOverlayPanel extends UIOverlayPanel
         {
             FontRenderer font = context.batcher.getFont();
 
-            for (int i = 0; i < LABELS.length; i++)
+            for (int i = 0; i < count(); i++)
             {
                 int[] tab = this.tab(font, i);
 

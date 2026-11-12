@@ -27,6 +27,16 @@ public class FxOverlay
     public static final int WORLD_WOBBLE = 18;
     public static final int RIPPLE = 19;
 
+    /** 2D transform of the finished frame: p0 = x, p1 = y (frame fractions), p2 = rotation (degrees), p3 = scale x, p4 = scale y. Drawn last. */
+    public static final int TRANSFORM = 23;
+
+    /**
+     * Depth of field with a hexagonal bokeh, asked for by a pro camera clip: p0 = focus distance
+     * (blocks), p1 = focal length (mm), p2 = aperture (f-stop), p3 = bokeh intensity, p4 = general
+     * blur. The renderer runs it as several passes of its own; 20 to 22 are the shader's modes for them.
+     */
+    public static final int DEPTH_OF_FIELD = 20;
+
     public static final int PARAMS = 24;
 
     public final int kind;

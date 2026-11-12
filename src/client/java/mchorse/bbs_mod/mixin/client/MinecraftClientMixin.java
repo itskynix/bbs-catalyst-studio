@@ -18,6 +18,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(MinecraftClient.class)
 public class MinecraftClientMixin
 {
+    @Inject(method = "getWindowTitle", at = @At("RETURN"), cancellable = true)
+    private void bbs$appendStage(CallbackInfoReturnable<String> info)
+    {
+        String suffix = mchorse.bbs_mod.dev.DevStageBadge.windowSuffix();
+
+        if (!suffix.isEmpty())
+        {
+            info.setReturnValue(info.getReturnValue() + " " + suffix);
+        }
+    }
+
     @Inject(method = "doAttack", at = @At("HEAD"), cancellable = true)
     public void wandAttack(CallbackInfoReturnable<Boolean> cir)
     {

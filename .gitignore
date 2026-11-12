@@ -60,3 +60,18 @@ DEV_STATE.md
 
 **/catalyst_ai.json
 bbs/*.json
+
+# Developer-only local files (never push)
+.developer
+*.dev_lock
+.dev_lock
+bbs/.developer
+bbs/.dev_lock
+dev_state.json
+bbs/dev_state.json
+*.dev_local
+dev_telemetry*
+
+# Yerel Derleme Kılavuzları
+bbs_cs_derleme_kilavuzu.md
+BUILD_GUIDE.md

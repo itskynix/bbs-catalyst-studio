@@ -1,19 +1,25 @@
 package mchorse.bbs_mod.film.replays;
 
+import mchorse.bbs_mod.data.types.BaseType;
 import mchorse.bbs_mod.data.types.ListType;
+import mchorse.bbs_mod.data.types.MapType;
 import mchorse.bbs_mod.forms.entities.EntityState;
 import mchorse.bbs_mod.forms.entities.IEntity;
 import mchorse.bbs_mod.settings.values.base.BaseValue;
+import mchorse.bbs_mod.settings.values.base.BaseValueGroup;
 import mchorse.bbs_mod.settings.values.core.ValueGroup;
 import mchorse.bbs_mod.utils.MathUtils;
 import mchorse.bbs_mod.utils.interps.IInterp;
 import mchorse.bbs_mod.utils.interps.Interpolations;
+import mchorse.bbs_mod.utils.interps.Lerps;
 import mchorse.bbs_mod.utils.keyframes.Keyframe;
 import mchorse.bbs_mod.utils.keyframes.KeyframeChannel;
 import mchorse.bbs_mod.utils.keyframes.KeyframeSegment;
 import mchorse.bbs_mod.utils.keyframes.factories.KeyframeFactories;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtElement;
 import org.joml.Vector2d;
 
 import java.util.ArrayList;
@@ -21,6 +27,7 @@ import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 public class ReplayKeyframes extends ValueGroup
 {
@@ -143,6 +150,8 @@ public class ReplayKeyframes extends ValueGroup
     public final KeyframeChannel<ItemStack> armorLegs = new KeyframeChannel<>("item_legs", KeyframeFactories.ITEM_STACK);
     public final KeyframeChannel<ItemStack> armorFeet = new KeyframeChannel<>("item_feet", KeyframeFactories.ITEM_STACK);
     public final KeyframeChannel<Integer> selectedSlot = new KeyframeChannel<>("selected_slot", KeyframeFactories.INTEGER);
+
+    public final Map<Integer, RecordFrame> mtrFrames = new TreeMap<>();
 
     public ReplayKeyframes(String id)
     {
@@ -370,6 +379,20 @@ public class ReplayKeyframes extends ValueGroup
                 keyframe.setTick(keyframe.getTick() + tick);
             }
         }
+
+        if (!this.mtrFrames.isEmpty())
+        {
+            int offset = Math.round(tick);
+            Map<Integer, RecordFrame> shifted = new TreeMap<>();
+
+            for (Map.Entry<Integer, RecordFrame> entry : this.mtrFrames.entrySet())
+            {
+                shifted.put(entry.getKey() + offset, entry.getValue());
+            }
+
+            this.mtrFrames.clear();
+            this.mtrFrames.putAll(shifted);
+        }
     }
 
     public void copyOver(ReplayKeyframes keyframes, int tick)
@@ -382,6 +405,224 @@ public class ReplayKeyframes extends ValueGroup
             {
                 channel.copyOver(keyframeChannel, tick);
             }
+        }
+
+        if (!keyframes.mtrFrames.isEmpty())
+        {
+            for (Map.Entry<Integer, RecordFrame> entry : keyframes.mtrFrames.entrySet())
+            {
+                RecordFrame frame = entry.getValue();
+
+                if (frame != null && frame.isMtrRiding)
+                {
+                    this.mtrFrames.put(entry.getKey() + tick, frame.copy());
+                }
+            }
+        }
+    }
+
+    public void recordMtrFrame(int tick, RecordFrame frame)
+    {
+        if (frame != null && frame.isMtrRiding)
+        {
+            this.mtrFrames.put(tick, frame.copy());
+        }
+        else
+        {
+            this.mtrFrames.remove(tick);
+        }
+    }
+
+    public RecordFrame getMtrFrame(int tick)
+    {
+        return this.mtrFrames.get(tick);
+    }
+
+    public RecordFrame getInterpolatedMtrFrame(float tick)
+    {
+        if (this.mtrFrames.isEmpty())
+        {
+            return null;
+        }
+
+        int tick0 = (int) Math.floor(tick);
+        float partial = tick - tick0;
+        RecordFrame frame0 = this.mtrFrames.get(tick0);
+
+        if (frame0 == null || !frame0.isMtrRiding || partial <= 0F)
+        {
+            return frame0;
+        }
+
+        RecordFrame frame1 = this.mtrFrames.get(tick0 + 1);
+
+        if (frame1 == null || !frame1.isMtrRiding || frame1.mtrVehicleId != frame0.mtrVehicleId || frame1.mtrCarNumber != frame0.mtrCarNumber)
+        {
+            return frame0;
+        }
+
+        RecordFrame interpolated = new RecordFrame();
+
+        interpolated.isMtrRiding = true;
+        interpolated.mtrVehicleId = frame0.mtrVehicleId;
+        interpolated.mtrCarNumber = frame0.mtrCarNumber;
+        interpolated.mtrLocalX = Lerps.lerp(frame0.mtrLocalX, frame1.mtrLocalX, partial);
+        interpolated.mtrLocalY = Lerps.lerp(frame0.mtrLocalY, frame1.mtrLocalY, partial);
+        interpolated.mtrLocalZ = Lerps.lerp(frame0.mtrLocalZ, frame1.mtrLocalZ, partial);
+        interpolated.mtrLocalYaw = (float) Lerps.lerpYaw(frame0.mtrLocalYaw, frame1.mtrLocalYaw, partial);
+        interpolated.mtrLocalPitch = Lerps.lerp(frame0.mtrLocalPitch, frame1.mtrLocalPitch, partial);
+
+        if (!Double.isNaN(frame0.mtrRailProgress) && !Double.isNaN(frame1.mtrRailProgress))
+        {
+            interpolated.mtrRailProgress = Lerps.lerp(frame0.mtrRailProgress, frame1.mtrRailProgress, partial);
+            interpolated.mtrSpeed = Lerps.lerp(frame0.mtrSpeed, frame1.mtrSpeed, partial);
+        }
+        else if (!Double.isNaN(frame0.mtrRailProgress))
+        {
+            interpolated.mtrRailProgress = frame0.mtrRailProgress + frame0.mtrSpeed * partial;
+            interpolated.mtrSpeed = frame0.mtrSpeed;
+        }
+
+        return interpolated;
+    }
+
+    @Override
+    public void copy(BaseValueGroup group)
+    {
+        super.copy(group);
+
+        if (group instanceof ReplayKeyframes other)
+        {
+            this.mtrFrames.clear();
+
+            for (Map.Entry<Integer, RecordFrame> entry : other.mtrFrames.entrySet())
+            {
+                RecordFrame frame = entry.getValue();
+
+                if (frame != null && frame.isMtrRiding)
+                {
+                    this.mtrFrames.put(entry.getKey(), frame.copy());
+                }
+            }
+        }
+    }
+
+    @Override
+    public BaseType toData()
+    {
+        BaseType base = super.toData();
+
+        if (base instanceof MapType data && !this.mtrFrames.isEmpty())
+        {
+            MapType mtrMap = new MapType();
+
+            for (Map.Entry<Integer, RecordFrame> entry : this.mtrFrames.entrySet())
+            {
+                RecordFrame frame = entry.getValue();
+
+                if (frame != null && frame.isMtrRiding)
+                {
+                    mtrMap.put(String.valueOf(entry.getKey()), frame.toMapData());
+                }
+            }
+
+            if (!mtrMap.isEmpty())
+            {
+                data.put(RecordFrame.NBT_MTR_RIDE, mtrMap);
+            }
+        }
+
+        return base;
+    }
+
+    @Override
+    public void fromData(BaseType data)
+    {
+        super.fromData(data);
+
+        this.mtrFrames.clear();
+
+        if (data instanceof MapType map && map.has(RecordFrame.NBT_MTR_RIDE))
+        {
+            MapType mtrMap = map.getMap(RecordFrame.NBT_MTR_RIDE);
+
+            if (mtrMap != null)
+            {
+                for (String key : mtrMap.keys())
+                {
+                    try
+                    {
+                        int frameTick = Integer.parseInt(key);
+                        MapType frameData = mtrMap.getMap(key);
+                        RecordFrame frame = new RecordFrame();
+
+                        frame.fromMapData(frameData);
+
+                        if (frame.isMtrRiding)
+                        {
+                            this.mtrFrames.put(frameTick, frame);
+                        }
+                    }
+                    catch (NumberFormatException ignored)
+                    {}
+                }
+            }
+        }
+    }
+
+    public void toNbt(NbtCompound root)
+    {
+        if (root == null || this.mtrFrames.isEmpty())
+        {
+            return;
+        }
+
+        NbtCompound framesTag = new NbtCompound();
+
+        for (Map.Entry<Integer, RecordFrame> entry : this.mtrFrames.entrySet())
+        {
+            RecordFrame frame = entry.getValue();
+
+            if (frame != null && frame.isMtrRiding)
+            {
+                framesTag.put(String.valueOf(entry.getKey()), frame.toNbt());
+            }
+        }
+
+        if (!framesTag.isEmpty())
+        {
+            root.put(RecordFrame.NBT_MTR_RIDE, framesTag);
+        }
+    }
+
+    public void fromNbt(NbtCompound root)
+    {
+        this.mtrFrames.clear();
+
+        if (root == null || !root.contains(RecordFrame.NBT_MTR_RIDE, NbtElement.COMPOUND_TYPE))
+        {
+            return;
+        }
+
+        NbtCompound framesTag = root.getCompound(RecordFrame.NBT_MTR_RIDE);
+
+        for (String key : framesTag.getKeys())
+        {
+            try
+            {
+                int frameTick = Integer.parseInt(key);
+                NbtCompound frameCompound = framesTag.getCompound(key);
+                RecordFrame frame = new RecordFrame();
+
+                frame.fromNbt(frameCompound);
+
+                if (frame.isMtrRiding)
+                {
+                    this.mtrFrames.put(frameTick, frame);
+                }
+            }
+            catch (NumberFormatException ignored)
+            {}
         }
     }
 

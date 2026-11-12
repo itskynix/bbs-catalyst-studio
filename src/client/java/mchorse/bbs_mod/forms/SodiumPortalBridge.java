@@ -20,6 +20,9 @@ import me.jellysquid.mods.sodium.client.render.viewport.CameraTransform;
 import me.jellysquid.mods.sodium.client.util.iterator.ReversibleObjectArrayIterator;
 import mchorse.bbs_mod.mixin.client.sodium.RenderSectionManagerAccessor;
 import mchorse.bbs_mod.mixin.client.sodium.SodiumWorldRendererAccessor;
+import mchorse.bbs_mod.utils.iris.IrisUtils;
+import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gl.ShaderProgram;
 import net.minecraft.client.gl.VertexBuffer;
 import net.minecraft.client.render.GameRenderer;
@@ -27,6 +30,7 @@ import net.minecraft.util.math.Vec3d;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
+import org.joml.Vector4f;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL14;
@@ -66,17 +70,45 @@ public final class SodiumPortalBridge
     {
         private final ObjectArrayList<ChunkRenderList> lists;
 
-        private PickedLists(ObjectArrayList<ChunkRenderList> lists)
+        /** Whether an Iris shader pack draws the terrain */
+        private final boolean shaders;
+
+        /** The GL state the chunk program draws with, read once per pass while diagnosing */
+        private String seen;
+        /** The framebuffer the pass was moved to under a shader pack, or 0 */
+        private int retargeted;
+
+        private PickedLists(ObjectArrayList<ChunkRenderList> lists, boolean shaders)
         {
             this.lists = lists;
+            this.shaders = shaders;
         }
 
         @Override
         public Iterator<ChunkRenderList> iterator(boolean reverse)
         {
+            /* Sodium asks for the lists after its program (or Iris's) is bound and its framebuffer set
+             * up, and before the first draw: the one point the draw can still be pointed elsewhere.
+             * Iris's solid and cutout framebuffers write to the buffers of before the translucent flip,
+             * which a pack no longer reads this late in the frame (see IrisPortalTerrain); its
+             * translucent one already follows the flip. */
+            int irisBound = diagnose ? GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING) : 0;
+
+            this.retargeted = this.shaders && !reverse ? IrisPortalTerrain.retarget() : 0;
+
+            if (diagnose)
+            {
+                this.seen = describeDrawState() + (this.retargeted != 0 ? ", retargeted from fbo " + irisBound + " to " + this.retargeted : ", not retargeted");
+            }
+
             return new ReversibleObjectArrayIterator<>(this.lists, reverse);
         }
     }
+
+    /** Whether this pass writes the diagnostic line; set for one pass per shader pack state. */
+    private static boolean diagnose;
+    /** The shader pack state the last line was written for: null before the first */
+    private static Boolean diagnosedShaders;
 
     /**
      * Preserves OpenGL state around Sodium chunk rendering so that subsequent pipeline passes
@@ -265,10 +297,18 @@ public final class SodiumPortalBridge
      */
     public static void drawTerrain(Matrix4f view, Matrix4f modelView, Matrix4f source, Matrix4f projection, Vec3d camera, float limit)
     {
+        /* One line per shader pack state: the first pass with a pack on, and the first with it off */
+        boolean shaders = isShaderPackInUse();
+
+        diagnose = diagnosedShaders == null || diagnosedShaders != shaders;
+        diagnosedShaders = shaders;
+
         SodiumWorldRenderer renderer = SodiumWorldRenderer.instanceNullable();
 
         if (renderer == null)
         {
+            skipped(shaders, "no Sodium world renderer");
+
             return;
         }
 
@@ -276,6 +316,8 @@ public final class SodiumPortalBridge
 
         if (manager == null)
         {
+            skipped(shaders, "no section manager");
+
             return;
         }
 
@@ -285,6 +327,8 @@ public final class SodiumPortalBridge
 
         if (chunkRenderer == null || regions == null)
         {
+            skipped(shaders, "no chunk renderer or regions");
+
             return;
         }
 
@@ -292,6 +336,8 @@ public final class SodiumPortalBridge
 
         if (picked.isEmpty())
         {
+            skipped(shaders, "no built section in front of the window (loaded regions=" + regions.getLoadedRegions().size() + ")");
+
             return;
         }
 
@@ -302,24 +348,238 @@ public final class SodiumPortalBridge
         Matrix4f rotation = new Matrix4f(modelView).setTranslation(0F, 0F, 0F);
         ChunkRenderMatrices matrices = new ChunkRenderMatrices(projection, rotation);
         CameraTransform transform = new CameraTransform(eye.x, eye.y, eye.z);
-        PickedLists lists = new PickedLists(picked);
+        PickedLists lists = new PickedLists(picked, shaders);
+        StringBuilder report = diagnose ? new StringBuilder() : null;
+
+        if (report != null)
+        {
+            report.append("[BBS] Portal terrain pass (Sodium): shaderPack=").append(shaders)
+                .append(", regions=").append(picked.size())
+                .append(", ").append(countSections(picked, projection, rotation, eye))
+                .append(", before={").append(describeDrawState()).append('}');
+        }
 
         GlStateGuard guard = GlStateGuard.capture();
+        boolean entered = false;
 
         try
         {
+            /* Sodium's device only hands out command lists inside its managed block, which it opens
+             * around its own terrain layers and closes again. The portal pass runs after that, so it
+             * opens the block itself - and closes only what it opened, never a block it was called in. */
+            if (!isDeviceActive())
+            {
+                RenderDevice.enterManagedCode();
+                entered = true;
+            }
+
             CommandList commands = RenderDevice.INSTANCE.createCommandList();
 
             for (TerrainRenderPass pass : DefaultTerrainRenderPasses.ALL)
             {
+                if (report == null)
+                {
+                    chunkRenderer.render(matrices, commands, lists, pass, transform);
+
+                    continue;
+                }
+
+                /* Counts the samples of the pass that got through every test - scissor, stencil, depth.
+                 * None with sections drawn means they are cut away; some means they are drawn and
+                 * something later paints over them */
+                GL11.glGetError();
+                lists.seen = null;
+
+                int query = GL15.glGenQueries();
+
+                GL15.glBeginQuery(GL15.GL_SAMPLES_PASSED, query);
                 chunkRenderer.render(matrices, commands, lists, pass, transform);
+                GL15.glEndQuery(GL15.GL_SAMPLES_PASSED);
+
+                int samples = GL15.glGetQueryObjecti(query, GL15.GL_QUERY_RESULT);
+                int error = GL11.glGetError();
+
+                GL15.glDeleteQueries(query);
+
+                report.append(", ").append(passName(pass)).append("={samples=").append(samples)
+                    .append(", glError=0x").append(Integer.toHexString(error))
+                    .append(", draw={").append(lists.seen == null ? "not reached" : lists.seen).append("}}");
             }
 
             commands.flush();
         }
         finally
         {
+            diagnose = false;
+
+            if (entered)
+            {
+                RenderDevice.exitManagedCode();
+            }
+
             guard.restore();
+
+            if (report != null)
+            {
+                System.out.println(report);
+            }
+        }
+    }
+
+    private static void skipped(boolean shaders, String why)
+    {
+        if (diagnose)
+        {
+            diagnose = false;
+
+            System.out.println("[BBS] Portal terrain pass (Sodium): shaderPack=" + shaders + ", nothing drawn: " + why);
+        }
+    }
+
+    private static String passName(TerrainRenderPass pass)
+    {
+        if (pass == DefaultTerrainRenderPasses.SOLID) return "solid";
+        if (pass == DefaultTerrainRenderPasses.CUTOUT) return "cutout";
+        if (pass == DefaultTerrainRenderPasses.TRANSLUCENT) return "translucent";
+
+        return String.valueOf(pass);
+    }
+
+    /** Whether an Iris shader pack is shading the world; false without Iris. */
+    private static boolean isShaderPackInUse()
+    {
+        if (!FabricLoader.getInstance().isModLoaded("iris"))
+        {
+            return false;
+        }
+
+        try
+        {
+            return IrisUtils.isShaderPackEnabled();
+        }
+        catch (Throwable e)
+        {
+            return false;
+        }
+    }
+
+    /**
+     * How many sections were picked, how many of them hold geometry, and how many have their centre in
+     * front of the eye the pass draws from (w above zero after the pass's projection) - the ones the
+     * vertex shader can put on the screen at all.
+     */
+    private static String countSections(ObjectArrayList<ChunkRenderList> picked, Matrix4f projection, Matrix4f rotation, Vec3d eye)
+    {
+        Matrix4f clip = new Matrix4f(projection).mul(rotation);
+        Vector4f point = new Vector4f();
+        int sections = 0;
+        int geometry = 0;
+        int front = 0;
+
+        for (ChunkRenderList list : picked)
+        {
+            RenderRegion region = list.getRegion();
+
+            for (int i = 0; i < RenderRegion.REGION_SIZE; i++)
+            {
+                RenderSection section = region.getSection(i);
+
+                if (section == null || section.isDisposed() || !section.isBuilt())
+                {
+                    continue;
+                }
+
+                sections += 1;
+
+                if ((section.getFlags() & 1) == 0)
+                {
+                    continue;
+                }
+
+                geometry += 1;
+
+                clip.transform(point.set((float) (section.getCenterX() - eye.x), (float) (section.getCenterY() - eye.y), (float) (section.getCenterZ() - eye.z), 1F));
+
+                if (point.w > 0F)
+                {
+                    front += 1;
+                }
+            }
+        }
+
+        return "regionSections=" + sections + ", withGeometry=" + geometry + ", inFrontOfEye=" + front;
+    }
+
+    /** The GL state a draw would go out with right now. */
+    private static String describeDrawState()
+    {
+        try
+        {
+            int framebuffer = GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
+            String stencil;
+
+            if (framebuffer == 0)
+            {
+                stencil = "default";
+            }
+            else
+            {
+                int type = GL30.glGetFramebufferAttachmentParameteri(GL30.GL_DRAW_FRAMEBUFFER, GL30.GL_STENCIL_ATTACHMENT, GL30.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE);
+                int depth = GL30.glGetFramebufferAttachmentParameteri(GL30.GL_DRAW_FRAMEBUFFER, GL30.GL_DEPTH_ATTACHMENT, GL30.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME);
+
+                stencil = (type == GL11.GL_NONE ? "none" : "yes") + ", depthTex=" + depth;
+            }
+
+            int main = MinecraftClient.getInstance().getFramebuffer() == null ? -1 : MinecraftClient.getInstance().getFramebuffer().getDepthAttachment();
+            int[] box = new int[4];
+
+            GL11.glGetIntegerv(GL11.GL_SCISSOR_BOX, box);
+
+            ByteBuffer mask;
+
+            try (MemoryStack stack = MemoryStack.stackPush())
+            {
+                mask = stack.malloc(4);
+                GL11.glGetBooleanv(GL11.GL_COLOR_WRITEMASK, mask);
+
+                return "program=" + GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM)
+                    + ", fbo=" + framebuffer + " (stencil=" + stencil + ", mainDepthTex=" + main + ")"
+                    + ", stencilTest=" + GL11.glIsEnabled(GL11.GL_STENCIL_TEST)
+                    + " func=0x" + Integer.toHexString(GL11.glGetInteger(GL11.GL_STENCIL_FUNC)) + " ref=" + GL11.glGetInteger(GL11.GL_STENCIL_REF)
+                    + ", depthTest=" + GL11.glIsEnabled(GL11.GL_DEPTH_TEST) + " func=0x" + Integer.toHexString(GL11.glGetInteger(GL11.GL_DEPTH_FUNC))
+                    + " mask=" + GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK)
+                    + ", scissor=" + GL11.glIsEnabled(GL11.GL_SCISSOR_TEST) + " [" + box[0] + "," + box[1] + "," + box[2] + "," + box[3] + "]"
+                    + ", colorMask=" + mask.get(0) + mask.get(1) + mask.get(2) + mask.get(3)
+                    + ", blend=" + GL11.glIsEnabled(GL11.GL_BLEND)
+                    + ", cull=" + GL11.glIsEnabled(GL11.GL_CULL_FACE);
+            }
+        }
+        catch (Throwable e)
+        {
+            return "unreadable: " + e;
+        }
+        finally
+        {
+            GL11.glGetError();
+        }
+    }
+
+    /**
+     * Whether Sodium's render device is inside its managed block already. Sodium keeps the flag to
+     * itself; asking for a command list is the one public way to find out, and it costs nothing, as
+     * the device hands out the same list every time.
+     */
+    private static boolean isDeviceActive()
+    {
+        try
+        {
+            RenderDevice.INSTANCE.createCommandList();
+
+            return true;
+        }
+        catch (IllegalStateException e)
+        {
+            return false;
         }
     }
 

@@ -982,6 +982,10 @@ public class BBSModClient implements ClientModInitializer
         /* Baked structures hold sprite UVs — stale after resource reload (pack switch, F3+A) */
         InvalidateRenderStateCallback.EVENT.register(BakedStructure::invalidateAll);
 
+        mchorse.bbs_mod.dev.DevTelemetryHud.init();
+        mchorse.bbs_mod.dev.DevTools.init();
+        mchorse.bbs_mod.dev.DevConflictWarning.register();
+
         HudRenderCallback.EVENT.register((drawContext, tickCounter) ->
         {
             //? if >=1.21

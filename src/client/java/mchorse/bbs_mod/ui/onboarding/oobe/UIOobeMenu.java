@@ -1346,7 +1346,7 @@ public class UIOobeMenu extends UIBaseMenu
 
     private void logo(UIContext c, int vx, int vw, float cardY)
     {
-        String name = "BBS Catalyst Studio";
+        String name = "Blockbuster Catalyst Studio";
         float scale = 2F;
 
         this.text(c, name, vx + vw / 2F - this.width(c, name, scale) / 2F, cardY - 38F, this.light ? 0xFF1C1C1E : 0xFFFFFFFF, scale);

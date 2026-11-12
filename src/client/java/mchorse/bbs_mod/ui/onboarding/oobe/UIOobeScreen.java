@@ -15,7 +15,7 @@ public class UIOobeScreen extends UIScreen
 {
     public UIOobeScreen(Runnable onComplete)
     {
-        super(Text.literal("BBS Catalyst Studio"), new UIOobeMenu(onComplete));
+        super(Text.literal("Blockbuster Catalyst Studio"), new UIOobeMenu(onComplete));
     }
 
     /** The wizard is over: on to the studio's central hub, or back to the title if the studio cannot come up */

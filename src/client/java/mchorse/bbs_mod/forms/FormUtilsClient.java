@@ -171,6 +171,9 @@ public class FormUtilsClient
         register(qualet.irlite.forms.SpotlightForm.class, qualet.irlite.client.forms.SpotlightFormRenderer::new);
         register(DecalForm.class, DecalFormRenderer::new);
         register(HeightFogForm.class, HeightFogFormRenderer::new);
+
+        /* Its name in the form list, the scene and the dope sheet, in the player's language */
+        HeightFogForm.displayNameSupplier = () -> mchorse.bbs_mod.l10n.L10n.lang("bbs.ui.forms.height_fog", "Volumetric Fog").get();
     }
 
     //? if >=1.21 {

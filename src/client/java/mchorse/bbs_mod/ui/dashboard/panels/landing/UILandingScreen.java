@@ -55,8 +55,8 @@ public class UILandingScreen extends UIElement
     private static final int DIMMED = Colors.setA(Colors.WHITE, 0.7F);
     private static final int MUTED = Colors.setA(Colors.WHITE, 0.5F);
 
-    private static final String BANNER_BRAND = "\u00a7lBBS Catalyst Studio";
-    private static final String BANNER_VERSION = "C1.2-1.20.4";
+    private static final String BANNER_BRAND = "\u00a7lBlockbuster Catalyst Studio";
+    private static final String BANNER_VERSION = "C1.4-1.20.4";
 
     /* Where the documentation lives; the same in every language, so not in the language files */
     public static final String WIKI_LINK = "https://github.com/itskynix/bbs-catalyst-studio/wiki";
@@ -144,12 +144,12 @@ public class UILandingScreen extends UIElement
         return this.card;
     }
 
-    /** "BBS CS 2.6.0" — the mod's own version, without the Minecraft version the build appends. */
+    /** "Blockbuster Catalyst Studio 2.6.0" — the mod's own version, without the Minecraft version the build appends. */
     public static String getVersion()
     {
         String version = getReleaseVersion();
 
-        return "BBS CS" + (version.isEmpty() ? "" : " " + version);
+        return "Blockbuster Catalyst Studio" + (version.isEmpty() ? "" : " " + version);
     }
 
     private static String getReleaseVersion()

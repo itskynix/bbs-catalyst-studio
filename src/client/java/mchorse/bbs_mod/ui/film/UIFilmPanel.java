@@ -45,11 +45,14 @@ import mchorse.bbs_mod.ui.dashboard.panels.IFlightSupported;
 import mchorse.bbs_mod.ui.dashboard.panels.UIDataDashboardPanel;
 import mchorse.bbs_mod.ui.dashboard.panels.overlay.UICRUDOverlayPanel;
 import mchorse.bbs_mod.ui.dashboard.utils.IUIOrbitKeysHandler;
+import mchorse.bbs.compat.mtr.MtrCompatHelper;
+import mchorse.bbs_mod.film.world.WorldEventBlock;
 import mchorse.bbs_mod.ui.film.audio.UIAudioRecorder;
 import mchorse.bbs_mod.ui.film.controller.UIFilmController;
 import mchorse.bbs_mod.ui.film.replays.UIReplaysEditor;
 import mchorse.bbs_mod.ui.film.utils.UIFilmUndoHandler;
 import mchorse.bbs_mod.ui.film.utils.undo.UIUndoHistoryOverlay;
+import mchorse.bbs_mod.ui.film.world.UIWorldTimelinePanel;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.onboarding.TourAnchors;
 import mchorse.bbs_mod.ui.onboarding.Tours;
@@ -166,6 +169,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
     public UIClipsPanel actionEditor;
     /** The overlay clips of the picked replay's point of view, on the POV timeline. */
     public UIClipsPanel povActionEditor;
+    public UIWorldTimelinePanel worldEditor;
 
     /* Icon bar buttons */
     public UIIcon openFilmMenu;
@@ -175,6 +179,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
     public UIIcon openCameraEditor;
     public UIIcon openReplayEditor;
     public UIIcon openPovEditor;
+    public UIIcon openWorldEditor;
     public UIIcon openCopilot;
     public mchorse.bbs_mod.catalyst.ai.UICatalystAIPanel catalystAI;
     public UIIcon layoutLock;
@@ -207,6 +212,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
     private final ScrollMemory<String> cameraScrolls = new ScrollMemory<>();
     private final ScrollMemory<String> actionScrolls = new ScrollMemory<>();
     private final ScrollMemory<String> replayScrolls = new ScrollMemory<>();
+    private final ScrollMemory<String> worldScrolls = new ScrollMemory<>();
 
     private FilmQueueExporter queueExporter;
 
@@ -256,6 +262,9 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.povActionEditor.setVisible(false);
         this.replayEditor.attachPovActionTimeline(this.povActionEditor);
 
+        this.worldEditor = new UIWorldTimelinePanel(this).target(this.editArea);
+        this.worldEditor.full(this.main).setVisible(false);
+
         this.selectedMainEditorPanel = this.cameraEditor;
 
         /* Not MORE: that icon is the film list now, and the menu beside it must not read the same */
@@ -270,6 +279,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
             this.replayEditor.setPovMode(false);
         });
         this.openPovEditor = new UIIcon(Icons.USER, (b) -> this.openPovEditor());
+        this.openWorldEditor = new UIIcon(Icons.GLOBE, (b) -> this.showPanel(this.worldEditor));
 
         this.layoutLock = new UIIcon(() -> this.dock.isLocked() ? Icons.LOCKED : Icons.UNLOCKED, (b) -> this.toggleLayoutLock());
         this.layoutLock.tooltip(() -> (this.dock.isLocked() ? UIKeys.FILM_LAYOUT_UNLOCK : UIKeys.FILM_LAYOUT_LOCK).get());
@@ -282,6 +292,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.openCameraEditor.tooltip(UIKeys.FILM_OPEN_CAMERA_EDITOR);
         this.openReplayEditor.tooltip(UIKeys.FILM_OPEN_REPLAY_EDITOR);
         this.openPovEditor.tooltip(UIKeys.FILM_OPEN_POV_EDITOR);
+        this.openWorldEditor.tooltip(UIKeys.FILM_OPEN_WORLD_EDITOR);
 
         this.openCopilot = new UIIcon(Icons.SPARKLES, (b) -> this.toggleCatalystAI());
         this.openCopilot.tooltip(L10n.lang("bbs.catalyst_ai.title"));
@@ -300,15 +311,21 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.actions()
             .editor(this.openCameraEditor, this.cameraEditor::isVisible)
             .editor(this.openReplayEditor, () -> this.replayEditor.isVisible() && !this.replayEditor.isPovMode())
-            .editor(this.openPovEditor, () -> this.replayEditor.isVisible() && this.replayEditor.isPovMode())
-            .action(this.openCopilot);
+            .editor(this.openPovEditor, () -> this.replayEditor.isVisible() && this.replayEditor.isPovMode());
+
+        if (MtrCompatHelper.isMtrLoaded())
+        {
+            this.actions().editor(this.openWorldEditor, this.worldEditor::isVisible);
+        }
+
+        this.actions().action(this.openCopilot);
 
         this.openOverlay.setVisible(false);
         this.actions().sync();
 
         /* Setup elements */
 
-        this.main.add(this.cameraEditor, this.replayEditor);
+        this.main.add(this.cameraEditor, this.replayEditor, this.worldEditor);
         this.add(this.controller);
         this.overlay.namesList.setFileIcon(Icons.FILM);
 
@@ -349,7 +366,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.keys().register(Keys.JUMP_BACKWARD, () -> this.setCursor(this.getCursor() - BBSSettings.editorJump.get())).active(active).category(editor);
         this.keys().register(Keys.FILM_CONTROLLER_CYCLE_EDITORS, () ->
         {
-            this.showPanel(MathUtils.cycler(this.getPanelIndex() + 1, this.panels));
+            this.cycleEditors();
             UIUtils.playClick();
         }).category(editor);
         this.keys().register(Keys.FILM_CONTROLLER_TOGGLE_ACTIONS, () ->
@@ -424,6 +441,11 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.panels.add(this.cameraEditor);
         this.panels.add(this.replayEditor);
 
+        if (MtrCompatHelper.isMtrLoaded())
+        {
+            this.panels.add(this.worldEditor);
+        }
+
         this.secretPlay = new UIElement();
         this.secretPlay.keys().register(Keys.PLAUSE, () -> this.preview.plause.clickItself()).active(() -> !this.isFlying() && !this.canBeSeen() && this.data != null).category(editor);
 
@@ -432,6 +454,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.replayEditor.setUndoId("replay_editor");
         this.actionEditor.setUndoId("action_editor");
         this.povActionEditor.setUndoId("pov_action_editor");
+        this.worldEditor.setUndoId("world_editor");
 
         UIElement element = new UIElement()
         {
@@ -486,7 +509,8 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         return this.isCursorOverClipsTimeline(this.cameraEditor, context)
             || this.isCursorOverClipsTimeline(this.actionEditor, context)
             || this.isCursorOverClipsTimeline(this.povActionEditor, context)
-            || this.isCursorOverReplayTimeline(context);
+            || this.isCursorOverReplayTimeline(context)
+            || this.isCursorOverWorldTimeline(context);
     }
 
     private boolean isCursorOverClipsTimeline(UIClipsPanel panel, UIContext context)
@@ -506,6 +530,15 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
             && this.replayEditor.keyframeEditor.view != null
             && this.replayEditor.keyframeEditor.view.isVisible()
             && this.replayEditor.keyframeEditor.view.area.isInside(context);
+    }
+
+    private boolean isCursorOverWorldTimeline(UIContext context)
+    {
+        return this.worldEditor != null
+            && this.worldEditor.isVisible()
+            && this.worldEditor.timeline != null
+            && this.worldEditor.timeline.isVisible()
+            && this.worldEditor.timeline.area.isInside(context);
     }
 
     @Override
@@ -555,9 +588,11 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         boolean visible = hasFilm && (mainActive || editAreaActive);
         boolean cameraVisible = visible && selected == this.cameraEditor;
         boolean replayVisible = visible && selected == this.replayEditor;
+        boolean worldVisible = visible && selected == this.worldEditor && MtrCompatHelper.isMtrLoaded();
 
         this.cameraEditor.setVisible(cameraVisible);
         this.replayEditor.setVisible(replayVisible);
+        this.worldEditor.setVisible(worldVisible);
 
         this.cameraEditor.setTimelineVisible(mainActive && cameraVisible);
         this.cameraEditor.setPropertiesVisible(editAreaActive && cameraVisible);
@@ -566,6 +601,9 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
          * timelines; both share main (timeline) and editArea (parameters). */
         this.replayEditor.setTimelineVisible(mainActive && replayVisible);
         this.replayEditor.setPropertiesVisible(editAreaActive && replayVisible);
+
+        this.worldEditor.setTimelineVisible(mainActive && worldVisible);
+        this.worldEditor.setPropertiesVisible(editAreaActive && worldVisible);
     }
 
     private ValueEditorLayout getFilmLayoutSettings()
@@ -2308,6 +2346,35 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         return -1;
     }
 
+    /**
+     * Camera -> replay -> point of view (the replay editor on its POV timeline) -> world (when MTR
+     * is loaded) -> camera. The POV editor shares the replay panel, so it is its own step here.
+     */
+    private void cycleEditors()
+    {
+        UIElement current = this.panels.get(Math.max(0, this.getPanelIndex()));
+
+        /* Replay -> POV; when no replay has a point of view the step is skipped without a complaint */
+        if (current == this.replayEditor && !this.replayEditor.isPovMode() && this.data != null && this.replayEditor.openPov())
+        {
+            return;
+        }
+
+        if (current == this.replayEditor && this.replayEditor.isPovMode())
+        {
+            this.replayEditor.setPovMode(false);
+        }
+
+        int next = MathUtils.cycler(this.getPanelIndex() + 1, this.panels);
+
+        this.showPanel(next);
+
+        if (this.panels.get(next) == this.replayEditor)
+        {
+            this.replayEditor.setPovMode(false);
+        }
+    }
+
     /** The replay editor on its POV timeline: the picked replay's, or the first one with a point of view. */
     private void openPovEditor()
     {
@@ -2335,6 +2402,11 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
     public void showPanel(UIElement element)
     {
         this.cameraEditor.clips.embedView(null);
+
+        if (this.worldEditor != null)
+        {
+            this.worldEditor.timeline.embedView(null);
+        }
 
         EditorLayoutNode previousRoot = this.getCurrentFilmLayoutRoot();
         int index = this.getPanelIndex();
@@ -2408,6 +2480,11 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.cameraScrolls.save(id, this.cameraEditor.clips.vertical.getScroll());
         this.actionScrolls.save(id, this.actionEditor.clips.vertical.getScroll());
 
+        if (this.worldEditor != null)
+        {
+            this.worldScrolls.save(id, this.worldEditor.timeline.vertical.getScroll());
+        }
+
         if (this.replayEditor.keyframeEditor != null)
         {
             this.replayScrolls.save(id, this.replayEditor.keyframeEditor.view.getDopeSheet().getYAxis().getScroll());
@@ -2431,6 +2508,12 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         if (this.actionScrolls.has(id))
         {
             this.restoreClipsScroll(this.actionEditor.clips, this.actionScrolls.get(id));
+        }
+
+        if (this.worldScrolls.has(id) && this.worldEditor != null)
+        {
+            this.worldEditor.timeline.updateScrollSize();
+            this.worldEditor.timeline.vertical.setScroll(this.worldScrolls.get(id));
         }
 
         if (this.replayScrolls.has(id) && this.replayEditor.keyframeEditor != null)
@@ -2607,6 +2690,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
             BaseValue.edit(film, (f) ->
             {
                 multiTrack.commitToFilm(f);
+                recorder.mtrTracker.commitToFilm(f);
             });
 
             this.applyRecordedMobs(recorder, film);
@@ -2616,6 +2700,11 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
             {
                 this.replayEditor.replaysList.replays.refreshReplayList();
                 this.controller.createEntities();
+            }
+
+            if (this.worldEditor != null)
+            {
+                this.worldEditor.fillData();
             }
 
             /* Every track of the take, to the server and the others */
@@ -2634,13 +2723,25 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
             {
                 rp.keyframes.copyOver(recorder.keyframes, 0);
                 recorder.pov.applyTo(rp);
-
+                recorder.mtrTracker.commitToFilm(f);
 
                 f.hp.set(recorder.hp);
                 f.hunger.set(recorder.hunger);
                 f.xpLevel.set(recorder.xpLevel);
                 f.xpProgress.set(recorder.xpProgress);
             });
+        }
+        else if (film != null)
+        {
+            BaseValue.edit(film, (f) ->
+            {
+                recorder.mtrTracker.commitToFilm(f);
+            });
+        }
+
+        if (this.worldEditor != null)
+        {
+            this.worldEditor.fillData();
         }
 
         this.applyRecordedMobs(recorder, film);
@@ -2885,6 +2986,11 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.cameraEditor.embedView(null);
         this.replayEditor.close();
 
+        if (this.worldEditor != null)
+        {
+            this.worldEditor.timeline.embedView(null);
+        }
+
         this.freezeFrame();
     }
 
@@ -3049,6 +3155,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.openCameraEditor.setEnabled(data != null);
         this.openReplayEditor.setEnabled(data != null);
         this.openPovEditor.setEnabled(data != null);
+        this.openWorldEditor.setEnabled(data != null);
 
         if (this.duplicateFilm != null)
         {
@@ -3061,6 +3168,8 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.cameraEditor.setClips(data == null ? null : data.camera);
         this.replayEditor.setFilm(data);
         this.cameraEditor.pickClip(null);
+        this.worldEditor.setTimeline(data == null ? null : data.worldTimeline);
+        this.worldEditor.pickBlock(null);
 
         this.fillData();
         this.controller.createEntities();
@@ -3213,7 +3322,10 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
             this.controller.stopGizmoInteraction();
         }
 
-        if (!this.isRunning() || !flight)
+        /* Flying while the film plays detaches the camera from the clips instead of freezing time;
+         * leaving flight (or opening a camera editor) locks it back onto the active clip. */
+        boolean detach = flight && this.isRunning();
+
         {
             if (!flight)
             {
@@ -3234,6 +3346,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
             }
 
             this.runner.setManual(flight ? this.position : null);
+            this.runner.setDetached(detach);
             this.dashboard.orbitUI.setControl(flight);
         }
     }
@@ -3486,7 +3599,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
             Position current = new Position(this.getCamera());
             boolean check = this.flightEditTime.check();
 
-            if (this.cameraEditor.getClip() != null && this.cameraEditor.isVisible() && this.controller.getPovMode() != UIFilmController.CAMERA_MODE_FREE)
+            if (!this.isRunning() && this.cameraEditor.getClip() != null && this.cameraEditor.isVisible() && this.controller.getPovMode() != UIFilmController.CAMERA_MODE_FREE)
             {
                 if (!this.lastPosition.equals(current) && check)
                 {
@@ -3711,6 +3824,11 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
             {
                 this.replayEditor.keyframeEditor.view.getXAxis().shiftIntoMiddle(this.getCursor());
             }
+
+            if (this.worldEditor != null)
+            {
+                this.worldEditor.timeline.getXAxis().shiftIntoMiddle(this.getCursor());
+            }
         }
     }
 
@@ -3753,6 +3871,11 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.cameraEditor.fillData();
         this.actionEditor.fillData();
         this.povActionEditor.fillData();
+
+        if (this.worldEditor != null)
+        {
+            this.worldEditor.fillData();
+        }
 
         if (this.replayEditor.keyframeEditor != null && this.replayEditor.keyframeEditor.editor != null)
         {
@@ -3934,6 +4057,15 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
                     }
                 }
             }
+
+            if (this.data.worldTimeline != null)
+            {
+                for (WorldEventBlock block : this.data.worldTimeline.getBlocks())
+                {
+                    points.add(block.startTick);
+                    points.add(block.getEndTick());
+                }
+            }
         }
 
         Integer higher = points.higher(tick);
@@ -3966,6 +4098,15 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
                         points.add(clip.tick.get());
                         points.add(clip.tick.get() + clip.duration.get());
                     }
+                }
+            }
+
+            if (this.data.worldTimeline != null)
+            {
+                for (WorldEventBlock block : this.data.worldTimeline.getBlocks())
+                {
+                    points.add(block.startTick);
+                    points.add(block.getEndTick());
                 }
             }
         }

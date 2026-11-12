@@ -8,6 +8,7 @@ import mchorse.bbs_mod.film.ReplayLookAt;
 import mchorse.bbs_mod.film.FilmControllerContext;
 import mchorse.bbs_mod.film.FilmTarget;
 import mchorse.bbs_mod.film.replays.Replay;
+import mchorse.bbs_mod.forms.FormPortals;
 import mchorse.bbs_mod.forms.entities.IEntity;
 import mchorse.bbs_mod.forms.entities.MCEntity;
 import mchorse.bbs_mod.forms.entities.StubEntity;
@@ -84,6 +85,7 @@ public class FilmEditorController extends BaseFilmController
         if (entity != this.controller.getControlled() || (this.controller.isRecording() && this.controller.getRecordingCountdown() <= 0 && groups != null))
         {
             replay.keyframes.apply(ticks, entity, entity == this.controller.getControlled() ? groups : null);
+            this.applyMtrSync(replay, ticks, entity, false);
             ReplayLookAt.apply(replay, this.film, ticks, entity);
             replay.applyClientActions(ticks, entity, this.film);
         }
@@ -160,6 +162,7 @@ public class FilmEditorController extends BaseFilmController
                     float tick = replay.getTick(this.getTick()) + this.getTransition(entity, transition);
 
                     replay.keyframes.apply(tick, entity);
+                    this.applyMtrSync(replay, tick, entity, true);
                     entity.setPrevX(entity.getX());
                     entity.setPrevY(entity.getY());
                     entity.setPrevZ(entity.getZ());
@@ -178,6 +181,13 @@ public class FilmEditorController extends BaseFilmController
     @Override
     protected boolean canUpdate(int i, Replay replay, IEntity entity, UpdateMode updateMode)
     {
+        /* Seen through a portal the actor whose eyes the view is in is drawn like any other: it is
+         * the one thing a mirror is for */
+        if (updateMode == UpdateMode.RENDER && FormPortals.isPassActive() && i != this.exception)
+        {
+            return true;
+        }
+
         return super.canUpdate(i, replay, entity, updateMode)
             || this.controller.getPovMode() != UIFilmController.CAMERA_MODE_FIRST_PERSON
             || !this.isCurrent(entity)
@@ -187,6 +197,15 @@ public class FilmEditorController extends BaseFilmController
     @Override
     protected void renderEntity(WorldRenderContext context, Replay replay, IEntity entity)
     {
+        /* The scene seen through a portal: the actor as it stands now, the first-person one
+         * included, and none of the editor's own drawing - the onion skin re-poses the entity */
+        if (FormPortals.isPassActive())
+        {
+            super.renderEntity(context, replay, entity);
+
+            return;
+        }
+
         boolean current = this.isCurrent(entity);
 
         if (!(this.controller.getPovMode() == UIFilmController.CAMERA_MODE_FIRST_PERSON && current))
@@ -226,6 +245,7 @@ public class FilmEditorController extends BaseFilmController
 
                     float tick = ticks + this.getTransition(entity, context./*$ wtd*/tickDelta()/**/);
                     replay.keyframes.apply(isPlaying ? ticks : tick, entity);
+                    this.applyMtrSync(replay, tick, entity, true);
                     Form form = entity.getForm();
                     replay.properties.applyProperties(form, tick);
 
@@ -263,6 +283,7 @@ public class FilmEditorController extends BaseFilmController
 
             int tick1 = (int) keyframe.getTick();
             replay.keyframes.apply(tick1, entity);
+            this.applyMtrSync(replay, tick1, entity, true);
             float tick = (int) keyframe.getTick();
             Form form = entity.getForm();
             replay.properties.applyProperties(form, tick);
@@ -284,7 +305,8 @@ public class FilmEditorController extends BaseFilmController
     @Override
     protected FilmControllerContext getFilmControllerContext(WorldRenderContext context, Replay replay, IEntity entity)
     {
-        boolean recording = this.controller.panel.recorder.isRecording();
+        /* No gizmo and no axes in the scene seen through a portal: they belong to the real view */
+        boolean recording = this.controller.panel.recorder.isRecording() || FormPortals.isPassActive();
 
         /* One question, asked once. The gizmo only ever belongs to the replay being edited,
          * so every other actor in the film gets NONE. */

@@ -12,7 +12,10 @@ import mchorse.bbs_mod.camera.clips.fx.ScreenShakeClip;
 import mchorse.bbs_mod.camera.clips.fx.WorldWobbleClip;
 import mchorse.bbs_mod.camera.clips.fx.MotionBlurClip;
 import mchorse.bbs_mod.camera.clips.fx.ScreenShaderGraphClip;
+import mchorse.bbs_mod.camera.clips.fx.TransformFxClip;
 import mchorse.bbs_mod.camera.clips.fx.VignetteClip;
+import mchorse.bbs_mod.ui.framework.elements.buttons.UIIcon;
+import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.l10n.L10n;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.film.IUIClipsDelegate;
@@ -183,6 +186,90 @@ public class UIFxClips
         {
             this.panels.add(this.section(key("debris_position"), this.x, this.y, this.z, this.fromCamera));
             this.panels.add(this.section(key("debris_burst"), this.count, this.speed, this.sparks, this.glass, this.metal, this.smoke));
+        }
+    }
+
+    public static class UITransformFxClip extends UIFxClip<TransformFxClip>
+    {
+        public UITrackpad posX;
+        public UITrackpad posY;
+        public UITrackpad rotation;
+        public UITrackpad scaleX;
+        public UITrackpad scaleY;
+        public UIIcon uniform;
+        public UICirculate edgeMode;
+
+        public UITransformFxClip(TransformFxClip clip, IUIClipsDelegate editor)
+        {
+            super(clip, editor);
+        }
+
+        @Override
+        protected void registerUI()
+        {
+            super.registerUI();
+
+            this.posX = this.trackpad(this.clip.basePosX);
+            this.posX.limit(-10D, 10D).increment(0.01D).tooltip(key("position_x"));
+            this.posY = this.trackpad(this.clip.basePosY);
+            this.posY.limit(-10D, 10D).increment(0.01D).tooltip(key("position_y"));
+            this.rotation = this.trackpad(this.clip.baseRotation);
+            this.rotation.limit(-360D, 360D).tooltip(key("rotation"));
+
+            /* With the lock on, the two scales move as one */
+            this.scaleX = new UITrackpad((v) ->
+            {
+                this.editor.editMultiple(this.clip.baseScaleX, (f) -> f.set(v.floatValue()));
+
+                if (this.clip.uniformScale.get())
+                {
+                    this.editor.editMultiple(this.clip.baseScaleY, (f) -> f.set(v.floatValue()));
+                }
+            });
+            this.scaleX = this.bind(this.scaleX, () -> this.scaleX.setValue(this.clip.baseScaleX.get()));
+            this.scaleX.limit(0D, 100D).increment(0.01D).tooltip(key("scale_x"));
+            this.scaleY = new UITrackpad((v) ->
+            {
+                this.editor.editMultiple(this.clip.baseScaleY, (f) -> f.set(v.floatValue()));
+
+                if (this.clip.uniformScale.get())
+                {
+                    this.editor.editMultiple(this.clip.baseScaleX, (f) -> f.set(v.floatValue()));
+                }
+            });
+            this.scaleY = this.bind(this.scaleY, () -> this.scaleY.setValue(this.clip.baseScaleY.get()));
+            this.scaleY.limit(0D, 100D).increment(0.01D).tooltip(key("scale_y"));
+
+            this.uniform = new UIIcon(() -> this.clip.uniformScale.get() ? Icons.LOCKED : Icons.UNLOCKED, (b) ->
+            {
+                boolean locked = !this.clip.uniformScale.get();
+
+                this.editor.editMultiple(this.clip.uniformScale, (v) -> v.set(locked));
+
+                if (locked)
+                {
+                    float x = this.clip.baseScaleX.get();
+
+                    this.editor.editMultiple(this.clip.baseScaleY, (v) -> v.set(x));
+                }
+            });
+            this.uniform.tooltip(key("uniform_scale"));
+
+            this.edgeMode = new UICirculate((b) -> this.editor.editMultiple(this.clip.edgeMode, (v) -> v.set(b.getValue())));
+            this.edgeMode.addLabel(key("edge_black"));
+            this.edgeMode.addLabel(key("edge_repeat"));
+            this.edgeMode.addLabel(key("edge_mirror"));
+            this.edgeMode.addLabel(key("edge_clamp"));
+            this.edgeMode = this.bind(this.edgeMode, () -> this.edgeMode.setValue(this.clip.edgeMode.get()));
+        }
+
+        @Override
+        protected void addFxPanels()
+        {
+            this.panels.add(this.section(key("position"), UI.row(this.posX, this.posY)));
+            this.panels.add(this.section(key("rotation"), this.rotation));
+            this.panels.add(this.section(key("scale"), UI.row(this.scaleX, this.uniform, this.scaleY)));
+            this.panels.add(this.section(key("edge_mode"), this.edgeMode));
         }
     }
 

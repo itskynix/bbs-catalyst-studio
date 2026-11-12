@@ -77,7 +77,7 @@ public class UICommunityHubScreen extends UIElement
         this.card = new UIElement();
         this.card.relative(this).xy(0.5F, 0.5F).anchor(0.5F);
 
-        /* 1. Header: BBS CS & ver c1.2 */
+        /* 1. Header: Blockbuster Catalyst Studio & version c1.3 */
         UIElement header = new UIElement();
         header.relative(this.card).x(0).y(6).w(1F).h(28);
         header.add(new UIRenderable((context) -> this.renderHeader(context, header.area)));
@@ -321,12 +321,12 @@ public class UICommunityHubScreen extends UIElement
         FontRenderer font = context.batcher.getFont();
         MatrixStack stack = context.batcher.getContext().getMatrices();
 
-        String title = "BBS CS";
-        float scale = 2F;
+        String title = "Blockbuster Catalyst Studio";
+        float scale = Math.min(2F, (area.w - 24) / (float) font.getWidth(title));
         int titleW = (int) (font.getWidth(title) * scale);
         int titleH = (int) (font.getHeight() * scale);
 
-        String ver = "ver c1.2";
+        String ver = "version c1.3";
         int verW = font.getWidth(ver);
 
         stack.push();

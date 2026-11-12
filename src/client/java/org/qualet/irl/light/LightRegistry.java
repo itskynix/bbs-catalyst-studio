@@ -507,6 +507,10 @@ public final class LightRegistry
      *  float. Directions (spot) are NOT translated.</p> */
     public static void flush(double originX, double originY, double originZ)
     {
+        // The globals UBO goes up with the light SSBO below; its height fog block is
+        // made relative to the same eye
+        VlGlobalsBuffer.setOrigin(originX, originY, originZ);
+
         LightBuffer.begin();
         ClusterGridBuffer.begin();
 

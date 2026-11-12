@@ -17,6 +17,7 @@ import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.UIScrollView;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIClickable;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIIcon;
+import mchorse.bbs_mod.ui.framework.elements.buttons.UIHubCreateButton;
 import mchorse.bbs_mod.ui.framework.elements.input.text.UITextbox;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UIConfirmOverlayPanel;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UIOverlay;
@@ -60,6 +61,7 @@ public class UICatalystHubScreen extends UIElement
     private final LandingBackdrop backdrop = new LandingBackdrop();
     private final UIElement card;
     private final UIElement searchContainer;
+    private UIHubCreateButton createBtn;
     private final UITextbox searchBox;
     private final UIElement projectsPanel;
     private final UILabel recentTitle;
@@ -81,7 +83,7 @@ public class UICatalystHubScreen extends UIElement
         this.card = new UIElement();
         this.card.relative(this).xy(0.5F, 0.5F).anchor(0.5F);
 
-        /* 1. Header: BBS CS & ver c1.2 */
+        /* 1. Header: Blockbuster Catalyst Studio & version c1.3 */
         UIElement header = new UIElement();
         header.relative(this.card).x(0).y(8).w(1F).h(34);
         header.add(new UIRenderable((context) -> this.renderHeader(context, header.area)));
@@ -92,11 +94,10 @@ public class UICatalystHubScreen extends UIElement
 
         this.searchBox = new UITextbox(this::onSearchChanged).placeholder(UIKeys.CATALYST_HUB_SEARCH);
         this.searchBox.background(false);
-        this.searchBox.relative(this.searchContainer).x(24).y(0).w(1F, -48).h(1F);
+        this.searchBox.relative(this.searchContainer).x(24).y(0).w(1F, -30).h(1F);
 
-        UIIcon addBtn = new UIIcon(Icons.ADD, (b) -> this.openNewProjectDialog());
-        addBtn.tooltip(UIKeys.CATALYST_HUB_ADD_PROJECT);
-        addBtn.relative(this.searchContainer).x(1F, -22).y(2).wh(20, 20);
+        this.createBtn = new UIHubCreateButton(UIKeys.HUB_CREATE_PROJECT, (b) -> this.openNewProjectDialog());
+        this.createBtn.relative(this.card).x(0.5F).y(76).w(340).h(26).anchor(0.5F, 0F);
 
         this.searchContainer.add(new UIRenderable((context) ->
         {
@@ -110,12 +111,12 @@ public class UICatalystHubScreen extends UIElement
             context.batcher.icon(Icons.SEARCH, 0x80ffffff, a.x + 6, a.my(), 0F, 0.5F);
         }));
 
-        this.searchContainer.add(this.searchBox, addBtn);
+        this.searchContainer.add(this.searchBox);
 
         /* 3. Subtitle / Badge: Catalyst Studio */
         UILabel badge = UI.label(UIKeys.CATALYST_HUB_BADGE).color(Colors.setA(Colors.WHITE, 0.45F));
         badge.labelAnchor(0.5F, 0.5F);
-        badge.relative(this.card).x(0.5F).y(74).w(1F).h(12).anchor(0.5F, 0F);
+        badge.relative(this.card).x(0.5F).y(108).w(1F).h(12).anchor(0.5F, 0F);
 
         /* 4. Recent Projects Card Grid Panel */
         this.projectsPanel = new UIElement()
@@ -133,7 +134,7 @@ public class UICatalystHubScreen extends UIElement
                 return false;
             }
         };
-        this.projectsPanel.relative(this.card).x(8).y(92).w(1F, -16).h(1F, -100);
+        this.projectsPanel.relative(this.card).x(8).y(126).w(1F, -16).h(1F, -134);
         this.projectsPanel.add(new UIRenderable((context) ->
         {
             Area a = this.projectsPanel.area;
@@ -170,7 +171,7 @@ public class UICatalystHubScreen extends UIElement
         this.projectsPanel.add(this.recentTitle, openFolderBtn, refreshBtn, this.cardsScroll);
         this.projectsPanel.add(new UIRenderable(this::renderEmptyHint));
 
-        this.card.add(header, this.searchContainer, badge, this.projectsPanel);
+        this.card.add(header, this.searchContainer, this.createBtn, badge, this.projectsPanel);
         this.add(this.card);
 
         this.refresh();
@@ -274,6 +275,7 @@ public class UICatalystHubScreen extends UIElement
 
         int searchW = Math.min(360, maxW - 32);
         this.searchContainer.w(searchW);
+        this.createBtn.w(searchW);
 
         super.resize();
 
@@ -309,8 +311,8 @@ public class UICatalystHubScreen extends UIElement
         FontRenderer font = context.batcher.getFont();
         MatrixStack stack = context.batcher.getContext().getMatrices();
 
-        String title = "BBS CS";
-        float scale = 2F;
+        String title = "Blockbuster Catalyst Studio";
+        float scale = Math.min(2F, (area.w - 24) / (float) font.getWidth(title));
         int titleW = (int) (font.getWidth(title) * scale);
         int titleH = (int) (font.getHeight() * scale);
 
@@ -320,10 +322,11 @@ public class UICatalystHubScreen extends UIElement
         context.batcher.text(title, 0, 0, Colors.WHITE, true);
         stack.pop();
 
-        String version = "ver c1.2";
+        String version = "version c1.3";
         int verW = font.getWidth(version);
         int verY = area.y + titleH + 2;
         context.batcher.text(version, area.mx() - verW / 2, verY, Colors.setA(Colors.WHITE, 0.55F), false);
+        mchorse.bbs_mod.dev.DevStageBadge.renderHubTag(context.batcher, area.mx() + verW / 2 + 6, verY);
     }
 
     private void renderEmptyHint(UIContext context)

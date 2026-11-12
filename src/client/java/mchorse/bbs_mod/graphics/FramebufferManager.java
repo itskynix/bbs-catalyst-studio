@@ -37,6 +37,15 @@ public class FramebufferManager
         return framebuffer;
     }
 
+    /** Frees the pooled form buffers only; the keyed ones are held by their owners and stay. */
+    public void purgePool()
+    {
+        if (this.formFramebuffers != null)
+        {
+            this.formFramebuffers.delete();
+        }
+    }
+
     public void delete()
     {
         for (Framebuffer framebuffer : this.framebuffers.values())

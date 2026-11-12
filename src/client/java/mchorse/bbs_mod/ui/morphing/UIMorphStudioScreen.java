@@ -566,7 +566,7 @@ public class UIMorphStudioScreen extends UIElement
         int primary = BBSSettings.primaryColor.get();
 
         context.batcher.text(title, this.area.x + 12, this.area.y + 10, Colors.WHITE, true);
-        context.batcher.text("BBS CS", this.area.x + 14 + font.getWidth(title), this.area.y + 10, Colors.setA(primary, 0.9F), true);
+        context.batcher.text("Blockbuster Catalyst Studio", this.area.x + 14 + font.getWidth(title), this.area.y + 10, Colors.setA(primary, 0.9F), true);
     }
 
     private void renderEmptyHint(UIContext context)

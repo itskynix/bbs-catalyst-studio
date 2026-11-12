@@ -542,11 +542,201 @@ vec3 ripple(vec2 uv)
     return scene(uv - offset / vec2(a, 1.0));
 }
 
+/* Depth of field with a hexagonal bokeh, in the way of the three-direction hexagonal blur: a hexagon is
+ * three rhombi, and each rhombus is a blur along one direction followed by a blur along another, the
+ * directions 120 degrees apart (up, down-left, down-right). Four passes in all:
+ *   20  CoC: copies the frame and keeps the signed circle of confusion, in pixels, in the alpha
+ *   21  line blur of that, along one direction (U3.xy, a unit step in pixels), run once for up and
+ *       once for down-left
+ *   22  the second blur of each rhombus and their sum: Sampler0 is the "up" image, Sampler1 the
+ *       "down-left" one
+ * The CoC travels in the alpha as 0.5 + 0.5 * radius / maxRadius, negative in front of the focus plane. */
+
+/* U0 = (focus distance in blocks, focal length in mm, f-stop, largest radius in pixels),
+ * U1 = (near, far, 1 when the depth buffer holds a scene, general blur radius in pixels),
+ * U2 = (bokeh intensity, sensor height in mm), U3 = (blur direction x, y in pixels, most taps a line takes) */
+float cocEncode(float radius)
+{
+    return clamp(0.5 + 0.5 * radius / max(U0.w, 0.001), 0.0, 1.0);
+}
+
+float cocDecode(float a)
+{
+    return (a * 2.0 - 1.0) * U0.w;
+}
+
+vec4 dofCoc(vec2 uv)
+{
+    vec3 color = scene(uv);
+    float focal = max(U0.y, 1.0);
+    float focus = max(U0.x * 1000.0, focal + 1.0);
+
+    /* How far the point is from the focus plane, as the thin lens has it: |Z - F| / Z. The sky is at
+     * infinity, where that is 1 - the most a lens blurs anything. With no depth to read, everything is
+     * in focus and only the general blur is left. */
+    float spread = 0.0;
+    bool front = false;
+
+    if (U1.z > 0.5)
+    {
+        float d = texture(Sampler1, uv).r;
+
+        if (d < 0.99999)
+        {
+            float near = max(U1.x, 0.001);
+            float far = max(U1.y, near + 1.0);
+            float z = max(2.0 * near * far / (far + near - (d * 2.0 - 1.0) * (far - near)) * 1000.0, 1.0);
+
+            spread = abs(z - focus) / z;
+            front = z < focus;
+        }
+        else
+        {
+            spread = 1.0;
+        }
+    }
+
+    /* The circle of confusion on the sensor, in millimetres, taken to the frame's pixels */
+    float coc = spread * (focal * focal) / (max(U0.z, 0.1) * (focus - focal));
+    float radius = 0.5 * coc / max(U2.y, 1.0) * Size.y;
+
+    /* The general blur is on top of it, whatever the focus; behind the focus when the two are level */
+    radius = min(radius + U1.w, U0.w);
+
+    return vec4(color, cocEncode(front ? -radius : radius));
+}
+
+/* How many taps a line of this radius takes: about one every two and a half pixels, which the linear
+ * filtering of the buffers smooths into a line without gaps, up to the cap in U3.z */
+float dofTaps(float radius)
+{
+    return clamp(ceil(radius / 2.5), 3.0, max(U3.z, 3.0));
+}
+
+/* weight = 1 + ((luma - threshold) / (1 - threshold))^2 * intensity * 12, and that times the taps over
+ * eight. A bright spot is one tap among all the taps of a line, and the second pass spreads the line
+ * again: without growing with the tap count its light would be thinned out twice over and the hexagon
+ * would never show, however bright the spot. The weights are normalised, so a bright area as a whole
+ * keeps its brightness; only a spot brighter than what is around it grows into a hexagon. */
+float dofBoost(vec3 c, float taps)
+{
+    float l = max(luma(c) - 0.6, 0.0) / 0.4;
+
+    return 1.0 + l * l * U2.x * 12.0 * max(taps / 8.0, 1.0);
+}
+
+/* One tap of the gather: how much it counts towards the pixel at the centre */
+float dofWeight(vec4 tap, float dist, float centreSigned, float centreRadius, float taps)
+{
+    float tapSigned = cocDecode(tap.a);
+    float tapRadius = abs(tapSigned);
+
+    /* Only a tap whose own circle reaches the pixel scatters light onto it */
+    float w = clamp(tapRadius - dist + 1.0, 0.0, 1.0);
+
+    /* What lies behind the pixel is let in less the sharper the pixel is than it */
+    if (tapSigned > centreSigned)
+    {
+        w *= clamp((centreRadius + 1.0) / (tapRadius + 1.0), 0.0, 1.0);
+    }
+
+    return w * dofBoost(tap.rgb, taps);
+}
+
+/* A blur along one direction, as far as the pixel's own circle reaches */
+vec4 dofLine(sampler2D tex, vec2 uv, vec2 dir)
+{
+    vec4 centre = textureLod(tex, uv, 0.0);
+    float centreSigned = cocDecode(centre.a);
+    float radius = abs(centreSigned);
+
+    if (radius < 0.5)
+    {
+        return centre;
+    }
+
+    float taps = dofTaps(radius);
+    float total = dofBoost(centre.rgb, taps);
+    vec3 sum = centre.rgb * total;
+
+    for (int i = 1; i <= 128; i++)
+    {
+        if (float(i) > taps)
+        {
+            break;
+        }
+
+        float dist = radius * float(i) / taps;
+        vec4 tap = textureLod(tex, clamp(uv + dir * dist / Size, vec2(0.0), vec2(1.0)), 0.0);
+        float w = dofWeight(tap, dist, centreSigned, radius, taps);
+
+        sum += tap.rgb * w;
+        total += w;
+    }
+
+    return vec4(sum / total, centre.a);
+}
+
+vec3 dofCombine(vec2 uv)
+{
+    /* Up, down-left and down-right: 120 degrees apart */
+    vec2 up = vec2(0.0, 1.0);
+    vec2 left = vec2(-0.8660254, -0.5);
+    vec2 right = vec2(0.8660254, -0.5);
+
+    vec3 a = dofLine(Sampler0, uv, left).rgb;
+    vec3 b = dofLine(Sampler0, uv, right).rgb;
+    vec3 c = dofLine(Sampler1, uv, right).rgb;
+
+    return (a + b + c) / 3.0;
+}
+
 void main()
 {
     vec2 uv = texCoord0;
     int mode = int(Mode + 0.5);
     vec3 c;
+
+    if (mode == 20)
+    {
+        fragColor = dofCoc(uv);
+
+        return;
+    }
+
+    if (mode == 21)
+    {
+        fragColor = dofLine(Sampler0, uv, U3.xy);
+
+        return;
+    }
+
+    if (mode == 23)
+    {
+        /* 2D transform: U0 is the inverse of scale * rotation (row major), U1 = (where the centre
+         * lands, the centre) in pixels with y down. Whatever the frame no longer covers is black. */
+        vec2 q = vec2(uv.x * Size.x, (1.0 - uv.y) * Size.y);
+        vec2 d = q - U1.xy;
+        vec2 p = U1.zw + vec2(U0.x * d.x + U0.y * d.y, U0.z * d.x + U0.w * d.y);
+        vec2 s = vec2(p.x / Size.x, 1.0 - p.y / Size.y);
+
+        int edge = int(U2.x + 0.5);
+
+        if (edge == 1) s = fract(s);
+        else if (edge == 2) s = 1.0 - abs(mod(s, 2.0) - 1.0);
+        else if (edge == 3) s = clamp(s, 0.0, 1.0);
+
+        if (s.x < 0.0 || s.x > 1.0 || s.y < 0.0 || s.y > 1.0)
+        {
+            fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+        }
+        else
+        {
+            fragColor = vec4(clamp(scene(s), 0.0, 1.0), 1.0);
+        }
+
+        return;
+    }
 
     if (mode == 1) c = grade(scene(uv));
     else if (mode == 2) c = vhs(uv);
@@ -567,6 +757,7 @@ void main()
     else if (mode == 17) c = screenShake(uv);
     else if (mode == 18) c = worldWobble(uv);
     else if (mode == 19) c = ripple(uv);
+    else if (mode == 22) c = dofCombine(uv);
     else c = scene(uv);
 
     fragColor = vec4(clamp(c, 0.0, 1.0), 1.0);

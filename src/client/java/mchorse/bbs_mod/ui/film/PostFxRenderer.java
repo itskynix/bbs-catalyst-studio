@@ -66,6 +66,30 @@ public class PostFxRenderer
     /* A blur never smears further than this much of the frame, whatever the camera did */
     private static final double MAX_BLUR = 0.2D;
 
+    /**
+     * Frees every buffer of the post passes (scratch, world depth, the depth of field's three) and
+     * forgets that anything failed: the next frame that needs one allocates it clean. Render thread only.
+     */
+    public static void purge()
+    {
+        for (SimpleFramebuffer buffer : new SimpleFramebuffer[] {scratch, worldDepth, dofCoc, dofUp, dofLeft})
+        {
+            if (buffer != null)
+            {
+                buffer.delete();
+            }
+        }
+
+        scratch = null;
+        worldDepth = null;
+        dofCoc = null;
+        dofUp = null;
+        dofLeft = null;
+        depthCaptured = false;
+        failed = false;
+        dofFailed = false;
+    }
+
     /** Whether any of the frame's clips asks for the world wobble, and so wants the depth kept. */
     public static boolean wantsDepth(ClipContext context)
     {
@@ -76,7 +100,7 @@ public class PostFxRenderer
 
         for (FxOverlay overlay : FxClip.getOverlays(context))
         {
-            if (overlay.kind == FxOverlay.WORLD_WOBBLE)
+            if (overlay.kind == FxOverlay.WORLD_WOBBLE || overlay.kind == FxOverlay.DEPTH_OF_FIELD)
             {
                 return true;
             }
@@ -252,9 +276,39 @@ public class PostFxRenderer
             RenderSystem.disableBlend();
             RenderSystem.depthMask(false);
 
+            /* The lens comes first: the grain, the vignette and the bars are laid over what it made. Two
+             * pro camera clips at once leave one lens, the last. */
+            FxOverlay lens = null;
+
             for (FxOverlay overlay : overlays)
             {
-                pass(program, main, overlay);
+                if (overlay.kind == FxOverlay.DEPTH_OF_FIELD)
+                {
+                    lens = overlay;
+                }
+            }
+
+            if (lens != null)
+            {
+                depthOfField(program, main, lens);
+            }
+
+            for (FxOverlay overlay : overlays)
+            {
+                if (overlay.kind != FxOverlay.DEPTH_OF_FIELD && overlay.kind != FxOverlay.TRANSFORM)
+                {
+                    pass(program, main, overlay);
+                }
+            }
+
+            /* The 2D transform moves the finished picture, so it goes last; neutral ones never get here */
+            for (FxOverlay overlay : overlays)
+            {
+                if (overlay.kind == FxOverlay.TRANSFORM)
+                {
+                    resolveTransform(overlay, main.textureWidth, main.textureHeight);
+                    pass(program, main, overlay);
+                }
             }
         }
         catch (Throwable e)
@@ -410,6 +464,42 @@ public class PostFxRenderer
         return false;
     }
 
+    /**
+     * T(c + pos) * R(rot) * S(scale) * T(-c) around the frame centre c, handed to the shader as its
+     * inverse: the pass asks, for every output pixel, which source pixel lands there.
+     */
+    private static void resolveTransform(FxOverlay overlay, int w, int h)
+    {
+        float[] p = overlay.params;
+
+        /* The same overlays can be drawn twice in a frame; the numbers become the matrix only once */
+        if (p[23] != 0F)
+        {
+            return;
+        }
+
+        double rot = Math.toRadians(p[2]);
+        double cos = Math.cos(rot);
+        double sin = Math.sin(rot);
+        double sx = Math.max(Math.abs(p[3]), 1.0E-4D) * Math.signum(p[3] == 0F ? 1F : p[3]);
+        double sy = Math.max(Math.abs(p[4]), 1.0E-4D) * Math.signum(p[4] == 0F ? 1F : p[4]);
+        double cx = w / 2D;
+        double cy = h / 2D;
+        float posX = (float) (p[0] * w);
+        float posY = (float) (p[1] * h);
+
+        /* S^-1 * R^-1, with y pointing down so a positive angle turns clockwise */
+        p[0] = (float) (cos / sx);
+        p[1] = (float) (sin / sx);
+        p[2] = (float) (-sin / sy);
+        p[3] = (float) (cos / sy);
+        p[4] = (float) (cx + posX);
+        p[5] = (float) (cy + posY);
+        p[6] = (float) cx;
+        p[7] = (float) cy;
+        p[23] = 1F;
+    }
+
     private static void pass(ShaderProgram program, Framebuffer main, FxOverlay overlay)
     {
         int w = main.textureWidth;
@@ -452,6 +542,141 @@ public class PostFxRenderer
         BufferBuilder builder;
 
         builder = Bufs.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE_COLOR);
+        builder.vertex(-1, -1, 0).texture(0F, 0F).color(1F, 1F, 1F, 1F)/*$ nx*/.next()/**/;
+        builder.vertex(1, -1, 0).texture(1F, 0F).color(1F, 1F, 1F, 1F)/*$ nx*/.next()/**/;
+        builder.vertex(1, 1, 0).texture(1F, 1F).color(1F, 1F, 1F, 1F)/*$ nx*/.next()/**/;
+        builder.vertex(-1, 1, 0).texture(0F, 1F).color(1F, 1F, 1F, 1F)/*$ nx*/.next()/**/;
+
+        Bufs.draw(builder);
+    }
+
+    /* The depth of field's own buffers: the frame with its circle of confusion, and the two directional blurs */
+    private static SimpleFramebuffer dofCoc;
+    private static SimpleFramebuffer dofUp;
+    private static SimpleFramebuffer dofLeft;
+    private static boolean dofFailed;
+
+    /** The largest blur radius, as a fraction of the frame's width */
+    private static final float DOF_MAX_RADIUS = 0.15F;
+
+    /** The general blur at full strength, as a fraction of the frame's height */
+    private static final float DOF_GENERAL_RADIUS = 0.02F;
+
+    /** The most taps one line of the blur takes (the shader takes one every 2.5 pixels of radius up to this) */
+    private static final int DOF_TAPS = 128;
+
+    private static SimpleFramebuffer dofBuffer(SimpleFramebuffer buffer, int w, int h)
+    {
+        boolean fresh = false;
+
+        if (buffer == null)
+        {
+            buffer = new SimpleFramebuffer(w, h, false, MinecraftClient.IS_SYSTEM_MAC);
+            fresh = true;
+        }
+        else if (buffer.textureWidth != w || buffer.textureHeight != h)
+        {
+            buffer.resize(w, h, MinecraftClient.IS_SYSTEM_MAC);
+            fresh = true;
+        }
+
+        if (fresh)
+        {
+            /* Half floats: the circle of confusion rides in the alpha, and eight bits of it would be
+             * steps of a couple of pixels at the largest blur. Linear filtering, so the taps between
+             * pixels blend instead of snapping. The texture keeps its name, so the framebuffer keeps it. */
+            int previous = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+
+            GlStateManager._bindTexture(buffer.getColorAttachment());
+            GlStateManager._texImage2D(GL11.GL_TEXTURE_2D, 0, GL30.GL_RGBA16F, w, h, 0, GL11.GL_RGBA, GL11.GL_FLOAT, null);
+            GlStateManager._texParameter(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
+            GlStateManager._texParameter(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
+            GlStateManager._bindTexture(previous);
+        }
+
+        return buffer;
+    }
+
+    /**
+     * Depth of field with a hexagonal bokeh, in four passes: the frame with its circle of confusion
+     * (from the depth the world left, in the alpha), a blur of it up, a blur of it down and to the left,
+     * and the second blur of each of the three rhombi a hexagon is made of, summed into the frame. The
+     * passes never write the frame before the last, so a failure leaves it as it was. It switches only
+     * itself off, not the other effects.
+     */
+    private static void depthOfField(ShaderProgram program, Framebuffer main, FxOverlay overlay)
+    {
+        if (dofFailed)
+        {
+            return;
+        }
+
+        int w = main.textureWidth;
+        int h = main.textureHeight;
+
+        try
+        {
+            dofCoc = dofBuffer(dofCoc, w, h);
+            dofUp = dofBuffer(dofUp, w, h);
+            dofLeft = dofBuffer(dofLeft, w, h);
+
+            boolean depth = depthCaptured && worldDepth != null && hasDepth(w, h);
+            float[] p = overlay.params;
+            float far = MinecraftClient.getInstance().gameRenderer.getFarPlaneDistance();
+            float maxRadius = Math.max(DOF_MAX_RADIUS * w, 1F);
+            float general = p[4] * DOF_GENERAL_RADIUS * h;
+
+            /* The same numbers in every pass, but for the direction */
+            float[] u0 = {p[0], p[1], p[2], maxRadius};
+            float[] u1 = {0.05F, far, depth ? 1F : 0F, general};
+            float[] u2 = {p[3], (float) mchorse.bbs_mod.camera.clips.overwrite.ProCameraClip.SENSOR_HEIGHT_MM, 0F, 0F};
+
+            RenderSystem.setShader(() -> program);
+            set(program, "Size", w, h);
+            set(program, "U0", u0);
+            set(program, "U1", u1);
+            set(program, "U2", u2);
+
+            /* 1: the frame and its circle of confusion */
+            dofPass(program, dofCoc, 20, main.getColorAttachment(), depth ? worldDepth.getDepthAttachment() : main.getColorAttachment(), 0F, 0F);
+
+            /* 2: up, and down-left, 120 degrees apart; the third direction is taken in the last pass */
+            dofPass(program, dofUp, 21, dofCoc.getColorAttachment(), dofCoc.getColorAttachment(), 0F, 1F);
+            dofPass(program, dofLeft, 21, dofCoc.getColorAttachment(), dofCoc.getColorAttachment(), -0.8660254F, -0.5F);
+
+            /* 3: the rhombi, onto the frame */
+            GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, main.fbo);
+            dofPass(program, null, 22, dofUp.getColorAttachment(), dofLeft.getColorAttachment(), 0F, 0F);
+        }
+        catch (Throwable e)
+        {
+            dofFailed = true;
+
+            System.err.println("[BBS] Depth of field failed and is switched off for this session:");
+            e.printStackTrace();
+        }
+    }
+
+    /** One of the depth of field's passes, into {@code target} or, with none, into whatever is bound. */
+    private static void dofPass(ShaderProgram program, SimpleFramebuffer target, int mode, int first, int second, float dirX, float dirY)
+    {
+        Framebuffer size = MinecraftClient.getInstance().getFramebuffer();
+
+        if (target != null)
+        {
+            GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, target.fbo);
+        }
+
+        GlStateManager._viewport(0, 0, size.textureWidth, size.textureHeight);
+
+        RenderSystem.setShaderTexture(0, first);
+        RenderSystem.setShaderTexture(1, second);
+
+        set(program, "Mode", mode);
+        set(program, "U3", dirX, dirY, DOF_TAPS, 0F);
+
+        BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE_COLOR);
+
         builder.vertex(-1, -1, 0).texture(0F, 0F).color(1F, 1F, 1F, 1F)/*$ nx*/.next()/**/;
         builder.vertex(1, -1, 0).texture(1F, 0F).color(1F, 1F, 1F, 1F)/*$ nx*/.next()/**/;
         builder.vertex(1, 1, 0).texture(1F, 1F).color(1F, 1F, 1F, 1F)/*$ nx*/.next()/**/;

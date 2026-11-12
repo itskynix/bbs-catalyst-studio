@@ -1,5 +1,8 @@
 package mchorse.bbs_mod.film.replays;
 
+import mchorse.bbs.compat.mtr.MtrCompatHelper;
+import mchorse.bbs.compat.mtr.MtrConfig;
+import mchorse.bbs.compat.mtr.mixin.VehicleRidingMovementAccessor;
 import mchorse.bbs_mod.film.*;
 import mchorse.bbs_mod.forms.FormUtils;
 import mchorse.bbs_mod.forms.forms.Form;
@@ -317,6 +320,24 @@ public class MultiTrackRecorder extends Recorder
         {
             Morph morph = Morph.getMorph(player);
             active.getKeyframes().record(this.tick, morph.entity, null);
+
+            if (MtrConfig.isLocalSpaceRecord() && MtrCompatHelper.isPlayerInVehicle())
+            {
+                RecordFrame frame = new RecordFrame();
+
+                frame.isMtrRiding = true;
+                frame.mtrVehicleId = VehicleRidingMovementAccessor.getRidingVehicleId();
+                frame.mtrCarNumber = VehicleRidingMovementAccessor.getRidingVehicleCarNumber();
+                frame.mtrLocalX = (float) VehicleRidingMovementAccessor.getRidingVehicleX();
+                frame.mtrLocalY = (float) VehicleRidingMovementAccessor.getRidingVehicleY();
+                frame.mtrLocalZ = (float) VehicleRidingMovementAccessor.getRidingVehicleZ();
+                frame.mtrLocalYaw = MtrCompatHelper.getRelativeYaw(player.getYaw());
+                frame.mtrLocalPitch = player.getPitch();
+                MtrCompatHelper.populateRecordedVehicleProgress(frame);
+
+                active.getKeyframes().recordMtrFrame(this.tick, frame);
+            }
+
             active.setEndTick(this.tick);
             active.setRecorded(true);
             active.setLastTransform(

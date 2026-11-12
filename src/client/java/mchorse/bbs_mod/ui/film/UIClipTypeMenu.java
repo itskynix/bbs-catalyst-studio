@@ -43,10 +43,10 @@ public class UIClipTypeMenu extends UIContextMenu
     private static final int PAD = 4;
 
     private static final String[][] CATEGORIES = {
-        {"idle", "dolly", "path", "keyframe", "pro_camera", "pov"},
+        {"idle", "dolly", "path", "keyframe", "pro_camera", "actor_eye", "pov"},
         {"audio", "video", "image"},
-        {"color_grade", "compound_fx", "cinematic_effects", "motion_blur", "vignette", "letterbox", "grain", "lens_distortion", "screen_shake", "world_wobble", "debris", "screen_shader_graph", "eye"},
-        {"translate", "angle", "drag", "shake", "math", "look", "orbit", "remapper", "tracker", "actor_eye", "dolly_zoom", "fov_punch"},
+        {"color_grade", "compound_fx", "cinematic_effects", "motion_blur", "vignette", "letterbox", "grain", "lens_distortion", "screen_shake", "world_wobble", "debris", "screen_shader_graph", "eye", "transform"},
+        {"translate", "angle", "drag", "shake", "math", "look", "orbit", "remapper", "tracker", "dolly_zoom", "fov_punch"},
         {}
     };
 

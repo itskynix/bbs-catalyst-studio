@@ -7,12 +7,16 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.systems.VertexSorter;
 import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.blocks.entities.ModelBlockEntity;
+import mchorse.bbs_mod.client.BBSRendering;
 import mchorse.bbs_mod.client.renderer.ModelBlockEntityRenderer;
 import mchorse.bbs_mod.forms.forms.BodyPart;
 import mchorse.bbs_mod.forms.forms.Form;
 import mchorse.bbs_mod.forms.forms.PortalForm;
 import mchorse.bbs_mod.mixin.client.WorldRendererAccessor;
 import mchorse.bbs_mod.network.ClientNetwork;
+import mchorse.bbs_mod.ui.dashboard.UIDashboard;
+import mchorse.bbs_mod.ui.film.UIFilmPanel;
+import mchorse.bbs_mod.ui.framework.UIScreen;
 import mchorse.bbs_mod.utils.colors.Color;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.fabricmc.loader.api.FabricLoader;
@@ -21,9 +25,11 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gl.Framebuffer;
 import net.minecraft.client.gl.GlUniform;
 import net.minecraft.client.gl.ShaderProgram;
+import net.minecraft.client.gl.SimpleFramebuffer;
 import net.minecraft.client.gl.VertexBuffer;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.render.BufferBuilder;
+import net.minecraft.client.render.Camera;
 import net.minecraft.client.render.BufferRenderer;
 import net.minecraft.client.render.BuiltChunkStorage;
 import net.minecraft.client.render.GameRenderer;
@@ -39,10 +45,13 @@ import net.minecraft.client.render.chunk.ChunkBuilder;
 import net.minecraft.client.render.entity.EntityRenderDispatcher;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.client.world.ClientWorld;
+import net.minecraft.entity.Entity;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.chunk.WorldChunk;
+import org.joml.FrustumIntersection;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
@@ -71,8 +80,15 @@ import java.util.Set;
  * which is the partner's view of it without a second camera. A window is cut into the stencil, the
  * world's depth inside it is replaced by the window's own - so what is seen is only what lies behind
  * the window, and the wall it is set in does not hide it - and its colour by the fog colour, as the
- * background of what is drawn. Only the films' forms are drawn again, not the terrain or vanilla
- * entities.</p>
+ * background of what is drawn. The terrain, the model blocks, the films' forms, the world's entities,
+ * its particles and its weather are all drawn again.</p>
+ *
+ * <p><b>Mirrors.</b> A portal form set to be a mirror has no other end: its window shows the scene
+ * moved by the reflection in its own plane, {@code T * diag(1, 1, -1) * T^-1}. Reflecting the scene is
+ * the same picture as reflecting the eye, its forward and its up in the plane and flipping the image
+ * left to right - the two are one matrix - so there is no second camera here either. A reflection
+ * turns every triangle's winding around, so the front face is the clockwise one while a mirror's
+ * scene is drawn. A mirror takes no place on its frequency, and nobody goes through it.</p>
  *
  * <p><b>Going through.</b> Each tick, a player whose body centre crosses a window from its front to
  * its back, inside its outline, is moved to the partner by the same transform; velocity and view are
@@ -111,13 +127,20 @@ public class FormPortals
 
     private static WorldRenderContext context;
     private static boolean passActive;
+    private static boolean passMirror;
     private static Matrix4f passProjection;
     private static boolean wantStencil;
     private static boolean warned;
     private static boolean terrainFailed;
+    private static boolean entitiesFailed;
+
+    /** The buffer a window's scene is drawn into at a resolution of its own; it only ever grows */
+    private static Framebuffer scaled;
+    private static boolean scaledFailed;
 
     /* Sodium owns the chunk rendering when it is loaded; its bridge is never touched otherwise */
     private static final boolean SODIUM_LOADED = FabricLoader.getInstance().isModLoaded("sodium");
+    private static final boolean IRIS_LOADED = FabricLoader.getInstance().isModLoaded("iris");
     private static long ticks;
     private static PortalForm guard;
     private static int guardAge;
@@ -135,11 +158,12 @@ public class FormPortals
         private int shape;
         private float width;
         private float height;
+        private boolean mirror;
         private long seen;
     }
 
     /** A window of the pass being drawn, in the frame it was drawn in. */
-    private record Window(PortalForm form, Matrix4f matrix, int shape, float width, float height, int frequency)
+    private record Window(PortalForm form, Matrix4f matrix, int shape, float width, float height, int frequency, float quality, boolean mirror)
     {}
 
     /* Pairing */
@@ -150,7 +174,8 @@ public class FormPortals
 
         for (Map.Entry<PortalForm, Live> entry : live.entrySet())
         {
-            if (entry.getValue().frequency == frequency)
+            /* A mirror is nobody's other end */
+            if (entry.getValue().frequency == frequency && !entry.getValue().mirror)
             {
                 list.add(entry.getKey());
             }
@@ -248,6 +273,12 @@ public class FormPortals
         return passActive;
     }
 
+    /** Whether the scene being drawn again is a mirror's: reflected, with its triangles wound the other way. */
+    public static boolean isMirrorPass()
+    {
+        return passActive && passMirror;
+    }
+
     /** Whether a portal's own scene is being drawn, in which no portal draws its frame or arrow. */
     public static boolean isRenderingPortal()
     {
@@ -303,7 +334,10 @@ public class FormPortals
         {
             GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, framebuffer.fbo);
             GlStateManager._bindTexture(framebuffer.getDepthAttachment());
-            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL30.GL_DEPTH24_STENCIL8, framebuffer.textureWidth, framebuffer.textureHeight, 0, GL30.GL_DEPTH_STENCIL, GL30.GL_UNSIGNED_INT_24_8, 0L);
+            /* Through GlStateManager, not GL11: Iris learns texture formats only from this call. Told the
+             * depth texture now has a stencil, it attaches it as depth-and-stencil to every framebuffer of
+             * its pipeline, so all of them share this one stencil */
+            GlStateManager._texImage2D(GL11.GL_TEXTURE_2D, 0, GL30.GL_DEPTH24_STENCIL8, framebuffer.textureWidth, framebuffer.textureHeight, 0, GL30.GL_DEPTH_STENCIL, GL30.GL_UNSIGNED_INT_24_8, null);
             GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_DEPTH_STENCIL_ATTACHMENT, GL11.GL_TEXTURE_2D, framebuffer.getDepthAttachment(), 0);
 
             RenderSystem.depthMask(true);
@@ -314,6 +348,15 @@ public class FormPortals
             GlStateManager._bindTexture(previousTexture);
             GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, previousFramebuffer);
             GL11.glGetError();
+        }
+
+        /* Iris attaches the depth texture to its framebuffers again only when it is told the texture
+         * was rebuilt, not when its format changes. A pipeline built before the stencil was there would
+         * keep drawing without it: the window would not be cut into the stencil, and what is drawn in
+         * it would cover the whole window, the forms in front of it included */
+        if (IRIS_LOADED)
+        {
+            IrisPortalTerrain.depthRebuilt(framebuffer);
         }
     }
 
@@ -332,13 +375,14 @@ public class FormPortals
         entry.shape = form.shape.get();
         entry.width = form.width.get();
         entry.height = form.height.get();
+        entry.mirror = form.mirror.get();
         entry.seen = ticks;
     }
 
     /** A portal form's window, at the frame it has been drawn in; drawn when the pass closes. */
     public static void addWindow(PortalForm form, Matrix4f matrix)
     {
-        windows.add(new Window(form, new Matrix4f(matrix), form.shape.get(), form.width.get(), form.height.get(), form.frequency.get()));
+        windows.add(new Window(form, new Matrix4f(matrix), form.shape.get(), form.width.get(), form.height.get(), form.frequency.get(), MathHelper.clamp(form.qualityScale.get(), 10F, 250F) / 100F, form.mirror.get()));
     }
 
     /* Teleporting */
@@ -386,7 +430,7 @@ public class FormPortals
 
         for (Map.Entry<PortalForm, Live> entry : live.entrySet())
         {
-            if (counts.merge(entry.getValue().frequency, 1, Integer::sum) > 2)
+            if (!entry.getValue().mirror && counts.merge(entry.getValue().frequency, 1, Integer::sum) > 2)
             {
                 conflicts.add(entry.getKey());
             }
@@ -620,9 +664,90 @@ public class FormPortals
             return false;
         }
 
+        /* A framebuffer that shares the game's depth texture (Iris's gbuffers do) must share its stencil
+         * as well: a stencil of its own would hold the window only for the programs drawing into it */
+        if (sharesMainDepth(main))
+        {
+            if (shareMainStencil(main))
+            {
+                return true;
+            }
+
+            if (depthIsEmpty)
+            {
+                addStencil(main);
+
+                return shareMainStencil(main);
+            }
+
+            wantStencil = true;
+
+            return false;
+        }
+
         attachStencilRenderbuffer(bound);
 
         return hasStencil();
+    }
+
+    /** Whether the bound framebuffer is not the game's but draws into the game's depth texture. */
+    private static boolean sharesMainDepth(Framebuffer main)
+    {
+        if (main == null || !main.useDepthAttachment || main.getDepthAttachment() <= 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            int bound = GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
+
+            if (bound == 0 || bound == main.fbo)
+            {
+                return false;
+            }
+
+            int type = GL30.glGetFramebufferAttachmentParameteri(GL30.GL_FRAMEBUFFER, GL30.GL_DEPTH_ATTACHMENT, GL30.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE);
+            int name = GL30.glGetFramebufferAttachmentParameteri(GL30.GL_FRAMEBUFFER, GL30.GL_DEPTH_ATTACHMENT, GL30.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME);
+
+            return type == GL11.GL_TEXTURE && name == main.getDepthAttachment();
+        }
+        finally
+        {
+            GL11.glGetError();
+        }
+    }
+
+    /**
+     * Attaches the game's depth texture to the bound framebuffer as depth-and-stencil, when the texture
+     * has a stencil already. Iris does the same on its own a frame after the texture got its stencil;
+     * this covers that frame, and replaces a stencil renderbuffer an older pass may have given it.
+     * Returns whether the bound framebuffer has the shared stencil afterwards.
+     */
+    private static boolean shareMainStencil(Framebuffer main)
+    {
+        int previousTexture = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+
+        try
+        {
+            GlStateManager._bindTexture(main.getDepthAttachment());
+
+            int format = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_INTERNAL_FORMAT);
+
+            if (format != GL30.GL_DEPTH24_STENCIL8 && format != GL30.GL_DEPTH32F_STENCIL8)
+            {
+                return false;
+            }
+
+            GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_DEPTH_STENCIL_ATTACHMENT, GL11.GL_TEXTURE_2D, main.getDepthAttachment(), 0);
+
+            return GL30.glCheckFramebufferStatus(GL30.GL_FRAMEBUFFER) == GL30.GL_FRAMEBUFFER_COMPLETE && hasStencil();
+        }
+        finally
+        {
+            GlStateManager._bindTexture(previousTexture);
+            GL11.glGetError();
+        }
     }
 
     private static void attachStencilRenderbuffer(int framebuffer)
@@ -767,11 +892,19 @@ public class FormPortals
 
         place(pass);
 
-        /* The first two windows of a frequency are a pair; a third has no partner */
+        /* The first two windows of a frequency are a pair; a third has no partner. A mirror is its own */
         Map<Integer, List<Window>> pairs = new HashMap<>();
+        List<Window> mirrors = new ArrayList<>();
 
         for (Window window : pass)
         {
+            if (window.mirror())
+            {
+                mirrors.add(window);
+
+                continue;
+            }
+
             List<Window> pair = pairs.computeIfAbsent(window.frequency(), (f) -> new ArrayList<>());
 
             if (pair.size() < 2)
@@ -782,8 +915,19 @@ public class FormPortals
 
         pairs.values().removeIf((pair) -> pair.size() < 2);
 
-        if (pairs.isEmpty())
+        if (pairs.isEmpty() && mirrors.isEmpty())
         {
+            return;
+        }
+
+        Framebuffer main = MinecraftClient.getInstance().getFramebuffer();
+
+        /* Under an Iris shader pack the pass runs in one of Iris's gbuffer framebuffers, which share the
+         * game's depth texture; the stencil they must use is the one in that texture */
+        if (sharesMainDepth(main) && !shareMainStencil(main))
+        {
+            wantStencil = true;
+
             return;
         }
 
@@ -816,6 +960,11 @@ public class FormPortals
             {
                 drawThrough(pair.get(0), pair.get(1));
                 drawThrough(pair.get(1), pair.get(0));
+            }
+
+            for (Window mirror : mirrors)
+            {
+                drawThrough(mirror, mirror);
             }
         }
         finally
@@ -968,9 +1117,14 @@ public class FormPortals
             return;
         }
 
-        /* Takes a point in front of the source to behind the target */
+        /* Takes a point in front of the source to behind the target: by a half turn from one window to
+         * the other, or, for a mirror, by the reflection in its own plane - the same point, as far behind
+         * the glass as it stood in front of it */
+        boolean mirror = target.mirror();
         Matrix4f sourceRigid = rigid(source.matrix());
-        Matrix4f move = rigid(target.matrix()).rotateY((float) Math.PI).mul(new Matrix4f(sourceRigid).invert());
+        Matrix4f move = mirror
+            ? rigid(target.matrix()).scale(1F, 1F, -1F).mul(new Matrix4f(sourceRigid).invert())
+            : rigid(target.matrix()).rotateY((float) Math.PI).mul(new Matrix4f(sourceRigid).invert());
 
         if (!Float.isFinite(move.m00()) || !Float.isFinite(move.m33()))
         {
@@ -1057,10 +1211,17 @@ public class FormPortals
             RenderSystem.enableCull();
             RenderSystem.enableBlend();
 
-            drawScene(move, sourceRigid, oblique, rigid(target.matrix()), target, reference);
+            passMirror = mirror;
+
+            if (!drawSceneScaled(move, sourceRigid, oblique, rigid(target.matrix()), target, reference, scissor, fog))
+            {
+                drawScene(move, sourceRigid, oblique, rigid(target.matrix()), target, reference);
+            }
         }
         finally
         {
+            passMirror = false;
+
             /* C: nothing of it stays behind. The scissor goes first: it would cut the clearing of the
              * stencil short as well. */
             if (wasScissor)
@@ -1208,6 +1369,213 @@ public class FormPortals
         GL11.glStencilMask(0x00);
     }
 
+    /**
+     * The scene of a window whose quality is not 100%: drawn into a buffer of its own, as many times
+     * larger or smaller than the window's rectangle on the screen as the quality says, and laid over
+     * the window from there. Below 100% the pixels are left as they are, large and square; above, they
+     * are averaged down, which is supersampling. Only the window's rectangle is drawn, not the screen.
+     *
+     * <p>Returns false when the scene has to be drawn straight into the window instead: at 100%, under a
+     * shader pack or the fabulous graphics, whose programs draw into framebuffers of their own, or when
+     * the buffer could not be made.</p>
+     */
+    private static boolean drawSceneScaled(Matrix4f move, Matrix4f source, Matrix4f projection, Matrix4f target, Window targetWindow, int reference, int[] scissor, float[] fog)
+    {
+        float scale = targetWindow.quality();
+
+        if (scaledFailed || Math.abs(scale - 1F) < 0.005F || BBSRendering.isIrisShadersEnabled() || MinecraftClient.isFabulousGraphicsOrBetter())
+        {
+            return false;
+        }
+
+        java.nio.IntBuffer box = org.lwjgl.BufferUtils.createIntBuffer(4);
+
+        GL11.glGetIntegerv(GL11.GL_VIEWPORT, box);
+
+        int vx = box.get(0);
+        int vy = box.get(1);
+        int vw = box.get(2);
+        int vh = box.get(3);
+        int[] region = scissor == null ? new int[] {vx, vy, vw, vh} : scissor;
+
+        if (vw <= 0 || vh <= 0 || region[2] <= 0 || region[3] <= 0)
+        {
+            return false;
+        }
+
+        /* No larger than the driver draws: the buffer by its textures, the moved viewport by its own limit */
+        java.nio.IntBuffer limits = org.lwjgl.BufferUtils.createIntBuffer(4);
+
+        GL11.glGetIntegerv(GL11.GL_MAX_VIEWPORT_DIMS, limits);
+
+        int maxTexture = Math.min(RenderSystem.maxSupportedTextureSize(), 16384);
+
+        scale = Math.min(scale, Math.min(maxTexture / (float) region[2], maxTexture / (float) region[3]));
+        scale = Math.min(scale, Math.min(limits.get(0) / (float) vw, limits.get(1) / (float) vh));
+
+        int width = Math.max(1, (int) Math.ceil(region[2] * scale));
+        int height = Math.max(1, (int) Math.ceil(region[3] * scale));
+        int previous = GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
+        boolean wasScissor = GL11.glIsEnabled(GL11.GL_SCISSOR_TEST);
+
+        GL11.glGetIntegerv(GL11.GL_SCISSOR_BOX, box);
+
+        int[] wasBox = {box.get(0), box.get(1), box.get(2), box.get(3)};
+        Framebuffer buffer;
+
+        try
+        {
+            buffer = scaledBuffer(width, height);
+        }
+        catch (RuntimeException e)
+        {
+            scaledFailed = true;
+            buffer = null;
+
+            System.err.println("[BBS] A portal's quality scale needs a framebuffer that could not be made; portals draw at the screen's resolution from now on: " + e);
+        }
+
+        if (buffer == null)
+        {
+            /* Making a framebuffer leaves another one bound, and its viewport */
+            GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, previous);
+            RenderSystem.viewport(vx, vy, vw, vh);
+
+            return false;
+        }
+
+        try
+        {
+            GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, buffer.fbo);
+
+            /* The whole view, scaled, and moved so that the window's rectangle lands on the buffer */
+            RenderSystem.viewport(Math.round((vx - region[0]) * scale), Math.round((vy - region[1]) * scale), Math.round(vw * scale), Math.round(vh * scale));
+            GL11.glEnable(GL11.GL_SCISSOR_TEST);
+            GL11.glScissor(0, 0, width, height);
+
+            /* The backdrop the window has, the far depth, and a stencil that is the window's value
+             * everywhere: the scene locks itself to that value, and here all of the buffer is the window */
+            GL11.glDisable(GL11.GL_STENCIL_TEST);
+            GL11.glStencilMask(0xFF);
+            GL11.glClearStencil(reference);
+            RenderSystem.colorMask(true, true, true, true);
+            RenderSystem.depthMask(true);
+            RenderSystem.clearColor(fog[0], fog[1], fog[2], 1F);
+            RenderSystem.clearDepth(1D);
+            GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT | GL11.GL_STENCIL_BUFFER_BIT);
+            GL11.glClearStencil(0);
+
+            drawScene(move, source, projection, target, targetWindow, reference);
+        }
+        finally
+        {
+            GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, previous);
+            RenderSystem.viewport(vx, vy, vw, vh);
+
+            if (wasScissor)
+            {
+                GL11.glScissor(wasBox[0], wasBox[1], wasBox[2], wasBox[3]);
+            }
+            else
+            {
+                GL11.glDisable(GL11.GL_SCISSOR_TEST);
+            }
+        }
+
+        /* Over the window, and only the window: the stencil cut into the screen still holds it */
+        Matrix4f realProjection = new Matrix4f(RenderSystem.getProjectionMatrix());
+        VertexSorter sorter = RenderSystem.getVertexSorting();
+        float x1 = (region[0] - vx) / (float) vw * 2F - 1F;
+        float y1 = (region[1] - vy) / (float) vh * 2F - 1F;
+        float x2 = (region[0] + region[2] - vx) / (float) vw * 2F - 1F;
+        float y2 = (region[1] + region[3] - vy) / (float) vh * 2F - 1F;
+        float u = region[2] * scale / buffer.textureWidth;
+        float v = region[3] * scale / buffer.textureHeight;
+
+        buffer.setTexFilter(scale < 1F ? GL11.GL_NEAREST : GL11.GL_LINEAR);
+
+        lockToWindow(reference);
+        RenderSystem.disableDepthTest();
+        RenderSystem.depthMask(false);
+        RenderSystem.disableBlend();
+        RenderSystem.disableCull();
+        /* The window keeps the alpha its backdrop gave it; the scene's own is whatever it blended to */
+        RenderSystem.colorMask(true, true, true, false);
+        RenderSystem.setProjectionMatrix(new Matrix4f(), sorter);
+        ModelViewStack.push();
+        ModelViewStack.identityTop();
+        RenderSystem.applyModelViewMatrix();
+
+        try
+        {
+            Matrix4f identity = new Matrix4f();
+            BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE);
+
+            builder.vertex(identity, x1, y1, 0F).texture(0F, 0F)/*$ nx*/.next()/**/;
+            builder.vertex(identity, x2, y1, 0F).texture(u, 0F)/*$ nx*/.next()/**/;
+            builder.vertex(identity, x2, y2, 0F).texture(u, v)/*$ nx*/.next()/**/;
+            builder.vertex(identity, x1, y2, 0F).texture(0F, v)/*$ nx*/.next()/**/;
+
+            RenderSystem.setShaderColor(1F, 1F, 1F, 1F);
+            RenderSystem.setShaderTexture(0, buffer.getColorAttachment());
+            RenderSystem.setShader(GameRenderer::getPositionTexProgram);
+            Bufs.draw(builder);
+        }
+        finally
+        {
+            ModelViewStack.pop();
+            RenderSystem.applyModelViewMatrix();
+            RenderSystem.setProjectionMatrix(realProjection, sorter);
+            RenderSystem.colorMask(true, true, true, true);
+            RenderSystem.depthMask(true);
+            RenderSystem.enableDepthTest();
+            RenderSystem.enableCull();
+            RenderSystem.enableBlend();
+        }
+
+        return true;
+    }
+
+    /**
+     * The buffer of {@link #drawSceneScaled}, at least this large. Grown in steps and never shrunk, as a
+     * window's rectangle changes with every move of the camera; the part in use is the corner at the
+     * origin. Its depth is a depth-and-stencil one from the start, so a form mask inside the scene finds
+     * the stencil it needs and does not hang one of its own - empty - on the buffer.
+     */
+    /** Frees the scaled-scene buffer; the next portal that needs one makes it again. Render thread only. */
+    public static void purge()
+    {
+        if (scaled != null)
+        {
+            scaled.delete();
+            scaled = null;
+        }
+    }
+
+    private static Framebuffer scaledBuffer(int width, int height)
+    {
+        if (scaled != null && scaled.textureWidth >= width && scaled.textureHeight >= height)
+        {
+            return scaled;
+        }
+
+        int w = Math.max(scaled == null ? 0 : scaled.textureWidth, (width + 255) / 256 * 256);
+        int h = Math.max(scaled == null ? 0 : scaled.textureHeight, (height + 255) / 256 * 256);
+
+        if (scaled == null)
+        {
+            scaled = new SimpleFramebuffer(w, h, true, MinecraftClient.IS_SYSTEM_MAC);
+        }
+        else
+        {
+            scaled.resize(w, h, MinecraftClient.IS_SYSTEM_MAC);
+        }
+
+        addStencil(scaled);
+
+        return scaled;
+    }
+
     private static void drawScene(Matrix4f move, Matrix4f source, Matrix4f projection, Matrix4f target, Window targetWindow, int reference)
     {
         MatrixStack stack = context.matrixStack();
@@ -1224,6 +1592,16 @@ public class FormPortals
 
         RenderSystem.setProjectionMatrix(projection, sorter);
 
+        /* A reflected scene has every triangle wound the other way: what was a front face is a back
+         * face now, and culling would leave the models inside out. The front is the other winding for
+         * as long as the mirror's scene is drawn - every part of it, whoever turns culling on. */
+        int frontFace = GL11.glGetInteger(GL11.GL_FRONT_FACE);
+
+        if (passMirror)
+        {
+            GL11.glFrontFace(frontFace == GL11.GL_CW ? GL11.GL_CCW : GL11.GL_CW);
+        }
+
         try
         {
             lockToWindow(reference);
@@ -1233,11 +1611,29 @@ public class FormPortals
 
             lockToWindow(reference);
             BBSModClient.getFilms().render(context);
+            lockToWindow(reference);
+            drawEditedFilm();
 
             float limit = Math.min(MinecraftClient.getInstance().options.getClampedViewDistance(), TERRAIN_CHUNKS) * 16F;
 
-            lockToWindow(reference);
-            drawPlayer(view, source, target, targetWindow, limit);
+            /* Entities are told apart as entities by a shader pack only in the entities' phase */
+            Object phase = IRIS_LOADED ? IrisPortalPhases.beginEntities() : null;
+
+            try
+            {
+                lockToWindow(reference);
+                drawPlayer(view, source, target, targetWindow, limit);
+                lockToWindow(reference);
+                drawEntities(view, source, limit);
+            }
+            finally
+            {
+                if (IRIS_LOADED)
+                {
+                    IrisPortalPhases.endPhase(phase);
+                }
+            }
+
             lockToWindow(reference);
             drawEffects(view, move);
         }
@@ -1258,6 +1654,8 @@ public class FormPortals
                 System.err.println("[BBS] Draining the portal pass failed: " + e);
             }
 
+            GL11.glFrontFace(frontFace);
+
             passActive = false;
             passProjection = null;
 
@@ -1266,6 +1664,30 @@ public class FormPortals
             stack.pop();
 
             RenderSystem.enableDepthTest();
+        }
+    }
+
+    /**
+     * The film open in the film editor. Its actors are the editor's own and are not among the films
+     * playing in the world, so the films' pass alone leaves a window empty of them while the editor is
+     * up. Drawn the way the world's pass draws it: through the screen that is open.
+     */
+    private static void drawEditedFilm()
+    {
+        try
+        {
+            if (UIScreen.getCurrentMenu() instanceof UIDashboard dashboard && dashboard.getPanels().panel instanceof UIFilmPanel panel && panel.getController() != null)
+            {
+                panel.getController().renderPortalPass(context);
+            }
+        }
+        finally
+        {
+            RenderSystem.enableDepthTest();
+            RenderSystem.depthMask(true);
+            RenderSystem.enableCull();
+            RenderSystem.enableBlend();
+            RenderSystem.defaultBlendFunc();
         }
     }
 
@@ -1304,7 +1726,8 @@ public class FormPortals
             /* The half of them through the window */
             Vector3f fromTarget = new Matrix4f(target).invert().mul(view).transformPosition(new Vector3f(rel));
             Vector3f scale = targetWindow.matrix().getScale(new Vector3f());
-            boolean through = Math.abs(fromTarget.z) <= PLAYER_MARGIN + 0.5F
+            /* Nobody goes through a mirror */
+            boolean through = !passMirror && Math.abs(fromTarget.z) <= PLAYER_MARGIN + 0.5F
                 && Math.abs(fromTarget.x) <= targetWindow.width() * scale.x / 2F + PLAYER_MARGIN
                 && Math.abs(fromTarget.y) <= targetWindow.height() * scale.y / 2F + PLAYER_MARGIN;
 
@@ -1357,10 +1780,156 @@ public class FormPortals
     }
 
     /**
+     * The world's entities - mobs, other players, items, anything with a renderer - that stand in front
+     * of {@code source} and near it, drawn with the moved scene. The local player is not among them:
+     * {@link #drawPlayer} draws them, first person or not. Culled by where they stand to the window
+     * and by the pass's own view, never by the real camera's, which looks somewhere else.
+     */
+    private static void drawEntities(Matrix4f view, Matrix4f source, float limit)
+    {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        ClientWorld world = mc.world;
+
+        if (entitiesFailed || world == null || context.camera() == null)
+        {
+            return;
+        }
+
+        try
+        {
+            Vec3d camera = context.camera().getPos();
+            MatrixStack stack = context.matrixStack();
+            float tickDelta = context./*$ wtd*/tickDelta()/**/;
+            Matrix4f toLocal = new Matrix4f(source).invert().mul(view);
+            EntityRenderDispatcher dispatcher = mc.getEntityRenderDispatcher();
+            VertexConsumerProvider.Immediate provider = mc.getBufferBuilders().getEntityVertexConsumers();
+            Vector3f local = new Vector3f();
+
+            /* The sides and the near plane of the pass's view; the far plane of an oblique projection is
+             * not where a far plane is, and would cull what is in plain sight */
+            FrustumIntersection frustum = new FrustumIntersection(new Matrix4f(passProjection).mul(stack.peek().getPositionMatrix()), false);
+            int planes = FrustumIntersection.PLANE_MASK_NX | FrustumIntersection.PLANE_MASK_PX | FrustumIntersection.PLANE_MASK_NY | FrustumIntersection.PLANE_MASK_PY | FrustumIntersection.PLANE_MASK_NZ;
+
+            for (Entity entity : world.getEntities())
+            {
+                if (entity == null || entity == mc.player || entity.isRemoved())
+                {
+                    continue;
+                }
+
+                double x = MathHelper.lerp(tickDelta, entity.lastRenderX, entity.getX());
+                double y = MathHelper.lerp(tickDelta, entity.lastRenderY, entity.getY());
+                double z = MathHelper.lerp(tickDelta, entity.lastRenderZ, entity.getZ());
+                float reach = Math.max(entity.getWidth(), entity.getHeight()) + PLAYER_MARGIN;
+
+                toLocal.transformPosition((float) (x - camera.x), (float) (y + entity.getHeight() / 2D - camera.y), (float) (z - camera.z), local);
+
+                if (local.z < -reach || local.length() > limit)
+                {
+                    continue;
+                }
+
+                Box box = entity.getVisibilityBoundingBox().expand(0.5D);
+
+                if (!box.isNaN() && box.getAverageSideLength() > 0D && frustum.intersectAab(
+                    (float) (box.minX - camera.x), (float) (box.minY - camera.y), (float) (box.minZ - camera.z),
+                    (float) (box.maxX - camera.x), (float) (box.maxY - camera.y), (float) (box.maxZ - camera.z), planes) >= 0)
+                {
+                    continue;
+                }
+
+                float yaw = MathHelper.lerp(tickDelta, entity.prevYaw, entity.getYaw());
+
+                dispatcher.render(entity, x - camera.x, y - camera.y, z - camera.z, yaw, tickDelta, stack, provider, dispatcher.getLight(entity, tickDelta));
+            }
+
+            provider.draw();
+        }
+        catch (RuntimeException | LinkageError e)
+        {
+            entitiesFailed = true;
+
+            System.err.println("[BBS] Drawing entities through a portal failed, and they are left out from now on: " + e);
+            e.printStackTrace();
+        }
+        finally
+        {
+            RenderSystem.enableDepthTest();
+            RenderSystem.depthMask(true);
+            RenderSystem.enableCull();
+            RenderSystem.enableBlend();
+            RenderSystem.defaultBlendFunc();
+        }
+    }
+
+    /** A camera that stands where another does and is turned some other way: what particles face. */
+    private static class BillboardCamera extends Camera
+    {
+        private Vec3d position = Vec3d.ZERO;
+        private final Quaternionf turning = new Quaternionf();
+
+        @Override
+        public Vec3d getPos()
+        {
+            return this.position;
+        }
+
+        @Override
+        public Quaternionf getRotation()
+        {
+            return this.turning;
+        }
+    }
+
+    private static final BillboardCamera billboardCamera = new BillboardCamera();
+
+    /**
+     * The camera particles are built to face in the moved scene: at the real camera's place, turned so
+     * that the scene's move turns it onto the real camera. For a mirror the move is no turn but a
+     * reflection, and no camera is turned that way; one of its sides is taken the other way round,
+     * which leaves the picture in the same plane, seen from its back - as a mirror shows it.
+     */
+    private static Camera billboardCamera(Matrix4f view, Matrix4f move)
+    {
+        Camera real = context.camera();
+
+        try
+        {
+            Matrix3f look = new Matrix3f(view);
+            Matrix3f world = new Matrix3f(look).invert().mul(new Matrix3f(move)).mul(look);
+            Matrix3f facing = world.invert().mul(new Matrix3f().set(real.getRotation()));
+
+            if (facing.determinant() < 0F)
+            {
+                facing.m00(-facing.m00()).m01(-facing.m01()).m02(-facing.m02());
+            }
+
+            if (!Float.isFinite(facing.m00() + facing.m11() + facing.m22()))
+            {
+                return real;
+            }
+
+            billboardCamera.position = real.getPos();
+            billboardCamera.turning.setFromUnnormalized(facing);
+
+            return billboardCamera;
+        }
+        catch (RuntimeException e)
+        {
+            return real;
+        }
+    }
+
+    /**
      * The particles and the weather of the world, drawn into the moved scene after everything else, as
      * the world draws them. Particles sit in the world and move with the scene. Rain and snow are made
      * around the eye, so they are made around the eye the scene is seen from - the real eye taken back
      * through the move - and turned the way the scene is turned.
+     *
+     * <p>A particle is a flat picture turned to face the camera it is given. Turned to the real one and
+     * then moved with the scene it would face somewhere else, so it is given a camera that stands where
+     * the real one does - the scene's matrices count from there - and is turned the way the scene will
+     * be turned back. No particle is culled by a view: the game culls none, and neither does Sodium.</p>
      */
     private static void drawEffects(Matrix4f view, Matrix4f move)
     {
@@ -1371,12 +1940,24 @@ public class FormPortals
             return;
         }
 
+        Object phase = null;
+        Object particles = null;
+
         try
         {
             MatrixStack stack = context.matrixStack();
             Vec3d camera = context.camera().getPos();
             float tickDelta = context./*$ wtd*/tickDelta()/**/;
             LightmapTextureManager lightmap = mc.gameRenderer.getLightmapTextureManager();
+            Camera billboards = billboardCamera(view, move);
+
+            /* Iris's particle engine draws half its sheets at a time and sets the pipeline's phase on its
+             * own; the pass wants every sheet, and both are put back as they were found */
+            if (IRIS_LOADED)
+            {
+                phase = IrisPortalPhases.currentPhase();
+                particles = IrisPortalPhases.beginParticles();
+            }
 
             //? if >=1.21 {
             /*ModelViewStack.push();
@@ -1385,7 +1966,7 @@ public class FormPortals
 
             try
             {
-                mc.particleManager.renderParticles(lightmap, context.camera(), tickDelta);
+                mc.particleManager.renderParticles(lightmap, billboards, tickDelta);
             }
             finally
             {
@@ -1394,8 +1975,21 @@ public class FormPortals
                 RenderSystem.applyModelViewMatrix();
             }
             *///?} else {
-            mc.particleManager.renderParticles(stack, mc.getBufferBuilders().getEntityVertexConsumers(), lightmap, context.camera(), tickDelta);
+            mc.particleManager.renderParticles(stack, mc.getBufferBuilders().getEntityVertexConsumers(), lightmap, billboards, tickDelta);
             //?}
+
+            /* Under a shader pack the buffer source is Iris's own and holds what was written to it until
+             * it is drawn: drawn here, in the window and with the pass's matrices */
+            mc.getBufferBuilders().getEntityVertexConsumers().draw();
+
+            if (IRIS_LOADED)
+            {
+                IrisPortalPhases.endParticles(particles);
+                IrisPortalPhases.endPhase(phase);
+
+                particles = null;
+                phase = null;
+            }
 
             /* The move in the world's own frame around the camera, and the eye it takes back to */
             Matrix4f world = new Matrix4f(view).invert().mul(move).mul(view);
@@ -1425,6 +2019,12 @@ public class FormPortals
         }
         finally
         {
+            if (IRIS_LOADED)
+            {
+                IrisPortalPhases.endParticles(particles);
+                IrisPortalPhases.endPhase(phase);
+            }
+
             RenderSystem.enableDepthTest();
             RenderSystem.depthMask(true);
             RenderSystem.enableCull();
@@ -1618,7 +2218,8 @@ public class FormPortals
         {
             terrainFailed = true;
 
-            System.err.println("[BBS] Drawing terrain through a portal failed, and is left out from now on: " + e);
+            System.err.println("[BBS] Drawing terrain through a portal failed, and is left out from now on" + (SODIUM_LOADED ? " (Sodium bridge)" : "") + ": " + e);
+            e.printStackTrace();
         }
         finally
         {

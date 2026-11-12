@@ -145,6 +145,10 @@ layout(std140, binding = 7) uniform IrliteVlGlobals
     vec4 irlite_vlE;   // outline: x strength, y fresnelPower, z back, w frontStrength
     vec4 irlite_vlF;   // x outline glowStrength, y outline pixelSize (int-valued float), z shadow light size (penumbra width), w reserved (written as 0)
     vec4 irlite_vlG;   // surface: x master intensity (diffuse, specular, outline), y specular intensity, z toon bands (int-valued float), w toon smoothing
+    vec4 irlite_fogA;  // height fog: rgb colour (sRGB), w density 0..1
+    vec4 irlite_fogB;  // height fog: x base height, y falloff height (blocks), z box top, w box bottom; heights eye-relative
+    vec4 irlite_fogC;  // height fog: x/y box centre x/z (eye-relative), z half width (x), w half length (z)
+    vec4 irlite_fogD;  // height fog noise: x intensity 0..1, y scale, z wind speed, w time (seconds)
 };
 
 // Wave 1 (2026-07-21): the outline knobs moved from #define to this UBO, so they
@@ -1626,6 +1630,83 @@ float irlite_vlPointStepPrepared(vec3 toLight, float dist, float radius,
 #endif // IRLITE_COMPILE_SHADOWS
 #endif // IRLITE_VL_SHADOWS
 
+// ---- Height fog (BBS HeightFogForm): a true volumetric fog, lit by nothing but its own colour ----
+// vlC.w bit18 = the fog block in the UBO is this frame's (a height fog form is rendering). Everything is
+// eye-relative like playerPos. Density rho(y) = sigma * exp(-max(0, y - base) / falloff): full below
+// the base height, thinning above it, nothing outside the box. The noise (fogD) breaks it into puffs
+// that the wind carries along x: rho *= 1 - intensity * noise, the noise anchored to the box so it
+// stays put as the camera moves.
+// Returns the in-scattered fog light (linear) in rgb and the fog's OPACITY (1 - transmittance) in a, so
+// a texel nothing wrote (alpha 0) reads as "no fog" rather than as a black wall.
+#define IRLITE_FOG_SIGMA 0.25   // extinction per block at density 1
+#define IRLITE_FOG_STEPS 16
+
+float irlite_fogHash(vec3 p)
+{
+    p = fract(p * 0.3183099 + 0.1);
+    p *= 17.0;
+    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+}
+
+// Smooth value noise, 0..1
+float irlite_fogNoise(vec3 x)
+{
+    vec3 i = floor(x);
+    vec3 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(irlite_fogHash(i),                   irlite_fogHash(i + vec3(1.0, 0.0, 0.0)), f.x),
+                   mix(irlite_fogHash(i + vec3(0.0, 1.0, 0.0)), irlite_fogHash(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
+               mix(mix(irlite_fogHash(i + vec3(0.0, 0.0, 1.0)), irlite_fogHash(i + vec3(1.0, 0.0, 1.0)), f.x),
+                   mix(irlite_fogHash(i + vec3(0.0, 1.0, 1.0)), irlite_fogHash(i + vec3(1.0, 1.0, 1.0)), f.x), f.y), f.z);
+}
+
+bool irlite_fogSlab(float o, float d, float lo, float hi, inout float t0, inout float t1)
+{
+    if (abs(d) < 1e-6) return o >= lo && o <= hi;
+    float ta = (lo - o) / d;
+    float tb = (hi - o) / d;
+    t0 = max(t0, min(ta, tb));
+    t1 = min(t1, max(ta, tb));
+    return t1 > t0;
+}
+
+vec4 irlite_heightFog(vec3 startPlayer, vec3 endPlayer, float dither)
+{
+    if ((irlite_vlC.w & 262144u) == 0u || !(irlite_fogA.w > 0.0)) return vec4(0.0);
+    vec3 seg = endPlayer - startPlayer;
+    float len = length(seg);
+    if (len < 1e-4) return vec4(0.0);
+    vec3 dir = seg / len;
+
+    float t0 = 0.0;
+    float t1 = len;
+    if (!irlite_fogSlab(startPlayer.x, dir.x, irlite_fogC.x - irlite_fogC.z, irlite_fogC.x + irlite_fogC.z, t0, t1)) return vec4(0.0);
+    if (!irlite_fogSlab(startPlayer.z, dir.z, irlite_fogC.y - irlite_fogC.w, irlite_fogC.y + irlite_fogC.w, t0, t1)) return vec4(0.0);
+    if (!irlite_fogSlab(startPlayer.y, dir.y, irlite_fogB.w, irlite_fogB.z, t0, t1)) return vec4(0.0);
+
+    float falloff = max(irlite_fogB.y, 0.1);
+    float dt = (t1 - t0) / float(IRLITE_FOG_STEPS);
+    float noiseAmount = clamp(irlite_fogD.x, 0.0, 1.0);
+    float noiseFreq = 0.08 * max(irlite_fogD.y, 0.1);
+    vec3 boxOrigin = vec3(irlite_fogC.x, irlite_fogB.w, irlite_fogC.y);
+    // The wind in blocks: at speed 1 the puffs drift 1.5 blocks a second along x and 0.8 along z
+    vec3 wind = vec3(irlite_fogD.w * irlite_fogD.z * 1.5, 0.0, irlite_fogD.w * irlite_fogD.z * 0.8) * noiseFreq;
+    float opticalDepth = 0.0;
+    for (int i = 0; i < IRLITE_FOG_STEPS; i++) {
+        vec3 p = startPlayer + dir * (t0 + (float(i) + dither) * dt);
+        float rho = exp(-max(p.y - irlite_fogB.x, 0.0) / falloff);
+        if (noiseAmount > 0.0) {
+            vec3 q = (p - boxOrigin) * noiseFreq + wind;
+            float n = 0.65 * irlite_fogNoise(q) + 0.35 * irlite_fogNoise(q * 2.03 + vec3(17.0, 5.0, 11.0));
+            rho *= 1.0 - noiseAmount * n;
+        }
+        opticalDepth += rho;
+    }
+    float opacity = 1.0 - exp(-irlite_fogA.w * IRLITE_FOG_SIGMA * opticalDepth * dt);
+    vec3 fogColor = pow(clamp(irlite_fogA.rgb, 0.0, 1.0), vec3(2.2));
+    return vec4(fogColor * opacity, opacity);
+}
+
 // Per-light single-scatter march.
 vec3 irlite_volumetric(vec3 startWorld, vec3 endWorld, vec3 worldDir, float dither)
 {
@@ -2114,6 +2195,7 @@ uniform sampler2D irl_blueNoise;    // 128x128 R8 void-and-cluster dither array,
 //Program//
 void main() {
     vec3 irliteVL = vec3(0.0);
+    float irliteFogOpacity = 0.0;   // height fog opacity (alpha of colortex10); 0 = no fog
 
     #if defined IRLITE_ACTIVE && defined IRLITE_VOLUMETRIC
         // NOT texelFetch: gl_FragCoord lives in the REDUCED viewport while
@@ -2140,10 +2222,16 @@ void main() {
         vec3 eyePlayer = gbufferModelViewInverse[3].xyz;
         irliteVL = irlite_volumetric(eyePlayer, playerPos,
                                      normalize(playerPos - eyePlayer), dither);
+
+        // Height fog: its own light goes in with the lights' beams, its opacity rides the alpha
+        // and dims the scene behind it in composite1
+        vec4 irliteFog = irlite_heightFog(eyePlayer, playerPos, dither);
+        irliteVL += irliteFog.rgb;
+        irliteFogOpacity = irliteFog.a;
     #endif
 
     /* RENDERTARGETS: 10 */
-    gl_FragData[0] = vec4(irliteVL, 1.0);
+    gl_FragData[0] = vec4(irliteVL, irliteFogOpacity);
 }
 
 #endif
@@ -2311,7 +2399,8 @@ after "    color = pow(color, vec3(2.2));"
         // rounding would flip the picked pixel per column); at full res floor(t+0.75) = t.
         // Depth metric = true view-space Z in blocks, nf/(f - z(f-n)): the pack's
         // GetLinearDepth*far is 2df/(d+f), which would stretch sigma 0.5x-2x over distance.
-        vec3 irliteVL;
+        // rgb = the lights' beams plus the height fog's own light, a = the height fog's opacity
+        vec4 irliteVL;
         if ((irlite_vlC.w & 64u) != 0u) {
             ivec2 irliteVlSize = textureSize(colortex10, 0);
             vec2 irliteVlPos = texCoord * vec2(irliteVlSize) - 0.5;
@@ -2319,7 +2408,7 @@ after "    color = pow(color, vec3(2.2));"
             vec2 irliteVlFrac = irliteVlPos - irliteVlBase;
             float irliteRefDepth = (near * far) / (far - z1 * (far - near));
             float irliteSigma = irlite_vlD.y > 0.0 ? irlite_vlD.y : 1.5; // blocks (vlD.y 0 = default)
-            vec3 irliteVlSum = vec3(0.0);
+            vec4 irliteVlSum = vec4(0.0);
             float irliteVlWSum = 0.0;
             for (int i = 0; i < 4; i++) {
                 ivec2 irliteTap = ivec2(i & 1, i >> 1);
@@ -2330,22 +2419,23 @@ after "    color = pow(color, vec3(2.2));"
                 float irliteDz = abs(irliteTapLin - irliteRefDepth) / irliteSigma;
                 vec2 irliteBi = mix(1.0 - irliteVlFrac, irliteVlFrac, vec2(irliteTap));
                 float irliteW = irliteBi.x * irliteBi.y / (1.0 + irliteDz * irliteDz);
-                irliteVlSum += texelFetch(colortex10, irliteTexel, 0).rgb * irliteW;
+                irliteVlSum += texelFetch(colortex10, irliteTexel, 0) * irliteW;
                 irliteVlWSum += irliteW;
             }
             // Sub-tap geometry (fences/leaves): no tap depth matches -> plain bilinear beats
             // a normalized mush of 4 wrong-surface taps.
-            irliteVL = irliteVlWSum > 1e-3 ? irliteVlSum / irliteVlWSum : texture2D(colortex10, texCoord).rgb;
+            irliteVL = irliteVlWSum > 1e-3 ? irliteVlSum / irliteVlWSum : texture2D(colortex10, texCoord);
         } else {
-            irliteVL = texture2D(colortex10, texCoord).rgb;
+            irliteVL = texture2D(colortex10, texCoord);
         }
         if (isEyeInWater == 1) {
             vec3 irliteUWM = vec3(0.80, 0.87, 0.97) * 0.55;
-            irliteVL *= irliteUWM * irliteUWM;
+            irliteVL.rgb *= irliteUWM * irliteUWM;
         } else if (isEyeInWater == 2) {
-            irliteVL = vec3(0.0);
+            irliteVL = vec4(0.0);
         }
-        color += irliteVL;
+        // The height fog hides what lies behind it (opacity in a), then everything glows on top
+        color = color * (1.0 - clamp(irliteVL.a, 0.0, 1.0)) + irliteVL.rgb;
     #endif
 >>>
 
@@ -2353,7 +2443,7 @@ after "    color = pow(color, vec3(2.2));"
 @file shaders/lib/pipelineSettings.glsl
 after "const int colortex8Format = RGBA16F;        //SSR results for WSR, topmost translucent opacity"
 <<<
-const int colortex10Format = RGB16F;        //IRLite reduced-res volumetric (added deferred2 pass)
+const int colortex10Format = RGBA16F;       //IRLite reduced-res volumetric (added deferred2 pass); a = height fog opacity
 >>>
 before "*/"
 <<<

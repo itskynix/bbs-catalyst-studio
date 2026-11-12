@@ -106,7 +106,10 @@
         "iris.SamplerBindingCubeArrayMixin",
         "iris.CapturedRenderingStateClusterMixin",
         "iris.ReplayUniformMixin",
-        "iris.CompositeRendererTimerMixin"
+        "iris.CompositeRendererTimerMixin",
+        "mtr.VehicleRidingMovementAccessor",
+        "mtr.VehicleExtensionMixin",
+        "mtr.PacketUpdateVehiclesLiftsMixin"
     ],
     "injectors": {
         "defaultRequire": 1

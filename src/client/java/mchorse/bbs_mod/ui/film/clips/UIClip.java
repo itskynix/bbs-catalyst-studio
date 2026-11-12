@@ -152,6 +152,7 @@ public abstract class UIClip <T extends Clip> extends UIElement
         register(mchorse.bbs_mod.camera.clips.fx.DebrisClip.class, UIFxClips.UIDebrisClip::new);
         register(mchorse.bbs_mod.camera.clips.fx.ScreenShaderGraphClip.class, UIFxClips.UIScreenShaderGraphClip::new);
         register(mchorse.bbs_mod.camera.clips.fx.CompoundFxClip.class, UICompoundFxClip::new);
+        register(mchorse.bbs_mod.camera.clips.fx.TransformFxClip.class, UIFxClips.UITransformFxClip::new);
 
         /* The POV action clips, on a replay's POV action timeline */
         register(mchorse.bbs_mod.film.pov.PovGuiClip.class, mchorse.bbs_mod.ui.film.clips.pov.UIPovGuiClip::new);

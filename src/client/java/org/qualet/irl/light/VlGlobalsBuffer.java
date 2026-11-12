@@ -21,7 +21,15 @@ import java.nio.ByteBuffer;
  *       vec4 irlite_vlE;   // outline: x = strength, y = fresnelPower, z = back, w = frontStrength
  *       vec4 irlite_vlF;   // x = outline glowStrength, y = outline pixelSize (int-valued), z = shadow light size, w = reserved (written as 0)
  *       vec4 irlite_vlG;   // surface: x = master intensity (diffuse, specular, outline), y = specular intensity, z = toon bands (int-valued), w = toon smoothing
+ *       vec4 irlite_fogA;  // height fog: rgb = colour (sRGB), w = density (0..1)
+ *       vec4 irlite_fogB;  // height fog: x = base height, y = falloff height (blocks), z = box top, w = box bottom; heights eye-relative
+ *       vec4 irlite_fogC;  // height fog: x/y = box centre x/z (eye-relative), z = half width (x), w = half length (z)
+ *       vec4 irlite_fogD;  // height fog noise: x = intensity (0..1), y = scale, z = wind speed, w = time in seconds
  *   };
+ *
+ * vlC.w bit18 = HEIGHT FOG VALID: a height fog form registered itself for this
+ * upload, so the fog block above carries real data. Without it the shader skips
+ * the fog altogether.
  *
  * Growing the block in the TAIL is binary-safe: existing std140 offsets do not
  * move, so a pack built against a shorter version keeps reading the same bytes
@@ -31,7 +39,23 @@ public final class VlGlobalsBuffer
 {
     public static final int BINDING = 7;
 
-    private static final int CAPACITY = 112;    // 7 × vec4 (std140)
+    private static final int CAPACITY = 176;    // 11 × vec4 (std140)
+
+    /** vlC.w bit18: the height fog block holds this frame's fog (see the class comment). */
+    private static final int FLAG_HEIGHT_FOG = 1 << 18;
+
+    // Height fog (true volumetric, marched by the patched pack in its VL pass). A
+    // height fog form registers itself while it renders; the next upload writes it
+    // relative to the eye and then forgets it, so a form that stops rendering takes
+    // its fog with it. World coordinates until the upload, which knows the eye.
+    private static boolean fogPending = false;
+    private static float fogR, fogG, fogB, fogDensity;
+    private static double fogBase, fogBottom, fogTop, fogCentreX, fogCentreZ;
+    private static float fogFalloff, fogHalfWidth, fogHalfLength;
+    private static float fogNoiseIntensity, fogNoiseScale, fogWindSpeed, fogTime;
+
+    // The eye this upload is relative to (the light SSBO uses the same origin)
+    private static double originX, originY, originZ;
 
     /** vlC.w bit7. Set on every upload (never via a setter, so it cannot be
      *  forgotten): it tells the shader the whole block carries real data. An
@@ -192,6 +216,52 @@ public final class VlGlobalsBuffer
             | (toon ? 1 << 17 : 0);
     }
 
+    /**
+     * Registers a height fog for the next upload, in world coordinates: the box runs
+     * from {@code centreX ± halfWidth}, {@code centreZ ± halfLength}, and from
+     * {@code bottom} to {@code top}; below {@code base} the fog is at full density,
+     * above it thins as exp(-(y - base) / falloff). The noise varies the density by up
+     * to {@code noiseIntensity}, in puffs sized by {@code noiseScale}, carried along x by
+     * {@code windSpeed}; {@code time} (seconds) drives the wind. Only one fog is carried:
+     * the last one registered before an upload wins.
+     */
+    public static void setHeightFog(float r, float g, float b, float density, double base, float falloff, double bottom, double top,
+                                    double centreX, double centreZ, float halfWidth, float halfLength,
+                                    float noiseIntensity, float noiseScale, float windSpeed, float time)
+    {
+        if (!(density > 0F) || !(top > bottom))
+        {
+            return;
+        }
+
+        fogR = r;
+        fogG = g;
+        fogB = b;
+        fogDensity = Math.min(density, 1F);
+        fogBase = base;
+        fogFalloff = Math.max(0.1F, falloff);
+        fogBottom = bottom;
+        fogTop = top;
+        fogCentreX = centreX;
+        fogCentreZ = centreZ;
+        fogHalfWidth = Math.max(0.25F, halfWidth);
+        fogHalfLength = Math.max(0.25F, halfLength);
+        fogNoiseIntensity = Math.max(0F, Math.min(1F, noiseIntensity));
+        fogNoiseScale = Math.max(0.1F, Math.min(5F, noiseScale));
+        fogWindSpeed = Math.max(0F, Math.min(5F, windSpeed));
+        /* Wrapped, so the float keeps its precision however long a film runs */
+        fogTime = time % 3600F;
+        fogPending = true;
+    }
+
+    /** The eye the coming upload is made relative to (LightRegistry.flush's origin). */
+    public static void setOrigin(double x, double y, double z)
+    {
+        originX = x;
+        originY = y;
+        originZ = z;
+    }
+
     public static void upload()
     {
         if (!initialized)
@@ -202,11 +272,32 @@ public final class VlGlobalsBuffer
         scratch.clear();
         scratch.putFloat(intensity).putFloat(maxDist).putFloat(tipBoost).putFloat(tipRadius);
         scratch.putFloat(noiseAmount).putFloat(noiseScale).putFloat(noiseSpeed).putFloat(frameIndex);  // w = frameIndex
-        scratch.putInt(stepMax).putInt(shadowStride).putInt(noiseStride).putInt(flags | outlineFlags | shadowFlags | surfaceFlags | FLAG_GLOBALS_VALID | FLAG_SURFACE_VALID);
+        scratch.putInt(stepMax).putInt(shadowStride).putInt(noiseStride).putInt(flags | outlineFlags | shadowFlags | surfaceFlags | FLAG_GLOBALS_VALID | FLAG_SURFACE_VALID | (fogPending ? FLAG_HEIGHT_FOG : 0));
         scratch.putFloat(noiseMorph).putFloat(0F).putFloat(0F).putFloat(0F);  // vlD: x = noiseMorph, y = bilateral sigma (0 = shader default, no setter yet), z/w reserved
         scratch.putFloat(outlineStrength).putFloat(outlineFresnelPower).putFloat(outlineBack).putFloat(outlineFrontStrength);  // vlE
         scratch.putFloat(outlineGlowStrength).putFloat(outlinePixelSize).putFloat(shadowSize).putFloat(0F);  // vlF: w reserved
         scratch.putFloat(surfaceIntensity).putFloat(specularIntensity).putFloat(toonBands).putFloat(toonSmooth);  // vlG
+
+        if (fogPending)
+        {
+            scratch.putFloat(fogR).putFloat(fogG).putFloat(fogB).putFloat(fogDensity);  // fogA
+            scratch.putFloat((float) (fogBase - originY)).putFloat(fogFalloff).putFloat((float) (fogTop - originY)).putFloat((float) (fogBottom - originY));  // fogB
+            scratch.putFloat((float) (fogCentreX - originX)).putFloat((float) (fogCentreZ - originZ)).putFloat(fogHalfWidth).putFloat(fogHalfLength);  // fogC
+            scratch.putFloat(fogNoiseIntensity).putFloat(fogNoiseScale).putFloat(fogWindSpeed).putFloat(fogTime);  // fogD
+        }
+        else
+        {
+            for (int i = 0; i < 16; i++)
+            {
+                scratch.putFloat(0F);
+            }
+        }
+
+        logFogUpload();
+
+        /* Consumed: the form puts it back while it keeps rendering */
+        fogPending = false;
+
         scratch.flip();
 
         frameIndex = (frameIndex + 1) & 4095;   // one tick per upload = per frame
@@ -214,6 +305,53 @@ public final class VlGlobalsBuffer
         GL30.glBindBufferBase(GL31.GL_UNIFORM_BUFFER, BINDING, ubo);
         GL15.glBufferSubData(GL31.GL_UNIFORM_BUFFER, 0L, scratch);
         GL15.glBindBuffer(GL31.GL_UNIFORM_BUFFER, 0);
+    }
+
+    /* The last fog state logged by logFogUpload */
+    private static String lastFogLog = "";
+    private static int fogLogCount = 0;
+
+    /**
+     * One line whenever what the shader is handed for the height fog changes: OFF when no form
+     * registered one for this upload, otherwise the box relative to the eye (what the pack's
+     * slab test sees). A screen full of fog with OFF here is not this fog.
+     */
+    private static void logFogUpload()
+    {
+        String line;
+
+        if (fogPending)
+        {
+            line = String.format("ON, box relative to the eye x %d..%d, y %d..%d, z %d..%d, density %.2f",
+                Math.round(fogCentreX - originX - fogHalfWidth), Math.round(fogCentreX - originX + fogHalfWidth),
+                Math.round(fogBottom - originY), Math.round(fogTop - originY),
+                Math.round(fogCentreZ - originZ - fogHalfLength), Math.round(fogCentreZ - originZ + fogHalfLength),
+                fogDensity);
+        }
+        else
+        {
+            line = "OFF";
+        }
+
+        if (!line.equals(lastFogLog) && fogLogCount < 400)
+        {
+            lastFogLog = line;
+            fogLogCount++;
+
+            System.out.println("[BBS] Height fog upload: " + line + (fogLogCount == 400 ? " (last line logged)" : ""));
+        }
+    }
+
+    /** A few lines about the buffer and the height fog it carries, for the developer screen. */
+    public static String[] liveStatus()
+    {
+        return new String[] {
+            "VlGlobals UBO: binding " + BINDING + ", " + (initialized ? "buffer #" + ubo + ", " + CAPACITY + " bytes" : "not created yet"),
+            String.format(java.util.Locale.ROOT, "VL: intensity %.2f, max dist %.0f, steps %d, frame %d", intensity, maxDist, stepMax, frameIndex),
+            String.format(java.util.Locale.ROOT, "Flags: vl 0x%X, outline 0x%X, surface 0x%X, shadow 0x%X", flags, outlineFlags, surfaceFlags, shadowFlags),
+            "Height fog: " + (lastFogLog.isEmpty() ? "no upload yet" : lastFogLog),
+            String.format(java.util.Locale.ROOT, "Fog form: %s, density %.2f, base %.1f, falloff %.1f", fogPending ? "registered" : "idle", fogDensity, fogBase, fogFalloff)
+        };
     }
 
     public static void delete()

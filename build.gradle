@@ -63,6 +63,15 @@ tasks.named('runClient', JavaExec) {
 // Apply version-specific build script (1.20.1 / 1.20.4 / 1.21.1)
 apply from: rootProject.file("versions/${project.name}/build.gradle")
 
+/* The stage this jar is built as: -Pstage=TESTER|DEVELOPMENT|PRIVATE|UNDERRATING|PUBLIC, PUBLIC without it.
+ * It ends up in assets/bbs/build_info.json, which the game reads when no local bbs/dev_state.json says otherwise. */
+def buildStage = (project.findProperty("stage") ?: "PUBLIC").toString().trim().toUpperCase()
+
+if (!["TESTER", "DEVELOPMENT", "PRIVATE", "UNDERRATING", "PUBLIC"].contains(buildStage)) {
+	throw new GradleException("Unknown -Pstage='" + buildStage + "', use TESTER, DEVELOPMENT, PRIVATE, UNDERRATING or PUBLIC")
+}
+
+
 dependencies {
 	modImplementation "org.anarres:jcpp:1.4.14"
 	modImplementation "io.github.douira:glsl-transformer:2.0.0-pre13"
@@ -73,8 +82,27 @@ dependencies {
 
 def fabricModVersion = project.findProperty('mod_semver') ?: project.version
 
+def buildInfoDir = layout.buildDirectory.dir("generated/build_info")
+def generateBuildInfo = tasks.register("generateBuildInfo") {
+	def outDir = buildInfoDir
+	def infoVersion = fabricModVersion.toString()
+
+	inputs.property("stage", buildStage)
+	inputs.property("infoVersion", infoVersion)
+	outputs.dir(outDir)
+
+	doLast {
+		def file = outDir.get().file("assets/bbs/build_info.json").asFile
+
+		file.parentFile.mkdirs()
+		file.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([stage: buildStage, version: infoVersion])) + System.lineSeparator()
+	}
+}
+
 processResources {
 	inputs.property "version", fabricModVersion
+	dependsOn generateBuildInfo
+	from(buildInfoDir)
 
 	filesMatching("fabric.mod.json") {
 		expand "version": fabricModVersion, "minecraft_dependency": project.minecraft_dependency, "java_dependency": project.java_dependency
@@ -318,4 +346,11 @@ if (!excludedMixins.isEmpty()) {
 			filter { String line -> excludedMixins.any { line.contains('"' + it + '"') } ? null : line }
 		}
 	}
+}
+
+
+/* The remapped jar lands in versions/<mc version>/build/libs under the name of its stage: bbs-cs-C1.4-1.20.4.jar for
+ * PUBLIC, the stage appended for every other one (bbs-cs-C1.4-1.20.4-TESTER.jar). */
+if (buildStage != "PUBLIC") {
+	tasks.named("remapJar") { archiveClassifier = buildStage }
 }

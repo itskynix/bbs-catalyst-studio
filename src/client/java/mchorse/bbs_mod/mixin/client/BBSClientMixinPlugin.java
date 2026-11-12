@@ -12,6 +12,7 @@ public class BBSClientMixinPlugin implements IMixinConfigPlugin
 {
     private static final boolean IRIS_LOADED = FabricLoader.getInstance().isModLoaded("iris");
     private static final boolean SODIUM_LOADED = FabricLoader.getInstance().isModLoaded("sodium");
+    private static final boolean MTR_LOADED = FabricLoader.getInstance().isModLoaded("mtr");
 
     @Override
     public void onLoad(String mixinPackage)
@@ -34,6 +35,11 @@ public class BBSClientMixinPlugin implements IMixinConfigPlugin
         if (mixinClassName.contains(".sodium.") || targetClassName.startsWith("me.jellysquid.mods.sodium."))
         {
             return SODIUM_LOADED;
+        }
+
+        if (mixinClassName.contains(".mtr.") || targetClassName.startsWith("org.mtr."))
+        {
+            return MTR_LOADED;
         }
 
         return true;

@@ -2,7 +2,7 @@
     "schemaVersion": 1,
     "id": "bbs",
     "version": "${version}",
-    "name": "BBS CS (Catalyst Studio)",
+    "name": "Blockbuster Catalyst Studio",
     "description": "The complete cinematic animation and filmmaking studio for Minecraft.",
     "authors": [
         "Kynix"

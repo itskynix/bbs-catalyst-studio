@@ -27,7 +27,7 @@ import java.util.List;
  */
 public class HubChangelog
 {
-    public static final String VERSION = "C1.3";
+    public static final String VERSION = "C1.4";
     /** How many features each category holds: vehicles, lattice, setup, studio */
     public static final int[] CATEGORIES = {5, 5, 5, 9};
 

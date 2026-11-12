@@ -71,7 +71,7 @@ public class UIAudioHubScreen extends UILandingScreen
         this.card = new UIElement();
         this.card.relative(this).xy(0.5F, 0.5F).anchor(0.5F);
 
-        /* 1. Header: BBS CS & ver c1.2 */
+        /* 1. Header: Blockbuster Catalyst Studio & version c1.3 */
         UIElement header = new UIElement();
         header.relative(this.card).x(0).y(8).w(1F).h(34);
         header.add(new UIRenderable((context) -> this.renderHeader(context, header.area)));
@@ -337,8 +337,8 @@ public class UIAudioHubScreen extends UILandingScreen
         FontRenderer font = context.batcher.getFont();
         MatrixStack stack = context.batcher.getContext().getMatrices();
 
-        String title = "BBS CS";
-        float scale = 2F;
+        String title = "Blockbuster Catalyst Studio";
+        float scale = Math.min(2F, (area.w - 24) / (float) font.getWidth(title));
         int titleW = (int) (font.getWidth(title) * scale);
         int titleH = (int) (font.getHeight() * scale);
 
@@ -348,7 +348,7 @@ public class UIAudioHubScreen extends UILandingScreen
         context.batcher.text(title, 0, 0, Colors.WHITE, true);
         stack.pop();
 
-        String version = "ver c1.2";
+        String version = "version c1.3";
         int verW = font.getWidth(version);
         int verY = area.y + titleH + 2;
         context.batcher.text(version, area.mx() - verW / 2, verY, Colors.setA(Colors.WHITE, 0.55F), false);

@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "id": "bbs",
-  "version": "2.7.0+C1.3-1.20.4",
-  "name": "BBS CS (Catalyst Studio)",
-  "description": "Built for machinima creators, animators, and filmmakers. BBS CS upgrades the core studio with the Catalyst NLE timeline, lossless studio-grade audio engine, smart replay LOD culling, and major render stability fixes.",
+  "version": "C1.4-1.20.4",
+  "name": "Blockbuster Catalyst Studio",
+  "description": "Built for machinima creators, animators, and filmmakers. Blockbuster Catalyst Studio upgrades the core studio with the Catalyst NLE timeline, lossless studio-grade audio engine, smart replay LOD culling, and major render stability fixes.",
   "authors": [
     "McHorse",
     "Wemppy (BBS FS)",

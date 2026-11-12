@@ -7,6 +7,7 @@ import mchorse.bbs_mod.data.types.BaseType;
 import mchorse.bbs_mod.film.markers.FilmMarkers;
 import mchorse.bbs_mod.film.replays.Replay;
 import mchorse.bbs_mod.film.replays.Replays;
+import mchorse.bbs_mod.film.world.WorldTimeline;
 import mchorse.bbs_mod.settings.values.core.ValueGroup;
 import mchorse.bbs_mod.settings.values.core.ValueString;
 import mchorse.bbs_mod.settings.values.numeric.ValueFloat;
@@ -36,6 +37,9 @@ public class Film extends ValueGroup
 
     /** Author's notes pinned to ticks, drawn on every timeline's ruler. */
     public final FilmMarkers markers = new FilmMarkers("markers");
+
+    /** World timeline for MTR operations and scene-level events. */
+    public WorldTimeline worldTimeline = new WorldTimeline();
 
     public final ValueFloat hp = new ValueFloat("hp", 20F);
     public final ValueFloat hunger = new ValueFloat("hunger", 20F);
@@ -71,6 +75,7 @@ public class Film extends ValueGroup
         this.add(this.replays);
         this.add(this.replayCategories);
         this.add(this.markers);
+        this.add(this.worldTimeline);
 
         this.add(this.hp);
         this.add(this.hunger);
@@ -92,6 +97,11 @@ public class Film extends ValueGroup
         if (data.isMap() && SaveVersion.read(data.asMap()) < 2)
         {
             new FilmStableIds().migrate(data.asMap());
+        }
+
+        if (this.worldTimeline != null)
+        {
+            this.worldTimeline.blocks.clear();
         }
 
         super.fromData(data);
@@ -155,6 +165,11 @@ public class Film extends ValueGroup
     public int calculateDuration()
     {
         int duration = this.camera.calculateDuration();
+
+        if (this.worldTimeline != null)
+        {
+            duration = Math.max(duration, this.worldTimeline.calculateDuration());
+        }
 
         for (Replay replay : this.replays.getList())
         {

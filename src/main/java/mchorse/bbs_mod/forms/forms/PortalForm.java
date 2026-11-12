@@ -32,6 +32,16 @@ public class PortalForm extends Form
     /** The window's outline and the arrow along its facing, for placing it; off, the window shows only its view. */
     public final ValueBoolean showFrame = new ValueBoolean("showFrame", false);
     public final ValueColor frameColor = new ValueColor("frameColor", new Color(1F, 1F, 1F, 0.8F));
+    /**
+     * The resolution of what is seen through the window, in percent of the screen's: 10 is a handful of
+     * large pixels and cheap, 100 the screen's own, 250 two and a half times it, averaged down.
+     */
+    public final ValueFloat qualityScale = new ValueFloat("qualityScale", 100F, 10F, 250F);
+    /**
+     * A true mirror: the window shows what stands in front of it, reflected in its own plane. A mirror
+     * has no other end - it takes no place on its frequency and nobody goes through it.
+     */
+    public final ValueBoolean mirror = new ValueBoolean("mirror", false);
 
     public PortalForm()
     {
@@ -43,6 +53,8 @@ public class PortalForm extends Form
         this.add(this.frequency);
         this.add(this.showFrame);
         this.add(this.frameColor);
+        this.add(this.qualityScale);
+        this.add(this.mirror);
     }
 
     @Override

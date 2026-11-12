@@ -9,8 +9,15 @@ import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.film.IUIClipsDelegate;
 import mchorse.bbs_mod.ui.framework.UIContext;
+import mchorse.bbs_mod.film.replays.Replay;
+import mchorse.bbs_mod.ui.film.UIFilmPanel;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIButton;
+import mchorse.bbs_mod.ui.framework.elements.buttons.UICirculate;
+import mchorse.bbs_mod.ui.framework.elements.buttons.UIIcon;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIToggle;
+import mchorse.bbs_mod.ui.framework.elements.input.keyframes.factories.UIAnchorKeyframeFactory;
+import mchorse.bbs_mod.ui.utils.icons.Icons;
+import mchorse.bbs_mod.utils.Direction;
 import mchorse.bbs_mod.ui.framework.elements.input.UITrackpad;
 import mchorse.bbs_mod.ui.utils.UI;
 import mchorse.bbs_mod.ui.utils.UIConstants;
@@ -45,6 +52,20 @@ public class UIProCameraClip extends UIKeyframeClip
 
     /* Focus Distance */
     public UITrackpad focusDistance;
+
+    /* Depth of field and bokeh */
+    public UIButton lockFocus;
+    public UITrackpad aperture;
+    public UITrackpad bokehIntensity;
+    public UITrackpad generalBlur;
+
+    /* Where the focus comes from, and the actor it follows */
+    public UICirculate focusMode;
+    public UIButton focusActor;
+    public UIIcon pickFocusActor;
+
+    /* The focus plane guide in the viewport */
+    public UIIcon focusPlaneIcon;
 
     public ProCameraClip getProClip()
     {
@@ -81,6 +102,110 @@ public class UIProCameraClip extends UIKeyframeClip
         /* Focus Distance */
         this.focusDistance = new UITrackpad((v) -> this.applyFocusDistance(v.doubleValue()));
         this.focusDistance.limit(0.1, 500).tooltip(IKey.raw("Focus Distance (Blocks)"));
+
+        /* Depth of field and bokeh */
+        this.lockFocus = new UIButton(UIKeys.CAMERA_PANELS_DOF_LOCK_FOCUS, (b) -> this.lockFocusToCrosshair());
+        this.lockFocus.tooltip(UIKeys.CAMERA_PANELS_DOF_LOCK_FOCUS_TOOLTIP);
+
+        this.aperture = new UITrackpad((v) -> this.applyAperture(v.doubleValue()));
+        this.aperture.limit(ProCameraClip.MIN_APERTURE, ProCameraClip.MAX_APERTURE).tooltip(UIKeys.CAMERA_PANELS_DOF_APERTURE_TOOLTIP);
+
+        this.bokehIntensity = new UITrackpad((v) -> this.applyUnit(this.getProClip().bokehIntensity, this.bokehIntensity, v.doubleValue()));
+        this.bokehIntensity.limit(0, 1).tooltip(UIKeys.CAMERA_PANELS_DOF_BOKEH_INTENSITY_TOOLTIP);
+
+        this.generalBlur = new UITrackpad((v) -> this.applyUnit(this.getProClip().generalBlur, this.generalBlur, v.doubleValue()));
+        this.generalBlur.limit(0, 1).tooltip(UIKeys.CAMERA_PANELS_DOF_GENERAL_BLUR_TOOLTIP);
+
+        /* Focus source: manual, crosshair, or an actor followed live */
+        this.focusMode = new UICirculate((b) -> this.editor.editMultiple(this.getProClip().focusMode, (v) -> v.set(b.getValue())));
+        this.focusMode.addLabel(UIKeys.CAMERA_PANELS_DOF_FOCUS_MODE_MANUAL);
+        this.focusMode.addLabel(UIKeys.CAMERA_PANELS_DOF_FOCUS_MODE_CROSSHAIR);
+        this.focusMode.addLabel(UIKeys.CAMERA_PANELS_DOF_FOCUS_MODE_ACTOR);
+        this.focusMode.tooltip(UIKeys.CAMERA_PANELS_DOF_FOCUS_MODE_TOOLTIP);
+
+        this.focusActor = new UIButton(UIKeys.CAMERA_PANELS_DOF_FOCUS_ACTOR_NONE, (b) ->
+        {
+            UIFilmPanel panel = this.getParent(UIFilmPanel.class);
+
+            if (panel != null)
+            {
+                UIAnchorKeyframeFactory.displayActors(this.getContext(), panel.getController().getEntities(), this.getProClip().focusTargetActor.get(), this::setFocusActor);
+            }
+        });
+        this.focusActor.tooltip(UIKeys.CAMERA_PANELS_DOF_FOCUS_ACTOR_TOOLTIP);
+
+        this.pickFocusActor = new UIIcon(Icons.EYEDROPPER, (b) ->
+        {
+            UIFilmPanel panel = this.getParent(UIFilmPanel.class);
+
+            if (panel != null)
+            {
+                /* The viewport's own pick: the next click on an actor in the preview chooses it */
+                panel.getController().picker.toggleTargetPick(this.pickFocusActor, null, (actor, pair) -> this.setFocusActor(actor));
+            }
+        });
+        this.pickFocusActor.wh(20, 20);
+        this.pickFocusActor.highlight(() ->
+        {
+            UIFilmPanel panel = this.getParent(UIFilmPanel.class);
+
+            return panel != null && panel.getController().picker.isPickingTarget(this.pickFocusActor);
+        }, Direction.BOTTOM);
+        this.pickFocusActor.tooltip(UIKeys.CAMERA_PANELS_DOF_FOCUS_PICK_TOOLTIP);
+
+        /* The focus plane: one icon, in the plane's own purple, that turns it on and off and is highlighted while on */
+        ProCameraClip pro = this.getProClip();
+
+
+        this.focusPlaneIcon = new UIIcon(Icons.PLANE, (b) -> this.editor.editMultiple(pro.showFocusPlane, (v) -> v.set(!v.get())));
+        this.focusPlaneIcon.iconColor(0xff9b59b6);
+        this.focusPlaneIcon.wh(20, 20);
+        this.focusPlaneIcon.highlight(() -> this.getProClip().showFocusPlane.get(), Direction.BOTTOM);
+        this.focusPlaneIcon.tooltip(UIKeys.CAMERA_PANELS_DOF_SHOW_FOCUS_PLANE_TOOLTIP);
+    }
+
+    /**
+     * Follows an actor with the focus, or, given none, goes back to the focus distance channel.
+     * Both in one undoable edit.
+     */
+    private void setFocusActor(String id)
+    {
+        ProCameraClip clip = this.getProClip();
+        String actor = id == null ? "" : id;
+
+        this.editor.editMultiple(clip.focusTargetActor, (v) -> v.set(actor));
+        this.editor.editMultiple(clip.focusMode, (v) -> v.set(actor.isEmpty() ? ProCameraClip.FOCUS_MANUAL : ProCameraClip.FOCUS_ACTOR));
+        this.fillFocusSource();
+    }
+
+    /** The focus source widgets from the clip: the mode and the name of the actor followed. */
+    private void fillFocusSource()
+    {
+        ProCameraClip clip = this.getProClip();
+        String id = clip.focusTargetActor.get();
+        UIFilmPanel panel = this.getParent(UIFilmPanel.class);
+        IKey label = UIKeys.CAMERA_PANELS_DOF_FOCUS_ACTOR_NONE;
+
+        if (!id.isEmpty())
+        {
+            label = IKey.constant(id);
+
+            if (panel != null)
+            {
+                for (Replay replay : panel.getData().replays.getList())
+                {
+                    if (replay.getId().equals(id))
+                    {
+                        label = IKey.constant(replay.getName());
+
+                        break;
+                    }
+                }
+            }
+        }
+
+        this.focusMode.setValue(clip.focusMode.get());
+        this.focusActor.label = label;
     }
 
     @Override
@@ -114,6 +239,87 @@ public class UIProCameraClip extends UIKeyframeClip
             UI.row(UIConstants.MARGIN, 0, 20, this.pickSubject, this.baseSubjectDistance)
         ));
         this.panels.add(this.section(IKey.raw("Focus Distance"), this.focusDistance));
+
+        /* Aperture presets */
+        UIButton f07 = new UIButton(IKey.constant("f/0.7"), (b) -> this.applyAperture(0.7));
+        UIButton f095 = new UIButton(IKey.constant("f/0.95"), (b) -> this.applyAperture(0.95));
+        UIButton f14 = new UIButton(IKey.constant("f/1.4"), (b) -> this.applyAperture(1.4));
+        UIButton f28 = new UIButton(IKey.constant("f/2.8"), (b) -> this.applyAperture(2.8));
+        UIButton f56 = new UIButton(IKey.constant("f/5.6"), (b) -> this.applyAperture(5.6));
+        UIButton f11 = new UIButton(IKey.constant("f/11"), (b) -> this.applyAperture(11));
+
+        this.panels.add(this.section(UIKeys.CAMERA_PANELS_DOF_TITLE,
+            UI.labelRow(UIKeys.CAMERA_PANELS_DOF_FOCUS_MODE, this.focusMode),
+            UI.row(UIConstants.MARGIN, 0, 20, this.focusActor, this.pickFocusActor, this.focusPlaneIcon),
+            this.lockFocus,
+            UI.row(UIConstants.MARGIN, 0, 20, f07, f095, f14),
+            UI.row(UIConstants.MARGIN, 0, 20, f28, f56, f11),
+            UI.labelRow(UIKeys.CAMERA_PANELS_DOF_APERTURE, this.aperture),
+            UI.labelRow(UIKeys.CAMERA_PANELS_DOF_BOKEH_INTENSITY, this.bokehIntensity),
+            UI.labelRow(UIKeys.CAMERA_PANELS_DOF_GENERAL_BLUR, this.generalBlur)
+        ));
+    }
+
+    private void applyAperture(double fStop)
+    {
+        double value = Math.max(ProCameraClip.MIN_APERTURE, Math.min(ProCameraClip.MAX_APERTURE, fStop));
+
+        this.insertKeyframe(this.getCurrentClipTick(), this.getProClip().aperture, value);
+        this.aperture.setValue((float) value);
+        this.editor.fillData();
+    }
+
+    /** A channel that runs from 0 to 1, keyed at the cursor. */
+    private void applyUnit(KeyframeChannel<Double> channel, UITrackpad field, double value)
+    {
+        double clamped = Math.max(0D, Math.min(1D, value));
+
+        this.insertKeyframe(this.getCurrentClipTick(), channel, clamped);
+        field.setValue((float) clamped);
+        this.editor.fillData();
+    }
+
+    /**
+     * Focuses on what lies under the crosshair: the distance from the camera to the block or the actor
+     * it points at, keyed as the focus distance at the cursor. Looking at nothing leaves the focus as it is.
+     */
+    private void lockFocusToCrosshair()
+    {
+        Camera camera = this.editor.getCamera();
+        MinecraftClient mc = MinecraftClient.getInstance();
+
+        if (camera == null || mc.world == null)
+        {
+            return;
+        }
+
+        HitResult hit = RayTracing.rayTraceEntity(mc.world, camera, 256);
+        Vec3d point = null;
+
+        if (hit instanceof BlockHitResult block && block.getType() != HitResult.Type.MISS)
+        {
+            point = block.getPos();
+        }
+        else if (hit instanceof EntityHitResult entity && entity.getType() != HitResult.Type.MISS)
+        {
+            point = entity.getPos();
+        }
+
+        if (point == null)
+        {
+            this.getContext().notifyInfo(UIKeys.CAMERA_PANELS_DOF_FOCUS_NOTHING);
+
+            return;
+        }
+
+        /* Along the camera's own axis, not straight to the point: that is what the lens focuses on */
+        Vector3f look = camera.getLookDirection();
+        double distance = (point.x - camera.position.x) * look.x + (point.y - camera.position.y) * look.y + (point.z - camera.position.z) * look.z;
+
+        distance = Math.max(0.1D, Math.min(500D, distance));
+
+        this.applyFocusDistance(distance);
+        this.getContext().notifyInfo(UIKeys.CAMERA_PANELS_DOF_FOCUS_LOCKED.format(String.format("%.1f", distance)));
     }
 
     private float getCurrentClipTick()
@@ -242,6 +448,13 @@ public class UIProCameraClip extends UIKeyframeClip
 
         double curFocus = this.getProClip().focusDistance.isEmpty() ? 5.0 : this.getProClip().focusDistance.interpolate(tick);
         this.focusDistance.setValue((float) curFocus);
+
+        ProCameraClip pro = this.getProClip();
+
+        this.aperture.setValue((float) (pro.aperture.isEmpty() ? ProCameraClip.MAX_APERTURE : pro.aperture.interpolate(tick)));
+        this.bokehIntensity.setValue((float) (pro.bokehIntensity.isEmpty() ? 0.5D : pro.bokehIntensity.interpolate(tick)));
+        this.generalBlur.setValue((float) (pro.generalBlur.isEmpty() ? 0D : pro.generalBlur.interpolate(tick)));
+        this.fillFocusSource();
         this.baseSubjectDistance.setValue(this.getProClip().baseSubjectDistance.get());
     }
 

@@ -19,6 +19,7 @@ public class RunnerCameraController extends CameraWorkCameraController
     private float lastTransition;
 
     private Position manual;
+    private boolean detached;
     private UIFilmPanel panel;
 
     private Consumer<Boolean> callback;
@@ -84,12 +85,27 @@ public class RunnerCameraController extends CameraWorkCameraController
     public void setManual(Position manual)
     {
         this.manual = manual;
+
+        if (manual == null)
+        {
+            this.detached = false;
+        }
+    }
+
+    /**
+     * Free-cam during playback: the manual camera overrides the clips, but time keeps moving so the
+     * film can be watched from outside (Blender's camera detach). Only meaningful while a manual
+     * position is set; clearing the manual position re-locks the camera to the film.
+     */
+    public void setDetached(boolean detached)
+    {
+        this.detached = detached && this.manual != null;
     }
 
     @Override
     public void update()
     {
-        if (this.context.playing && this.manual == null)
+        if (this.context.playing && (this.manual == null || this.detached))
         {
             if (this.context.clips == null)
             {
@@ -134,6 +150,12 @@ public class RunnerCameraController extends CameraWorkCameraController
 
         if (this.manual != null)
         {
+            /* Detached: the film keeps running underneath so the scene camera can be drawn where it is */
+            if (this.detached && this.context.clips != null)
+            {
+                this.apply(null, this.ticks, this.getTransition(transition));
+            }
+
             this.manual.apply(camera);
         }
         else if (this.context.clips != null)

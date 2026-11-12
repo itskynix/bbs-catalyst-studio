@@ -1,6 +1,9 @@
 package mchorse.bbs_mod.film;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import mchorse.bbs.compat.mtr.MtrCompatHelper;
+import mchorse.bbs.compat.mtr.MtrConfig;
+import mchorse.bbs.compat.mtr.MtrGovernor;
 import mchorse.bbs_mod.BBSModClient;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -13,6 +16,7 @@ import mchorse.bbs_mod.client.renderer.LivePlayerItemUse;
 import mchorse.bbs_mod.client.renderer.ThirdPersonItemUse;
 import mchorse.bbs_mod.cubic.animation.ItemUsePose;
 import mchorse.bbs_mod.entity.ActorEntity;
+import mchorse.bbs_mod.film.replays.RecordFrame;
 import mchorse.bbs_mod.film.replays.Replay;
 import mchorse.bbs_mod.film.replays.ReplayItemUse;
 import mchorse.bbs_mod.film.replays.ReplayKeyframes;
@@ -49,6 +53,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.MovementType;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.math.Box;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import org.joml.Matrix4f;
@@ -118,6 +123,7 @@ public abstract class BaseFilmController
 
                 entity.setForm(FormUtils.copy(replay.form.get()));
                 replay.keyframes.apply(ticks, entity);
+                this.applyMtrSync(replay, ticks, entity, true);
                 entity.setPrevX(entity.getX());
                 entity.setPrevY(entity.getY());
                 entity.setPrevZ(entity.getZ());
@@ -154,6 +160,12 @@ public abstract class BaseFilmController
     {
         FilmEvents.TICK_BEFORE.invoker().onFilmTick(this, ticks);
 
+        if (this.film != null && this.film.worldTimeline != null && MtrCompatHelper.isMtrLoaded())
+        {
+            MtrCompatHelper.registerWorldTimelineBridge();
+            this.film.worldTimeline.apply(ticks);
+        }
+
         List<Replay> replays = this.replays();
 
         for (int i = 0; i < replays.size(); i++)
@@ -175,6 +187,7 @@ public abstract class BaseFilmController
                  * carry over to the next replay in the loop (which would then wrap an already wrapped tick). */
                 int replayTicks = replay.getTick(ticks);
 
+                this.prepareMtrLimbDelta(replay, replayTicks, entity);
                 this.updateEntityAndForm(entity, replayTicks);
                 this.applyReplay(replay, replayTicks, entity);
 
@@ -197,13 +210,15 @@ public abstract class BaseFilmController
 
                         if (anEntity instanceof ActorEntity actor)
                         {
+                            boolean mtrSynced = this.isMtrSyncedAt(replay, replayTicks);
+
                             /* Force synchronize entity angles */
-                            float yaw = replay.keyframes.yaw.interpolate(replayTicks).floatValue();
-                            float pitch = replay.keyframes.pitch.interpolate(replayTicks).floatValue();
+                            float yaw = mtrSynced ? entity.getYaw() : replay.keyframes.yaw.interpolate(replayTicks).floatValue();
+                            float pitch = mtrSynced ? entity.getPitch() : replay.keyframes.pitch.interpolate(replayTicks).floatValue();
 
                             actor.setYaw(yaw);
-                            actor.setHeadYaw(replay.keyframes.headYaw.interpolate(replayTicks).floatValue());
-                            actor.setBodyYaw(replay.keyframes.bodyYaw.interpolate(replayTicks).floatValue());
+                            actor.setHeadYaw(mtrSynced ? entity.getHeadYaw() : replay.keyframes.headYaw.interpolate(replayTicks).floatValue());
+                            actor.setBodyYaw(mtrSynced ? entity.getBodyYaw() : replay.keyframes.bodyYaw.interpolate(replayTicks).floatValue());
                             actor.setPitch(pitch);
 
                             /* And its position, for the same reason the angles are forced: the body
@@ -212,9 +227,9 @@ public abstract class BaseFilmController
                              * settles a blow against the hitbox the client can see, so a hitbox
                              * trailing the body means aiming at the body and missing. Zero
                              * interpolation steps is what stops that easing from dragging it back. */
-                            double x = replay.keyframes.x.interpolate(replayTicks);
-                            double y = replay.keyframes.y.interpolate(replayTicks);
-                            double z = replay.keyframes.z.interpolate(replayTicks);
+                            double x = mtrSynced ? entity.getX() : replay.keyframes.x.interpolate(replayTicks);
+                            double y = mtrSynced ? entity.getY() : replay.keyframes.y.interpolate(replayTicks);
+                            double z = mtrSynced ? entity.getZ() : replay.keyframes.z.interpolate(replayTicks);
 
                             //? if >=1.20.4 {
                             actor.updateTrackedPositionAndAngles(x, y, z, yaw, pitch, 0);
@@ -283,9 +298,10 @@ public abstract class BaseFilmController
 
                         if (anEntity instanceof PlayerEntity player)
                         {
-                            double x = replay.keyframes.x.interpolate(replayTicks);
-                            double y = replay.keyframes.y.interpolate(replayTicks);
-                            double z = replay.keyframes.z.interpolate(replayTicks);
+                            boolean mtrSynced = this.applyMtrSync(replay, replayTicks, entity, false);
+                            double x = mtrSynced ? entity.getX() : replay.keyframes.x.interpolate(replayTicks);
+                            double y = mtrSynced ? entity.getY() : replay.keyframes.y.interpolate(replayTicks);
+                            double z = mtrSynced ? entity.getZ() : replay.keyframes.z.interpolate(replayTicks);
                             boolean sneaking = EntityState.isOn(replay.keyframes.state(EntityState.SNEAKING).interpolate(replayTicks));
                             boolean grounded = EntityState.isOn(replay.keyframes.state(EntityState.GROUNDED).interpolate(replayTicks));
                             boolean swimming = EntityState.isOn(replay.keyframes.state(EntityState.SWIMMING).interpolate(replayTicks));
@@ -358,12 +374,138 @@ public abstract class BaseFilmController
     protected void applyReplay(Replay replay, int ticks, IEntity entity)
     {
         replay.keyframes.apply(ticks, entity);
+        this.applyMtrSync(replay, ticks, entity, false);
         ReplayLookAt.apply(replay, this.film, ticks, entity);
         replay.applyClientActions(ticks, entity, this.film);
     }
 
+    protected boolean isMtrSyncedAt(Replay replay, float tick)
+    {
+        if (replay == null || !MtrConfig.isPlaybackSync() || !MtrCompatHelper.isMtrLoaded())
+        {
+            return false;
+        }
+
+        RecordFrame frame = replay.keyframes.getInterpolatedMtrFrame(tick);
+
+        if (frame == null || !frame.isMtrRiding)
+        {
+            return false;
+        }
+
+        return MtrCompatHelper.getVehicleCarPose(MtrGovernor.resolveLiveId(frame.mtrVehicleId), frame.mtrCarNumber) != null;
+    }
+
+    protected void prepareMtrLimbDelta(Replay replay, int replayTicks, IEntity entity)
+    {
+        if (replay == null || entity == null || !MtrConfig.isPlaybackSync() || !MtrCompatHelper.isMtrLoaded())
+        {
+            return;
+        }
+
+        RecordFrame curr = replay.keyframes.getMtrFrame(replayTicks);
+
+        if (curr == null || !curr.isMtrRiding)
+        {
+            return;
+        }
+
+        if (MtrCompatHelper.getVehicleCarPose(MtrGovernor.resolveLiveId(curr.mtrVehicleId), curr.mtrCarNumber) == null)
+        {
+            return;
+        }
+
+        RecordFrame prev = replay.keyframes.getMtrFrame(replayTicks - 1);
+
+        if (prev != null && prev.isMtrRiding && prev.mtrVehicleId == curr.mtrVehicleId && prev.mtrCarNumber == curr.mtrCarNumber)
+        {
+            entity.setPrevX(entity.getX() - (curr.mtrLocalX - prev.mtrLocalX));
+            entity.setPrevY(entity.getY() - (curr.mtrLocalY - prev.mtrLocalY));
+            entity.setPrevZ(entity.getZ() - (curr.mtrLocalZ - prev.mtrLocalZ));
+        }
+        else
+        {
+            entity.setPrevX(entity.getX());
+            entity.setPrevY(entity.getY());
+            entity.setPrevZ(entity.getZ());
+        }
+    }
+
+    protected boolean applyMtrSync(Replay replay, float tick, IEntity entity, boolean syncPrev)
+    {
+        if (replay == null || entity == null || !MtrConfig.isPlaybackSync() || !MtrCompatHelper.isMtrLoaded())
+        {
+            return false;
+        }
+
+        RecordFrame frame = replay.keyframes.getInterpolatedMtrFrame(tick);
+
+        if (frame == null || !frame.isMtrRiding)
+        {
+            return false;
+        }
+
+        /* Read-only: the vehicle itself is driven solely by MtrGovernor (through the world timeline).
+         * The recorded vehicle may be played by another live vehicle of the same siding. */
+        MtrCompatHelper.PositionAndRotation carPose = MtrCompatHelper.getVehicleCarPose(MtrGovernor.resolveLiveId(frame.mtrVehicleId), frame.mtrCarNumber);
+
+        if (carPose == null)
+        {
+            return false;
+        }
+
+        MtrCompatHelper.TransformedPose worldPose = MtrCompatHelper.transformToWorld(
+            carPose,
+            frame.mtrLocalX,
+            frame.mtrLocalY,
+            frame.mtrLocalZ,
+            frame.mtrLocalYaw,
+            frame.mtrLocalPitch
+        );
+
+        if (worldPose == null)
+        {
+            return false;
+        }
+
+        float recordedYaw = replay.keyframes.yaw.interpolate(tick).floatValue();
+        float recordedHeadYaw = replay.keyframes.headYaw.interpolate(tick).floatValue();
+        float recordedBodyYaw = replay.keyframes.bodyYaw.interpolate(tick).floatValue();
+
+        float headOffset = MathHelper.wrapDegrees(recordedHeadYaw - recordedYaw);
+        float bodyOffset = MathHelper.wrapDegrees(recordedBodyYaw - recordedYaw);
+
+        float worldHeadYaw = worldPose.yaw + headOffset;
+        float worldBodyYaw = worldPose.yaw + bodyOffset;
+
+        entity.setPosition(worldPose.x, worldPose.y, worldPose.z);
+        entity.setYaw(worldPose.yaw);
+        entity.setPitch(worldPose.pitch);
+        entity.setHeadYaw(worldHeadYaw);
+        entity.setBodyYaw(worldBodyYaw);
+
+        if (syncPrev)
+        {
+            entity.setPrevX(worldPose.x);
+            entity.setPrevY(worldPose.y);
+            entity.setPrevZ(worldPose.z);
+            entity.setPrevYaw(worldPose.yaw);
+            entity.setPrevPitch(worldPose.pitch);
+            entity.setPrevHeadYaw(worldHeadYaw);
+            entity.setPrevBodyYaw(worldBodyYaw);
+        }
+
+        return true;
+    }
+
     public void startRenderFrame(float transition)
     {
+        if (this.film != null && this.film.worldTimeline != null && MtrCompatHelper.isMtrLoaded())
+        {
+            MtrCompatHelper.registerWorldTimelineBridge();
+            this.film.worldTimeline.apply(this.getTick() + (this.paused ? 0F : transition));
+        }
+
         List<Replay> replays = this.replays();
 
         for (int i = 0; i < replays.size(); i++)
@@ -378,18 +520,20 @@ public abstract class BaseFilmController
 
             float delta = this.getTransition(entity, transition);
             int tick = replay.getTick(this.getTick());
+            float exactTick = tick + delta;
+            boolean mtrSynced = this.applyMtrSync(replay, exactTick, entity, true);
 
             /* Apply property */
             Form form1 = entity.getForm();
 
-            this.applyTracks(replay, form1, tick + delta, delta);
+            this.applyTracks(replay, form1, exactTick, delta);
 
             /* The item use of this take, published for everything that draws
              * its body: the procedural animator poses the arms with it, and the
              * model form renderer makes the vanilla item predicates fire on the
              * held items (a drawn bow bends and shows its arrow) */
-            ItemUsePose.Use use = ReplayItemUse.compute(replay, tick + delta, true);
-            ItemUsePose.Use offUse = ReplayItemUse.compute(replay, tick + delta, false);
+            ItemUsePose.Use use = ReplayItemUse.compute(replay, exactTick, true);
+            ItemUsePose.Use offUse = ReplayItemUse.compute(replay, exactTick, false);
 
             ThirdPersonItemUse.set(ThirdPersonItemUse.keyOf(entity), use, offUse);
 
@@ -407,7 +551,26 @@ public abstract class BaseFilmController
 
                     if (anEntity instanceof ActorEntity actor)
                     {
-                        this.applyTracks(replay, actor.getForm(), tick + delta, delta);
+                        this.applyTracks(replay, actor.getForm(), exactTick, delta);
+
+                        if (mtrSynced)
+                        {
+                            actor.setPosition(entity.getX(), entity.getY(), entity.getZ());
+                            actor.prevX = entity.getX();
+                            actor.prevY = entity.getY();
+                            actor.prevZ = entity.getZ();
+                            actor.lastRenderX = entity.getX();
+                            actor.lastRenderY = entity.getY();
+                            actor.lastRenderZ = entity.getZ();
+                            actor.setYaw(entity.getYaw());
+                            actor.setHeadYaw(entity.getHeadYaw());
+                            actor.setBodyYaw(entity.getBodyYaw());
+                            actor.setPitch(entity.getPitch());
+                            actor.prevYaw = entity.getYaw();
+                            actor.prevHeadYaw = entity.getHeadYaw();
+                            actor.prevBodyYaw = entity.getBodyYaw();
+                            actor.prevPitch = entity.getPitch();
+                        }
                     }
                     else if (anEntity instanceof PlayerEntity player)
                     {
@@ -419,12 +582,12 @@ public abstract class BaseFilmController
 
                         if (morph != null)
                         {
-                            this.applyTracks(replay, morph.getForm(), tick + delta, delta);
+                            this.applyTracks(replay, morph.getForm(), exactTick, delta);
                         }
 
-                        float yawHead = replay.keyframes.headYaw.interpolate(tick + delta).floatValue();
-                        float yawBody = replay.keyframes.bodyYaw.interpolate(tick + delta).floatValue();
-                        float pitch = replay.keyframes.pitch.interpolate(tick + delta).floatValue();
+                        float yawHead = mtrSynced ? entity.getHeadYaw() : replay.keyframes.headYaw.interpolate(exactTick).floatValue();
+                        float yawBody = mtrSynced ? entity.getBodyYaw() : replay.keyframes.bodyYaw.interpolate(exactTick).floatValue();
+                        float pitch = mtrSynced ? entity.getPitch() : replay.keyframes.pitch.interpolate(exactTick).floatValue();
 
                         player.setYaw(yawHead);
                         player.setHeadYaw(yawHead);
@@ -552,6 +715,10 @@ public abstract class BaseFilmController
             {
                 continue;
             }
+
+            float renderTick = replay.getTick(this.getTick()) + this.getTransition(entity, context./*$ wtd*/tickDelta()/**/);
+
+            this.applyMtrSync(replay, renderTick, entity, true);
 
             if (frustum != null && this.isCulled(frustum, replay, entity))
             {
@@ -716,6 +883,7 @@ public abstract class BaseFilmController
                 }
 
                 replay.keyframes.apply(tick, entity);
+                this.applyMtrSync(replay, tick, entity, true);
                 replay.properties.applyProperties(form, tick);
                 entity.setPrevX(entity.getX());
                 entity.setPrevY(entity.getY());
@@ -742,6 +910,7 @@ public abstract class BaseFilmController
             {
                 /* Back to now: the keyframes and the form's properties, then the place the actor stood at */
                 replay.keyframes.apply(ticks + transition, entity);
+                this.applyMtrSync(replay, ticks + transition, entity, true);
                 replay.properties.applyProperties(form, ticks + transition);
                 RenderFrame.invalidate();
 
@@ -773,6 +942,11 @@ public abstract class BaseFilmController
     public void shutdown()
     {
         FilmEvents.SHUTDOWN.invoker().onFilmShutdown(this);
+
+        if (this.film != null && this.film.worldTimeline != null)
+        {
+            this.film.worldTimeline.resetAll();
+        }
 
         this.entities.clear();
 

@@ -50,6 +50,12 @@ public class InGameHudMixin
     public void onRenderEnd(DrawContext drawContext, float tickDelta, CallbackInfo info)
     {
         mchorse.bbs_mod.client.BBSRendering.onRenderBeforeScreen();
+
+        /* After everything else of the HUD, and drawn even with F1 hiding it; a screen draws its own copy */
+        if (net.minecraft.client.MinecraftClient.getInstance().currentScreen == null)
+        {
+            mchorse.bbs_mod.dev.DevOverlay.render(drawContext);
+        }
     }
     //?}
 }

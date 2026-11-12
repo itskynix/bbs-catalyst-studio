@@ -65,6 +65,10 @@ public class UIPortalFormPanel extends UIFormPanel<PortalForm>
         this.shape.tooltip(key("shape_tooltip"));
         UIValues.resettable(this.shape, () -> this.form.shape, () -> this.shape.setValue(this.form.shape.get()));
 
+        UITrackpad quality = UIValues.trackpad(() -> this.form.qualityScale);
+
+        quality.limit(10, 250).values(5F, 1F, 25F).tooltip(key("quality_scale_tooltip"));
+
         this.frameColor = UIValues.color(() -> this.form.frameColor).withAlpha();
 
         /* Whether the portal has a partner, as the scene draws it right now */
@@ -75,7 +79,12 @@ public class UIPortalFormPanel extends UIFormPanel<PortalForm>
             {
                 PortalForm form = UIPortalFormPanel.this.form;
 
-                if (form != null && FormPortals.isConflicted(form))
+                if (form != null && form.mirror.get())
+                {
+                    this.label = key("status.mirror");
+                    this.color = Colors.GREEN;
+                }
+                else if (form != null && FormPortals.isConflicted(form))
                 {
                     this.label = key("status.invalid");
                     this.color = Colors.RED;
@@ -101,6 +110,8 @@ public class UIPortalFormPanel extends UIFormPanel<PortalForm>
             UI.labelRow(key("shape"), this.shape),
             UI.label(key("frequency")), this.frequency,
             this.status,
+            UIValues.toggle(key("mirror"), () -> this.form.mirror).tooltip(key("mirror_tooltip")),
+            UI.label(key("quality_scale")), quality,
             UIValues.toggle(key("show_frame"), () -> this.form.showFrame).tooltip(key("show_frame_tooltip")),
             UI.labelRow(key("frame_color"), this.frameColor)
         );
