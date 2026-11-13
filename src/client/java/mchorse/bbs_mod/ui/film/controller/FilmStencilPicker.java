@@ -3,6 +3,7 @@ package mchorse.bbs_mod.ui.film.controller;
 import mchorse.bbs_mod.utils.GlStateGuard;
 import mchorse.bbs_mod.utils.GuiState;
 import mchorse.bbs_mod.utils.InverseViewRotation;
+import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.systems.VertexSorter;
 import mchorse.bbs_mod.BBSSettings;
@@ -209,14 +210,31 @@ public class FilmStencilPicker
         RenderSystem.setProjectionMatrix(this.controller.panel.lastProjection, VertexSorter.BY_Z);
         InverseViewRotation.setOverride(new Matrix3f(this.controller.panel.lastView).invert());
 
-        /* Render the stencil */
+        /* Render the stencil. The caller clips the highlight to the preview, but that clip is a
+         * scissor box in window pixels: left on, it would also cut the clear and every draw of the
+         * off-screen pick buffer, whose pixels have nothing to do with the window's - the buffer
+         * would only be written inside an unrelated rectangle, and bones under the cursor would
+         * only be found when they happened to land in it. Off for the pass, back on for the overlay. */
+        boolean scissor = GL11.glIsEnabled(GL11.GL_SCISSOR_TEST);
         MatrixStack worldStack = this.controller.worldRenderContext().matrixStack();
 
-        worldStack.push();
-        worldStack.loadIdentity();
-        MatrixStackUtils.multiply(worldStack, this.controller.panel.lastView);
-        this.renderStencil(this.controller.worldRenderContext(), this.controller.getContext(), altPressed);
-        worldStack.pop();
+        GlStateManager._disableScissorTest();
+
+        try
+        {
+            worldStack.push();
+            worldStack.loadIdentity();
+            MatrixStackUtils.multiply(worldStack, this.controller.panel.lastView);
+            this.renderStencil(this.controller.worldRenderContext(), this.controller.getContext(), altPressed);
+            worldStack.pop();
+        }
+        finally
+        {
+            if (scissor)
+            {
+                GlStateManager._enableScissorTest();
+            }
+        }
 
         /* Return back to orthographic projection */
         MatrixStackUtils.restoreMatrices();

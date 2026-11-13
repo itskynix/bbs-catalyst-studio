@@ -341,10 +341,10 @@ public class UIFilmPreview extends UIElement
             });
             menu.action(Icons.IN, UIKeys.CAMERA_EDITOR_KEYS_LOOPING_SET_MIN, () -> this.panel.cameraEditor.clips.setLoopMin());
             menu.action(Icons.OUT, UIKeys.CAMERA_EDITOR_KEYS_LOOPING_SET_MAX, () -> this.panel.cameraEditor.clips.setLoopMax());
-            menu.action(Icons.LEFT_HANDLE, mchorse.bbs_mod.l10n.keys.IKey.raw("Mark In"), () -> this.panel.cameraEditor.clips.setInPoint());
-            menu.action(Icons.RIGHT_HANDLE, mchorse.bbs_mod.l10n.keys.IKey.raw("Mark Out"), () -> this.panel.cameraEditor.clips.setOutPoint());
-            menu.action(Icons.FULLSCREEN, mchorse.bbs_mod.l10n.keys.IKey.raw("Mark Clip"), () -> this.panel.cameraEditor.clips.markClip());
-            menu.action(Icons.CLOSE, mchorse.bbs_mod.l10n.keys.IKey.raw("Clear In Out"), () -> this.panel.cameraEditor.clips.clearInOut());
+            menu.action(Icons.LEFT_HANDLE, UIKeys.FILM_TIMELINE_MARK_IN, () -> this.panel.cameraEditor.clips.setInPoint());
+            menu.action(Icons.RIGHT_HANDLE, UIKeys.FILM_TIMELINE_MARK_OUT, () -> this.panel.cameraEditor.clips.setOutPoint());
+            menu.action(Icons.FULLSCREEN, UIKeys.FILM_TIMELINE_MARK_CLIP, () -> this.panel.cameraEditor.clips.markClip());
+            menu.action(Icons.CLOSE, UIKeys.FILM_TIMELINE_CLEAR_IN_OUT, () -> this.panel.cameraEditor.clips.clearInOut());
         });
 
         this.recordVideo = new UIIcon(Icons.VIDEO_CAMERA, (b) ->

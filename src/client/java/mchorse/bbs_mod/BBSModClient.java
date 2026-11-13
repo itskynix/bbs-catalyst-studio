@@ -681,6 +681,7 @@ public class BBSModClient implements ClientModInitializer
             .register(Link.bbs("audio"), AudioClientClip.class, new ClipFactoryData(Icons.SOUND, 0xffc825))
             .register(Link.bbs("video"), VideoClientClip.class, new ClipFactoryData(Icons.VIDEO_CAMERA, 0xd21f3c))
             .register(Link.bbs("tracker"), TrackerClientClip.class, new ClipFactoryData(Icons.USER, 0x4cedfc))
+            .register(Link.bbs("third_person"), mchorse.bbs_mod.camera.clips.misc.ThirdPersonClientClip.class, new ClipFactoryData(Icons.FRUSTUM, 0x2eb67d))
             .register(Link.bbs("actor_eye"), mchorse.bbs_mod.camera.clips.misc.ActorEyeClientClip.class, new ClipFactoryData(Icons.CAMERA, 0x2fa8a0))
             .register(Link.bbs("curve"), CurveClientClip.class, new ClipFactoryData(Icons.ARC, 0xff1493));
 

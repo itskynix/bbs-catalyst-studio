@@ -260,6 +260,16 @@ public class UIKeys
     public static final IKey CAMERA_PANELS_TARGET = L10n.lang("bbs.ui.camera.panels.target");
     public static final IKey CAMERA_PANELS_TARGET_TITLE = L10n.lang("bbs.ui.camera.panels.target-title");
     public static final IKey CAMERA_PANELS_TARGET_TOOLTIP = L10n.lang("bbs.ui.camera.panels.target-tooltip");
+    public static final IKey THIRD_PERSON_ARM = L10n.lang("bbs.ui.camera.third_person.arm");
+    public static final IKey THIRD_PERSON_BONE_TOOLTIP = L10n.lang("bbs.ui.camera.third_person.bone-tooltip");
+    public static final IKey THIRD_PERSON_FOLLOW_YAW = L10n.lang("bbs.ui.camera.third_person.follow_yaw");
+    public static final IKey THIRD_PERSON_FOLLOW_YAW_TOOLTIP = L10n.lang("bbs.ui.camera.third_person.follow_yaw-tooltip");
+    public static final IKey THIRD_PERSON_POSITION_LAG = L10n.lang("bbs.ui.camera.third_person.position_lag");
+    public static final IKey THIRD_PERSON_POSITION_LAG_TOOLTIP = L10n.lang("bbs.ui.camera.third_person.position_lag-tooltip");
+    public static final IKey THIRD_PERSON_ROTATION_LAG = L10n.lang("bbs.ui.camera.third_person.rotation_lag");
+    public static final IKey THIRD_PERSON_ROTATION_LAG_TOOLTIP = L10n.lang("bbs.ui.camera.third_person.rotation_lag-tooltip");
+    public static final IKey THIRD_PERSON_COLLISION = L10n.lang("bbs.ui.camera.third_person.collision");
+    public static final IKey THIRD_PERSON_COLLISION_TOOLTIP = L10n.lang("bbs.ui.camera.third_person.collision-tooltip");
     public static final IKey CAMERA_PANELS_TICK = L10n.lang("bbs.ui.camera.panels.tick");
     public static final IKey CAMERA_PANELS_TITLE = L10n.lang("bbs.ui.camera.panels.title");
     public static final IKey CAMERA_PANELS_TITLE_TOOLTIP = L10n.lang("bbs.ui.camera.panels.title_tooltip");
@@ -903,6 +913,10 @@ public class UIKeys
     public static final IKey FILM_ADD_CAMERA_POSE_DONE = L10n.lang("bbs.ui.film.add_camera_pose.done");
     public static final IKey FILM_ADD_CAMERA_POSE_NO_CLIP = L10n.lang("bbs.ui.film.add_camera_pose.no_clip");
     public static final IKey FILM_PREVIEW_RESET_ZOOM = L10n.lang("bbs.ui.film.preview.reset_zoom");
+    public static final IKey FILM_TIMELINE_MARK_IN = L10n.lang("bbs.ui.film.timeline.mark_in");
+    public static final IKey FILM_TIMELINE_MARK_OUT = L10n.lang("bbs.ui.film.timeline.mark_out");
+    public static final IKey FILM_TIMELINE_MARK_CLIP = L10n.lang("bbs.ui.film.timeline.mark_clip");
+    public static final IKey FILM_TIMELINE_CLEAR_IN_OUT = L10n.lang("bbs.ui.film.timeline.clear_in_out");
     public static final IKey FILM_PREVIEW_ZOOM_TOOLTIP = L10n.lang("bbs.ui.film.preview.zoom_tooltip");
     public static final IKey FILM_TOGGLE_SHADERS = L10n.lang("bbs.ui.film.toggle_shaders");
     public static final IKey FILM_GREEN_SCREEN = L10n.lang("bbs.ui.film.green_screen");
