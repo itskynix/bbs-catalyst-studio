@@ -3,6 +3,7 @@ package mchorse.bbs_mod.ui.dashboard.panels;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.UIKeys;
+import mchorse.bbs_mod.ui.dashboard.menu.UIGlobalMenuBar;
 import mchorse.bbs_mod.ui.dashboard.panels.tabs.UIDataTabs;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
@@ -29,6 +30,12 @@ public class UIDashboardPanels extends UIElement
 
     /** The global tab strip along the very top, above the panel and (when docked there) the bar. */
     public static final int TABS = UIDataTabs.TABS_HEIGHT_PX;
+
+    /** The application menu bar above the tab strip, along the very top. */
+    public static final int MENU = UIGlobalMenuBar.HEIGHT;
+
+    /** Everything above the panel: the menu bar and the tab strip. */
+    public static final int TOP = MENU + TABS;
 
     /**
      * The edges the bar can be docked to, in the order they are offered — and the order
@@ -168,7 +175,7 @@ public class UIDashboardPanels extends UIElement
 
             if (side == Direction.TOP)
             {
-                this.taskBar.y(TABS);
+                this.taskBar.y(TOP);
             }
             this.pinned.h(BAR).row(0).resize();
             this.panelButtons.x(1F, 5).h(BAR).wTo(this.taskBar.area, 1F).row(0).scroll();
@@ -181,7 +188,7 @@ public class UIDashboardPanels extends UIElement
         }
         else
         {
-            this.taskBar.w(BAR).y(TABS).h(1F, -TABS);
+            this.taskBar.w(BAR).y(TOP).h(1F, -TOP);
             this.pinned.w(BAR).column(0).vertical();
             this.panelButtons.y(1F, 5).w(BAR).hTo(this.taskBar.area, 1F).column(0).vertical().scroll();
             this.panelButtons.scroll.direction = ScrollDirection.VERTICAL;
@@ -300,10 +307,10 @@ public class UIDashboardPanels extends UIElement
 
         switch (this.side)
         {
-            case TOP -> panel.y(BAR + TABS).w(1F).h(1F, -BAR - TABS);
-            case LEFT -> panel.x(BAR).y(TABS).w(1F, -BAR).h(1F, -TABS);
-            case RIGHT -> panel.y(TABS).w(1F, -BAR).h(1F, -TABS);
-            default -> panel.y(TABS).w(1F).h(1F, -BAR - TABS);
+            case TOP -> panel.y(BAR + UIDashboardPanels.TOP).w(1F).h(1F, -BAR - UIDashboardPanels.TOP);
+            case LEFT -> panel.x(BAR).y(UIDashboardPanels.TOP).w(1F, -BAR).h(1F, -UIDashboardPanels.TOP);
+            case RIGHT -> panel.y(UIDashboardPanels.TOP).w(1F, -BAR).h(1F, -UIDashboardPanels.TOP);
+            default -> panel.y(UIDashboardPanels.TOP).w(1F).h(1F, -BAR - UIDashboardPanels.TOP);
         }
     }
 
@@ -324,10 +331,19 @@ public class UIDashboardPanels extends UIElement
      */
     public UIDataTabs setTabStrip(UIDataTabs strip)
     {
-        strip.relative(this).x(0).y(0).w(1F).h(TABS);
+        strip.relative(this).x(0).y(MENU).w(1F).h(TABS);
         this.add(strip);
 
         return strip;
+    }
+
+    /** Put the application menu bar along the very top, above the tab strip. */
+    public UIGlobalMenuBar setMenuBar(UIGlobalMenuBar bar)
+    {
+        bar.relative(this).x(0).y(0).w(1F).h(MENU);
+        this.add(bar);
+
+        return bar;
     }
 
     /** Register a panel that has no button in the bar: it is reached through the Central Hub. */

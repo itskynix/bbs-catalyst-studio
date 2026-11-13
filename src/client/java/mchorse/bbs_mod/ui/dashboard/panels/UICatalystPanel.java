@@ -109,8 +109,21 @@ import mchorse.bbs_mod.audio.Wave;
  *  - Timeline supports click-to-scrub and drag-scrub (mouseDown + mouseScroll mapped).
  *  - Play/Pause advances currentFrame at ~60 FPS via render-tick counter; playhead updates live.
  */
-public class UICatalystPanel extends UIDashboardPanel
+public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod.ui.dashboard.menu.IGlobalMenuProvider
 {
+    @Override
+    public boolean hasEditMenu()
+    {
+        return true;
+    }
+
+    @Override
+    public void fillEditMenu(mchorse.bbs_mod.ui.utils.context.ContextMenuManager menu)
+    {
+        menu.action(Icons.UNDO, UIKeys.MENU_EDIT_UNDO, this::undo).key(org.lwjgl.glfw.GLFW.GLFW_KEY_Z, org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT_CONTROL);
+        menu.action(Icons.REDO, UIKeys.MENU_EDIT_REDO, this::redo).key(org.lwjgl.glfw.GLFW.GLFW_KEY_Y, org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT_CONTROL);
+    }
+
     public enum CatalystTab { PROJECTS, EDITOR }
 
     /* ── State ── */

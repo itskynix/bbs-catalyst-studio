@@ -15,6 +15,10 @@ import mchorse.bbs_mod.resources.Link;
 import mchorse.bbs_mod.settings.ui.UISettingsOverlayPanel;
 import mchorse.bbs_mod.ui.Keys;
 import mchorse.bbs_mod.ui.UIKeys;
+import mchorse.bbs_mod.ui.dashboard.menu.UIAboutModal;
+import mchorse.bbs_mod.ui.dashboard.menu.UIGlobalMenuBar;
+import mchorse.bbs_mod.ui.dashboard.panels.landing.UIChangelogView;
+import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.dashboard.panels.IFlightSupported;
 import mchorse.bbs_mod.ui.dashboard.panels.UIDashboardPanel;
 import mchorse.bbs_mod.ui.dashboard.panels.UICatalystPanel;
@@ -78,6 +82,7 @@ public class UIDashboard extends UIBaseMenu
 
     private UIDashboardPanels panels;
     private UIGlobalTabs globalTabs;
+    private UIGlobalMenuBar menuBar;
 
     public UIIcon settings;
     public UIIcon selectors;
@@ -103,9 +108,11 @@ public class UIDashboard extends UIBaseMenu
         this.panels = new UIDashboardPanels();
         this.globalTabs = new UIGlobalTabs(this);
         this.globalTabs.setBar(this.panels.setTabStrip(new UIDataTabs(this.globalTabs)));
+        this.menuBar = this.panels.setMenuBar(new UIGlobalMenuBar(this));
         this.panels.getEvents().register(UIDashboardPanels.PanelEvent.class, (e) ->
         {
             this.globalTabs.onPanelChanged();
+            this.menuBar.setPanel(e.panel);
 
             this.orbitUI.setControl(this.panels.isFlightSupported());
 
@@ -279,6 +286,33 @@ public class UIDashboard extends UIBaseMenu
         }
 
         this.globalTabs.pick(target);
+    }
+
+    /** File > Back to the Hub: the Central Hub, if it is not what is on screen already. */
+    public void returnToHub()
+    {
+        UIDashboardPanel hub = this.getPanel(UICentralHubPanel.class);
+
+        if (hub != null && this.panels.panel != hub)
+        {
+            this.setPanel(hub);
+        }
+    }
+
+    /** Help > About: the same small window from every editor. */
+    public void openAbout(UIContext context)
+    {
+        UIOverlay.addOverlay(context, new UIAboutModal(this), UIAboutModal.WIDTH, UIAboutModal.HEIGHT);
+    }
+
+    /** Help > What's New: the release notes window over whatever is on screen. */
+    public void openChangelog(UIContext context)
+    {
+        UIChangelogView view = new UIChangelogView();
+
+        view.full(this.overlay);
+        this.overlay.add(view);
+        this.overlay.resize();
     }
 
     /** + and Ctrl+N: a new "Central Hub" tab, whatever is on screen. */

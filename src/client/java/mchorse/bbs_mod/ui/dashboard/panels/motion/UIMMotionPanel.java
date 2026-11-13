@@ -2744,7 +2744,7 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
         this.onClose(this::releasePanelResources);
         this.onDisappear(this::releasePanelResources);
 
-        int topBarH = this.topBar != null && this.topBar.area.h > 0 ? this.topBar.area.h : UIPanelTopBar.HEIGHT;
+        int topBarH = 0;
         this.editor.relative(this).x(0).y(topBarH).w(1F).h(1F, -topBarH);
         this.editor.markContainer().noCulling();
 
@@ -2974,7 +2974,7 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
         if (this.editor != null)
         {
             this.editor.setVisible(true);
-            int topBarH = this.topBar != null && this.topBar.area.h > 0 ? this.topBar.area.h : UIPanelTopBar.HEIGHT;
+            int topBarH = 0;
             this.editor.relative(this).x(0).y(topBarH).w(1F).h(1F, -topBarH);
         }
 
@@ -6202,7 +6202,7 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
             return;
         }
 
-        int topBarH = this.topBar != null && this.topBar.area.h > 0 ? this.topBar.area.h : UIPanelTopBar.HEIGHT;
+        int topBarH = 0;
         this.editor.relative(this).x(0).y(topBarH).w(1F).h(1F, -topBarH);
         Area ea = this.editor.area;
         if (ea.w <= 0 || ea.h <= 0)
@@ -6272,7 +6272,7 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
     @Override
     public void resize()
     {
-        int topBarH = this.topBar != null && this.topBar.area.h > 0 ? this.topBar.area.h : UIPanelTopBar.HEIGHT;
+        int topBarH = 0;
         if (this.editor != null)
         {
             this.editor.relative(this).x(0).y(topBarH).w(1F).h(1F, -topBarH);
@@ -6513,6 +6513,24 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
             this.pendingSnapshot = current;
             this.commitPending();
         }
+    }
+
+    @Override
+    protected boolean canMenuUndo()
+    {
+        return true;
+    }
+
+    @Override
+    protected void menuUndo()
+    {
+        this.undo();
+    }
+
+    @Override
+    protected void menuRedo()
+    {
+        this.redo();
     }
 
     public void undo()
@@ -7161,7 +7179,7 @@ public class UIMMotionPanel extends UIEditorDashboardPanel
         {
             this.transformEditor.getGesture().pump(context);
         }
-        int topBarH = this.topBar != null && this.topBar.area.h > 0 ? this.topBar.area.h : UIPanelTopBar.HEIGHT;
+        int topBarH = 0;
 
         /* Render dark opaque backdrop when in editor view to prevent any transparent bleed-through */
         if (this.editor != null && this.editor.isVisible() && this.area.w > 0 && this.area.h > 0)

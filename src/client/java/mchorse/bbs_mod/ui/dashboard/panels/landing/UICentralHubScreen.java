@@ -57,6 +57,19 @@ public class UICentralHubScreen extends UIElement
         new Card(UIKeys.CENTRAL_HUB_CARD_TEXTURE_TITLE, UIKeys.CENTRAL_HUB_CARD_TEXTURE_DESC, Icons.MATERIAL, UITextureManagerPanel.class, false)
     );
 
+    /** The editors the hub leads to, in the order of its cards. */
+    public static List<Class<? extends UIDashboardPanel>> workspaces()
+    {
+        List<Class<? extends UIDashboardPanel>> out = new ArrayList<>();
+
+        for (Card card : CARDS)
+        {
+            out.add(card.panel());
+        }
+
+        return out;
+    }
+
     /** The card of an editor, by its panel class; null for a panel that has none. */
     private static Card cardOf(Class<? extends UIDashboardPanel> panel)
     {

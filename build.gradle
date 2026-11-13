@@ -87,15 +87,49 @@ def generateBuildInfo = tasks.register("generateBuildInfo") {
 	def outDir = buildInfoDir
 	def infoVersion = fabricModVersion.toString()
 
+	def mcVersion = project.minecraft_version.toString()
+	def gitRoot = rootProject.projectDir
+
 	inputs.property("stage", buildStage)
 	inputs.property("infoVersion", infoVersion)
+	inputs.property("mcVersion", mcVersion)
 	outputs.dir(outDir)
 
+	/* The commit count and hash move with every commit and the date with every day, none of which are inputs Gradle
+	 * could see: so the task always runs, and processResources only reruns when what it wrote actually changed. */
+	outputs.upToDateWhen { false }
+
 	doLast {
+		def git = { String... args ->
+			try
+			{
+				def process = (["git"] + args.toList()).execute(null, gitRoot)
+				def text = process.text.trim()
+
+				process.waitFor()
+
+				return process.exitValue() == 0 && !text.isEmpty() ? text : null
+			}
+			catch (Throwable ignored)
+			{
+				return null
+			}
+		}
+
+		def commit = git("rev-parse", "--short", "HEAD") ?: "nogit"
+		def count = git("rev-list", "--count", "HEAD") ?: "0"
+		def date = new Date().format("yyyyMMdd")
 		def file = outDir.get().file("assets/bbs/build_info.json").asFile
 
 		file.parentFile.mkdirs()
-		file.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([stage: buildStage, version: infoVersion])) + System.lineSeparator()
+		file.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([
+			stage       : buildStage,
+			version     : infoVersion,
+			mod_version : project.mod_version.toString(),
+			mc_version  : mcVersion,
+			build_number: date + "." + count,
+			commit      : commit
+		])) + System.lineSeparator()
 	}
 }
 

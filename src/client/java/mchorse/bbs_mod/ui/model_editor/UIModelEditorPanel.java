@@ -783,6 +783,24 @@ public class UIModelEditorPanel extends UIDataDashboardPanel<ModelConfig>
         }
     }
 
+    @Override
+    protected boolean canMenuUndo()
+    {
+        return this.data != null;
+    }
+
+    @Override
+    protected void menuUndo()
+    {
+        this.undo();
+    }
+
+    @Override
+    protected void menuRedo()
+    {
+        this.redo();
+    }
+
     public void undo()
     {
         if (this.data != null && this.undoHandler != null && this.undoHandler.getUndoManager().undo(this.data))

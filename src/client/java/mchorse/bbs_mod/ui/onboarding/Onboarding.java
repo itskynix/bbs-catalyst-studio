@@ -12,7 +12,6 @@ import mchorse.bbs_mod.ui.framework.elements.overlay.UIOverlay;
 import mchorse.bbs_mod.ui.model_blocks.UIModelBlockPanel;
 import mchorse.bbs_mod.ui.model_editor.UIModelEditorPanel;
 import mchorse.bbs_mod.ui.morphing.UIMorphingPanel;
-import mchorse.bbs_mod.ui.onboarding.welcome.UIWelcomeOverlayPanel;
 import mchorse.bbs_mod.ui.particles.UIParticleSchemePanel;
 import mchorse.bbs_mod.ui.utility.audio.UIAudioEditorPanel;
 
@@ -95,28 +94,6 @@ public class Onboarding
         {
             start(context, chapter);
         }
-    }
-
-    /** The welcome screen, whether for the first time or from the settings. */
-    public static void showWelcome(UIContext context)
-    {
-        UIWelcomeOverlayPanel panel = new UIWelcomeOverlayPanel();
-
-        /* The context is taken now: by the time the close event fires the panel is already off
-         * the tree, and a panel off the tree has no context to ask for */
-        panel.onClose((e) -> welcomeClosed(context));
-
-        abandon();
-
-        /* It paints the whole screen itself; dimming and blurring under it would be wasted work */
-        UIOverlay.addOverlay(context, panel, 1F, 1F).noBackground();
-    }
-
-    /** The welcome screen went down, however it went down: the tour is what comes next. */
-    public static void welcomeClosed(UIContext context)
-    {
-        BBSSettings.onboardingWelcomeSeen.set(true);
-        start(context, Tours.DASHBOARD);
     }
 
     /** Forget every chapter walked, and start over from where the user is. */

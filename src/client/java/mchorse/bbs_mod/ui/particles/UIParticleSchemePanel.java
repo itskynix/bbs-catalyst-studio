@@ -294,6 +294,24 @@ public class UIParticleSchemePanel extends UIDataDashboardPanel<ParticleScheme>
         }
     }
 
+    @Override
+    protected boolean canMenuUndo()
+    {
+        return this.data != null;
+    }
+
+    @Override
+    protected void menuUndo()
+    {
+        this.undo();
+    }
+
+    @Override
+    protected void menuRedo()
+    {
+        this.redo();
+    }
+
     public void undo()
     {
         if (this.data != null && this.undoManager != null && this.undoManager.undo(this.data))

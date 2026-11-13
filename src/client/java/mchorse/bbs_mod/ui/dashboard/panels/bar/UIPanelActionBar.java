@@ -219,6 +219,19 @@ public class UIPanelActionBar extends UIElement
         return icon != null && icon.isVisible();
     }
 
+    /**
+     * Move this row of buttons under another element, at its right end: the panel's own top bar, or
+     * the application menu bar while this panel is on screen.
+     */
+    public void attachTo(UIElement parent)
+    {
+        this.removeFromParent();
+        this.relative(parent).x(1F).y(0).h(UIPanelTopBar.HEIGHT).anchorX(1F);
+        this.w(this.getContentWidth());
+
+        parent.add(this);
+    }
+
     /** Width this bar needs, so the tab strip beside it knows where to stop. */
     public int getContentWidth()
     {

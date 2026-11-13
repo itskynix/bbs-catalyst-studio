@@ -4,7 +4,13 @@ import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.Keys;
 import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.dashboard.UIDashboard;
+import mchorse.bbs_mod.ui.dashboard.menu.IGlobalMenuProvider;
 import mchorse.bbs_mod.ui.dashboard.panels.bar.UIPanelActionBar;
+import mchorse.bbs_mod.ui.utils.UIUtils;
+import mchorse.bbs_mod.ui.utils.context.ContextMenuManager;
+import org.lwjgl.glfw.GLFW;
+
+import java.io.File;
 import mchorse.bbs_mod.ui.dashboard.panels.bar.UIPanelTopBar;
 import mchorse.bbs_mod.ui.dashboard.panels.landing.ILandingHost;
 import mchorse.bbs_mod.ui.dashboard.panels.landing.UILandingScreen;
@@ -31,7 +37,7 @@ import java.util.Collection;
  * <p>So does the landing screen of an empty tab: the panel calls {@link #mountLanding()} and this
  * class owns the rest — where it sits, when it shows, and what it knows still exists.</p>
  */
-public abstract class UIEditorDashboardPanel extends UIDashboardPanel implements IUITabsHost, ILandingHost
+public abstract class UIEditorDashboardPanel extends UIDashboardPanel implements IUITabsHost, ILandingHost, IGlobalMenuProvider
 {
     public final UIPanelTopBar topBar;
     public final UIElement editor;
@@ -49,7 +55,10 @@ public abstract class UIEditorDashboardPanel extends UIDashboardPanel implements
         this.tabs = new UITabList(this);
 
         this.topBar = new UIPanelTopBar();
-        this.topBar.relative(this).w(1F).h(UIPanelTopBar.HEIGHT);
+        /* Nothing of its own is left in it: the actions are shown by the menu bar at the very top of the
+         * dashboard (see UIGlobalMenuBar), so the bar takes no room and the editor starts at the top. */
+        this.topBar.relative(this).w(1F).h(0);
+        this.topBar.setVisible(false);
         /* No strip of its own: the tabs of every editor live in the dashboard's global strip, which
          * reads them from this list — see UIGlobalTabs. The bar keeps just the actions. */
         this.tabs.setListener(dashboard::syncGlobalTabs);
@@ -84,13 +93,80 @@ public abstract class UIEditorDashboardPanel extends UIDashboardPanel implements
         return this.topBar.actions;
     }
 
+    /* IGlobalMenuProvider — the application menu bar takes over what the top bar showed */
+
+    @Override
+    public UIPanelActionBar getQuickActions()
+    {
+        return this.topBar.actions;
+    }
+
+    @Override
+    public void fillFileMenu(ContextMenuManager menu)
+    {
+        IKey create = this.getCreateLabel();
+
+        if (create != null)
+        {
+            menu.action(Icons.ADD, create, () -> this.addNewData(this.getContext()));
+        }
+
+        if (this.saveInMenu())
+        {
+            menu.action(Icons.SAVED, UIKeys.GENERAL_SAVE, this::saveOpen).key(GLFW.GLFW_KEY_S, GLFW.GLFW_KEY_LEFT_CONTROL);
+        }
+
+        menu.action(Icons.MORE, this.getListLabel(), this::openDataManager);
+
+        File folder = this.getDataFolder();
+
+        if (folder != null)
+        {
+            menu.action(Icons.FOLDER, UIKeys.MENU_FILE_OPEN_FOLDER, () -> UIUtils.openFolder(folder));
+        }
+    }
+
+    /** Whether the File menu offers Save: for panels that edit a document, which is what {@link #saveOpen()} saves. */
+    protected boolean saveInMenu()
+    {
+        return false;
+    }
+
+    @Override
+    public boolean hasEditMenu()
+    {
+        return this.canMenuUndo();
+    }
+
+    @Override
+    public void fillEditMenu(ContextMenuManager menu)
+    {
+        if (this.canMenuUndo())
+        {
+            menu.action(Icons.UNDO, UIKeys.MENU_EDIT_UNDO, this::menuUndo).key(GLFW.GLFW_KEY_Z, GLFW.GLFW_KEY_LEFT_CONTROL);
+            menu.action(Icons.REDO, UIKeys.MENU_EDIT_REDO, this::menuRedo).key(GLFW.GLFW_KEY_Y, GLFW.GLFW_KEY_LEFT_CONTROL);
+        }
+    }
+
+    /** Whether the editor has a history to step through; the Edit menu is only there for those that do. */
+    protected boolean canMenuUndo()
+    {
+        return false;
+    }
+
+    protected void menuUndo()
+    {}
+
+    protected void menuRedo()
+    {}
+
     /**
      * Stretch an element across everything below the top bar — the editor itself, and the
      * selection screens that cover it.
      */
     protected <T extends UIElement> T layoutUnderTopBar(T element)
     {
-        element.relative(this).y(UIPanelTopBar.HEIGHT).w(1F).h(1F, -UIPanelTopBar.HEIGHT);
+        element.relative(this).y(0).w(1F).h(1F);
 
         return element;
     }

@@ -1406,22 +1406,6 @@ public class UIKeys
     public static final IKey GENERAL_RIGHT_CLICK = L10n.lang("bbs.ui.right_click");
 
     /* First run: the welcome screen and the tours */
-    public static final IKey ONBOARDING_WELCOME_TITLE = L10n.lang("bbs.ui.onboarding.welcome.title");
-    public static final IKey ONBOARDING_APPEARANCE_TITLE = L10n.lang("bbs.ui.onboarding.appearance.title");
-    public static final IKey ONBOARDING_APPEARANCE_SLOGAN = L10n.lang("bbs.ui.onboarding.appearance.slogan");
-    public static final IKey ONBOARDING_APPEARANCE_SWATCH_DARK = L10n.lang("bbs.ui.onboarding.appearance.swatch.dark");
-    public static final IKey ONBOARDING_APPEARANCE_SWATCH_LIGHT = L10n.lang("bbs.ui.onboarding.appearance.swatch.light");
-    public static final IKey ONBOARDING_APPEARANCE_SWATCH_WARM = L10n.lang("bbs.ui.onboarding.appearance.swatch.warm");
-    public static final IKey ONBOARDING_APPEARANCE_SWATCH_COOL = L10n.lang("bbs.ui.onboarding.appearance.swatch.cool");
-    public static final IKey ONBOARDING_ENCODER_TITLE = L10n.lang("bbs.ui.onboarding.encoder.title");
-    public static final IKey ONBOARDING_ENCODER_SLOGAN = L10n.lang("bbs.ui.onboarding.encoder.slogan");
-    public static final IKey ONBOARDING_ENCODER_FOUND = L10n.lang("bbs.ui.onboarding.encoder.found");
-    public static final IKey ONBOARDING_ENCODER_MISSING = L10n.lang("bbs.ui.onboarding.encoder.missing");
-    public static final IKey ONBOARDING_ENCODER_CHECKING = L10n.lang("bbs.ui.onboarding.encoder.checking");
-    public static final IKey ONBOARDING_ENCODER_PICK = L10n.lang("bbs.ui.onboarding.encoder.pick");
-    public static final IKey ONBOARDING_ENCODER_DOWNLOAD = L10n.lang("bbs.ui.onboarding.encoder.download");
-    public static final IKey ONBOARDING_LAYOUT_TITLE = L10n.lang("bbs.ui.onboarding.layout.title");
-    public static final IKey ONBOARDING_LAYOUT_SLOGAN = L10n.lang("bbs.ui.onboarding.layout.slogan");
     public static final IKey ONBOARDING_LAYOUT_DEFAULT = L10n.lang("bbs.ui.onboarding.layout.default");
     public static final IKey ONBOARDING_LAYOUT_DEFAULT_DESCRIPTION = L10n.lang("bbs.ui.onboarding.layout.default-description");
     public static final IKey ONBOARDING_LAYOUT_BBS_OLD = L10n.lang("bbs.ui.onboarding.layout.bbs_old");
@@ -1430,12 +1414,7 @@ public class UIKeys
     public static final IKey ONBOARDING_LAYOUT_MINI_DESCRIPTION = L10n.lang("bbs.ui.onboarding.layout.mini-description");
     public static final IKey ONBOARDING_LAYOUT_SHORT = L10n.lang("bbs.ui.onboarding.layout.short");
     public static final IKey ONBOARDING_LAYOUT_SHORT_DESCRIPTION = L10n.lang("bbs.ui.onboarding.layout.short-description");
-    public static final IKey ONBOARDING_NEXT_TITLE = L10n.lang("bbs.ui.onboarding.next.title");
-    public static final IKey ONBOARDING_NEXT_SLOGAN = L10n.lang("bbs.ui.onboarding.next.slogan");
-    public static final IKey ONBOARDING_NEXT_KEYS = L10n.lang("bbs.ui.onboarding.next.keys");
-    public static final IKey ONBOARDING_NEXT_START = L10n.lang("bbs.ui.onboarding.next.start");
     public static final IKey ONBOARDING_SETTINGS_TITLE = L10n.lang("bbs.ui.onboarding.settings.title");
-    public static final IKey ONBOARDING_SETTINGS_SHOW_WELCOME = L10n.lang("bbs.ui.onboarding.settings.show_welcome");
     public static final IKey ONBOARDING_SETTINGS_RESET_TOURS = L10n.lang("bbs.ui.onboarding.settings.reset_tours");
     public static final IKey ONBOARDING_TOUR_NEXT = L10n.lang("bbs.ui.onboarding.tour.next");
     public static final IKey ONBOARDING_TOUR_COUNTER = L10n.lang("bbs.ui.onboarding.tour.counter");
@@ -1587,6 +1566,33 @@ public class UIKeys
     public static final IKey CENTRAL_HUB_SUBTITLE = L10n.lang("bbs.central_hub.subtitle");
     public static final IKey CENTRAL_HUB_BADGE_NEW = L10n.lang("bbs.central_hub.badge.new");
     public static final IKey CENTRAL_HUB_TAB = L10n.lang("bbs.central_hub.tab");
+
+    /* Application menu bar and the About window */
+    public static final IKey MENU_FILE = L10n.lang("bbs.ui.menu.file");
+    public static final IKey MENU_EDIT = L10n.lang("bbs.ui.menu.edit");
+    public static final IKey MENU_WINDOW = L10n.lang("bbs.ui.menu.window");
+    public static final IKey MENU_TOOLS = L10n.lang("bbs.ui.menu.tools");
+    public static final IKey MENU_HELP = L10n.lang("bbs.ui.menu.help");
+    public static final IKey MENU_FILE_BACK_TO_HUB = L10n.lang("bbs.ui.menu.file.back_to_hub");
+    public static final IKey MENU_FILE_EXIT = L10n.lang("bbs.ui.menu.file.exit");
+    public static final IKey MENU_FILE_OPEN_FOLDER = L10n.lang("bbs.ui.menu.file.open_folder");
+    public static final IKey MENU_EDIT_UNDO = L10n.lang("bbs.ui.menu.edit.undo");
+    public static final IKey MENU_EDIT_REDO = L10n.lang("bbs.ui.menu.edit.redo");
+    public static final IKey MENU_WINDOW_HUB = L10n.lang("bbs.ui.menu.window.hub");
+    public static final IKey MENU_TOOLS_CAMERA_EDITOR = L10n.lang("bbs.ui.menu.tools.camera_editor");
+    public static final IKey MENU_TOOLS_REPLAY_EDITOR = L10n.lang("bbs.ui.menu.tools.replay_editor");
+    public static final IKey MENU_TOOLS_POV_EDITOR = L10n.lang("bbs.ui.menu.tools.pov_editor");
+    public static final IKey MENU_TOOLS_WORLD_EDITOR = L10n.lang("bbs.ui.menu.tools.world_editor");
+    public static final IKey MENU_HELP_WHATS_NEW = L10n.lang("bbs.ui.menu.help.whats_new");
+    public static final IKey MENU_HELP_ABOUT = L10n.lang("bbs.ui.menu.help.about");
+    public static final IKey ABOUT_TITLE = L10n.lang("bbs.ui.about.title");
+    public static final IKey ABOUT_SUBTITLE = L10n.lang("bbs.ui.about.subtitle");
+    public static final IKey ABOUT_VERSION = L10n.lang("bbs.ui.about.version");
+    public static final IKey ABOUT_MINECRAFT = L10n.lang("bbs.ui.about.minecraft");
+    public static final IKey ABOUT_BUILD = L10n.lang("bbs.ui.about.build");
+    public static final IKey ABOUT_CHANNEL = L10n.lang("bbs.ui.about.channel");
+    public static final IKey ABOUT_AUTHORS = L10n.lang("bbs.ui.about.authors");
+    public static final IKey ABOUT_VIEW_CHANGES = L10n.lang("bbs.ui.about.view_changes");
     public static final IKey CENTRAL_HUB_TAB_SUFFIX = L10n.lang("bbs.central_hub.tab_suffix");
     public static final IKey CENTRAL_HUB_NEW_TAB_TOOLTIP = L10n.lang("bbs.central_hub.new_tab_tooltip");
     public static final IKey CENTRAL_HUB_CLOSE_TAB_TOOLTIP = L10n.lang("bbs.central_hub.close_tab_tooltip");

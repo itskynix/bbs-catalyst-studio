@@ -144,11 +144,6 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
     public UIDockLayout dock;
     public UIFilmRecorder recorder;
     public UIFilmPreview preview;
-    public UIElement menuBar;
-    public UIMenuBarItem menuWindow;
-    public UIMenuBarItem menuTools;
-    public UIMenuBarItem menuHelp;
-
     public boolean leftDrawerActive;
     public boolean leftDrawerOpen;
     public boolean leftDrawerPinned;
@@ -173,15 +168,10 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
 
     /* Icon bar buttons */
     public UIIcon openFilmMenu;
-    public UIMenuBarItem menuEdit;
-    public UIIcon menuDataManager;
-    public UIIcon menuLock;
     public UIIcon openCameraEditor;
     public UIIcon openReplayEditor;
     public UIIcon openPovEditor;
     public UIIcon openWorldEditor;
-    public UIIcon openCopilot;
-    public mchorse.bbs_mod.catalyst.ai.UICatalystAIPanel catalystAI;
     public UIIcon layoutLock;
 
     private UICopyPasteController layoutPresetsController;
@@ -294,19 +284,16 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.openPovEditor.tooltip(UIKeys.FILM_OPEN_POV_EDITOR);
         this.openWorldEditor.tooltip(UIKeys.FILM_OPEN_WORLD_EDITOR);
 
-        this.openCopilot = new UIIcon(Icons.SPARKLES, (b) -> this.toggleCatalystAI());
-        this.openCopilot.tooltip(L10n.lang("bbs.catalyst_ai.title"));
-
-        /* What the tour of this editor points at. The two editor buttons are one place: they
+        /* What the tour of this editor points at. The three editor buttons (camera, character, POV) are one place: they
          * only mean something as a pair. */
         TourAnchors.register("film.preview", () -> this.preview);
-        TourAnchors.register("film.editors", () -> this.openCameraEditor, () -> this.openReplayEditor);
+        TourAnchors.register("film.editors", () -> this.openCameraEditor, () -> this.openReplayEditor, () -> this.openPovEditor);
         TourAnchors.register("film.timeline", () -> this.main);
         TourAnchors.register("film.properties", () -> this.editArea);
         TourAnchors.register("film.export", () -> this.preview.recordVideo);
 
         /* The right of the top bar keeps the core actions only: the editors (camera, replay, and the
-         * point of view one the POV integration adds), the AI and saving. The layout lock, the data
+         * point of view one the POV integration adds), and saving. The layout lock, the data
          * manager and what the film menu held live in the menu bar at the top left. */
         this.actions()
             .editor(this.openCameraEditor, this.cameraEditor::isVisible)
@@ -317,8 +304,6 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         {
             this.actions().editor(this.openWorldEditor, this.worldEditor::isVisible);
         }
-
-        this.actions().action(this.openCopilot);
 
         this.openOverlay.setVisible(false);
         this.actions().sync();
@@ -413,11 +398,9 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
             }
         }).active(active).category(editor);
 
-        this.setupMenuBar();
-
-        /* Dockable layout, shared with the particle editor. */
+        /* Dockable layout, shared with the particle editor. The menus live in the dashboard's menu bar. */
         this.dock = new UIDockLayout();
-        this.dock.relative(this.editor).x(0).y(16).w(1F).h(1F, -16);
+        this.dock.relative(this.editor).x(0).y(0).w(1F).h(1F);
         this.dock.source(this.createLayoutSource())
             .locked(!BBSSettings.editorLayoutSettings.isDockUnlocked(ValueEditorLayout.FILM))
             .frameless(PANEL_PREVIEW_ID)
@@ -436,7 +419,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.dock.mount();
 
         this.setupDrawers();
-        this.editor.add(this.menuBar, this.dock, this.leftDrawerTabBtn, this.rightDrawerTabBtn, this.leftDrawerOverlay, this.rightDrawerOverlay);
+        this.editor.add(this.dock, this.leftDrawerTabBtn, this.rightDrawerTabBtn, this.leftDrawerOverlay, this.rightDrawerOverlay);
 
         this.fill(null);
 
@@ -871,7 +854,51 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
     }
 
     /** The menu bar's Window and Layout menu: the side panels, the presets, binding, reset, the lock and hidden panels. */
-    private void fillWindowMenu(ContextMenuManager menu)
+    @Override
+    public boolean hasWindowMenu()
+    {
+        return true;
+    }
+
+    @Override
+    public boolean hasToolsMenu()
+    {
+        return true;
+    }
+
+    @Override
+    public String getMenuBadge()
+    {
+        StudioLocks.Entry lock = this.getFilmLock();
+
+        if (lock != null)
+        {
+            return L10n.lang("bbs.multiplayer.locked_badge").format(lock.playerName).get();
+        }
+
+        return this.isFilmReadOnly() ? L10n.lang("bbs.multiplayer.read_only_badge").get() : null;
+    }
+
+    @Override
+    protected boolean canMenuUndo()
+    {
+        return this.data != null;
+    }
+
+    @Override
+    protected void menuUndo()
+    {
+        this.undo();
+    }
+
+    @Override
+    protected void menuRedo()
+    {
+        this.redo();
+    }
+
+    @Override
+    public void fillWindowMenu(ContextMenuManager menu)
     {
         menu.action(this.isLeftPanelVisible() ? Icons.CHECKMARK : Icons.NONE, UIKeys.FILM_MENU_LEFT_PANEL, this::toggleLeftPanel);
         menu.action(this.isRightPanelVisible() ? Icons.CHECKMARK : Icons.NONE, UIKeys.FILM_MENU_RIGHT_PANEL, this::toggleRightPanel);
@@ -883,14 +910,34 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.dock.fillHiddenPanelsMenu(menu);
     }
 
-    private void fillToolsMenu(ContextMenuManager menu)
+    @Override
+    public void fillToolsMenu(ContextMenuManager menu)
     {
+        /* The editors of the film and the assistant, the same switches as the icons at the right of the bar */
+        menu.action(Icons.CAMERA, UIKeys.MENU_TOOLS_CAMERA_EDITOR, this.cameraEditor.isVisible(), () -> this.openCameraEditor.clickItself());
+        menu.action(Icons.EDITOR, UIKeys.MENU_TOOLS_REPLAY_EDITOR, this.replayEditor.isVisible() && !this.replayEditor.isPovMode(), () -> this.openReplayEditor.clickItself());
+        menu.action(Icons.VIDEO_CAMERA, UIKeys.MENU_TOOLS_POV_EDITOR, this.replayEditor.isVisible() && this.replayEditor.isPovMode(), () -> this.openPovEditor.clickItself());
+
+        if (MtrCompatHelper.isMtrLoaded())
+        {
+            menu.action(Icons.BLOCK, UIKeys.MENU_TOOLS_WORLD_EDITOR, this.worldEditor.isVisible(), () -> this.openWorldEditor.clickItself());
+        }
+
         menu.action(Icons.CAMERA, UIKeys.FILM_SCREENSHOT, () -> this.preview.takeScreenshot());
         menu.action(Icons.REFRESH, UIKeys.FILM_RESET_REPLAYS, this.recorder.resetReplays, () -> this.recorder.resetReplays = !this.recorder.resetReplays);
         menu.action(Icons.FILM, UIKeys.CAMERA_TOOLTIPS_OPEN_VIDEOS, () -> this.recorder.openMovies());
     }
 
-    private void fillHelpMenu(ContextMenuManager menu)
+    @Override
+    public void fillFileMenu(ContextMenuManager menu)
+    {
+        super.fillFileMenu(menu);
+
+        menu.action(this.dock.isLocked() ? Icons.LOCKED : Icons.UNLOCKED, this.dock.isLocked() ? UIKeys.FILM_LAYOUT_UNLOCK : UIKeys.FILM_LAYOUT_LOCK, this::toggleLayoutLock);
+    }
+
+    @Override
+    public void fillHelpMenu(ContextMenuManager menu)
     {
         menu.action(Icons.HELP, UIKeys.FILM_MENU_TOUR, () ->
         {
@@ -904,145 +951,6 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         {
             UIOverlay.addOverlay(this.getContext(), new UIFilmDetailsOverlayPanel(this.getData()), 320, 310);
         });
-        menu.action(Icons.SAVED, UIKeys.ONBOARDING_SETTINGS_SHOW_WELCOME, () ->
-        {
-            mchorse.bbs_mod.ui.onboarding.Onboarding.showWelcome(this.getContext());
-        });
-    }
-
-    private void setupMenuBar()
-    {
-        this.menuBar = new UIElement()
-        {
-            @Override
-            public void resize()
-            {
-                super.resize();
-                int currentX = 4;
-                for (IUIElement child : this.getChildren())
-                {
-                    if (child instanceof UIElement elem && elem.isVisible())
-                    {
-                        elem.area.x = this.area.x + currentX;
-                        elem.area.y = this.area.y;
-                        currentX += elem.area.w;
-                    }
-                }
-            }
-
-            @Override
-            public void render(UIContext context)
-            {
-                context.batcher.box(this.area.x, this.area.y, this.area.ex(), this.area.ey(), 0xEE121212);
-                context.batcher.box(this.area.x, this.area.ey() - 1, this.area.ex(), this.area.ey(), 0x22FFFFFF);
-                super.render(context);
-
-                /* [Locked: name] at the right end while another player has this film open */
-                StudioLocks.Entry lock = UIFilmPanel.this.getFilmLock();
-                String label = null;
-
-                if (lock != null)
-                {
-                    label = L10n.lang("bbs.multiplayer.locked_badge").format(lock.playerName).get();
-                }
-                else if (UIFilmPanel.this.isFilmReadOnly())
-                {
-                    label = L10n.lang("bbs.multiplayer.read_only_badge").get();
-                }
-
-                if (label != null)
-                {
-                    int w = context.batcher.getFont().getWidth(label) + 8;
-                    int x = this.area.ex() - w - 4;
-
-                    context.batcher.box(x, this.area.y + 2, x + w, this.area.ey() - 2, 0xCC8B1A1A);
-                    context.batcher.textShadow(label, x + 4, this.area.my(context.batcher.getFont().getHeight()), Colors.WHITE);
-                }
-            }
-        };
-
-        this.menuBar.relative(this.editor).x(0).y(0).w(1F).h(16);
-
-        this.menuWindow = new UIMenuBarItem(UIKeys.FILM_MENU_WINDOW, (b) ->
-        {
-            this.getContext().replaceContextMenu(this::fillWindowMenu, b.area.x, b.area.ey() + 1);
-        });
-
-        this.menuTools = new UIMenuBarItem(UIKeys.FILM_MENU_TOOLS, (b) ->
-        {
-            this.getContext().replaceContextMenu(this::fillToolsMenu, b.area.x, b.area.ey() + 1);
-        });
-
-        this.menuHelp = new UIMenuBarItem(UIKeys.FILM_MENU_HELP, (b) ->
-        {
-            this.getContext().replaceContextMenu(this::fillHelpMenu, b.area.x, b.area.ey() + 1);
-        });
-
-        this.menuEdit = new UIMenuBarItem(UIKeys.FILM_MENU_EDIT, (b) ->
-        {
-            this.getContext().replaceContextMenu(this::fillEditMenu, b.area.x, b.area.ey() + 1);
-        });
-
-        /* The data manager and the layout lock, as icons ahead of the menus */
-        this.menuDataManager = new UIIcon(Icons.MORE, (b) -> this.openDataManager());
-        this.menuDataManager.tooltip(UIKeys.FILM_MENU_DATA_MANAGER);
-        this.menuDataManager.wh(16, 16);
-
-        this.menuLock = new UIIcon(() -> this.dock.isLocked() ? Icons.LOCKED : Icons.UNLOCKED, (b) -> this.toggleLayoutLock());
-        this.menuLock.tooltip(() -> (this.dock.isLocked() ? UIKeys.FILM_LAYOUT_UNLOCK : UIKeys.FILM_LAYOUT_LOCK).get());
-        this.menuLock.wh(16, 16);
-
-        this.menuBar.add(this.menuDataManager, this.menuLock, this.menuWindow, this.menuEdit, this.menuTools, this.menuHelp);
-    }
-
-    public static class UIMenuBarItem extends UIClickable<UIMenuBarItem>
-    {
-        public IKey label;
-
-        public UIMenuBarItem(IKey label, Consumer<UIMenuBarItem> callback)
-        {
-            super(callback);
-            this.label = label;
-            this.h(16);
-        }
-
-        @Override
-        public void resize()
-        {
-            super.resize();
-            if (this.label != null)
-            {
-                int textW = Batcher2D.getDefaultTextRenderer().getWidth(this.label.get());
-                this.area.w = textW + 14;
-                this.area.h = 16;
-            }
-        }
-
-        @Override
-        protected UIMenuBarItem get()
-        {
-            return this;
-        }
-
-        @Override
-        protected void renderSkin(UIContext context)
-        {
-            if (this.hover)
-            {
-                context.batcher.box(this.area.x, this.area.y, this.area.ex(), this.area.ey(), 0x22FFFFFF);
-            }
-
-            if (this.label != null)
-            {
-                FontRenderer font = context.batcher.getFont();
-                String str = this.label.get();
-                int x = this.area.mx(font.getWidth(str));
-                int y = this.area.my(font.getHeight());
-                int color = this.hover ? Colors.WHITE : 0xFFCCCCCC;
-
-                context.batcher.text(str, x, y, color, false);
-            }
-        }
     }
 
     public void handleDockPanelClose(String panelId)
@@ -1098,11 +1006,11 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.rightDrawerTabBtn.setVisible(false);
 
         this.leftDrawerOverlay = new UIFilmDrawerContainer(this, "left", Icons.LIST, UIKeys.FILM_MENU_LEFT_PANEL);
-        this.leftDrawerOverlay.relative(this.editor).x(0).y(16).w(260).h(1F, -16);
+        this.leftDrawerOverlay.relative(this.editor).x(0).y(0).w(260).h(1F);
         this.leftDrawerOverlay.setVisible(false);
 
         this.rightDrawerOverlay = new UIFilmDrawerContainer(this, "right", Icons.EDITOR, UIKeys.FILM_MENU_RIGHT_PANEL);
-        this.rightDrawerOverlay.relative(this.editor).x(1F).anchorX(1F).y(16).w(260).h(1F, -16);
+        this.rightDrawerOverlay.relative(this.editor).x(1F).anchorX(1F).y(0).w(260).h(1F);
         this.rightDrawerOverlay.setVisible(false);
     }
 
@@ -1998,12 +1906,15 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
     }
 
     /** The menu bar's Edit menu: history and the operations on the whole film. Needs a film. */
-    private void fillEditMenu(ContextMenuManager menu)
+    @Override
+    public void fillEditMenu(ContextMenuManager menu)
     {
         if (this.data == null)
         {
             return;
         }
+
+        super.fillEditMenu(menu);
 
         menu.action(Icons.LIST, UIKeys.FILM_OPEN_HISTORY, () ->
         {
@@ -2085,34 +1996,6 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
             UIOverlay.addOverlay(this.getContext(), new UIFilmDetailsOverlayPanel(this.getData()), 320, 310);
         });
     }
-
-    /** Catalyst AI docks at the right of the editor, below the top bar and over the properties, clear of the preview and the timeline. */
-    public void openCatalystAI()
-    {
-        if (this.catalystAI == null)
-        {
-            this.catalystAI = new mchorse.bbs_mod.catalyst.ai.UICatalystAIPanel(this);
-            this.catalystAI.relative(this.editor).x(1F, -6).anchorX(1F).y(22).w(300).h(0.62F, -22);
-            this.editor.add(this.catalystAI);
-        }
-
-        this.catalystAI.setVisible(true);
-        this.resize();
-        this.catalystAI.input.textbox.setFocused(true);
-    }
-
-    public void toggleCatalystAI()
-    {
-        if (this.catalystAI != null && this.catalystAI.isVisible())
-        {
-            this.catalystAI.setVisible(false);
-        }
-        else
-        {
-            this.openCatalystAI();
-        }
-    }
-
 
     /**
      * Relative move that snaps the scene's first position keyframe onto the

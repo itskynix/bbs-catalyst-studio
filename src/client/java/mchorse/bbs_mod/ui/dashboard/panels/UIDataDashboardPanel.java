@@ -56,6 +56,12 @@ public abstract class UIDataDashboardPanel <T extends ValueGroup> extends UICRUD
         this.onClose(this::save);
     }
 
+    @Override
+    protected boolean saveInMenu()
+    {
+        return true;
+    }
+
     private void startPeriodicSave()
     {
         int seconds = BBSSettings.editorPeriodicSave.get();
