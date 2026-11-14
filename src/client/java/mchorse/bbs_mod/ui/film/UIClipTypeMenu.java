@@ -6,6 +6,8 @@ import mchorse.bbs_mod.l10n.L10n;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.resources.Link;
 import mchorse.bbs_mod.ui.UIKeys;
+import mchorse.bbs_mod.ui.framework.elements.windows.GlassChrome;
+import mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.context.UIContextMenu;
 import mchorse.bbs_mod.ui.framework.elements.input.text.UITextbox;
@@ -341,7 +343,7 @@ public class UIClipTypeMenu extends UIContextMenu
         boolean searching = !this.query().isEmpty();
 
         /* The tab strip */
-        context.batcher.box(this.area.x, this.area.y, this.area.ex(), this.area.y + TAB_H, Colors.setA(0, 0.25F));
+        RoundedDraw.fill(context.batcher, this.area.x, this.area.y, this.area.ex(), this.area.y + TAB_H, GlassChrome.RADIUS, RoundedDraw.TOP, Colors.setA(0, 0.25F));
         context.batcher.icon(Icons.ARROW_LEFT, this.onBack(context) ? Colors.WHITE : Colors.LIGHTER_GRAY, this.area.x + BACK_W / 2, this.area.y + TAB_H / 2, 0.5F, 0.5F);
 
         for (int i = 0; i < this.tabIcons.length; i++)
@@ -351,12 +353,12 @@ public class UIClipTypeMenu extends UIContextMenu
 
             if (active)
             {
-                context.batcher.box(x, this.area.y, x + tabW, this.area.y + TAB_H, Colors.setA(primary, 0.12F));
+                RoundedDraw.fill(context.batcher, x + 2, this.area.y + 2, x + tabW - 2, this.area.y + TAB_H - 2, 4, RoundedDraw.ALL, Colors.setA(primary, 0.16F));
                 context.batcher.box(x + 3, this.area.y + TAB_H - 1, x + tabW - 3, this.area.y + TAB_H, primary);
             }
             else if (i == hoverTab)
             {
-                context.batcher.box(x, this.area.y, x + tabW, this.area.y + TAB_H, Colors.setA(Colors.WHITE, 0.08F));
+                RoundedDraw.fill(context.batcher, x + 2, this.area.y + 2, x + tabW - 2, this.area.y + TAB_H - 2, 4, RoundedDraw.ALL, Colors.setA(Colors.WHITE, 0.08F));
             }
 
             context.batcher.icon(this.tabIcons[i], active ? Colors.WHITE : Colors.LIGHTER_GRAY, x + tabW / 2, this.area.y + TAB_H / 2, 0.5F, 0.5F);
@@ -380,7 +382,7 @@ public class UIClipTypeMenu extends UIContextMenu
 
             if (i == hover)
             {
-                context.batcher.box(this.area.x + PAD, y, this.area.ex() - PAD, y + ROW_H, Colors.setA(Colors.WHITE, 0.1F));
+                RoundedDraw.fill(context.batcher, this.area.x + 4, y, this.area.ex() - 4, y + ROW_H, 4, RoundedDraw.ALL, Colors.setA(Colors.WHITE, 0.1F));
             }
 
             /* The colour the clip has on the timeline */

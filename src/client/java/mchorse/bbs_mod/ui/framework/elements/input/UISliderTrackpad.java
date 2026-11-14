@@ -1,5 +1,7 @@
 package mchorse.bbs_mod.ui.framework.elements.input;
 
+import mchorse.bbs_mod.ui.framework.elements.windows.UIGlassTextbox;
+import mchorse.bbs_mod.ui.framework.elements.windows.UIGlassSlider;
 import java.util.function.Consumer;
 
 import org.lwjgl.glfw.GLFW;
@@ -507,8 +509,8 @@ public class UISliderTrackpad extends UINumericInput<UISliderTrackpad>
 
         if (this.textbox.isFocused())
         {
+            /* The textbox draws the rounded ground with its accent frame itself */
             this.textbox.render(context);
-            context.batcher.box(this.area.x, this.area.ey() - 1, this.area.ex(), this.area.ey(), Colors.opaque(BBSSettings.primaryColor.get()));
         }
         else
         {
@@ -516,9 +518,16 @@ public class UISliderTrackpad extends UINumericInput<UISliderTrackpad>
             int fillX = MathUtils.clamp(this.getHandleCenter(), this.area.x, this.area.ex());
             int fillColor = Colors.setA(primary, this.dragging ? DRAG_VALUE_ALPHA : VALUE_ALPHA);
 
-            this.area.render(context.batcher, BBSSettings.inputSurface());
+            boolean glass = true;
 
-            if (this.hasSliderRange())
+            UIGlassTextbox.paintGround(context, this.area, false);
+
+            if (this.hasSliderRange() && glass)
+            {
+                /* a slim rail along the bottom of the field, the value above it */
+                UIGlassSlider.paintTrack(context, this.area.x + 7, this.area.ex() - 7, this.area.ey() - 6, MathUtils.clamp(fillX, this.area.x + 7, this.area.ex() - 7), this.dragging || this.area.isInside(context), 8);
+            }
+            else if (this.hasSliderRange())
             {
                 context.batcher.box(this.area.x, this.area.y, fillX, this.area.ey(), fillColor);
                 context.batcher.box(fillX - 1, this.area.y, fillX + 1, this.area.ey(), Colors.setA(primary, MARKER_ALPHA));
@@ -534,7 +543,7 @@ public class UISliderTrackpad extends UINumericInput<UISliderTrackpad>
             int base = this.textbox.getColor();
             int textColor = this.dragging ? Colors.opaque(base) : Colors.setA(base, VALUE_ALPHA);
             int lx = this.area.ex() - 6 - font.getWidth(label);
-            int ly = this.area.my() - font.getHeight() / 2;
+            int ly = this.area.my() - font.getHeight() / 2 - (glass && this.hasSliderRange() ? 2 : 0);
 
             context.batcher.text(label, lx, ly, textColor);
         }

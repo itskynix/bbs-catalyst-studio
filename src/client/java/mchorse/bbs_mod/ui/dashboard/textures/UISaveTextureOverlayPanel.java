@@ -74,7 +74,7 @@ public class UISaveTextureOverlayPanel extends UIOverlayPanel implements IFolder
         this.name = new UITextbox(1000, (text) -> {})
             .validator((text) -> UITextbox.FILENAME_PREDICATE.test(text.replace(" ", "")));
         this.name.placeholder(UIKeys.TEXTURES_SAVE_DIALOG_NAME);
-        this.save = new UIButton(UIKeys.GENERAL_SAVE, (b) -> this.trySave());
+        this.save = new UIButton(UIKeys.GENERAL_SAVE, (b) -> this.trySave()).primary();
 
         this.right = new UIElement();
 

@@ -1,6 +1,10 @@
 package mchorse.bbs_mod.ui.framework.elements.context;
 
 import mchorse.bbs_mod.ui.UIKeys;
+import mchorse.bbs_mod.ui.framework.elements.windows.GlassChrome;
+import mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw;
+import mchorse.bbs_mod.ui.utils.Area;
+import mchorse.bbs_mod.utils.colors.Colors;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.input.list.UIList;
 import mchorse.bbs_mod.ui.framework.elements.input.text.UITextbox;
@@ -130,6 +134,7 @@ public class UISimpleContextMenu extends UIContextMenu
         }
 
         super.render(context);
+
     }
 
     @Override

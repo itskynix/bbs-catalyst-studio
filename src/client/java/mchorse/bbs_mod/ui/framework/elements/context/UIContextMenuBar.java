@@ -23,8 +23,8 @@ import java.util.List;
  */
 public class UIContextMenuBar extends UIElement
 {
-    public static final int HEIGHT = 20;
-    public static final int BUTTON = 20;
+    public static final int HEIGHT = 28;
+    public static final int BUTTON = 28;
 
     private final List<MenuIcon> icons = new ArrayList<>();
     private final List<UIIcon> buttons = new ArrayList<>();

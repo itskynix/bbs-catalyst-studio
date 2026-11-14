@@ -1,11 +1,10 @@
 package mchorse.bbs_mod.ui.framework.elements.overlay;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.utils.EventPropagation;
-import mchorse.bbs_mod.ui.utils.InterfaceBlur;
+import mchorse.bbs_mod.ui.framework.elements.IUIElement;
 import mchorse.bbs_mod.ui.utils.UIUtils;
 import mchorse.bbs_mod.ui.utils.resizers.Flex;
 import mchorse.bbs_mod.utils.colors.Colors;
@@ -277,6 +276,36 @@ public class UIOverlay extends UIElement
 
     /* Don't pass user input down the line... */
 
+    /** The window this overlay holds, or null once it is gone. */
+    private UIOverlayPanel getPanel()
+    {
+        java.util.List<UIOverlayPanel> panels = this.getChildren(UIOverlayPanel.class);
+
+        return panels.isEmpty() ? null : panels.get(0);
+    }
+
+    /**
+     * A modal window holds every input; a tool window only what lands on it, the rest goes through to
+     * the studio behind it.
+     */
+    @Override
+    protected boolean cantPropagate(EventPropagation propagation, UIContext context)
+    {
+        UIOverlayPanel panel = this.getPanel();
+
+        if (panel == null || this.closing || panel.isModal())
+        {
+            return super.cantPropagate(propagation, context);
+        }
+
+        return panel.area.isInside(context);
+    }
+
+    /**
+     * A click beside the window. A modal window doesn't let it reach the studio and doesn't close
+     * either: it comes to the front and flashes its frame red, the way Windows answers a click on a
+     * window a dialog is holding. A tool window lets the click through.
+     */
     @Override
     protected boolean subMouseClicked(UIContext context)
     {
@@ -285,15 +314,43 @@ public class UIOverlay extends UIElement
             return true;
         }
 
-        this.closeItself();
+        UIOverlayPanel panel = this.getPanel();
 
-        return super.subMouseClicked(context);
+        if (panel == null || !panel.isModal())
+        {
+            return super.subMouseClicked(context);
+        }
+
+        this.bringToFront();
+        panel.flash();
+
+        return true;
+    }
+
+    /** Moves this window above the other open windows. */
+    public void bringToFront()
+    {
+        UIElement parent = this.getParent();
+
+        if (parent == null)
+        {
+            return;
+        }
+
+        java.util.List<IUIElement> siblings = parent.getChildren();
+
+        if (!siblings.isEmpty() && siblings.get(siblings.size() - 1) != this && siblings.remove(this))
+        {
+            siblings.add(this);
+        }
     }
 
     @Override
     public void render(UIContext context)
     {
-        int background = this.background == null ? BBSSettings.overlayBackground() : this.background;
+        /* No full screen dimming or blur: the studio stays sharp behind, and the window floats over
+         * it like a desktop window. Only a colour a caller set on purpose is still painted. */
+        int background = this.background == null ? 0 : this.background;
         boolean animated = OverlayAnimation.isEnabled() && !this.instant;
         double progress = 1D;
 
@@ -320,13 +377,6 @@ public class UIOverlay extends UIElement
         }
 
         float alpha = (float) Math.min(Math.max(progress, 0D), 1D);
-
-        /* An overlay that asked for no background of its own gets no blur either; the setting
-         * turned down to zero is a different thing — that is the dimming off, not the glass */
-        if (this.background == null || Colors.getA(this.background) > 0F)
-        {
-            InterfaceBlur.apply();
-        }
 
         if (alpha < 1F)
         {

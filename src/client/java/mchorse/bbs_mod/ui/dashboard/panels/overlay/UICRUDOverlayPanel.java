@@ -10,6 +10,7 @@ import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIIcon;
 import mchorse.bbs_mod.ui.framework.elements.input.list.UISearchList;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UIConfirmOverlayPanel;
+import mchorse.bbs_mod.ui.framework.elements.overlay.UINameInputOverlayPanel;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UIOverlay;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UIOverlayPanel;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UIPromptOverlayPanel;
@@ -166,6 +167,24 @@ public abstract class UICRUDOverlayPanel extends UIOverlayPanel
 
     protected void addNewData(UIContext context, MapType data)
     {
+        IKey title = this.getNewDataTitle();
+
+        /* A panel that names what it creates gets the modern text input window */
+        if (title != null)
+        {
+            UINameInputOverlayPanel input = new UINameInputOverlayPanel(
+                title,
+                this.getNewDataLabel(),
+                (str) -> this.addNewData(context, this.namesList.getPath(str).toString(), data)
+            );
+
+            input.text.filename();
+
+            UIOverlay.addOverlay(context, input);
+
+            return;
+        }
+
         UIPromptOverlayPanel panel = new UIPromptOverlayPanel(
             UIKeys.GENERAL_ADD,
             UIKeys.PANELS_MODALS_ADD,
@@ -175,6 +194,17 @@ public abstract class UICRUDOverlayPanel extends UIOverlayPanel
         panel.text.filename();
 
         UIOverlay.addOverlay(context, panel);
+    }
+
+    /** The title of the window that asks for a new document's name; null keeps the plain prompt. */
+    protected IKey getNewDataTitle()
+    {
+        return null;
+    }
+
+    protected IKey getNewDataLabel()
+    {
+        return UIKeys.PANELS_MODALS_ADD;
     }
 
     protected abstract void addNewData(UIContext context, String name, MapType data);

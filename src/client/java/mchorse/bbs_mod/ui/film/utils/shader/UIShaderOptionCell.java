@@ -7,6 +7,8 @@ import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIToggle;
 import mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D;
 import mchorse.bbs_mod.ui.framework.elements.utils.FontRenderer;
+import mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw;
+import mchorse.bbs_mod.ui.framework.elements.windows.UIGlassButton;
 import mchorse.bbs_mod.ui.utils.Area;
 import mchorse.bbs_mod.ui.utils.UIUtils;
 import mchorse.bbs_mod.utils.colors.Colors;
@@ -195,18 +197,20 @@ public class UIShaderOptionCell extends UIElement
         boolean lightBackground = activatable || this.added;
 
         /* Background — primary tint when the cell is on a "button" (clickable/added), neutral otherwise. */
-        int fill = lightBackground ? (BBSSettings.primaryColor.get() | Colors.A100) : Colors.A50;
-
-        if (activatable && this.hover)
+        if (lightBackground)
         {
-            fill = Colors.mulRGB(fill, 0.85F);
+            /* A cell that acts like a button wears the rounded dark glass of one */
+            UIGlassButton.paintGround(context, a, false, activatable && this.hover);
         }
-
-        batcher.surfaceBox(a.x, a.y, a.ex(), a.ey(), fill, true, false);
+        else
+        {
+            RoundedDraw.fill(batcher, a.x, a.y, a.ex(), a.ey(), 4, RoundedDraw.ALL, Colors.A50);
+        }
 
         if (this.added)
         {
-            batcher.outline(a.x, a.y, a.ex(), a.ey(), addedBorderColor(), 2);
+            RoundedDraw.outline(batcher, a.x, a.y, a.ex(), a.ey(), 4, RoundedDraw.ALL, addedBorderColor());
+            RoundedDraw.outline(batcher, a.x + 1, a.y + 1, a.ex() - 1, a.ey() - 1, 3, RoundedDraw.ALL, addedBorderColor());
         }
 
         /* Boolean cells delegate label + value entirely to the embedded (locked) toggle. */

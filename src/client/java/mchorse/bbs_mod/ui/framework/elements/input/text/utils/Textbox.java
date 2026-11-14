@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.framework.elements.input.text.utils;
 
+import mchorse.bbs_mod.ui.framework.elements.windows.UIGlassTextbox;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.graphics.window.Window;
 import mchorse.bbs_mod.l10n.keys.IKey;
@@ -706,12 +707,8 @@ public class Textbox
 
         if (this.background)
         {
-            this.area.render(context.batcher, BBSSettings.inputSurface());
-
-            if (this.border && this.focused)
-            {
-                context.batcher.box(this.area.x, this.area.ey() - 1, this.area.ex(), this.area.ey(), Colors.opaque(BBSSettings.primaryColor.get()));
-            }
+            /* Every text box, in every panel: rounded dark glass, an accent frame while focused */
+            UIGlassTextbox.paintGround(context, this.area, this.focused);
 
             x = this.area.x + 4;
             y = this.area.my() - this.font.getHeight() / 2;

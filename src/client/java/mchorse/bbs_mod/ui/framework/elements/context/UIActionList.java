@@ -12,6 +12,9 @@ public class UIActionList extends UIList<ContextAction>
     public UIActionList(Consumer<List<ContextAction>> callback)
     {
         super(callback);
+
+        /* a compact row */
+        this.scroll.scrollItemSize = 20;
     }
 
     /** A menu row is cut to its icon and its label; there is nothing in it to make room for. */

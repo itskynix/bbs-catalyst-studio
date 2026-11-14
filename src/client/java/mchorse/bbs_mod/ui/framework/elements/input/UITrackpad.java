@@ -1,5 +1,7 @@
 package mchorse.bbs_mod.ui.framework.elements.input;
 
+import mchorse.bbs_mod.ui.framework.elements.windows.UIGlassTextbox;
+import mchorse.bbs_mod.ui.framework.elements.windows.UIGlassSlider;
 import java.util.function.Consumer;
 
 import org.lwjgl.glfw.GLFW;
@@ -401,12 +403,12 @@ public class UITrackpad extends UINumericInput<UITrackpad>
 
         if (this.textbox.isFocused())
         {
+            /* The textbox draws the rounded ground with its accent frame itself */
             this.textbox.render(context);
-            context.batcher.box(this.area.x, this.area.ey() - 1, this.area.ex(), this.area.ey(), Colors.opaque(BBSSettings.primaryColor.get()));
         }
         else
         {
-            this.area.render(context.batcher, BBSSettings.inputSurface());
+            UIGlassTextbox.paintGround(context, this.area, false);
 
             if (dragging)
             {

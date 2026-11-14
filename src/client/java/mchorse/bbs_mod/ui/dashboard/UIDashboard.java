@@ -42,6 +42,7 @@ import mchorse.bbs_mod.ui.framework.elements.overlay.UIMessageOverlayPanel;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UIOverlay;
 import mchorse.bbs_mod.ui.model_blocks.UIModelBlockPanel;
 import mchorse.bbs_mod.ui.model_editor.UIModelEditorPanel;
+import mchorse.bbs_mod.ui.dashboard.panels.sandbox.UISandboxPanel;
 import mchorse.bbs_mod.ui.morphing.UIMorphingPanel;
 import mchorse.bbs_mod.ui.onboarding.Onboarding;
 import mchorse.bbs_mod.ui.onboarding.TourAnchors;
@@ -419,6 +420,8 @@ public class UIDashboard extends UIBaseMenu
         this.buildStep("textures", () -> this.panels.registerHiddenPanel(new UITextureManagerPanel(this)));
         this.buildStep("audio", () -> this.panels.registerHiddenPanel(new UIAudioEditorPanel(this)));
         this.buildStep("community assets", () -> this.panels.registerPanel(new UICommunityHubPanel(this), UIKeys.COMMUNITY_ASSETS_TITLE, Icons.GLOBE));
+
+        this.buildStep("ui sandbox", () -> this.panels.registerPanel(new UISandboxPanel(this), UIKeys.SANDBOX_TITLE, Icons.PLAY));
 
         /* Add-on panels go into the bar after ours, so this waits for the last of ours */
         this.buildStep("add-ons", () -> BBSMod.events.post(new RegisterDashboardPanelsEvent(this)));

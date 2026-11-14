@@ -622,8 +622,6 @@ public class UISettingsOverlayPanel extends UIOverlayPanel
         int y = this.content.area.y;
         int ey = this.content.area.ey();
 
-        /* The title bar runs the width of the window, not just over the close button */
-        context.batcher.box(this.area.x, this.area.y, this.area.ex() - 20, y, BBSSettings.chromeSurface());
         context.batcher.box(x, y, x + SIDE_WIDTH, ey, BBSSettings.chromeSurface());
         context.batcher.box(x + SIDE_WIDTH - 1, y, x + SIDE_WIDTH, ey, BBSSettings.dividerColor());
 

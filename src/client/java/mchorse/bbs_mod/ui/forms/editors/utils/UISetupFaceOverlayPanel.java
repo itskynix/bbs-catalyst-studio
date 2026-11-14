@@ -48,7 +48,7 @@ public class UISetupFaceOverlayPanel extends UIOverlayPanel
         this.glow = new UIToggle(UIKeys.FORMS_EDITOR_SETUP_FACE_GLOW, false, null);
         this.glow.tooltip(UIKeys.FORMS_EDITOR_SETUP_FACE_GLOW_HINT);
 
-        this.confirm = new UIButton(UIKeys.GENERAL_CONFIRM, (b) -> this.confirm());
+        this.confirm = new UIButton(UIKeys.GENERAL_CONFIRM, (b) -> this.confirm()).primary();
 
         this.content.column(UIConstants.MARGIN).vertical().stretch().padding(UIConstants.SCROLL_PADDING);
         this.content.add(

@@ -4,6 +4,8 @@ import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.utils.FontRenderer;
+import mchorse.bbs_mod.ui.framework.elements.windows.GlassChrome;
+import mchorse.bbs_mod.ui.framework.elements.windows.UIGlassButton;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.utils.colors.Colors;
 
@@ -36,9 +38,9 @@ public class UIHubCreateButton extends UIClickable<UIHubCreateButton>
         int accent = BBSSettings.primaryColor.get() | Colors.A100;
         int color = this.hover ? Colors.mulRGB(accent, 1.15F) : accent;
 
-        context.batcher.dropShadow(this.area.x, this.area.y, this.area.ex(), this.area.ey(), 6, Colors.A50, 0);
-        context.batcher.surfaceBox(this.area.x, this.area.y, this.area.ex(), this.area.ey(), color | Colors.A100, true, false);
-        context.batcher.outline(this.area.x, this.area.y, this.area.ex(), this.area.ey(), 0x40ffffff);
+        /* The primary action of the hub: the rounded accent button, with a soft round shadow */
+        GlassChrome.shadow(context, this.area.x, this.area.y, this.area.ex(), this.area.ey(), 4, 0.3F);
+        UIGlassButton.paintColoredGround(context, this.area, color);
 
         FontRenderer font = context.batcher.getFont();
         String text = font.limitToWidth(this.label.get(), this.area.w - 40);

@@ -4,6 +4,7 @@ import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.utils.FontRenderer;
+import mchorse.bbs_mod.ui.framework.elements.windows.UIGlassButton;
 import mchorse.bbs_mod.ui.framework.elements.utils.ITextColoring;
 import mchorse.bbs_mod.ui.utils.UIConstants;
 import mchorse.bbs_mod.utils.colors.Colors;
@@ -21,6 +22,9 @@ public class UIButton extends UIClickable<UIButton> implements ITextColoring
     public int customColor;
     public int customHighlightColor;
     public boolean background = true;
+
+    /** In a glass window: the accent-filled button, the one to press. Every other one is dark glass. */
+    public boolean primaryStyle;
 
     public UIButton(IKey label, Consumer<UIButton> callback)
     {
@@ -56,6 +60,13 @@ public class UIButton extends UIClickable<UIButton> implements ITextColoring
         return this;
     }
 
+    public UIButton primary()
+    {
+        this.primaryStyle = true;
+
+        return this;
+    }
+
     public UIButton background(boolean background)
     {
         this.background = background;
@@ -79,16 +90,19 @@ public class UIButton extends UIClickable<UIButton> implements ITextColoring
     @Override
     protected void renderSkin(UIContext context)
     {
-        int color = (this.custom ? this.customColor : BBSSettings.primaryColor.get() | Colors.A100);
-
-        if (this.hover)
-        {
-            color = this.custom ? this.customHighlightColor : Colors.mulRGB(color, 0.85F);
-        }
-
         if (this.background)
         {
-            context.batcher.surfaceBox(this.area.x, this.area.y, this.area.ex(), this.area.ey(), color | Colors.A100, true, false);
+            /* Every button is the rounded one: dark glass unless it is the primary action or has a colour of its own */
+            if (this.custom)
+            {
+                UIGlassButton.paintColored(this, context, this.hover ? this.customHighlightColor : this.customColor);
+            }
+            else
+            {
+                UIGlassButton.paint(this, context, this.primaryStyle, this.hover);
+            }
+
+            return;
         }
 
         FontRenderer font = context.batcher.getFont();

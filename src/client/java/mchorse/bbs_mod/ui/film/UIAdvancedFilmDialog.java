@@ -245,6 +245,19 @@ public class UIAdvancedFilmDialog extends UIOverlayPanel
         this.content.add(this.leftPane, separator, this.rightPane);
     }
 
+    /** The folder tree, the name row with its four profile chips and a card or two of the grid: less and something spills out of the frame */
+    @Override
+    public int getMinWidth()
+    {
+        return 560;
+    }
+
+    @Override
+    public int getMinHeight()
+    {
+        return 340;
+    }
+
     @Override
     protected void onAdd(UIElement parent)
     {

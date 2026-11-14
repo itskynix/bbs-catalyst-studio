@@ -41,7 +41,7 @@ public class UINewTextureOverlayPanel extends UIMessageBarOverlayPanel
         this.height = new UITrackpad();
         this.height.limit(1, 4096, true).setValue(64);
         this.height.tooltip(UIKeys.SNOWSTORM_APPEARANCE_HEIGHT);
-        this.create = new UIButton(UIKeys.GENERAL_ADD, (b) -> this.confirm());
+        this.create = new UIButton(UIKeys.GENERAL_ADD, (b) -> this.confirm()).primary();
         this.create.w(80);
 
         this.bar.remove(this.confirm);

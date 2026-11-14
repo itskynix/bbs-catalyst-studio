@@ -4,6 +4,7 @@ import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.utils.FontRenderer;
+import mchorse.bbs_mod.ui.framework.elements.windows.UIGlassToggle;
 import mchorse.bbs_mod.ui.framework.elements.utils.ITextColoring;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.utils.colors.Colors;
@@ -16,6 +17,9 @@ public class UIToggle extends UIClickable<UIToggle> implements ITextColoring
     public int color = Colors.WHITE;
     public boolean textShadow = true;
     private boolean value;
+
+    /** Where the knob of the glass switch is, 0 to 1; negative until first drawn. */
+    public float glassSlide = -1F;
 
     public UIToggle(IKey label, Consumer<UIToggle> callback)
     {
@@ -83,47 +87,10 @@ public class UIToggle extends UIClickable<UIToggle> implements ITextColoring
         return this;
     }
 
-    private static final int TRACK_W = 20;
-    private static final int TRACK_H = 8;
-    private static final int KNOB = 10;
-
-    /** Neutral, a touch below the brightest thing the interface draws. */
-    private static final int KNOB_COLOR = 0xffc4c4c4;
-
+    /** Every switch is the glass pill; the old square box is gone. */
     @Override
     protected void renderSkin(UIContext context)
     {
-        FontRenderer font = context.batcher.getFont();
-        String label = font.limitToWidth(this.label.get(), this.area.w - TRACK_W - 6);
-
-        context.batcher.text(label, this.area.x, this.area.my(font.getHeight()), this.color, this.textShadow);
-
-        int my = this.area.my();
-        int trackRight = this.area.ex() - 2;
-        int trackLeft = trackRight - TRACK_W;
-
-        /* The knob is centred and taller than the track; the track sits flush
-         * with the knob's bottom edge, so the knob rises out of it upwards */
-        int knobLeft = trackLeft + (this.value ? TRACK_W - KNOB : 0);
-        int knobTop = my - KNOB / 2;
-        int trackBottom = knobTop + KNOB;
-        int trackTop = trackBottom - TRACK_H;
-
-        /* No outline at all: off is a well in the surface ramp, on is the accent,
-         * and the knob is light enough to stand on either without being drawn
-         * around. */
-        int trackFill = this.value ? Colors.A100 | BBSSettings.primaryColor.get() : BBSSettings.deepSurface();
-
-        context.batcher.box(trackLeft, trackTop, trackRight, trackBottom, trackFill);
-
-        int knobColor = this.hover ? Colors.lerp(KNOB_COLOR, Colors.WHITE, 0.2F) : KNOB_COLOR;
-
-        context.batcher.surfaceBox(knobLeft, knobTop, knobLeft + KNOB, knobTop + KNOB, knobColor, true, false);
-
-        if (!this.isEnabled())
-        {
-            context.batcher.box(knobLeft, knobTop, knobLeft + KNOB, knobTop + KNOB, Colors.A50);
-            context.batcher.outlinedIcon(Icons.LOCKED, trackLeft + TRACK_W / 2, my, 0.5F, 0.5F);
-        }
+        UIGlassToggle.paint(this, context, this.hover);
     }
 }

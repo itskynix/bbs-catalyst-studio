@@ -4,13 +4,13 @@ import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
+import mchorse.bbs_mod.ui.framework.elements.UIScrollView;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIButton;
 import mchorse.bbs_mod.ui.framework.elements.input.UITrackpad;
 import mchorse.bbs_mod.ui.framework.elements.input.text.UITextbox;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UIOverlayPanel;
 import mchorse.bbs_mod.ui.framework.elements.utils.UILabel;
 import mchorse.bbs_mod.ui.utils.UI;
-import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.ui.utils.keys.KeyAction;
 import mchorse.bbs_mod.utils.colors.Colors;
 import org.lwjgl.glfw.GLFW;
@@ -109,14 +109,21 @@ public class UIMMotionNewProjectDialog extends UIOverlayPanel
         UIElement presetsRow = UI.row(5, 0, 20, p1080, p4k, pShorts, p720).h(20);
 
         /* 5. Bottom Action Buttons: Create (Red accent) & Close */
-        this.createBtn = new UIButton(UIKeys.CATALYST_DIALOG_CREATE, (b) -> this.createProject()).color(0xFFDC2626, 0xFFEF4444);
+        this.createBtn = new UIButton(UIKeys.CATALYST_DIALOG_CREATE, (b) -> this.createProject()).primary();
         UIButton cancelBtn = new UIButton(UIKeys.GENERAL_CLOSE, (b) -> this.close());
-        UIElement buttonsRow = UI.row(5, 0, 20, this.createBtn, cancelBtn).h(20);
 
-        /* Structured Vertical Form */
-        UIElement form = UI.column(
+        /* The actions live in the footer strip, so they stay inside the frame however short the window is */
+        this.footer(FOOTER);
+
+        UIElement buttonsRow = UI.row(6, 0, 22, cancelBtn, this.createBtn);
+
+        buttonsRow.relative(this).x(1F, -214).y(1F, -FOOTER + 7).w(202).h(22);
+        this.add(buttonsRow);
+
+        /* Structured vertical form; it scrolls when the window is too short for it */
+        UIScrollView form = UI.scrollView(
             5,
-            0,
+            12,
             nameLabel,
             this.nameBox,
             fpsDurationLabels.marginTop(2),
@@ -124,19 +131,32 @@ public class UIMMotionNewProjectDialog extends UIOverlayPanel
             this.durationCalcLabel,
             resLabel.marginTop(2),
             resInputs,
-            presetsRow,
-            buttonsRow.marginTop(6)
+            presetsRow
         );
-        form.relative(this.content).xy(16, 6).w(1F, -32);
+        form.relative(this.content).xy(0, 0).w(1F).h(1F);
 
         this.content.add(form);
         this.updateDurationCalcLabel();
     }
 
+    private static final int FOOTER = 36;
+
     @Override
     public int getPreferredWidth()
     {
-        return 360;
+        return 420;
+    }
+
+    @Override
+    public int getMinWidth()
+    {
+        return 420;
+    }
+
+    @Override
+    public int getMinHeight()
+    {
+        return 320;
     }
 
     private void updateDurationCalcLabel()

@@ -261,7 +261,7 @@ public class UIMMotionHubScreen extends UILandingScreen
 
     public void openNewSceneDialog()
     {
-        UIOverlay.addOverlay(this.getContext(), new UIMMotionNewProjectDialog(this.panel), 360, 265);
+        UIOverlay.addOverlay(this.getContext(), new UIMMotionNewProjectDialog(this.panel), 420, 340);
     }
 
     public void duplicateScene(UIMMotionPanel.MotionScene scene)

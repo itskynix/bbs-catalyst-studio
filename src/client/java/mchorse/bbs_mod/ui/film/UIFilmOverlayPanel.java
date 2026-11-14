@@ -149,7 +149,7 @@ public class UIFilmOverlayPanel extends UIDataOverlayPanel<Film>
             }
         );
 
-        UIOverlay.addOverlay(context, dialog, 620, 380);
+        UIOverlay.addOverlay(context, dialog, 640, 400);
     }
 
     @Override

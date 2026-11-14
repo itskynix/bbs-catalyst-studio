@@ -4,6 +4,7 @@ import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.l10n.L10n;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.UIKeys;
+import mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.UIScrollView;
@@ -352,12 +353,12 @@ public class UIWorldClipTypeMenu extends UIContextMenu
 
             if (this.active)
             {
-                context.batcher.box(this.area.x, this.area.y, this.area.ex(), this.area.ey(), Colors.A50 | primary);
-                context.batcher.box(this.area.x, this.area.ey() - 2, this.area.ex(), this.area.ey(), Colors.A100 | primary);
+                RoundedDraw.fill(context.batcher, this.area.x + 2, this.area.y + 2, this.area.ex() - 2, this.area.ey() - 2, 4, RoundedDraw.ALL, Colors.setA(primary, 0.25F));
+                context.batcher.box(this.area.x + 6, this.area.ey() - 3, this.area.ex() - 6, this.area.ey() - 1, Colors.A100 | primary);
             }
             else if (hovered)
             {
-                context.batcher.box(this.area.x, this.area.y, this.area.ex(), this.area.ey(), Colors.setA(Colors.WHITE, 0.08F));
+                RoundedDraw.fill(context.batcher, this.area.x + 2, this.area.y + 2, this.area.ex() - 2, this.area.ey() - 2, 4, RoundedDraw.ALL, Colors.setA(Colors.WHITE, 0.08F));
             }
 
             int iconColor = this.active ? Colors.WHITE : (hovered ? Colors.LIGHTEST_GRAY : Colors.GRAY);
@@ -403,7 +404,7 @@ public class UIWorldClipTypeMenu extends UIContextMenu
 
             if (hovered)
             {
-                context.batcher.box(this.area.x, this.area.y, this.area.ex(), this.area.ey(), Colors.A50 | BBSSettings.primaryColor.get());
+                RoundedDraw.fill(context.batcher, this.area.x + 4, this.area.y + 1, this.area.ex() - 4, this.area.ey() - 1, 4, RoundedDraw.ALL, Colors.setA(Colors.WHITE, 0.10F));
             }
 
             /* Left color bar matching UIClipTypeMenu */

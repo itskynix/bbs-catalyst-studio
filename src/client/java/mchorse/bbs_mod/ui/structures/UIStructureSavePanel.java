@@ -88,7 +88,7 @@ public class UIStructureSavePanel extends UIOverlayPanel
         this.bz = this.corner(StructureWand.COLOR_B);
 
         this.recent = new UIToggle(UIKeys.STRUCTURE_WAND_SAVE_RECENT, true, null);
-        this.save = new UIButton(UIKeys.GENERAL_SAVE, (b) -> this.save());
+        this.save = new UIButton(UIKeys.GENERAL_SAVE, (b) -> this.save()).primary();
 
         UIElement a = UI.row(this.ax, this.ay, this.az);
         UIElement b = UI.row(this.bx, this.by, this.bz);

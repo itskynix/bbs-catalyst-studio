@@ -1,9 +1,9 @@
 package mchorse.bbs_mod.ui.framework.elements.buttons;
 
-import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.utils.FontRenderer;
+import mchorse.bbs_mod.ui.framework.elements.windows.UIGlassButton;
 import mchorse.bbs_mod.ui.utils.UIConstants;
 import mchorse.bbs_mod.utils.colors.Colors;
 
@@ -126,21 +126,22 @@ public class UICirculate extends UIClickable<UICirculate>
     @Override
     protected void renderSkin(UIContext context)
     {
-        int color = Colors.A100 | (this.custom ? this.customColor : BBSSettings.primaryColor.get());
-
-        if (this.hover)
+        /* The rounded dark glass of every button; one given a colour of its own keeps it */
+        if (this.custom)
         {
-            color = Colors.mulRGB(color, 0.85F);
+            UIGlassButton.paintColoredGround(context, this.area, this.hover ? Colors.mulRGB(Colors.A100 | this.customColor, 0.85F) : this.customColor);
+        }
+        else
+        {
+            UIGlassButton.paintGround(context, this.area, false, this.hover);
         }
 
-        context.batcher.surfaceBox(this.area.x, this.area.y, this.area.ex(), this.area.ey(), color, true, false);
-
         FontRenderer font = context.batcher.getFont();
-        String label = font.limitToWidth(this.label.get(), this.area.w - 4);
+        String label = font.limitToWidth(this.label.get(), this.area.w - 8);
         int x = this.area.mx(font.getWidth(label));
         int y = this.area.my(font.getHeight());
 
-        context.batcher.textShadow(label, x, y, Colors.mulRGB(Colors.WHITE, this.hover ? 0.9F : 1F));
+        context.batcher.text(label, x, y, Colors.WHITE, false);
 
         this.renderLockedArea(context);
     }

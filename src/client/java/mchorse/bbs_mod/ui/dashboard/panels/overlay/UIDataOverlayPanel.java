@@ -6,6 +6,8 @@ import mchorse.bbs_mod.settings.values.core.ValueGroup;
 import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.dashboard.panels.UIDataDashboardPanel;
 import mchorse.bbs_mod.ui.framework.UIContext;
+import mchorse.bbs_mod.ui.model_editor.UIModelEditorPanel;
+import mchorse.bbs_mod.ui.particles.UIParticleSchemePanel;
 import mchorse.bbs_mod.ui.utils.UIUtils;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.ui.utils.presets.UICopyPasteController;
@@ -68,6 +70,23 @@ public class UIDataOverlayPanel <T extends ValueGroup> extends UICRUDOverlayPane
     }
 
     /* CRUD */
+
+    @Override
+    protected IKey getNewDataTitle()
+    {
+        if (this.panel instanceof UIParticleSchemePanel)
+        {
+            return UIKeys.NAME_INPUT_PARTICLE_TITLE;
+        }
+
+        return this.panel instanceof UIModelEditorPanel ? UIKeys.NAME_INPUT_MODEL_TITLE : null;
+    }
+
+    @Override
+    protected IKey getNewDataLabel()
+    {
+        return this.panel instanceof UIParticleSchemePanel ? UIKeys.NAME_INPUT_PARTICLE_LABEL : UIKeys.NAME_INPUT_MODEL_LABEL;
+    }
 
     @Override
     protected void addNewData(UIContext context, String name, MapType mapType)

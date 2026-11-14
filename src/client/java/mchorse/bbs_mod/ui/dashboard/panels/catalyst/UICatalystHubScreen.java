@@ -190,7 +190,7 @@ public class UICatalystHubScreen extends UIElement
 
     public void openNewProjectDialog()
     {
-        UIOverlay.addOverlay(this.getContext(), new UICatalystNewProjectDialog(this.panel), 360, 265);
+        UIOverlay.addOverlay(this.getContext(), new UICatalystNewProjectDialog(this.panel), 420, 340);
     }
 
     public void refresh()
