@@ -86,6 +86,15 @@ public class UIReplayPropertiesPanel extends UIElement
     public UITrackpad lookAtZ;
     public UIElement lookAtPoint;
 
+    /* Crowd glance: the switch, whom to glance at, and how */
+    public UIToggle crowdGlance;
+    public UIButton crowdGlanceTarget;
+    public UITrackpad crowdGlanceRadius;
+    public UITrackpad crowdGlanceDuration;
+    public UITrackpad crowdGlanceNeck;
+    public UITrackpad crowdGlanceBlend;
+    public UITrackpad crowdGlanceCooldown;
+
     /* Point of view: the hand model, how the head and the hurt jolt behave, and the POV body parts */
     public UISection povSection;
     public UINestedEdit povHand;
@@ -238,12 +247,24 @@ public class UIReplayPropertiesPanel extends UIElement
             trackpad.context((menu) -> menu.action(Icons.BLOCK, UIKeys.FILM_REPLAY_LOOK_AT_FROM_LOOK, this::pasteLookAtFromLook));
         }
 
+        this.createCrowdGlanceFields();
         this.createPovSection();
 
         UISection lookAtSection = new UISection(UIKeys.FILM_REPLAY_LOOK_AT);
 
         lookAtSection.fields.add(
             this.lookAtMode, this.lookAtTarget, this.lookAtPoint
+        );
+
+        UISection crowdGlanceSection = new UISection(UIKeys.FILM_REPLAY_CROWD_GLANCE);
+
+        crowdGlanceSection.fields.add(
+            this.crowdGlance, this.crowdGlanceTarget,
+            this.labelled(UIKeys.FILM_REPLAY_CROWD_GLANCE_RADIUS, this.crowdGlanceRadius),
+            this.labelled(UIKeys.FILM_REPLAY_CROWD_GLANCE_DURATION, this.crowdGlanceDuration),
+            this.labelled(UIKeys.FILM_REPLAY_CROWD_GLANCE_NECK, this.crowdGlanceNeck),
+            this.labelled(UIKeys.FILM_REPLAY_CROWD_GLANCE_BLEND, this.crowdGlanceBlend),
+            this.labelled(UIKeys.FILM_REPLAY_CROWD_GLANCE_COOLDOWN, this.crowdGlanceCooldown)
         );
 
         UISection shadowSection = new UISection(UIKeys.FILM_REPLAY_SHADOW);
@@ -262,6 +283,7 @@ public class UIReplayPropertiesPanel extends UIElement
         );
 
         lookAtSection.setExpanded(false);
+        crowdGlanceSection.setExpanded(false);
         shadowSection.setExpanded(false);
         other.setExpanded(false);
 
@@ -269,6 +291,7 @@ public class UIReplayPropertiesPanel extends UIElement
             this.pickEdit, this.enabled, this.label, this.nameTag,
             this.povSection,
             lookAtSection,
+            crowdGlanceSection,
             shadowSection,
             other
         );
@@ -285,6 +308,40 @@ public class UIReplayPropertiesPanel extends UIElement
         this.add(this.properties);
         this.showLookAtFields(ReplayLookAt.OFF);
         this.setReplay(null);
+    }
+
+    /**
+     * The crowd glance's fields. Like every other field here, a change goes to all the picked
+     * replays at once, so a whole crowd is switched on and pointed at one target in a click.
+     */
+    private void createCrowdGlanceFields()
+    {
+        this.crowdGlance = this.bound(new UIToggle(UIKeys.FILM_REPLAY_CROWD_GLANCE_ENABLED, (b) -> this.edit((replay) -> replay.crowdGlance.enabled.set(b.getValue()))), (r) -> this.crowdGlance.setValue(r.crowdGlance.enabled.get()));
+        this.crowdGlance.tooltip(UIKeys.FILM_REPLAY_CROWD_GLANCE_ENABLED_TOOLTIP);
+
+        this.crowdGlanceTarget = this.bound(new UIButton(IKey.EMPTY, (b) -> this.openCrowdGlanceTargetMenu()), (r) -> this.crowdGlanceTarget.label = this.replayLabel(r.crowdGlance.target.get()));
+        this.crowdGlanceTarget.tooltip(UIKeys.FILM_REPLAY_CROWD_GLANCE_TARGET_TOOLTIP);
+
+        this.crowdGlanceRadius = this.bound(new UITrackpad((v) -> this.edit((replay) -> replay.crowdGlance.radius.set(v.floatValue()))), (r) -> this.crowdGlanceRadius.setValue(r.crowdGlance.radius.get()));
+        this.crowdGlanceRadius.limit(0, 1000, false).tooltip(UIKeys.FILM_REPLAY_CROWD_GLANCE_RADIUS_TOOLTIP);
+
+        this.crowdGlanceDuration = this.bound(new UITrackpad((v) -> this.edit((replay) -> replay.crowdGlance.duration.set(v.intValue()))), (r) -> this.crowdGlanceDuration.setValue(r.crowdGlance.duration.get()));
+        this.crowdGlanceDuration.limit(1, 72000, true).tooltip(UIKeys.FILM_REPLAY_CROWD_GLANCE_DURATION_TOOLTIP);
+
+        this.crowdGlanceNeck = this.bound(new UITrackpad((v) -> this.edit((replay) -> replay.crowdGlance.maxNeckAngle.set(v.floatValue()))), (r) -> this.crowdGlanceNeck.setValue(r.crowdGlance.maxNeckAngle.get()));
+        this.crowdGlanceNeck.limit(0, 180, false).tooltip(UIKeys.FILM_REPLAY_CROWD_GLANCE_NECK_TOOLTIP);
+
+        this.crowdGlanceBlend = this.bound(new UITrackpad((v) -> this.edit((replay) -> replay.crowdGlance.blendTicks.set(v.intValue()))), (r) -> this.crowdGlanceBlend.setValue(r.crowdGlance.blendTicks.get()));
+        this.crowdGlanceBlend.limit(1, 200, true).tooltip(UIKeys.FILM_REPLAY_CROWD_GLANCE_BLEND_TOOLTIP);
+
+        this.crowdGlanceCooldown = this.bound(new UITrackpad((v) -> this.edit((replay) -> replay.crowdGlance.cooldownTicks.set(v.intValue()))), (r) -> this.crowdGlanceCooldown.setValue(r.crowdGlance.cooldownTicks.get()));
+        this.crowdGlanceCooldown.limit(0, 72000, true).tooltip(UIKeys.FILM_REPLAY_CROWD_GLANCE_COOLDOWN_TOOLTIP);
+    }
+
+    /** A field with its name on the left, so the numbers of the section can be told apart without hovering */
+    private UIElement labelled(IKey label, UIElement field)
+    {
+        return UI.row(UI.label(label, 20).labelAnchor(0F, 0.5F), field);
     }
 
     /**
@@ -537,13 +594,19 @@ public class UIReplayPropertiesPanel extends UIElement
 
     private IKey lookAtTargetLabel(Replay replay)
     {
+        return this.replayLabel(replay.lookAtTarget.get());
+    }
+
+    /** The name of the film's replay with the given id, or a dash */
+    private IKey replayLabel(String id)
+    {
         Film film = this.filmPanel.getData();
 
         if (film != null)
         {
             for (Replay other : film.replays.getList())
             {
-                if (other.getId().equals(replay.lookAtTarget.get()))
+                if (other.getId().equals(id))
                 {
                     return IKey.constant(other.getName());
                 }
@@ -574,6 +637,36 @@ public class UIReplayPropertiesPanel extends UIElement
                 }
 
                 manager.action(Icons.FILM, IKey.constant(other.getName()), () -> this.edit((replay) -> replay.lookAtTarget.set(other.getId())));
+            }
+        });
+    }
+
+    /** The target of the crowd glance, for every picked replay */
+    private void openCrowdGlanceTargetMenu()
+    {
+        Film film = this.filmPanel.getData();
+
+        if (film == null || this.replay == null || this.list == null)
+        {
+            return;
+        }
+
+        List<Replay> picked = this.list.getSelectedReplays();
+
+        this.getContext().replaceContextMenu((manager) ->
+        {
+            manager.autoKeys();
+
+            for (Replay other : film.replays.getList())
+            {
+                /* With the whole crowd picked (Ctrl+A) the target is among them: it is still offered,
+                 * and the target pointed at itself simply does not glance */
+                if (picked.size() == 1 && picked.get(0) == other)
+                {
+                    continue;
+                }
+
+                manager.action(Icons.FILM, IKey.constant(other.getName()), () -> this.edit((replay) -> replay.crowdGlance.target.set(other.getId())));
             }
         });
     }

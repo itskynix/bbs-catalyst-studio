@@ -63,6 +63,7 @@ public class ReplayBatchProcessor
         public boolean fill;
         public Replay lookAtTarget;
         public GroundProvider groundProvider;
+
     }
 
     @FunctionalInterface

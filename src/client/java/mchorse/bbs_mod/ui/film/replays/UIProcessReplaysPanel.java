@@ -3,6 +3,7 @@ package mchorse.bbs_mod.ui.film.replays;
 import mchorse.bbs_mod.film.Film;
 import mchorse.bbs_mod.film.replays.Replay;
 import mchorse.bbs_mod.film.replays.ReplayKeyframes;
+import mchorse.bbs_mod.l10n.L10n;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.settings.values.base.BaseValue;
 import mchorse.bbs_mod.ui.UIKeys;
@@ -40,6 +41,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Batch processing of the picked replays: scatter them randomly, line them up, shape them into
@@ -70,11 +73,31 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
             context.batcher.icon(icon, RowStyle.iconColor(hover || selected), x + 2, y + h / 2F, 0F, 0.5F);
             context.batcher.textShadow(this.elementToString(context, i, element), x + 24, y + (h - context.batcher.getFont().getHeight()) / 2, RowStyle.textColor(hover || selected));
         }
+
+        @Override
+        protected String elementToString(UIContext context, int i, String element)
+        {
+            return channelTitle(element).get();
+        }
     };
 
+    /** Stands where the channel list does when the chosen operation takes no channels */
+    private final UIText noChannels = new UIText(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_NO_CHANNELS_NOTE).padding(0, 0).lineHeight(10);
+
     private final UIPanelBase<UIElement> modes = new UIPanelBase<>(Direction.TOP);
-    private final UINormalProcessView normal = new UINormalProcessView();
-    private final UIAdvancedProcessView advanced = new UIAdvancedProcessView();
+    /* Built in the constructor, after filmPanel is set: the views read the film while they are made */
+    private final UINormalProcessView normal;
+    private final UIAdvancedProcessView advanced;
+
+    /** Channels that have a plain name of their own; the rest are listed by their id */
+    private static final Set<String> NAMED_CHANNELS = Set.of("x", "y", "z", "pitch", "yaw", "headYaw", "bodyYaw", "look_at_weight", "look_at_x", "look_at_y", "look_at_z", "sneaking", "sprinting", "grounded", "swimming");
+
+    private static final Map<String, IKey> CHANNEL_TITLES = new HashMap<>();
+
+    private static IKey channelTitle(String id)
+    {
+        return CHANNEL_TITLES.computeIfAbsent(id, (i) -> NAMED_CHANNELS.contains(i) ? L10n.lang("bbs.ui.scene.replays.context.process.channel." + i) : IKey.constant(i));
+    }
 
     private static class ProcessReplaysState
     {
@@ -98,6 +121,8 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
 
         this.filmPanel = filmPanel;
         this.replays = replays;
+        this.normal = new UINormalProcessView();
+        this.advanced = new UIAdvancedProcessView();
 
         this.message.setVisible(false);
 
@@ -128,13 +153,26 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
         UIElement body = new UIElement();
         body.relative(this.content).xy(6, 6).w(1F, -12).h(1F, -40);
 
-        this.modes.relative(body).x(0).y(0).w(1F, -126).h(1F);
+        this.modes.relative(body).x(0).y(0).w(1F, -220).h(1F);
 
-        this.properties.relative(body).x(1F, -120).y(20).w(120).h(1F, -20);
+        this.properties.relative(body).x(1F, -214).y(20).w(214).h(1F, -20);
+        this.noChannels.relative(body).x(1F, -214).y(24).w(214);
 
         this.confirm.w(1F, -10);
         this.content.add(body);
-        body.add(this.modes, this.properties);
+        body.add(this.modes, this.properties, this.noChannels);
+    }
+
+    @Override
+    public void render(UIContext context)
+    {
+        /* Operations that take no channels leave nothing to pick from: the list gives way to a note */
+        boolean needed = this.modes.view == this.advanced || this.normal.getSelectedOperation() == null || this.normal.getSelectedOperation().channels;
+
+        this.properties.setVisible(needed);
+        this.noChannels.setVisible(!needed);
+
+        super.render(context);
     }
 
     /** Numeric channels of a replay, curated first, in the order the timeline shows them. */
@@ -223,21 +261,23 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
                 operation = NormalOperation.RANDOM;
             }
 
-            if (operation != NormalOperation.LOOK_AT && selectedProperties.isEmpty())
+            /* Fitting to the ground only moves Y, and the list is out of the way for it */
+            if (operation == NormalOperation.FIT_HEIGHT)
+            {
+                selectedProperties = new ArrayList<>(List.of("y"));
+            }
+
+            if (operation.channels && selectedProperties.isEmpty())
             {
                 context.notifyError(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_ERROR_NO_CHANNELS);
 
                 return false;
             }
 
-            if (operation == NormalOperation.FIT_HEIGHT && !selectedProperties.contains("y"))
+            if (operation.channels)
             {
-                context.notifyError(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_ERROR_NEED_Y_CHANNEL);
-
-                return false;
+                PROCESS_STATE.properties = new ArrayList<>(selectedProperties);
             }
-
-            PROCESS_STATE.properties = new ArrayList<>(selectedProperties);
 
             if (!this.applyNormal(context, visible, selectedProperties))
             {
@@ -335,6 +375,7 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
         {
             PROCESS_STATE.shift = this.normal.shift.getValue();
         }
+
         ReplayBatchProcessor.NormalParams params = new ReplayBatchProcessor.NormalParams();
         params.randomMin = PROCESS_STATE.randomMin;
         params.randomMax = PROCESS_STATE.randomMax;
@@ -425,11 +466,11 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
 
     private Replay resolveLookAtTargetReplay()
     {
-        if (PROCESS_STATE.operation != NormalOperation.LOOK_AT)
-        {
-            return null;
-        }
+        return PROCESS_STATE.operation == NormalOperation.LOOK_AT ? this.resolveReplay(PROCESS_STATE.lookAtTarget) : null;
+    }
 
+    private Replay resolveReplay(int index)
+    {
         Film film = this.filmPanel.getData();
 
         if (film == null)
@@ -438,7 +479,6 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
         }
 
         List<Replay> replays = film.replays.getList();
-        int index = PROCESS_STATE.lookAtTarget;
 
         if (index < 0 || index >= replays.size())
         {
@@ -510,13 +550,14 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
             this.fill = new UIToggle(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FILL, PROCESS_STATE.fill, (b) -> PROCESS_STATE.fill = b.getValue());
             this.fill.tooltip(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FILL_TOOLTIP);
 
-            this.lookAtTarget = new UIButton(IKey.EMPTY, (b) -> this.openLookAtTargetMenu());
+            this.lookAtTarget = new UIButton(IKey.EMPTY, (b) -> this.openTargetMenu());
             this.lookAtTarget.tooltip(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_LOOK_AT_TARGET_TOOLTIP);
 
-            int opsHeight = UIConstants.CONTROL_HEIGHT * NormalOperation.values().length;
+            /* The list scrolls: eleven operations and what they ask for would not fit one panel */
+            int opsHeight = UIConstants.CONTROL_HEIGHT * Math.min(NormalOperation.values().length, 7);
 
             this.operations.relative(this).xy(0, 0).w(1F).h(opsHeight);
-            this.params.relative(this.operations).y(1F, UIConstants.MARGIN * 2).w(1F).h(UIConstants.CONTROL_HEIGHT * 2 + UIConstants.MARGIN);
+            this.params.relative(this.operations).y(1F, UIConstants.MARGIN * 2).w(1F).h(UIConstants.CONTROL_HEIGHT * 5 + UIConstants.MARGIN * 4);
             this.hint.relative(this.params).y(1F, UIConstants.MARGIN).w(1F);
 
             this.add(this.operations, this.params, this.hint);
@@ -527,104 +568,59 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
 
         private void updateOperation()
         {
-            NormalOperation operation = null;
-            Label<NormalOperation> operationLabel = this.operations.getCurrentFirst();
-
-            if (operationLabel != null)
-            {
-                operation = operationLabel.value;
-            }
+            NormalOperation operation = this.getSelectedOperation();
 
             this.params.removeAll();
+            this.updateTargetLabels();
+
             int rows = 0;
 
-            if (operation == NormalOperation.RANDOM)
-            {
-                UILabel minLabel = this.paramLabel(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_MIN, 36);
-                UILabel maxLabel = this.paramLabel(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_MAX, 36);
-                UIElement row = UI.row(minLabel, this.randomMin, maxLabel, this.randomMax);
-                row.relative(this.params).w(1F).h(UIConstants.CONTROL_HEIGHT).resize();
-                this.params.add(row);
-                rows = 1;
-                this.hint.text(operation.hint);
-            }
-            else if (operation == NormalOperation.LINE)
-            {
-                UILabel offsetLabel = this.paramLabel(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_OFFSET, 56);
-                UIElement row = UI.row(offsetLabel, this.lineOffset);
-                row.relative(this.params).w(1F).h(UIConstants.CONTROL_HEIGHT).resize();
-                this.params.add(row);
-                rows = 1;
-                this.hint.text(operation.hint);
-            }
-            else if (operation == NormalOperation.SQUARE || operation == NormalOperation.SQUARE_OUTLINE)
-            {
-                UILabel sizeLabel = this.paramLabel(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_SIZE, 56);
-                UIElement row1 = UI.row(sizeLabel, this.size);
-                row1.relative(this.params).w(1F).h(UIConstants.CONTROL_HEIGHT).resize();
-                this.params.add(row1);
-                rows = 1;
-                this.hint.text(operation.hint);
-            }
-            else if (operation == NormalOperation.CUBE || operation == NormalOperation.SPHERE)
-            {
-                UILabel sizeLabel = this.paramLabel(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_SIZE, 56);
-                UIElement row = UI.row(sizeLabel, this.size);
-                row.relative(this.params).w(1F).h(UIConstants.CONTROL_HEIGHT).resize();
-                this.params.add(row);
-                rows = 1;
-                this.hint.text(operation.hint);
-            }
-            else if (operation == NormalOperation.CIRCLE || operation == NormalOperation.CIRCLE_OUTLINE)
-            {
-                UILabel sizeLabel = this.paramLabel(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_SIZE, 56);
-                UIElement row = UI.row(sizeLabel, this.size);
-                row.relative(this.params).w(1F).h(UIConstants.CONTROL_HEIGHT).resize();
-                this.params.add(row);
-                rows = 1;
-                this.hint.text(operation.hint);
-            }
-            else if (operation == NormalOperation.FIT_HEIGHT)
-            {
-                this.hint.text(operation.hint);
-            }
-            else if (operation == NormalOperation.LOOK_AT)
-            {
-                UILabel targetLabel = this.paramLabel(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_LOOK_AT_TARGET, 56);
-                this.updateLookAtTargetLabel();
-                UIElement row = UI.row(targetLabel, this.lookAtTarget);
-                row.relative(this.params).w(1F).h(UIConstants.CONTROL_HEIGHT).resize();
-                this.params.add(row);
-                rows = 1;
-                this.hint.text(operation.hint);
-            }
-            else if (operation == NormalOperation.SHIFT)
-            {
-                UILabel shiftLabel = this.paramLabel(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_SHIFT, 56);
-                UIElement row = UI.row(shiftLabel, this.shift);
-                row.relative(this.params).w(1F).h(UIConstants.CONTROL_HEIGHT).resize();
-                this.params.add(row);
-                rows = 1;
-                this.hint.text(operation.hint);
-            }
-            else
+            if (operation == null)
             {
                 this.hint.text(IKey.EMPTY);
             }
-
-            int y = UIConstants.CONTROL_HEIGHT + UIConstants.MARGIN;
-            boolean showFill = operation == NormalOperation.CUBE || operation == NormalOperation.SPHERE;
-
-            if (showFill)
+            else
             {
-                this.fill.relative(this.params).x(0).y(y).w(1F).h(UIConstants.CONTROL_HEIGHT);
+                this.hint.text(operation.hint);
+
+                switch (operation)
+                {
+                    case RANDOM ->
+                    {
+                        rows = this.addRow(rows, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_MIN, this.randomMin);
+                        rows = this.addRow(rows, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_MAX, this.randomMax);
+                    }
+                    case LINE -> rows = this.addRow(rows, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_OFFSET, this.lineOffset);
+                    case SQUARE, SQUARE_OUTLINE, CUBE, SPHERE, CIRCLE, CIRCLE_OUTLINE -> rows = this.addRow(rows, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_SIZE, this.size);
+                    case LOOK_AT -> rows = this.addRow(rows, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_LOOK_AT_TARGET, this.lookAtTarget);
+                    case SHIFT -> rows = this.addRow(rows, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_SHIFT, this.shift);
+                    default ->
+                    {}
+                }
+            }
+
+            if (operation == NormalOperation.CUBE || operation == NormalOperation.SPHERE)
+            {
+                this.fill.relative(this.params).x(0).y(rows * (UIConstants.CONTROL_HEIGHT + UIConstants.MARGIN)).w(1F).h(UIConstants.CONTROL_HEIGHT);
                 this.params.add(this.fill);
                 rows += 1;
             }
 
             int height = rows <= 0 ? 0 : rows * UIConstants.CONTROL_HEIGHT + (rows - 1) * UIConstants.MARGIN;
+
             this.params.h(height);
             this.resize();
+        }
+
+        /** One labelled row of the parameters, stacked under the ones before it. */
+        private int addRow(int rows, IKey label, UIElement field)
+        {
+            UIElement row = UI.row(this.paramLabel(label, 104), field);
+
+            row.relative(this.params).y(rows * (UIConstants.CONTROL_HEIGHT + UIConstants.MARGIN)).w(1F).h(UIConstants.CONTROL_HEIGHT).resize();
+            this.params.add(row);
+
+            return rows + 1;
         }
 
         private NormalOperation getSelectedOperation()
@@ -634,40 +630,37 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
             return operationLabel == null ? null : operationLabel.value;
         }
 
-        private void updateLookAtTargetLabel()
+        private void updateTargetLabels()
         {
-            Film film = UIProcessReplaysPanel.this.filmPanel.getData();
-
-            if (film == null)
+            if (UIProcessReplaysPanel.this.filmPanel == null || UIProcessReplaysPanel.this.filmPanel.getData() == null)
             {
-                this.lookAtTarget.label = IKey.constant("-");
                 return;
             }
 
-            List<Replay> replays = film.replays.getList();
-            int index = PROCESS_STATE.lookAtTarget;
-
-            if (index < 0 || index >= replays.size())
-            {
-                this.lookAtTarget.label = IKey.constant("-");
-                return;
-            }
-
-            this.lookAtTarget.label = IKey.constant(replays.get(index).getName());
+            this.setTargetLabel(this.lookAtTarget, PROCESS_STATE.lookAtTarget);
         }
 
-        private void openLookAtTargetMenu()
+        private void setTargetLabel(UIButton button, int index)
         {
-            UIContext context = this.getContext();
+            Film film = UIProcessReplaysPanel.this.filmPanel == null ? null : UIProcessReplaysPanel.this.filmPanel.getData();
 
-            if (context == null)
+            if (film == null || index < 0 || index >= film.replays.getList().size())
             {
+                button.label = IKey.constant("-");
+
                 return;
             }
 
+            button.label = IKey.constant(film.replays.getList().get(index).getName());
+        }
+
+        /** The replays of the film to pick from, for the one to look at. */
+        private void openTargetMenu()
+        {
+            UIContext context = this.getContext();
             Film film = UIProcessReplaysPanel.this.filmPanel.getData();
 
-            if (film == null)
+            if (context == null || film == null)
             {
                 return;
             }
@@ -681,11 +674,12 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
                 for (int i = 0; i < replays.size(); i++)
                 {
                     int index = i;
-                    Replay replay = replays.get(i);
-                    manager.action(Icons.FILM, IKey.constant(replay.getName()), () ->
+
+                    manager.action(Icons.FILM, IKey.constant(replays.get(i).getName()), () ->
                     {
                         PROCESS_STATE.lookAtTarget = index;
-                        this.updateLookAtTargetLabel();
+
+                        this.updateTargetLabels();
                     });
                 }
             });
@@ -720,25 +714,29 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
 
     private enum NormalOperation
     {
-        RANDOM(ReplayBatchProcessor.Operation.RANDOM, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_RANDOM, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_RANDOM, Icons.SIX_STAR),
-        LINE(ReplayBatchProcessor.Operation.LINE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_LINE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_LINE, Icons.LINE),
-        SQUARE(ReplayBatchProcessor.Operation.SQUARE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_SQUARE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_SHAPES, Icons.SQUARE),
-        SQUARE_OUTLINE(ReplayBatchProcessor.Operation.SQUARE_OUTLINE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_SQUARE_OUTLINE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_SHAPES, Icons.OUTLINE),
-        CUBE(ReplayBatchProcessor.Operation.CUBE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_CUBE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_CUBE, Icons.BLOCK),
-        CIRCLE(ReplayBatchProcessor.Operation.CIRCLE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_CIRCLE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_SHAPES, Icons.CIRCLE),
-        CIRCLE_OUTLINE(ReplayBatchProcessor.Operation.CIRCLE_OUTLINE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_CIRCLE_OUTLINE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_SHAPES, Icons.OUTLINE_SPHERE),
-        SPHERE(ReplayBatchProcessor.Operation.SPHERE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_SPHERE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_SPHERE, Icons.SPHERE),
-        FIT_HEIGHT(ReplayBatchProcessor.Operation.FIT_HEIGHT, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_FIT_HEIGHT, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_FIT_HEIGHT, Icons.ARROW_DOWN),
-        LOOK_AT(ReplayBatchProcessor.Operation.LOOK_AT, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_LOOK_AT, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_LOOK_AT, Icons.LOOKING),
-        SHIFT(ReplayBatchProcessor.Operation.SHIFT, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_SHIFT, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_SHIFT, Icons.SHIFT_TO);
+        RANDOM(ReplayBatchProcessor.Operation.RANDOM, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_RANDOM, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_RANDOM, Icons.SIX_STAR, true),
+        LINE(ReplayBatchProcessor.Operation.LINE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_LINE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_LINE, Icons.LINE, true),
+        SQUARE(ReplayBatchProcessor.Operation.SQUARE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_SQUARE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_SQUARE, Icons.SQUARE, true),
+        SQUARE_OUTLINE(ReplayBatchProcessor.Operation.SQUARE_OUTLINE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_SQUARE_OUTLINE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_SQUARE_OUTLINE, Icons.OUTLINE, true),
+        CUBE(ReplayBatchProcessor.Operation.CUBE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_CUBE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_CUBE, Icons.BLOCK, true),
+        CIRCLE(ReplayBatchProcessor.Operation.CIRCLE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_CIRCLE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_CIRCLE, Icons.CIRCLE, true),
+        CIRCLE_OUTLINE(ReplayBatchProcessor.Operation.CIRCLE_OUTLINE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_CIRCLE_OUTLINE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_CIRCLE_OUTLINE, Icons.OUTLINE_SPHERE, true),
+        SPHERE(ReplayBatchProcessor.Operation.SPHERE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_SPHERE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_SPHERE, Icons.SPHERE, true),
+        FIT_HEIGHT(ReplayBatchProcessor.Operation.FIT_HEIGHT, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_FIT_HEIGHT, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_FIT_HEIGHT, Icons.ARROW_DOWN, false),
+        LOOK_AT(ReplayBatchProcessor.Operation.LOOK_AT, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_LOOK_AT, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_LOOK_AT, Icons.LOOKING, false),
+        SHIFT(ReplayBatchProcessor.Operation.SHIFT, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_SHIFT, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_SHIFT, Icons.SHIFT_TO, true);
 
         public final ReplayBatchProcessor.Operation op;
         public final IKey title;
         public final IKey hint;
         public final Icon icon;
 
-        NormalOperation(ReplayBatchProcessor.Operation op, IKey title, IKey hint, Icon icon)
+        /** Whether the operation works on channels the user picks; the others know which ones they need */
+        public final boolean channels;
+
+        NormalOperation(ReplayBatchProcessor.Operation op, IKey title, IKey hint, Icon icon, boolean channels)
         {
+            this.channels = channels;
             this.op = op;
             this.title = title;
             this.hint = hint;

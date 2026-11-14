@@ -65,6 +65,9 @@ public class Replay extends ValueGroup
     /** The point looked at in mode 3, unless the look_at_x/y/z tracks have keys */
     public final ValuePoint lookAtPoint = new ValuePoint("look_at_point", new Point(0, 0, 0));
 
+    /** Turning the head to a passing character and back, worked out while playing; see {@link ReplayCrowdGlance} */
+    public final ReplayCrowdGlance crowdGlance = new ReplayCrowdGlance("crowd_glance");
+
     public final ValueBoolean axesPreview = new ValueBoolean("axes_preview", false);
     public final ValueString axesPreviewBone = new ValueString("axes_preview_bone", "");
 
@@ -97,6 +100,7 @@ public class Replay extends ValueGroup
         this.add(this.lookAtMode);
         this.add(this.lookAtTarget);
         this.add(this.lookAtPoint);
+        this.add(this.crowdGlance);
 
         this.add(this.axesPreview);
         this.add(this.axesPreviewBone);

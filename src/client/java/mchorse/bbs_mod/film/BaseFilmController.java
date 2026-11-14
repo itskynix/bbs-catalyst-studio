@@ -376,6 +376,7 @@ public abstract class BaseFilmController
         replay.keyframes.apply(ticks, entity);
         this.applyMtrSync(replay, ticks, entity, false);
         ReplayLookAt.apply(replay, this.film, ticks, entity);
+        ReplayCrowdGlanceDriver.apply(replay, this.film, ticks, entity);
         replay.applyClientActions(ticks, entity, this.film);
     }
 

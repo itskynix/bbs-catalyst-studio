@@ -185,6 +185,7 @@ public class UIReplayList extends UIList<ReplayListEntry>
                 }
 
                 menu.action(Icons.ALL_DIRECTIONS, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS, this::processReplays);
+                menu.action(Icons.USER, UIKeys.SCENE_REPLAYS_CONTEXT_TOGGLE_CROWD_GLANCE, this::toggleCrowdGlance);
                 menu.action(Icons.TIME, UIKeys.SCENE_REPLAYS_CONTEXT_OFFSET_TIME, this::offsetTimeReplays);
                 menu.action(Icons.MATERIAL, UIKeys.SCENE_REPLAYS_SELECT_SAME_MODEL, this::selectSameModel);
                 menu.action(Icons.DUPE, UIKeys.SCENE_REPLAYS_DUPLICATE_TOTAL, this::openDuplicateTotalOverlay);
@@ -1516,7 +1517,7 @@ public class UIReplayList extends UIList<ReplayListEntry>
             return;
         }
 
-        UIOverlay.addOverlay(this.getContext(), new UIProcessReplaysPanel(this.panel, this.getSelectedReplaysInViewOrder()), 320, 320);
+        UIOverlay.addOverlay(this.getContext(), new UIProcessReplaysPanel(this.panel, this.getSelectedReplaysInViewOrder()), 500, 420);
     }
 
     private void offsetTimeReplays()
@@ -1829,6 +1830,21 @@ public class UIReplayList extends UIList<ReplayListEntry>
     {
         this.panel.getController().createEntities();
         this.panel.replayEditor.updateChannelsList();
+    }
+
+    /**
+     * Crowd glance on for every picked replay, or off when all of them have it already: a quick
+     * switch for a whole crowd. The target and the rest are set in the properties panel.
+     */
+    private void toggleCrowdGlance()
+    {
+        List<Replay> picked = this.getSelectedReplays();
+        boolean on = picked.stream().anyMatch((replay) -> !replay.crowdGlance.enabled.get());
+
+        for (Replay replay : picked)
+        {
+            replay.crowdGlance.enabled.set(on);
+        }
     }
 
     public void dupeReplay()

@@ -5,6 +5,7 @@ import mchorse.bbs_mod.film.BaseFilmController;
 import mchorse.bbs_mod.film.FilmEntityRenderer;
 import mchorse.bbs_mod.film.Film;
 import mchorse.bbs_mod.film.ReplayLookAt;
+import mchorse.bbs_mod.film.ReplayCrowdGlanceDriver;
 import mchorse.bbs_mod.film.FilmControllerContext;
 import mchorse.bbs_mod.film.FilmTarget;
 import mchorse.bbs_mod.film.replays.Replay;
@@ -87,6 +88,7 @@ public class FilmEditorController extends BaseFilmController
             replay.keyframes.apply(ticks, entity, entity == this.controller.getControlled() ? groups : null);
             this.applyMtrSync(replay, ticks, entity, false);
             ReplayLookAt.apply(replay, this.film, ticks, entity);
+            ReplayCrowdGlanceDriver.apply(replay, this.film, ticks, entity);
             replay.applyClientActions(ticks, entity, this.film);
         }
 
