@@ -19,7 +19,7 @@ import mchorse.bbs_mod.utils.Direction;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.Perspective;
 
-public class UIMorphingPanel extends UIDashboardPanel
+public class UIMorphingPanel extends UIDashboardPanel implements UIMorphStudioScreen.Host
 {
     public UIMorphStudioScreen studioScreen;
     public UIFormPalette palette;
@@ -63,7 +63,7 @@ public class UIMorphingPanel extends UIDashboardPanel
         });
 
         /* Modern Morphing Studio & Canlı 3D Podyum Ekranı */
-        this.studioScreen = new UIMorphStudioScreen(this);
+        this.studioScreen = new UIMorphStudioScreen(this, false);
         this.studioScreen.full(this);
 
         this.add(this.palette, this.studioScreen);
@@ -79,6 +79,24 @@ public class UIMorphingPanel extends UIDashboardPanel
         TourAnchors.register("morphing.forms", () -> this.palette.list.forms);
         TourAnchors.register("morphing.edit", () -> this.palette.list.edit);
         TourAnchors.register("morphing.demorph", () -> this.demorph);
+    }
+
+    @Override
+    public void confirmForm(Form form)
+    {
+        this.setForm(form);
+    }
+
+    @Override
+    public void editForm(Form form)
+    {
+        this.openEditor(form);
+    }
+
+    @Override
+    public void showClassic()
+    {
+        this.showClassicView();
     }
 
     public void showStudioView()
@@ -155,11 +173,13 @@ public class UIMorphingPanel extends UIDashboardPanel
         }
     }
 
+    @Override
     public void demorph()
     {
         this.setForm(null);
     }
 
+    @Override
     public void morphFromMob()
     {
         Form form = Morph.getMobForm(MinecraftClient.getInstance().player);

@@ -84,17 +84,6 @@ public class UIMorphPodiumRenderer extends UIModelRenderer
         this.scalePop = Lerps.lerp(this.scalePop, 1.0F, 0.15F);
 
         super.render(context);
-
-        /* Form seçilmediğinde merkezde şık bilgilendirme etiketi */
-        if (this.form == null)
-        {
-            Area a = this.area;
-            FontRenderer font = context.batcher.getFont();
-            String hint = "Form Seçilmedi / No Form Selected";
-            int w = font.getWidth(hint);
-
-            context.batcher.text(hint, a.mx() - w / 2, a.my() - 4, Colors.setA(Colors.WHITE, 0.45F));
-        }
     }
 
     @Override
@@ -174,7 +163,10 @@ public class UIMorphPodiumRenderer extends UIModelRenderer
             .camera(this.camera)
             .modelRenderer(context.getTick());
 
+        /* Tall models (a portal) must stay inside the podium, under the title bar */
+        context.batcher.clip(this.area, context);
         FormUtilsClient.render(this.form, formContext);
+        context.batcher.unclip(context);
 
         matrices.pop();
     }

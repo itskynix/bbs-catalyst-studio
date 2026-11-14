@@ -1690,6 +1690,7 @@ public class UIReplayList extends UIList<ReplayListEntry>
             }
         });
 
+        palette.title(UIKeys.MORPH_STUDIO_PICKER_CHARACTER);
         palette.updatable();
     }
 

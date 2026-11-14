@@ -13,6 +13,7 @@ import mchorse.bbs_mod.ui.utils.UIUtils;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.utils.colors.Colors;
 import mchorse.bbs_mod.utils.interps.Lerps;
+import net.minecraft.client.util.math.MatrixStack;
 
 /**
  * Grid card component for a morphable form in the Morphing Studio Catalog.
@@ -23,6 +24,10 @@ public class UIMorphFormCard extends UIClickable<UIMorphFormCard>
 {
     private final UIMorphStudioScreen studio;
     public final Form form;
+
+    private final String title;
+    private final String code;
+    private final String type;
 
     private float hoverY = 0F;
     private float glowAlpha = 0F;
@@ -35,10 +40,11 @@ public class UIMorphFormCard extends UIClickable<UIMorphFormCard>
         this.studio = studio;
         this.form = form;
 
-        String name = form.getDisplayName();
-        String type = UIMorphCategory.getFormTypeLabel(form);
+        this.title = UIMorphNaming.title(form);
+        this.code = UIMorphNaming.code(form);
+        this.type = UIMorphCategory.getFormTypeShort(form);
 
-        this.tooltip(IKey.raw(name + " (" + type + ")"));
+        this.tooltip(IKey.raw(this.title));
 
         this.context((menu) ->
         {
@@ -100,7 +106,7 @@ public class UIMorphFormCard extends UIClickable<UIMorphFormCard>
         int ey = a.ey() + yOff;
 
         int bg = isSelected ? 0xd8182232 : (isHovered ? 0xb0131924 : 0x750c1018);
-        int border = isSelected ? (Colors.A100 | primary) : (isHovered ? 0x60ffffff : 0x22ffffff);
+        int border = isSelected ? (Colors.A100 | primary) : (isHovered ? Colors.setA(primary, 0.8F) : 0x22ffffff);
 
         if (this.glowAlpha > 0.02F)
         {
@@ -114,6 +120,12 @@ public class UIMorphFormCard extends UIClickable<UIMorphFormCard>
         context.batcher.box(x, y, ex, ey, bg);
         context.batcher.outline(x, y, ex, ey, border);
 
+        if (isSelected || isHovered)
+        {
+            /* A second ring inside, so the state reads at a glance */
+            context.batcher.outline(x + 1, y + 1, ex - 1, ey - 1, Colors.setA(isSelected ? primary : Colors.WHITE, isSelected ? 0.55F : 0.18F));
+        }
+
         /* 3D Preview Kutusu */
         int prevPad = 4;
         int prevX = x + prevPad;
@@ -124,7 +136,10 @@ public class UIMorphFormCard extends UIClickable<UIMorphFormCard>
         context.batcher.box(prevX, prevY, prevEx, prevEy, 0x55000000);
         context.batcher.outline(prevX, prevY, prevEx, prevEy, isHovered ? 0x30ffffff : 0x14ffffff);
 
+        /* Big models must not spill over the neighbouring cards: the picture is cut to its box */
+        context.batcher.clipBox(prevX, prevY, prevEx, prevEy, context);
         FormUtilsClient.renderPreview(this.form, context, prevX, prevY, prevEx, prevEy);
+        context.batcher.unclip(context);
 
         /* Favori Yıldız Rozeti */
         if (this.studio.isFavorite(this.form))
@@ -132,12 +147,19 @@ public class UIMorphFormCard extends UIClickable<UIMorphFormCard>
             context.batcher.icon(Icons.FAVORITE, ex - 18, y + 6, 0xffffd54f);
         }
 
-        /* Form Adı ve Kategori Altyazısı */
+        /* Title, then the technical name smaller and dimmer, then the kind */
         FontRenderer font = context.batcher.getFont();
-        String name = font.limitToWidth(this.form.getDisplayName(), a.w - 8);
-        context.batcher.text(name, x + 4, y + 72, Colors.WHITE, false);
+        String name = font.limitToWidth(this.title, "...", a.w - 8);
+        context.batcher.text(name, x + 4, y + 70, Colors.WHITE, false);
 
-        String typeStr = font.limitToWidth(UIMorphCategory.getFormTypeShort(this.form), a.w - 8);
-        context.batcher.text(typeStr, x + 4, y + 86, Colors.setA(Colors.WHITE, 0.50F), false);
+        MatrixStack matrices = context.batcher.getContext().getMatrices();
+        float small = 0.8F;
+
+        matrices.push();
+        matrices.scale(small, small, 1F);
+        context.batcher.text(font.limitToWidth(this.code, "...", (int) ((a.w - 8) / small)), (int) ((x + 4) / small), (int) ((y + 82) / small), Colors.setA(Colors.WHITE, 0.38F), false);
+        matrices.pop();
+
+        context.batcher.text(font.limitToWidth(this.type, "...", a.w - 8), x + 4, y + 92, Colors.setA(Colors.WHITE, 0.55F), false);
     }
 }

@@ -8,6 +8,8 @@ import mchorse.bbs_mod.data.types.ListType;
 import mchorse.bbs_mod.data.types.MapType;
 import mchorse.bbs_mod.data.types.StringType;
 import mchorse.bbs_mod.forms.FormCategories;
+import mchorse.bbs_mod.forms.FormUtils;
+import mchorse.bbs_mod.graphics.window.Window;
 import mchorse.bbs_mod.forms.categories.FormCategory;
 import mchorse.bbs_mod.forms.categories.RecentFormCategory;
 import mchorse.bbs_mod.forms.forms.Form;
@@ -22,6 +24,7 @@ import mchorse.bbs_mod.ui.framework.elements.buttons.UIButton;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIClickable;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIIcon;
 import mchorse.bbs_mod.ui.framework.elements.input.text.UITextbox;
+import mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D;
 import mchorse.bbs_mod.ui.framework.elements.utils.FontRenderer;
 import mchorse.bbs_mod.ui.framework.elements.utils.UILabel;
 import mchorse.bbs_mod.ui.framework.elements.utils.UIRenderable;
@@ -49,7 +52,29 @@ import java.util.Set;
  */
 public class UIMorphStudioScreen extends UIElement
 {
-    public final UIMorphingPanel panel;
+    /** What the studio asks of whoever hosts it: the morphing panel, or a form picker. */
+    public interface Host
+    {
+        /** The form was chosen: morph into it, or hand it to whatever asked for a form. */
+        void confirmForm(Form form);
+
+        void editForm(Form form);
+
+        void showClassic();
+
+        default void demorph()
+        {}
+
+        default void morphFromMob()
+        {}
+
+        default void close()
+        {}
+    }
+
+    public final Host host;
+    private final boolean picker;
+    private IKey title;
     private final LandingBackdrop backdrop = new LandingBackdrop();
 
     /* Sol Panel (38% - Canlı Podyum) */
@@ -59,6 +84,8 @@ public class UIMorphStudioScreen extends UIElement
     private final UILabel formTypeLabel;
     private final UIIcon favoriteBtn;
     private final UIIcon editBtn;
+    private final UIIcon copyBtn;
+    private final UIIcon resetBtn;
     private final UIButton morphBtn;
 
     /* Sağ Panel (62% - Form Kataloğu) */
@@ -79,11 +106,13 @@ public class UIMorphStudioScreen extends UIElement
     private UIMorphCategory currentCategory = UIMorphCategory.ALL;
     private String searchQuery = "";
 
-    public UIMorphStudioScreen(UIMorphingPanel panel)
+    public UIMorphStudioScreen(Host host, boolean picker)
     {
         super();
 
-        this.panel = panel;
+        this.host = host;
+        this.picker = picker;
+        this.title = picker ? UIKeys.MORPH_STUDIO_PICKER_TITLE : UIKeys.MORPH_STUDIO_HEADER;
 
         this.loadFavorites();
 
@@ -96,6 +125,10 @@ public class UIMorphStudioScreen extends UIElement
 
         topBar.add(new UIRenderable(this::renderTopHeader));
 
+        UIIcon closeBtn = new UIIcon(Icons.CLOSE, (b) -> this.host.close());
+        closeBtn.tooltip(UIKeys.MORPH_STUDIO_CLOSE, Direction.TOP);
+        closeBtn.relative(topBar).x(1F, -44).y(0).wh(20, 20);
+
         UIIcon demorphBtn = new UIIcon(Icons.POSE, (b) -> this.demorph());
         demorphBtn.tooltip(UIKeys.MORPHING_DEMORPH, Direction.TOP);
         demorphBtn.relative(topBar).x(1F, -68).y(0).wh(20, 20);
@@ -104,34 +137,31 @@ public class UIMorphStudioScreen extends UIElement
         fromMobBtn.tooltip(UIKeys.MORPHING_FROM_MOB, Direction.TOP);
         fromMobBtn.relative(topBar).x(1F, -46).y(0).wh(20, 20);
 
-        UIIcon classicViewBtn = new UIIcon(Icons.MORE, (b) -> this.panel.showClassicView());
+        UIIcon classicViewBtn = new UIIcon(Icons.MORE, (b) -> this.host.showClassic());
         classicViewBtn.tooltip(UIKeys.MORPH_STUDIO_CLASSIC_VIEW, Direction.TOP);
         classicViewBtn.relative(topBar).x(1F, -22).y(0).wh(20, 20);
 
-        topBar.add(demorphBtn, fromMobBtn, classicViewBtn);
+        if (this.picker)
+        {
+            topBar.add(closeBtn, classicViewBtn);
+        }
+        else
+        {
+            topBar.add(demorphBtn, fromMobBtn, classicViewBtn);
+        }
         this.add(topBar);
 
         /* 3. Sol Panel (%38 - Canlı Podyum) */
         this.leftPanel = new UIElement();
-        this.leftPanel.relative(this).x(10).y(30).w(0.38F, -14).h(1F, -40);
+        this.leftPanel.relative(this).x(0).y(28).w(0.38F).h(1F, -28);
 
         this.leftPanel.add(new UIRenderable((context) ->
         {
-            Area a = this.leftPanel.area;
-            int bg = 0xf00b0f16;
-            int border = BBSSettings.color(BBSSettings.dividerColor(), Colors.A12);
-
-            context.batcher.dropShadow(a.x, a.y, a.ex(), a.ey(), 8, Colors.A50, 0);
-            context.batcher.box(a.x, a.y, a.ex(), a.ey(), bg);
-            context.batcher.outline(a.x, a.y, a.ex(), a.ey(), border);
+            this.renderPanel(context, this.leftPanel.area, 0xf00b0f16);
         }));
 
-        UILabel podiumHeader = UI.label(UIKeys.MORPH_STUDIO_PODIUM_TITLE).color(Colors.setA(Colors.WHITE, 0.65F));
-        podiumHeader.labelAnchor(0, 0.5F);
-        podiumHeader.relative(this.leftPanel).xy(10, 6).w(1F, -20).h(16);
-
         this.podium = new UIMorphPodiumRenderer();
-        this.podium.relative(this.leftPanel).x(6).y(24).w(1F, -12).hTo(this.leftPanel.getFlex(), 1F, -114);
+        this.podium.relative(this.leftPanel).x(6).y(6).w(1F, -12).hTo(this.leftPanel.getFlex(), 1F, -114);
 
         /* Podyum altı metadata kartı ve aksiyon butonları */
         UIElement metaPanel = new UIElement();
@@ -156,9 +186,17 @@ public class UIMorphStudioScreen extends UIElement
         this.editBtn.tooltip(UIKeys.MORPH_STUDIO_EDIT);
         this.editBtn.relative(metaActions).x(24).y(0).wh(20, 20);
 
-        metaActions.add(this.favoriteBtn, this.editBtn);
+        this.copyBtn = new UIIcon(Icons.COPY, (b) -> this.copyForm(this.selectedForm));
+        this.copyBtn.tooltip(UIKeys.MORPH_STUDIO_COPY);
+        this.copyBtn.relative(metaActions).x(48).y(0).wh(20, 20);
 
-        this.morphBtn = new UIButton(UIKeys.MORPH_STUDIO_MORPH_BUTTON, (b) -> this.morphInto(this.selectedForm))
+        this.resetBtn = new UIIcon(Icons.REFRESH, (b) -> this.selectForm(null));
+        this.resetBtn.tooltip(UIKeys.MORPH_STUDIO_RESET);
+        this.resetBtn.relative(metaActions).x(72).y(0).wh(20, 20);
+
+        metaActions.add(this.favoriteBtn, this.editBtn, this.copyBtn, this.resetBtn);
+
+        this.morphBtn = new UIButton(picker ? UIKeys.MORPH_STUDIO_PICK_BUTTON : UIKeys.MORPH_STUDIO_MORPH_BUTTON, (b) -> this.morphInto(this.selectedForm))
         {
             @Override
             protected void renderSkin(UIContext context)
@@ -175,7 +213,7 @@ public class UIMorphStudioScreen extends UIElement
         this.morphBtn.relative(metaPanel).x(0).y(62).w(1F).h(26);
 
         metaPanel.add(this.formNameLabel, this.formTypeLabel, metaActions, this.morphBtn);
-        this.leftPanel.add(podiumHeader, this.podium, metaPanel);
+        this.leftPanel.add(this.podium, metaPanel);
         this.add(this.leftPanel);
 
         /* 4. Sağ Panel (%62 - Form Kataloğu) */
@@ -195,17 +233,11 @@ public class UIMorphStudioScreen extends UIElement
                 return false;
             }
         };
-        this.rightPanel.relative(this).x(0.38F, 2).y(30).w(0.62F, -12).h(1F, -40);
+        this.rightPanel.relative(this).x(0.38F).y(28).w(0.62F).h(1F, -28);
 
         this.rightPanel.add(new UIRenderable((context) ->
         {
-            Area a = this.rightPanel.area;
-            int bg = 0xf00c1017;
-            int border = BBSSettings.color(BBSSettings.dividerColor(), Colors.A12);
-
-            context.batcher.dropShadow(a.x, a.y, a.ex(), a.ey(), 8, Colors.A50, 0);
-            context.batcher.box(a.x, a.y, a.ex(), a.ey(), bg);
-            context.batcher.outline(a.x, a.y, a.ex(), a.ey(), border);
+            this.renderPanel(context, this.rightPanel.area, 0xf00c1017);
         }));
 
         /* Arama kutusu */
@@ -214,7 +246,7 @@ public class UIMorphStudioScreen extends UIElement
 
         this.searchBox = new UITextbox(this::onSearchChanged).placeholder(UIKeys.MORPH_STUDIO_SEARCH);
         this.searchBox.background(false);
-        this.searchBox.relative(searchContainer).x(24).y(0).w(1F, -26).h(1F);
+        this.searchBox.relative(searchContainer).x(2).y(0).w(1F, -22).h(1F);
 
         searchContainer.add(new UIRenderable((context) ->
         {
@@ -224,18 +256,18 @@ public class UIMorphStudioScreen extends UIElement
 
             context.batcher.box(a.x, a.y, a.ex(), a.ey(), bg);
             context.batcher.outline(a.x, a.y, a.ex(), a.ey(), border);
-            context.batcher.icon(Icons.SEARCH, a.x + 4, a.y + 3, Colors.setA(Colors.WHITE, 0.7F));
+            context.batcher.icon(Icons.SEARCH, a.ex() - 19, a.y + 3, Colors.setA(Colors.WHITE, 0.7F));
         }));
         searchContainer.add(this.searchBox);
 
         /* Kategori Filtre Butonları (Pills) */
         this.pillsRow = new UIElement();
         this.pillsRow.relative(this.rightPanel).x(8).y(34).w(1F, -16).h(20);
-        this.pillsRow.row(4);
 
         for (UIMorphCategory cat : UIMorphCategory.values())
         {
             UICategoryPill pill = new UICategoryPill(this, cat);
+            pill.relative(this.pillsRow);
             this.pills.add(pill);
             this.pillsRow.add(pill);
         }
@@ -259,8 +291,14 @@ public class UIMorphStudioScreen extends UIElement
         this.rightPanel.add(searchContainer, this.pillsRow, this.sectionTitle, this.cardsScroll);
         this.rightPanel.add(new UIRenderable(this::renderEmptyHint));
         this.add(this.rightPanel);
+        this.add(new UIRenderable(this::renderDivider));
 
         this.refresh();
+    }
+
+    public void setTitle(IKey title)
+    {
+        this.title = title;
     }
 
     public void setCategory(UIMorphCategory category)
@@ -287,7 +325,7 @@ public class UIMorphStudioScreen extends UIElement
         if (form != null)
         {
             this.selectForm(form);
-            this.panel.setForm(form);
+            this.host.confirmForm(form);
             UIUtils.playClick();
         }
     }
@@ -295,20 +333,28 @@ public class UIMorphStudioScreen extends UIElement
     public void demorph()
     {
         this.selectForm(null);
-        this.panel.setForm(null);
+        this.host.demorph();
         UIUtils.playClick();
     }
 
     public void morphFromMob()
     {
-        this.panel.morphFromMob();
+        this.host.morphFromMob();
     }
 
     public void openEditor(Form form)
     {
         if (form != null)
         {
-            this.panel.openEditor(form);
+            this.host.editForm(form);
+        }
+    }
+
+    public void copyForm(Form form)
+    {
+        if (form != null)
+        {
+            Window.setClipboard(FormUtils.toData(form));
         }
     }
 
@@ -364,15 +410,23 @@ public class UIMorphStudioScreen extends UIElement
             this.formTypeLabel.label = IKey.raw("");
             this.favoriteBtn.setEnabled(false);
             this.editBtn.setEnabled(false);
+            this.copyBtn.setEnabled(false);
+            this.resetBtn.setEnabled(false);
             this.morphBtn.setEnabled(false);
 
             return;
         }
 
-        this.formNameLabel.label = IKey.raw(this.selectedForm.getDisplayName());
-        this.formTypeLabel.label = IKey.raw(UIMorphCategory.getFormTypeLabel(this.selectedForm));
+        this.formNameLabel.label = IKey.raw(UIMorphNaming.title(this.selectedForm));
+
+        String detail = UIMorphCategory.getFormTypeShort(this.selectedForm) + " - " + UIMorphNaming.code(this.selectedForm);
+        int room = Math.max(120, this.leftPanel.area.w - 24);
+
+        this.formTypeLabel.label = IKey.raw(Batcher2D.getDefaultTextRenderer().limitToWidth(detail, "...", room));
         this.favoriteBtn.setEnabled(true);
         this.editBtn.setEnabled(true);
+        this.copyBtn.setEnabled(true);
+        this.resetBtn.setEnabled(true);
         this.morphBtn.setEnabled(true);
 
         boolean fav = this.isFavorite(this.selectedForm);
@@ -431,14 +485,14 @@ public class UIMorphStudioScreen extends UIElement
         /* Arama veya kategori filtreleme */
         for (Form form : this.allForms)
         {
-            if (!this.currentCategory.matches(form, this.favorites))
+            if (!this.currentCategory.matches(form, this.favorites, this.recentForms))
             {
                 continue;
             }
 
             if (!query.isEmpty())
             {
-                boolean matchName = form.getDisplayName().toLowerCase().contains(query);
+                boolean matchName = form.getDisplayName().toLowerCase().contains(query) || UIMorphNaming.title(form).toLowerCase().contains(query);
                 boolean matchCustom = form.name.get().toLowerCase().contains(query);
                 boolean matchId = form.getFormId().toLowerCase().contains(query);
 
@@ -451,33 +505,30 @@ public class UIMorphStudioScreen extends UIElement
             this.displayedForms.add(form);
         }
 
-        /* Öncelikli sıralama: Eğer ALL ve arama yoksa Recent & Favorite formları başa al */
-        if (this.currentCategory == UIMorphCategory.ALL && query.isEmpty())
+        /* Son Kullanılanlar sekmesi: en son kullanılanlar önce, sonra favoriler */
+        if (this.currentCategory == UIMorphCategory.RECENT)
         {
             this.displayedForms.sort((a, b) ->
             {
-                boolean favA = this.isFavorite(a);
-                boolean favB = this.isFavorite(b);
+                int ia = this.recentForms.indexOf(a);
+                int ib = this.recentForms.indexOf(b);
 
-                if (favA != favB)
+                if ((ia >= 0) != (ib >= 0))
                 {
-                    return favA ? -1 : 1;
+                    return ia >= 0 ? -1 : 1;
                 }
 
-                boolean recA = this.recentForms.contains(a);
-                boolean recB = this.recentForms.contains(b);
-
-                if (recA != recB)
+                if (ia != ib)
                 {
-                    return recA ? -1 : 1;
+                    return Integer.compare(ia, ib);
                 }
 
-                return a.getDisplayName().compareToIgnoreCase(b.getDisplayName());
+                return UIMorphNaming.title(a).compareToIgnoreCase(UIMorphNaming.title(b));
             });
         }
         else
         {
-            this.displayedForms.sort((a, b) -> a.getDisplayName().compareToIgnoreCase(b.getDisplayName()));
+            this.displayedForms.sort((a, b) -> UIMorphNaming.title(a).compareToIgnoreCase(UIMorphNaming.title(b)));
         }
 
         /* Başlık güncelleme */
@@ -485,13 +536,9 @@ public class UIMorphStudioScreen extends UIElement
         {
             this.sectionTitle.label = UIKeys.MORPH_STUDIO_SEARCH_TITLE.format(this.searchQuery);
         }
-        else if (this.currentCategory != UIMorphCategory.ALL)
-        {
-            this.sectionTitle.label = this.currentCategory.title;
-        }
         else
         {
-            this.sectionTitle.label = UIKeys.MORPH_STUDIO_RECENT_TITLE;
+            this.sectionTitle.label = this.currentCategory.title;
         }
 
         /* Kartları ekle */
@@ -504,6 +551,39 @@ public class UIMorphStudioScreen extends UIElement
         this.cardsScroll.resize();
         this.updateGridCentering();
         this.cardsScroll.scroll.clamp();
+    }
+
+    /** Pills are as wide as their words; when the row is too narrow they all shrink alike. */
+    private void layoutPills()
+    {
+        int gap = 4;
+        int available = Math.max(40, this.rightPanel.area.w - 16);
+        int x = 0;
+        int row = 0;
+
+        for (UICategoryPill pill : this.pills)
+        {
+            int w = Math.min(available, pill.naturalWidth());
+
+            if (x > 0 && x + w > available)
+            {
+                x = 0;
+                row += 1;
+            }
+
+            pill.x(x).y(row * 24).w(w).h(20);
+            x += w + gap;
+        }
+
+        int rows = row + 1;
+
+        this.pillsRow.h(rows * 24 - 4);
+        this.sectionTitle.y(34 + rows * 24);
+        this.cardsScroll.y(52 + rows * 24).h(1F, -(58 + rows * 24));
+
+        this.pillsRow.resize();
+        this.sectionTitle.resize();
+        this.cardsScroll.resize();
     }
 
     private void updateGridCentering()
@@ -531,6 +611,7 @@ public class UIMorphStudioScreen extends UIElement
     {
         super.resize();
 
+        this.layoutPills();
         this.updateGridCentering();
         this.cardsScroll.resize();
         this.cardsScroll.scroll.clamp();
@@ -559,14 +640,41 @@ public class UIMorphStudioScreen extends UIElement
 
     /* Rendering */
 
+    /** A panel's ground and its outer edges; the edge the panels share is the divider's. */
+    private void renderPanel(UIContext context, Area a, int bg)
+    {
+        int border = BBSSettings.color(BBSSettings.dividerColor(), Colors.A12);
+
+        context.batcher.box(a.x, a.y, a.ex(), a.ey(), bg);
+        context.batcher.box(a.x, a.y, a.ex(), a.y + 1, border);
+        context.batcher.box(a.x, a.ey() - 1, a.ex(), a.ey(), border);
+
+        if (a == this.leftPanel.area)
+        {
+            context.batcher.box(a.x, a.y, a.x + 1, a.ey(), border);
+        }
+        else
+        {
+            context.batcher.box(a.ex() - 1, a.y, a.ex(), a.ey(), border);
+        }
+    }
+
+    /** The one line between the panels, with one soft shadow on the catalogue's side instead of two stacked ones. */
+    private void renderDivider(UIContext context)
+    {
+        Area a = this.rightPanel.area;
+        int border = BBSSettings.color(BBSSettings.dividerColor(), Colors.A12);
+
+        context.batcher.gradientHBox(a.x + 1, a.y + 1, a.x + 8, a.ey() - 1, Colors.A50, 0);
+        context.batcher.box(a.x - 1, a.y, a.x + 1, a.ey(), border);
+    }
+
     private void renderTopHeader(UIContext context)
     {
         FontRenderer font = context.batcher.getFont();
-        String title = "MORPHING STUDIO";
-        int primary = BBSSettings.primaryColor.get();
+        String title = this.title.get();
 
-        context.batcher.text(title, this.area.x + 12, this.area.y + 10, Colors.WHITE, true);
-        context.batcher.text("Blockbuster Catalyst Studio", this.area.x + 14 + font.getWidth(title), this.area.y + 10, Colors.setA(primary, 0.9F), true);
+        context.batcher.text(title, this.area.mx() - font.getWidth(title) / 2, this.area.y + 10, Colors.WHITE, true);
     }
 
     private void renderEmptyHint(UIContext context)
@@ -652,6 +760,12 @@ public class UIMorphStudioScreen extends UIElement
             this.studio = studio;
             this.category = category;
             this.h(20);
+            this.w(this.naturalWidth());
+        }
+
+        public int naturalWidth()
+        {
+            return Batcher2D.getDefaultTextRenderer().getWidth(this.category.label.get()) + 14;
         }
 
         @Override
@@ -680,8 +794,8 @@ public class UIMorphStudioScreen extends UIElement
             context.batcher.box(a.x, a.y, a.ex(), a.ey(), bg);
             context.batcher.outline(a.x, a.y, a.ex(), a.ey(), border);
 
-            String label = this.category.title.get();
             FontRenderer font = context.batcher.getFont();
+            String label = font.limitToWidth(this.category.label.get(), a.w - 6);
             int tw = font.getWidth(label);
 
             context.batcher.text(label, a.mx() - tw / 2, a.my() - font.getHeight() / 2, textColor, false);

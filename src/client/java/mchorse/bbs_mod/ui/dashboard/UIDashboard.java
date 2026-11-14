@@ -408,7 +408,7 @@ public class UIDashboard extends UIBaseMenu
     protected void registerPanels()
     {
         /* The editors have no buttons of their own in the bar: the Central Hub, first in line, leads to each of them */
-        this.buildStep("central hub", () -> this.panels.registerPanel(new UICentralHubPanel(this), IKey.raw("Central Hub"), Icons.LAYOUT));
+        this.buildStep("central hub", () -> this.panels.registerPanel(new UICentralHubPanel(this), UIKeys.CENTRAL_HUB_TAB, Icons.LAYOUT));
         this.buildStep("morphing",() -> this.panels.registerPanel(new UIMorphingPanel(this), UIKeys.MORPHING_TITLE, Icons.MORPH));
         this.buildStep("film", () -> this.panels.registerHiddenPanel(new UIFilmPanel(this)));
         this.buildStep("catalyst", () -> this.panels.registerHiddenPanel(new UICatalystPanel(this)));

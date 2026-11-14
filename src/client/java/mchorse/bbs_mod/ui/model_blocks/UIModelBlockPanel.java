@@ -206,6 +206,7 @@ public class UIModelBlockPanel extends UIDashboardPanel implements GizmoViewport
             });
 
             palette.immersive();
+            palette.title(UIKeys.MORPH_STUDIO_PICKER_MODEL_BLOCK);
             palette.editor.keys().register(Keys.MODEL_BLOCKS_TOGGLE_RENDERING, () -> this.toggleRendering = !this.toggleRendering);
             palette.editor.renderer.full(dashboard.getRoot());
             palette.editor.renderer.setTarget(this.modelBlock.getEntity());

@@ -1,7 +1,13 @@
 package mchorse.bbs_mod.ui.morphing;
 
 import mchorse.bbs_mod.forms.forms.BlockForm;
+import mchorse.bbs_mod.forms.forms.AudioForm;
 import mchorse.bbs_mod.forms.forms.BillboardForm;
+import mchorse.bbs_mod.forms.forms.DecalForm;
+import mchorse.bbs_mod.forms.forms.ExtrudedForm;
+import mchorse.bbs_mod.forms.forms.HeightFogForm;
+import mchorse.bbs_mod.forms.forms.LabelForm;
+import mchorse.bbs_mod.forms.forms.VideoForm;
 import mchorse.bbs_mod.forms.forms.Form;
 import mchorse.bbs_mod.forms.forms.ItemForm;
 import mchorse.bbs_mod.forms.forms.MobForm;
@@ -15,29 +21,37 @@ import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.utils.icons.Icon;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 
+import java.util.Collection;
 import java.util.Set;
 
 public enum UIMorphCategory
 {
-    ALL(UIKeys.MORPH_CATEGORY_ALL, Icons.GLOBE, 0x4fc3f7),
-    RIGS(UIKeys.MORPH_CATEGORY_RIGS, Icons.POSE, 0x81c784),
-    MOBS(UIKeys.MORPH_CATEGORY_MOBS, Icons.CHICKEN, 0xffb74d),
-    VFX(UIKeys.MORPH_CATEGORY_VFX, Icons.PARTICLE, 0xba68c8),
-    BLOCKS(UIKeys.MORPH_CATEGORY_BLOCKS, Icons.BLOCK, 0x4db6ac),
-    FAVORITES(UIKeys.MORPH_CATEGORY_FAVORITES, Icons.FAVORITE, 0xffd54f);
+    ALL(UIKeys.MORPH_CATEGORY_ALL, UIKeys.MORPH_STUDIO_ALL_TITLE, Icons.GLOBE, 0x4fc3f7),
+    RECENT(UIKeys.MORPH_CATEGORY_RECENT, UIKeys.MORPH_STUDIO_RECENT_TITLE, Icons.TIME, 0x90a4ae),
+    MODELS(UIKeys.MORPH_CATEGORY_MODELS, UIKeys.MORPH_CATEGORY_MODELS, Icons.POSE, 0x81c784),
+    CREATURES(UIKeys.MORPH_CATEGORY_CREATURES, UIKeys.MORPH_CATEGORY_CREATURES, Icons.CHICKEN, 0xffb74d),
+    BLOCKS(UIKeys.MORPH_CATEGORY_BLOCKS, UIKeys.MORPH_CATEGORY_BLOCKS, Icons.BLOCK, 0x4db6ac),
+    PRODUCTION(UIKeys.MORPH_CATEGORY_PRODUCTION, UIKeys.MORPH_CATEGORY_PRODUCTION, Icons.FILM, 0xf06292),
+    LIGHTING(UIKeys.MORPH_CATEGORY_LIGHTING, UIKeys.MORPH_CATEGORY_LIGHTING, Icons.LIGHT, 0xfff176),
+    PARTICLES(UIKeys.MORPH_CATEGORY_PARTICLES, UIKeys.MORPH_CATEGORY_PARTICLES, Icons.PARTICLE, 0xba68c8),
+    STRUCTURES(UIKeys.MORPH_CATEGORY_STRUCTURES, UIKeys.MORPH_CATEGORY_STRUCTURES, Icons.STRUCTURE, 0xa1887f),
+    UTILITY(UIKeys.MORPH_CATEGORY_UTILITY, UIKeys.MORPH_CATEGORY_UTILITY, Icons.GEAR, 0x90caf9),
+    FAVORITES(UIKeys.MORPH_CATEGORY_FAVORITES, UIKeys.MORPH_CATEGORY_FAVORITES, Icons.FAVORITE, 0xffd54f);
 
+    public final IKey label;
     public final IKey title;
     public final Icon icon;
     public final int color;
 
-    UIMorphCategory(IKey title, Icon icon, int color)
+    UIMorphCategory(IKey label, IKey title, Icon icon, int color)
     {
+        this.label = label;
         this.title = title;
         this.icon = icon;
         this.color = color;
     }
 
-    public boolean matches(Form form, Set<String> favorites)
+    public boolean matches(Form form, Set<String> favorites, Collection<Form> recents)
     {
         if (form == null)
         {
@@ -49,32 +63,63 @@ public enum UIMorphCategory
             return true;
         }
 
+        if (this == RECENT)
+        {
+            return (recents != null && recents.contains(form)) || (favorites != null && favorites.contains(getFormKey(form)));
+        }
+
         if (this == FAVORITES)
         {
             return favorites != null && favorites.contains(getFormKey(form));
         }
 
-        if (this == RIGS)
+        return classify(form) == this;
+    }
+
+    /** The one category a form belongs to; everything unlisted is a utility. */
+    public static UIMorphCategory classify(Form form)
+    {
+        if (UIMorphNaming.isEmpty(form))
         {
-            return form instanceof ModelForm;
+            return UTILITY;
         }
 
-        if (this == MOBS)
+        if (form instanceof ModelForm)
         {
-            return form instanceof MobForm;
+            return MODELS;
         }
 
-        if (this == VFX)
+        if (form instanceof MobForm)
         {
-            return form instanceof ParticleForm || form instanceof VanillaParticleForm || form instanceof TrailForm;
+            return CREATURES;
         }
 
-        if (this == BLOCKS)
+        if (form instanceof BlockForm || form instanceof ItemForm)
         {
-            return form instanceof BlockForm || form instanceof ItemForm || form instanceof StructureForm || form instanceof BillboardForm;
+            return BLOCKS;
         }
 
-        return false;
+        if (form instanceof VideoForm || form instanceof AudioForm || form instanceof BillboardForm || form instanceof ExtrudedForm || form instanceof LabelForm || form instanceof DecalForm)
+        {
+            return PRODUCTION;
+        }
+
+        if (form instanceof mchorse.bbs_mod.forms.forms.LightForm || form instanceof qualet.irlite.forms.LightForm || form instanceof HeightFogForm)
+        {
+            return LIGHTING;
+        }
+
+        if (form instanceof ParticleForm || form instanceof VanillaParticleForm || form instanceof TrailForm)
+        {
+            return PARTICLES;
+        }
+
+        if (form instanceof StructureForm)
+        {
+            return STRUCTURES;
+        }
+
+        return UTILITY;
     }
 
     public static String getFormKey(Form form)
@@ -96,78 +141,31 @@ public enum UIMorphCategory
 
     public static String getFormTypeLabel(Form form)
     {
+        return getFormTypeShort(form);
+    }
+
+    public static String getFormTypeShort(Form form)
+    {
         if (form == null)
         {
             return "";
         }
 
-        if (form instanceof ModelForm modelForm)
-        {
-            String modelKey = modelForm.model.get();
-
-            return "Model (" + (modelKey.isEmpty() ? "BBS Bends" : modelKey) + ")";
-        }
-
-        if (form instanceof MobForm mobForm)
-        {
-            return "Mob (" + mobForm.mobID.get() + ")";
-        }
-
-        if (form instanceof ParticleForm)
-        {
-            return "Particle Scheme (Snowstorm)";
-        }
-
-        if (form instanceof VanillaParticleForm)
-        {
-            return "Vanilla Particle VFX";
-        }
-
-        if (form instanceof BlockForm)
-        {
-            return "Block Form";
-        }
-
         if (form instanceof ItemForm)
         {
-            return "Item Prop";
+            return UIKeys.MORPH_TYPE_ITEM.get();
         }
 
-        if (form instanceof StructureForm)
+        switch (classify(form))
         {
-            return "Structure Asset";
+            case MODELS: return UIKeys.MORPH_TYPE_MODEL.get();
+            case CREATURES: return UIKeys.MORPH_TYPE_CREATURE.get();
+            case BLOCKS: return UIKeys.MORPH_TYPE_BLOCK.get();
+            case PRODUCTION: return UIKeys.MORPH_TYPE_PRODUCTION.get();
+            case LIGHTING: return UIKeys.MORPH_TYPE_LIGHTING.get();
+            case PARTICLES: return UIKeys.MORPH_TYPE_PARTICLE.get();
+            case STRUCTURES: return UIKeys.MORPH_TYPE_STRUCTURE.get();
+            default: return UIKeys.MORPH_TYPE_UTILITY.get();
         }
-
-        if (form instanceof TrailForm)
-        {
-            return "Trail Ribbon";
-        }
-
-        return form.getFormId();
-    }
-
-    public static String getFormTypeShort(Form form)
-    {
-        if (form instanceof ModelForm)
-        {
-            return "Model / Rig";
-        }
-
-        if (form instanceof MobForm)
-        {
-            return "Mob";
-        }
-
-        if (form instanceof ParticleForm || form instanceof VanillaParticleForm || form instanceof TrailForm)
-        {
-            return "VFX";
-        }
-
-        if (form instanceof BlockForm || form instanceof ItemForm || form instanceof StructureForm)
-        {
-            return "Block / Prop";
-        }
-
-        return "Custom";
     }
 }

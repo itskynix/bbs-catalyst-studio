@@ -1,6 +1,13 @@
 package mchorse.bbs_mod.ui.forms;
 
+import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.forms.forms.Form;
+import mchorse.bbs_mod.l10n.keys.IKey;
+import mchorse.bbs_mod.ui.UIKeys;
+import mchorse.bbs_mod.ui.framework.elements.buttons.UIIcon;
+import mchorse.bbs_mod.ui.morphing.UIMorphStudioScreen;
+import mchorse.bbs_mod.ui.utils.icons.Icons;
+import mchorse.bbs_mod.utils.Direction;
 import mchorse.bbs_mod.ui.Keys;
 import mchorse.bbs_mod.ui.forms.categories.UIFormCategory;
 import mchorse.bbs_mod.ui.forms.editors.UIFormEditor;
@@ -17,6 +24,9 @@ public class UIFormPalette extends UIElement implements IUIFormList
     public UIFormList list;
     public UIFormEditor editor;
 
+    /** The podium view of the list; only the pickers opened through {@link #open} have it */
+    public UIMorphStudioScreen studio;
+
     public Consumer<Form> callback;
 
     private UIFormCategory lastSelected;
@@ -24,6 +34,10 @@ public class UIFormPalette extends UIElement implements IUIFormList
     private boolean cantExit;
     private boolean immersive;
     private boolean canModify;
+    private boolean classic;
+
+    /** The picker comes up in the view it was left in last */
+    private static boolean lastClassic;
 
     public static UIFormPalette open(UIElement parent, boolean editing, Form form, Consumer<Form> callback)
     {
@@ -46,6 +60,7 @@ public class UIFormPalette extends UIElement implements IUIFormList
 
         UIFormPalette palette = new UIFormPalette(callback);
 
+        palette.withStudio();
         palette.resetFlex().full(parent);
         palette.resize();
 
@@ -79,6 +94,105 @@ public class UIFormPalette extends UIElement implements IUIFormList
                 this.toggleEditor();
             }
         });
+    }
+
+    /** Gives this palette the podium picker; the classic list stays one click away. */
+    public UIFormPalette withStudio()
+    {
+        if (this.studio != null || this.immersive || this.cantExit)
+        {
+            return this;
+        }
+
+        this.studio = new UIMorphStudioScreen(new UIMorphStudioScreen.Host()
+        {
+            @Override
+            public void confirmForm(Form form)
+            {
+                UIFormPalette.this.accept(form);
+                UIFormPalette.this.exit();
+            }
+
+            @Override
+            public void editForm(Form form)
+            {
+                UIFormPalette.this.setSelected(form);
+                UIFormPalette.this.edit(true);
+            }
+
+            @Override
+            public void showClassic()
+            {
+                UIFormPalette.this.setClassic(true);
+            }
+
+            @Override
+            public void close()
+            {
+                UIFormPalette.this.exit();
+            }
+        }, true);
+        this.studio.full(this);
+        this.studio.setupForms(BBSModClient.getFormCategories());
+
+        UIIcon back = new UIIcon(Icons.ARROW_LEFT, (b) -> this.setClassic(false));
+
+        back.tooltip(UIKeys.MORPH_STUDIO_BACK_TO_PICKER, Direction.TOP);
+        this.list.bar.add(back);
+        this.add(this.studio);
+
+        this.classic = lastClassic;
+        this.syncViews();
+
+        return this;
+    }
+
+    /** What the picker is called: character form, model block form... */
+    public UIFormPalette title(IKey title)
+    {
+        if (this.studio != null)
+        {
+            this.studio.setTitle(title);
+        }
+
+        return this;
+    }
+
+    private void setClassic(boolean classic)
+    {
+        this.classic = classic;
+        lastClassic = classic;
+
+        if (classic && this.studio != null && this.studio.getSelectedForm() != null)
+        {
+            this.list.setSelected(this.studio.getSelectedForm());
+            this.list.scrollToSelected();
+        }
+        else if (!classic && this.studio != null)
+        {
+            Form form = this.list.getSelected();
+
+            if (form != null)
+            {
+                this.studio.setSelectedForm(form);
+            }
+        }
+
+        this.syncViews();
+    }
+
+    private void syncViews()
+    {
+        boolean editing = this.editor.isEditing();
+        boolean podium = this.studio != null && !this.classic;
+
+        this.list.setVisible(!editing && !podium);
+        this.editor.setVisible(editing);
+
+        if (this.studio != null)
+        {
+            this.studio.setVisible(!editing && podium);
+        }
     }
 
     public void noBackground()
@@ -189,10 +303,14 @@ public class UIFormPalette extends UIElement implements IUIFormList
             this.accept(form);
 
             this.lastSelected = null;
+
+            if (this.studio != null)
+            {
+                this.studio.setSelectedForm(form);
+            }
         }
 
-        this.list.setVisible(!this.editor.isEditing());
-        this.editor.setVisible(this.editor.isEditing());
+        this.syncViews();
     }
 
     @Override
@@ -208,6 +326,11 @@ public class UIFormPalette extends UIElement implements IUIFormList
     {
         this.list.setSelected(form);
         this.list.scrollToSelected();
+
+        if (this.studio != null)
+        {
+            this.studio.setSelectedForm(form);
+        }
     }
 
     @Override
