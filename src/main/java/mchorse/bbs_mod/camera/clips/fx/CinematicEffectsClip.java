@@ -5,8 +5,10 @@ import mchorse.bbs_mod.utils.clips.Clip;
 import java.util.List;
 
 /**
- * A bag of film and lens effects, each driven by its own keyframe channel: a channel at zero (or
- * without keyframes) leaves its effect off, so only what was keyframed costs anything to draw.
+ * The post-process effects clip. Two things live in it: a bag of film and lens effects, each driven
+ * by its own keyframe channel (a channel at zero, or without keyframes, leaves its effect off), and
+ * the effect stack - any number of effects from the {@link PostEffect} library, drawn after them in
+ * stack order. Only what was keyframed or stacked costs anything to draw.
  */
 public class CinematicEffectsClip extends FxClip
 {
@@ -38,9 +40,14 @@ public class CinematicEffectsClip extends FxClip
     public final Channel heatSpeed = this.channel("heat_speed", 1D);
     public final Channel heatScale = this.channel("heat_scale", 1D);
 
+    /** The effects added from the library, in the order they are drawn */
+    public final PostEffectStack stack = new PostEffectStack("effect_stack");
+
     public CinematicEffectsClip()
     {
         super();
+
+        this.add(this.stack);
 
         /* Starts on the most useful effect, so a fresh clip is visibly doing something */
         this.chromaIntensity.channel.insert(0, 0.4D);
@@ -93,6 +100,16 @@ public class CinematicEffectsClip extends FxClip
             out.add(new FxOverlay(FxOverlay.HEAT)
                 .set(0, heat).set(1, this.heatSpeed.get(t)).set(2, this.heatScale.get(t)).set(3, t / 20D));
         }
+
+        this.stack.collect(t, factor, out);
+    }
+
+    @Override
+    protected void breakDownClip(Clip original, int offset)
+    {
+        super.breakDownClip(original, offset);
+
+        this.stack.moveX(-offset);
     }
 
     @Override

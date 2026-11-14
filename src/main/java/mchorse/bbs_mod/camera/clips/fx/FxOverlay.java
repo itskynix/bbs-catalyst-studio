@@ -37,6 +37,14 @@ public class FxOverlay
      */
     public static final int DEPTH_OF_FIELD = 20;
 
+    /**
+     * One effect of the post-process library ({@link PostEffect}), drawn by its own shader program:
+     * p0 = the effect's mode, p1 = intensity 0..1, p2..p5 = its parameters, p6..p8 = its colour,
+     * p9 = seconds into the clip, p10 = 1 when it reads the depth. The renderer fills p12..p14 with
+     * near, far and whether the depth holds a scene.
+     */
+    public static final int LIBRARY = 30;
+
     public static final int PARAMS = 24;
 
     public final int kind;

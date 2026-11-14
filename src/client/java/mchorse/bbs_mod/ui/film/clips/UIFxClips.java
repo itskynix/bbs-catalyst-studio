@@ -2,7 +2,6 @@ package mchorse.bbs_mod.ui.film.clips;
 
 import mchorse.bbs_mod.camera.Camera;
 import mchorse.bbs_mod.camera.clips.fx.DebrisClip;
-import mchorse.bbs_mod.camera.clips.fx.CinematicEffectsClip;
 import mchorse.bbs_mod.camera.clips.fx.ColorGradeClip;
 import mchorse.bbs_mod.camera.clips.fx.EyeClip;
 import mchorse.bbs_mod.camera.clips.fx.GrainClip;
@@ -59,14 +58,6 @@ public class UIFxClips
         protected void addFxPanels()
         {
             this.panels.add(this.section(key("overlay_color"), this.overlayColor));
-        }
-    }
-
-    public static class UICinematicEffectsClip extends UIFxClip<CinematicEffectsClip>
-    {
-        public UICinematicEffectsClip(CinematicEffectsClip clip, IUIClipsDelegate editor)
-        {
-            super(clip, editor);
         }
     }
 

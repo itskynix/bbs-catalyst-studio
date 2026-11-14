@@ -235,6 +235,8 @@ public class UIAdvancedFilmDialog extends UIOverlayPanel
         this.filmsScroll.relative(filmsContainer).xy(2, 2).w(1F, -4).h(1F, -4);
 
         this.filmsGrid = this.filmsScroll.grid(6);
+        /* Without scroll() the grid never tells the view how tall the cards are, and it can't scroll */
+        this.filmsGrid.scroll();
         this.filmsGrid.padding(4);
         this.filmsGrid.width(108).height(104);
 

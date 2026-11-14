@@ -88,6 +88,7 @@ public class PostFxRenderer
         depthCaptured = false;
         failed = false;
         dofFailed = false;
+        libraryFailed = false;
     }
 
     /** Whether any of the frame's clips asks for the world wobble, and so wants the depth kept. */
@@ -101,6 +102,12 @@ public class PostFxRenderer
         for (FxOverlay overlay : FxClip.getOverlays(context))
         {
             if (overlay.kind == FxOverlay.WORLD_WOBBLE || overlay.kind == FxOverlay.DEPTH_OF_FIELD)
+            {
+                return true;
+            }
+
+            /* A library effect that reads the depth (sonar, world glitch, ...) */
+            if (overlay.kind == FxOverlay.LIBRARY && overlay.params[10] > 0.5F)
             {
                 return true;
             }
@@ -251,7 +258,8 @@ public class PostFxRenderer
         ShaderProgram program = BBSShaders.getPostFxProgram();
         Framebuffer main = MinecraftClient.getInstance().getFramebuffer();
 
-        if (program == null || main == null || main.textureWidth <= 0 || main.textureHeight <= 0)
+        /* The two programs stand apart: either one missing only takes its own effects with it */
+        if ((program == null && BBSShaders.getPostFxLibraryProgram() == null) || main == null || main.textureWidth <= 0 || main.textureHeight <= 0)
         {
             return;
         }
@@ -288,14 +296,26 @@ public class PostFxRenderer
                 }
             }
 
-            if (lens != null)
+            if (lens != null && program != null)
             {
                 depthOfField(program, main, lens);
             }
 
+            /* Whether the depth holds a scene, read back once a frame and only when a library effect needs it */
+            int libraryDepth = -1;
+
             for (FxOverlay overlay : overlays)
             {
-                if (overlay.kind != FxOverlay.DEPTH_OF_FIELD && overlay.kind != FxOverlay.TRANSFORM)
+                if (overlay.kind == FxOverlay.LIBRARY)
+                {
+                    if (libraryDepth < 0 && overlay.params[10] > 0.5F)
+                    {
+                        libraryDepth = depthCaptured && worldDepth != null && hasDepth(main.textureWidth, main.textureHeight) ? 1 : 0;
+                    }
+
+                    libraryPass(main, overlay, overlay.params[10] > 0.5F && libraryDepth == 1);
+                }
+                else if (program != null && overlay.kind != FxOverlay.DEPTH_OF_FIELD && overlay.kind != FxOverlay.TRANSFORM)
                 {
                     pass(program, main, overlay);
                 }
@@ -304,7 +324,7 @@ public class PostFxRenderer
             /* The 2D transform moves the finished picture, so it goes last; neutral ones never get here */
             for (FxOverlay overlay : overlays)
             {
-                if (overlay.kind == FxOverlay.TRANSFORM)
+                if (overlay.kind == FxOverlay.TRANSFORM && program != null)
                 {
                     resolveTransform(overlay, main.textureWidth, main.textureHeight);
                     pass(program, main, overlay);
@@ -542,6 +562,72 @@ public class PostFxRenderer
         BufferBuilder builder;
 
         builder = Bufs.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE_COLOR);
+        builder.vertex(-1, -1, 0).texture(0F, 0F).color(1F, 1F, 1F, 1F)/*$ nx*/.next()/**/;
+        builder.vertex(1, -1, 0).texture(1F, 0F).color(1F, 1F, 1F, 1F)/*$ nx*/.next()/**/;
+        builder.vertex(1, 1, 0).texture(1F, 1F).color(1F, 1F, 1F, 1F)/*$ nx*/.next()/**/;
+        builder.vertex(-1, 1, 0).texture(0F, 1F).color(1F, 1F, 1F, 1F)/*$ nx*/.next()/**/;
+
+        Bufs.draw(builder);
+    }
+
+    /**
+     * One effect of the post-process library, drawn by the library's own program: the frame copied
+     * aside, then drawn back over itself through the effect. A depth effect gets the world's depth
+     * when it holds a scene and otherwise falls back to its screen space look in the shader.
+     */
+    private static void libraryPass(Framebuffer main, FxOverlay overlay, boolean depth)
+    {
+        ShaderProgram library = BBSShaders.getPostFxLibraryProgram();
+
+        if (library == null || libraryFailed)
+        {
+            return;
+        }
+
+        try
+        {
+            drawLibraryPass(library, main, overlay, depth);
+        }
+        catch (Throwable e)
+        {
+            /* Only the library goes: the other post-production clips keep drawing */
+            libraryFailed = true;
+
+            System.err.println("[BBS] The post-process effect library (postfx_lib) failed while drawing effect mode " + (int) overlay.params[0] + " and is switched off for this session:");
+            e.printStackTrace();
+        }
+    }
+
+    private static boolean libraryFailed;
+
+    private static void drawLibraryPass(ShaderProgram library, Framebuffer main, FxOverlay overlay, boolean depth)
+    {
+
+        int w = main.textureWidth;
+        int h = main.textureHeight;
+        float[] p = overlay.params;
+
+        GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, main.fbo);
+        GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, scratch.fbo);
+        GL30.glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL11.GL_COLOR_BUFFER_BIT, GL11.GL_NEAREST);
+
+        GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, main.fbo);
+        GlStateManager._viewport(0, 0, w, h);
+
+        RenderSystem.setShader(() -> library);
+        RenderSystem.setShaderTexture(0, scratch.getColorAttachment());
+        RenderSystem.setShaderTexture(1, depth ? worldDepth.getDepthAttachment() : scratch.getColorAttachment());
+
+        set(library, "Mode", p[0]);
+        set(library, "Size", w, h);
+        set(library, "Time", p[9]);
+        set(library, "Intensity", p[1]);
+        set(library, "P", p[2], p[3], p[4], p[5]);
+        set(library, "Tint", p[6], p[7], p[8]);
+        set(library, "DepthInfo", 0.05F, MinecraftClient.getInstance().gameRenderer.getFarPlaneDistance(), depth ? 1F : 0F);
+
+        BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE_COLOR);
+
         builder.vertex(-1, -1, 0).texture(0F, 0F).color(1F, 1F, 1F, 1F)/*$ nx*/.next()/**/;
         builder.vertex(1, -1, 0).texture(1F, 0F).color(1F, 1F, 1F, 1F)/*$ nx*/.next()/**/;
         builder.vertex(1, 1, 0).texture(1F, 1F).color(1F, 1F, 1F, 1F)/*$ nx*/.next()/**/;

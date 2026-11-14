@@ -142,7 +142,7 @@ public abstract class UIClip <T extends Clip> extends UIElement
         register(mchorse.bbs_mod.camera.clips.modifiers.FovPunchClip.class, UIFovPunchClip::new);
         register(mchorse.bbs_mod.camera.clips.fx.MotionBlurClip.class, UIFxClips.UIMotionBlurClip::new);
         register(mchorse.bbs_mod.camera.clips.fx.ColorGradeClip.class, UIFxClips.UIColorGradeClip::new);
-        register(mchorse.bbs_mod.camera.clips.fx.CinematicEffectsClip.class, UIFxClips.UICinematicEffectsClip::new);
+        register(mchorse.bbs_mod.camera.clips.fx.CinematicEffectsClip.class, UICinematicEffectsClip::new);
         register(mchorse.bbs_mod.camera.clips.fx.VignetteClip.class, UIFxClips.UIVignetteClip::new);
         register(mchorse.bbs_mod.camera.clips.fx.LetterboxClip.class, UIFxClips.UILetterboxClip::new);
         register(mchorse.bbs_mod.camera.clips.fx.GrainClip.class, UIFxClips.UIGrainClip::new);

@@ -24,6 +24,7 @@ public class BBSShaders
     private static ShaderProgram pixelArtText;
     private static ShaderProgram pixelArtTextIntensity;
     private static ShaderProgram postFx;
+    private static ShaderProgram postFxLibrary;
 
     private static ShaderProgram pickerPreview;
     private static ShaderProgram pickerOutline;
@@ -47,8 +48,10 @@ public class BBSShaders
         if (pixelArtText != null) pixelArtText.close();
         if (pixelArtTextIntensity != null) pixelArtTextIntensity.close();
         if (postFx != null) postFx.close();
+        if (postFxLibrary != null) postFxLibrary.close();
 
         postFx = null;
+        postFxLibrary = null;
 
         if (pickerPreview != null) pickerPreview.close();
         if (pickerOutline != null) pickerOutline.close();
@@ -117,6 +120,39 @@ public class BBSShaders
 
             e.printStackTrace();
         }
+
+        /* The post-process effect library: a program of its own, so a driver that will not build
+         * it only loses the library's effects and keeps the rest of post-production */
+        try
+        {
+            postFxLibrary = new ShaderProgram(new ProxyResourceFactory(MinecraftClient.getInstance().getResourceManager()), "postfx_lib", VertexFormats.POSITION_TEXTURE_COLOR);
+
+            /* A uniform the shader does not have would be set into nothing, silently: say so once */
+            for (String uniform : new String[] {"Mode", "Size", "Time", "Intensity", "P", "Tint", "DepthInfo"})
+            {
+                if (postFxLibrary.getUniform(uniform) == null)
+                {
+                    System.err.println("[BBS] Shader 'postfx_lib' has no uniform '" + uniform + "': postfx_lib.json and postfx_lib.fsh disagree.");
+                }
+            }
+        }
+        catch (Throwable e)
+        {
+            if (postFxLibrary != null) postFxLibrary.close();
+
+            postFxLibrary = null;
+
+            /* Says which shader and why, so the reason is one search away in latest.log: the
+             * exception's message carries the driver's own compile or link log */
+            System.err.println("[BBS] Shader 'postfx_lib' (assets/bbs/shaders/core/postfx_lib.fsh) failed to compile or link; the post-process effect library draws nothing until it is fixed. Reason: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /** The post-process effect library's pass; null when it could not be built, which draws nothing. */
+    public static ShaderProgram getPostFxLibraryProgram()
+    {
+        return postFxLibrary;
     }
 
     /**
