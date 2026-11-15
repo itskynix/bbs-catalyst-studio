@@ -171,9 +171,29 @@ public class FormUtilsClient
         register(qualet.irlite.forms.SpotlightForm.class, qualet.irlite.client.forms.SpotlightFormRenderer::new);
         register(DecalForm.class, DecalFormRenderer::new);
         register(HeightFogForm.class, HeightFogFormRenderer::new);
+        register(mchorse.bbs_mod.forms.forms.PostProcessForm.class, mchorse.bbs_mod.forms.renderers.PostProcessFormRenderer::new);
 
         /* Its name in the form list, the scene and the dope sheet, in the player's language */
         HeightFogForm.displayNameSupplier = () -> mchorse.bbs_mod.l10n.L10n.lang("bbs.ui.forms.height_fog", "Volumetric Fog").get();
+        mchorse.bbs_mod.forms.forms.PostProcessForm.displayNameSupplier = () -> mchorse.bbs_mod.l10n.L10n.lang("bbs.ui.forms.post_process_volume", "Post-Process Volume").get();
+
+        /* A volume's slot track: the effect in the slot, then which of its values */
+        mchorse.bbs_mod.forms.forms.PostProcessForm.trackNameSupplier = (id, param) ->
+        {
+            mchorse.bbs_mod.camera.clips.fx.PostEffect effect = mchorse.bbs_mod.camera.clips.fx.PostEffect.get(id);
+
+            if (effect == null)
+            {
+                return id;
+            }
+
+            String name = mchorse.bbs_mod.ui.film.clips.UIPostEffectPicker.effectName(effect).get();
+            String value = param < 0 || param >= effect.params.length
+                ? mchorse.bbs_mod.ui.UIKeys.POST_FX_INTENSITY.get()
+                : mchorse.bbs_mod.ui.film.clips.UIPostEffectPicker.paramName(effect.params[param].name()).get();
+
+            return name + " - " + value;
+        };
     }
 
     //? if >=1.21 {

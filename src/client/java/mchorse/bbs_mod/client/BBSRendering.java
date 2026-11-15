@@ -641,6 +641,7 @@ public class BBSRendering
 
         mchorse.bbs_mod.forms.renderers.AudioFormRenderer.reapOrphans();
         mchorse.bbs_mod.forms.renderers.AudioFormRenderer.clearRipples();
+        mchorse.bbs_mod.forms.renderers.PostProcessFormRenderer.clearQueue();
 
         renderingWorld = true;
         frameCapturedThisRender = false;
@@ -671,6 +672,12 @@ public class BBSRendering
             wanted = PostFxRenderer.wantsDepth(panel.getRunner().getContext());
         }
 
+        /* A post-process volume the camera is in with a depth effect in its stack */
+        if (!wanted)
+        {
+            wanted = mchorse.bbs_mod.forms.renderers.PostProcessFormRenderer.wantsDepth();
+        }
+
         if (wanted)
         {
             PostFxRenderer.captureDepth();
@@ -680,6 +687,11 @@ public class BBSRendering
     public static void onWorldRenderEnd()
     {
         MinecraftClient mc = MinecraftClient.getInstance();
+
+        /* The post-process volumes first: they are part of the world's look, and the film's own
+         * post-production (bars, grain, the 2D transform) is laid over them. Here and not at
+         * WorldRenderEvents.LAST, which under a shader pack comes before its composite */
+        mchorse.bbs_mod.forms.renderers.PostProcessFormRenderer.flush();
 
         if (BBSModClient.getCameraController().getCurrent() instanceof PlayCameraController controller)
         {

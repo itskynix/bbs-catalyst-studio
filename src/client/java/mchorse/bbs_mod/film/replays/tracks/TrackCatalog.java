@@ -245,7 +245,11 @@ public class TrackCatalog
             }
 
             BaseValueBasic property = FormUtils.getProperty(root, id.toKey());
-            TrackDescriptor track = new TrackDescriptor(id, channel, form, TrackStyle.label(id),
+            /* A post-process volume's slot is whatever effect sits in it now: named after that effect */
+            IKey title = value instanceof mchorse.bbs_mod.forms.forms.PostProcessForm.SlotValue slot && form instanceof mchorse.bbs_mod.forms.forms.PostProcessForm volume
+                ? IKey.constant(volume.slotTrackName(slot))
+                : TrackStyle.label(id);
+            TrackDescriptor track = new TrackDescriptor(id, channel, form, title,
                 TrackStyle.icon(name), TrackStyle.color(name), property);
 
             if (name.startsWith("pose_overlay"))

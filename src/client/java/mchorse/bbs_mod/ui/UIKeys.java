@@ -1316,6 +1316,20 @@ public class UIKeys
 
     /* Height Fog Form */
     public static final IKey FORMS_EDITORS_HEIGHT_FOG_TITLE = L10n.lang("bbs.ui.forms.editors.height_fog.title");
+    public static final IKey FORMS_POST_VOLUME_TITLE = L10n.lang("bbs.ui.forms.editors.post_volume.title");
+    public static final IKey FORMS_POST_VOLUME_BOX = L10n.lang("bbs.ui.forms.editors.post_volume.box");
+    public static final IKey FORMS_POST_VOLUME_BLEND = L10n.lang("bbs.ui.forms.editors.post_volume.blend");
+    public static final IKey FORMS_POST_VOLUME_BLEND_TOOLTIP = L10n.lang("bbs.ui.forms.editors.post_volume.blend_tooltip");
+    public static final IKey FORMS_POST_VOLUME_UNBOUND = L10n.lang("bbs.ui.forms.editors.post_volume.unbound");
+    public static final IKey FORMS_POST_VOLUME_UNBOUND_TOOLTIP = L10n.lang("bbs.ui.forms.editors.post_volume.unbound_tooltip");
+    public static final IKey FORMS_POST_VOLUME_MIX = L10n.lang("bbs.ui.forms.editors.post_volume.mix");
+    public static final IKey FORMS_POST_VOLUME_INTENSITY = L10n.lang("bbs.ui.forms.editors.post_volume.intensity");
+    public static final IKey FORMS_POST_VOLUME_INTENSITY_TOOLTIP = L10n.lang("bbs.ui.forms.editors.post_volume.intensity_tooltip");
+    public static final IKey FORMS_POST_VOLUME_PRIORITY = L10n.lang("bbs.ui.forms.editors.post_volume.priority");
+    public static final IKey FORMS_POST_VOLUME_PRIORITY_TOOLTIP = L10n.lang("bbs.ui.forms.editors.post_volume.priority_tooltip");
+    public static final IKey FORMS_POST_VOLUME_GUIDES = L10n.lang("bbs.ui.forms.editors.post_volume.guides");
+    public static final IKey FORMS_POST_VOLUME_GUIDES_TOOLTIP = L10n.lang("bbs.ui.forms.editors.post_volume.guides_tooltip");
+    public static final IKey FORMS_POST_VOLUME_FULL = L10n.lang("bbs.ui.forms.editors.post_volume.full");
     public static final IKey FORMS_EDITORS_HEIGHT_FOG_BASE_HEIGHT = L10n.lang("bbs.ui.forms.editors.height_fog.base_height");
     public static final IKey FORMS_EDITORS_HEIGHT_FOG_DENSITY = L10n.lang("bbs.ui.forms.editors.height_fog.density");
     public static final IKey FORMS_EDITORS_HEIGHT_FOG_FALLOFF = L10n.lang("bbs.ui.forms.editors.height_fog.falloff");

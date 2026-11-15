@@ -139,6 +139,8 @@ public class PostEffectStack extends ValueList<PostEffectStack.Layer>
         public final ValueString effect = new ValueString("effect", "");
         public final ValueBoolean enabled = new ValueBoolean("enabled", true);
         public final ValueInt color = new ValueInt("color", 0xffffff);
+        /** The post-process volume's property slot this layer reads its keyframable values from; -1 in a clip */
+        public final ValueInt slot = new ValueInt("slot", -1);
 
         public final ValueFloat intensity = new ValueFloat("intensity_value", 1F, 0F, 1F);
         public final ValueFloat[] values = new ValueFloat[PARAMS];
@@ -154,6 +156,7 @@ public class PostEffectStack extends ValueList<PostEffectStack.Layer>
             this.add(this.effect);
             this.add(this.enabled);
             this.add(this.color);
+            this.add(this.slot);
             this.add(this.intensity);
             this.add(this.intensityChannel);
 

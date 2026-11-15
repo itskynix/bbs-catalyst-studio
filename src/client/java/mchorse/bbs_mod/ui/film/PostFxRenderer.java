@@ -239,6 +239,73 @@ public class PostFxRenderer
         }
     }
 
+    /**
+     * The effect stacks of the post-process volumes the camera is in, queued while the world was drawn
+     * and drawn over it once it is finished, before the film's own post-production. Only library
+     * passes; the depth is the one captured before the hand, when a volume asked for it.
+     */
+    public static void renderVolumes(List<FxOverlay> overlays)
+    {
+        if (failed || overlays.isEmpty() || BBSShaders.getPostFxLibraryProgram() == null)
+        {
+            return;
+        }
+
+        Framebuffer main = MinecraftClient.getInstance().getFramebuffer();
+
+        if (main == null || main.textureWidth <= 0 || main.textureHeight <= 0)
+        {
+            return;
+        }
+
+        int prevRead = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+        int prevDraw = GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
+
+        try
+        {
+            if (scratch == null)
+            {
+                scratch = new SimpleFramebuffer(main.textureWidth, main.textureHeight, true, MinecraftClient.IS_SYSTEM_MAC);
+            }
+            else if (scratch.textureWidth != main.textureWidth || scratch.textureHeight != main.textureHeight)
+            {
+                scratch.resize(main.textureWidth, main.textureHeight, MinecraftClient.IS_SYSTEM_MAC);
+            }
+
+            RenderSystem.disableDepthTest();
+            RenderSystem.disableBlend();
+            RenderSystem.depthMask(false);
+
+            int libraryDepth = -1;
+
+            for (FxOverlay overlay : overlays)
+            {
+                if (libraryDepth < 0 && overlay.params[10] > 0.5F)
+                {
+                    libraryDepth = depthCaptured && worldDepth != null && hasDepth(main.textureWidth, main.textureHeight) ? 1 : 0;
+                }
+
+                libraryPass(main, overlay, overlay.params[10] > 0.5F && libraryDepth == 1);
+            }
+        }
+        catch (Throwable e)
+        {
+            failed = true;
+
+            System.err.println("[BBS] Post-process volumes failed and post-production is switched off for this session:");
+            e.printStackTrace();
+        }
+        finally
+        {
+            /* depthCaptured stays: the film's own depth effects later in the frame read the same copy */
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, prevRead);
+            GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, prevDraw);
+
+            RenderSystem.depthMask(true);
+            RenderSystem.enableDepthTest();
+        }
+    }
+
     public static void render(MatrixStack stack, Batcher2D batcher, ClipContext context)
     {
         if (failed)
