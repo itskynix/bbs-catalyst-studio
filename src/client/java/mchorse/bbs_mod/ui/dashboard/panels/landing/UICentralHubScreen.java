@@ -165,7 +165,7 @@ public class UICentralHubScreen extends UIElement
 
         if (context.mouseButton == 0 && context.mouseX >= this.creditsRect[0] && context.mouseX < this.creditsRect[2] && context.mouseY >= this.creditsRect[1] && context.mouseY < this.creditsRect[3])
         {
-            mchorse.bbs_mod.ui.framework.elements.overlay.UIOverlay.addOverlay(context, new UICreditsOverlayPanel(), 440, 330);
+            UICinematicCredits.open(context);
 
             return true;
         }

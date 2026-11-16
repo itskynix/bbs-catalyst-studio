@@ -178,6 +178,12 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
         menu.action(Icons.SPARKLES, UIKeys.CATALYST_NLE_AI_CLOSE_GAPS, this.aiTools::closeAllGaps);
     }
 
+    /** Whether the studio is playing or exporting, which is when its music steps aside */
+    public boolean isStudioBusy()
+    {
+        return this.isPlaying || this.isExporting || this.exportLayout;
+    }
+
     public boolean isAiBusy()
     {
         return this.aiBusy;

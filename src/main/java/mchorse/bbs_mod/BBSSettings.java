@@ -235,6 +235,9 @@ public class BBSSettings {
 	public static ValueBoolean interfaceShadows;
 	public static ValueBoolean interfaceHighlights;
 	public static ValueBoolean interfaceGlow;
+	public static ValueBoolean studioMusicEnabled;
+	public static ValueFloat studioMusicVolume;
+	public static ValueFloat welcomeMusicVolume;
 	public static ValueBoolean interfaceBlur;
 	public static ValueInt interfaceBlurRadius;
 
@@ -730,6 +733,9 @@ public class BBSSettings {
 		interfaceShadows = builder.getBoolean("interface_shadows", true);
 		interfaceHighlights = builder.getBoolean("interface_highlights", false);
 		interfaceGlow = builder.getBoolean("interface_glow", true);
+		studioMusicEnabled = builder.getBoolean("studio_music", true);
+		studioMusicVolume = builder.getFloat("studio_music_volume", 0.65F, 0F, 1F).slider();
+		welcomeMusicVolume = builder.getFloat("welcome_music_volume", 0.8F, 0F, 1F).slider();
 
 		builder.category("scrollbars", Icons.VERTICAL);
 		scrollbarWidth = builder.getInt("width", 4, 2, 10).slider();

@@ -950,6 +950,20 @@ public class UISettingsOverlayPanel extends UIOverlayPanel
             this.marginBottom(8);
         }
 
+        /* A click on the card opens the credits as the end of a film */
+        @Override
+        public boolean subMouseClicked(UIContext context)
+        {
+            if (context.mouseButton == 0 && this.area.isInside(context))
+            {
+                mchorse.bbs_mod.ui.dashboard.panels.landing.UICinematicCredits.open(context);
+
+                return true;
+            }
+
+            return super.subMouseClicked(context);
+        }
+
         @Override
         public void render(UIContext context)
         {

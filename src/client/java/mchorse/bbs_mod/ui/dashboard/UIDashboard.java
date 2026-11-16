@@ -114,6 +114,7 @@ public class UIDashboard extends UIBaseMenu
         {
             this.globalTabs.onPanelChanged();
             this.menuBar.setPanel(e.panel);
+            mchorse.bbs_mod.audio.StudioMusicManager.get().setCategory(mchorse.bbs_mod.audio.StudioMusicManager.categoryOf(e.panel));
 
             this.orbitUI.setControl(this.panels.isFlightSupported());
 
@@ -350,6 +351,9 @@ public class UIDashboard extends UIBaseMenu
     {
         super.onOpen(oldMenu);
 
+        /* The dashboard is back: the music of the workspace on screen starts again */
+        mchorse.bbs_mod.audio.StudioMusicManager.get().setCategory(mchorse.bbs_mod.audio.StudioMusicManager.categoryOf(this.panels.panel));
+
         this.lastPerspective = MinecraftClient.getInstance().options.getPerspective();
 
         MinecraftClient.getInstance().options.setPerspective(Perspective.FIRST_PERSON);
@@ -378,6 +382,8 @@ public class UIDashboard extends UIBaseMenu
     public void onClose(UIBaseMenu nextMenu)
     {
         super.onClose(nextMenu);
+
+        mchorse.bbs_mod.audio.StudioMusicManager.get().stop();
 
         if (nextMenu != this)
         {
@@ -560,6 +566,14 @@ public class UIDashboard extends UIBaseMenu
     public void startRenderFrame(float tickDelta)
     {
         super.startRenderFrame(tickDelta);
+
+        /* The music gives way while the editor plays or records */
+        UIDashboardPanel current = this.panels.panel;
+        boolean busy = (current instanceof UICatalystPanel catalyst && catalyst.isStudioBusy())
+            || (current instanceof UIFilmPanel film && (film.isRunning() || (film.recorder != null && (film.recorder.isRecording() || film.recorder.isExporting()))));
+
+        mchorse.bbs_mod.audio.StudioMusicManager.get().setDucked(busy);
+        mchorse.bbs_mod.audio.StudioMusicManager.get().frame();
 
         if (this.panels.panel != null)
         {
