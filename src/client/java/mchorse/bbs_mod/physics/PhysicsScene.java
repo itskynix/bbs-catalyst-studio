@@ -192,7 +192,10 @@ final class PhysicsScene implements AutoCloseable
 
         for (Replay replay : replays)
         {
-            Rig rig = replay.physics.ragdoll.get() && !replay.physics.rigid.get() ? this.buildRagdoll(replay, world) : null;
+            /* The form's own physics mode comes first; left at zero, the replay's switches decide */
+            int mode = replay.form.get() instanceof mchorse.bbs_mod.forms.forms.ModelForm model ? model.physicsMode.get() : 0;
+            boolean jointed = mode == 1 || (mode == 0 && replay.physics.ragdoll.get() && !replay.physics.rigid.get());
+            Rig rig = jointed ? this.buildRagdoll(replay, world) : null;
 
             this.rigs.add(rig != null ? rig : this.build(replay));
         }
@@ -349,7 +352,7 @@ final class PhysicsScene implements AutoCloseable
             twist.normalize();
 
             Vector3f plane = twist.cross(Math.abs(twist.y) > 0.9F ? new Vector3f(1F, 0F, 0F) : new Vector3f(0F, 1F, 0F), new Vector3f()).normalize();
-            float[] limits = limits(bone.id());
+            float[] limits = limits(bone.id(), bone.joint());
             SwingTwistConstraintSettings joint = new SwingTwistConstraintSettings();
             RVec3 at = new RVec3(frame.position().x, frame.position().y, frame.position().z);
 
@@ -394,10 +397,21 @@ final class PhysicsScene implements AutoCloseable
     }
 
     /** Normal cone, plane cone and twist, in radians, by what the bone is called */
-    private static float[] limits(String name)
+    private static float[] limits(String name, int joint)
     {
         String id = name.toLowerCase();
         float d = (float) Math.PI / 180F;
+
+        /* What the form picked for the bone wins over its name */
+        if (joint == 1)
+        {
+            return new float[] {2F * d, 80F * d, 3F * d};
+        }
+
+        if (joint == 2)
+        {
+            return new float[] {0.5F * d, 0.5F * d, 0.5F * d};
+        }
 
         if (id.contains("fore") || id.contains("lower") || id.contains("shin") || id.contains("calf") || id.contains("knee") || id.contains("elbow"))
         {

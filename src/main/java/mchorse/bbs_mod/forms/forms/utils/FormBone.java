@@ -60,6 +60,10 @@ public class FormBone extends ValueGroup
     public final ValueFloat physicsGravityRotateY = new ValueFloat("physics_gravity_rotate_y", 0F);
     public final ValueFloat physicsGravityRotateZ = new ValueFloat("physics_gravity_rotate_z", 0F);
     public final ValueBonePhysics physics = new ValueBonePhysics("physics", new PhysicsControl());
+    /** Whether the bone is a body of the form's ragdoll; off, its cubes ride on the nearest parent body */
+    public final ValueBoolean ragdollCollision = new ValueBoolean("ragdoll_collision", true);
+    /** The joint to its parent body: 0 free, by the bone's name, 1 hinge, 2 fixed */
+    public final ValueInt ragdollJoint = new ValueInt("ragdoll_joint", 0);
 
     public FormBone(String id)
     {
@@ -112,6 +116,8 @@ public class FormBone extends ValueGroup
         this.add(this.physicsGravityRotateY);
         this.add(this.physicsGravityRotateZ);
         this.add(this.physics);
+        this.add(this.ragdollCollision);
+        this.add(this.ragdollJoint);
     }
 
     /** Whether this bone is the root of a configured physics chain. */
@@ -152,6 +158,8 @@ public class FormBone extends ValueGroup
             && this.physicsGravityRotateX.get() == 0F
             && this.physicsGravityRotateY.get() == 0F
             && this.physicsGravityRotateZ.get() == 0F
-            && this.physics.get().isDefault();
+            && this.physics.get().isDefault()
+            && this.ragdollCollision.get()
+            && this.ragdollJoint.get() == 0;
     }
 }

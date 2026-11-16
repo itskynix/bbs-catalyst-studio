@@ -55,6 +55,12 @@ public class UIModelPhysicsFormPanel extends UIBoneListFormPanel
     public UISliderTrackpad windTurbulenceScale;
     public UIToggle windLocal;
 
+    /* The physics studio's side of the form: what the model becomes, and the selected bone's body and joint */
+    public mchorse.bbs_mod.ui.framework.elements.buttons.UICirculate ragdollMode;
+    public UIToggle ragdollCollision;
+    public mchorse.bbs_mod.ui.framework.elements.buttons.UICirculate ragdollJoint;
+    public UIToggle ragdollPreview;
+
     /* Hidden until the chain is switched on, exactly like the IK panel's chain
      * parameters. The wind section stays: it is the FORM's own property, not the
      * bone's, and it keeps working while every chain sits idle. */
@@ -243,7 +249,39 @@ public class UIModelPhysicsFormPanel extends UIBoneListFormPanel
             UI.labelRow(UIKeys.FORMS_EDITORS_MODEL_PHYSICS_WIND_TURBULENCE_SCALE, this.windTurbulenceScale)
         );
 
+        this.ragdollMode = new mchorse.bbs_mod.ui.framework.elements.buttons.UICirculate((b) ->
+        {
+            if (this.form != null)
+            {
+                this.form.physicsMode.set(b.getValue());
+            }
+        });
+        this.ragdollMode.addLabel(UIKeys.FORMS_EDITORS_MODEL_RAGDOLL_MODE_OFF);
+        this.ragdollMode.addLabel(UIKeys.FORMS_EDITORS_MODEL_RAGDOLL_MODE_RAGDOLL);
+        this.ragdollMode.addLabel(UIKeys.FORMS_EDITORS_MODEL_RAGDOLL_MODE_RIGID);
+        this.ragdollMode.tooltip(UIKeys.FORMS_EDITORS_MODEL_RAGDOLL_MODE_TOOLTIP);
+        this.ragdollCollision = new UIToggle(UIKeys.FORMS_EDITORS_MODEL_RAGDOLL_COLLISION, (b) -> this.editBone((bone) -> bone.ragdollCollision.set(b.getValue())));
+        this.ragdollCollision.tooltip(UIKeys.FORMS_EDITORS_MODEL_RAGDOLL_COLLISION_TOOLTIP);
+        this.ragdollJoint = new mchorse.bbs_mod.ui.framework.elements.buttons.UICirculate((b) -> this.editBone((bone) -> bone.ragdollJoint.set(b.getValue())));
+        this.ragdollJoint.addLabel(UIKeys.FORMS_EDITORS_MODEL_RAGDOLL_JOINT_FREE);
+        this.ragdollJoint.addLabel(UIKeys.FORMS_EDITORS_MODEL_RAGDOLL_JOINT_HINGE);
+        this.ragdollJoint.addLabel(UIKeys.FORMS_EDITORS_MODEL_RAGDOLL_JOINT_FIXED);
+        this.ragdollJoint.tooltip(UIKeys.FORMS_EDITORS_MODEL_RAGDOLL_JOINT_TOOLTIP);
+        this.ragdollPreview = new UIToggle(UIKeys.FORMS_EDITORS_MODEL_RAGDOLL_PREVIEW, (b) -> mchorse.bbs_mod.physics.RagdollShapesDebug.enabled = b.getValue());
+        this.ragdollPreview.setValue(mchorse.bbs_mod.physics.RagdollShapesDebug.enabled);
+
+        UISection ragdollSection = this.section(UIKeys.FORMS_EDITORS_MODEL_RAGDOLL_TITLE, "physics.ragdoll", true);
+
+        ragdollSection.fields.add(
+            UI.labelRow(UIKeys.FORMS_EDITORS_MODEL_RAGDOLL_MODE, this.ragdollMode),
+            UI.label(UIKeys.FORMS_EDITORS_MODEL_RAGDOLL_BONE),
+            this.ragdollCollision,
+            this.ragdollJoint,
+            this.ragdollPreview
+        );
+
         this.options.add(
+            ragdollSection,
             this.debugRow(this.debug, BBSSettings.physicsDebug),
             this.bonesSearch,
             settings,
@@ -372,6 +410,21 @@ public class UIModelPhysicsFormPanel extends UIBoneListFormPanel
         this.iterations.setValue(bone == null ? 4 : bone.physicsIterations.get());
         this.collisions.setValue(bone != null && bone.physicsCollisions.get());
         this.radius.setValue(bone == null ? 0.1D : bone.physicsRadius.get());
+
+        this.ragdollMode.setValue(this.form == null ? 0 : this.form.physicsMode.get());
+        this.ragdollCollision.setEnabled(panelEnabled && boneSelected);
+        this.ragdollJoint.setEnabled(panelEnabled && boneSelected);
+        this.ragdollCollision.setValue(bone == null || bone.ragdollCollision.get());
+        this.ragdollJoint.setValue(bone == null ? 0 : bone.ragdollJoint.get());
+    }
+
+    @Override
+    public void render(mchorse.bbs_mod.ui.framework.UIContext context)
+    {
+        /* The live collision preview draws only over the form this tab is editing, and only while it is up */
+        mchorse.bbs_mod.physics.RagdollShapesDebug.editing(this.form);
+
+        super.render(context);
     }
 
     private void updateWindFields()

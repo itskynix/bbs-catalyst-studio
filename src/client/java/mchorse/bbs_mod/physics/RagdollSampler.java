@@ -42,8 +42,57 @@ import java.util.Set;
 final class RagdollSampler
 {
     /** One bone of the ragdoll: its name, the nearest ancestor that is also a body, and its box in its own frame */
-    record Bone(String id, int parent, Vector3f center, Vector3f half)
+    record Bone(String id, int parent, Vector3f center, Vector3f half, int joint)
     {}
+
+    /**
+     * The ragdoll bones of a model: groups with cubes whose collision the form did not switch off, each with its
+     * box in its own frame, its nearest parent body and the joint the form picked for it.
+     */
+    static List<Bone> bones(Model model, ModelForm form)
+    {
+        List<Bone> list = new ArrayList<>();
+
+        for (ModelGroup group : model.topGroups)
+        {
+            collect(list, group, -1, form);
+        }
+
+        return list;
+    }
+
+    private static void collect(List<Bone> list, ModelGroup group, int parent, ModelForm form)
+    {
+        int index = parent;
+        mchorse.bbs_mod.forms.forms.utils.FormBone settings = form == null ? null : form.bones.getBone(group.id);
+        boolean collides = settings == null || settings.ragdollCollision.get();
+
+        if (!group.cubes.isEmpty() && collides)
+        {
+            Vector3f min = new Vector3f(Float.MAX_VALUE);
+            Vector3f max = new Vector3f(-Float.MAX_VALUE);
+
+            for (ModelCube cube : group.cubes)
+            {
+                min.min(cube.origin);
+                max.max(new Vector3f(cube.origin).add(cube.size));
+            }
+
+            Vector3f pivot = group.initial.translate;
+            Vector3f center = new Vector3f(min).add(max).mul(0.5F).sub(pivot).div(16F);
+            Vector3f half = new Vector3f(max).sub(min).mul(0.5F / 16F);
+
+            half.set(Math.max(0.03F, half.x), Math.max(0.03F, half.y), Math.max(0.03F, half.z));
+
+            list.add(new Bone(group.id, parent, center, half, settings == null ? 0 : settings.ragdollJoint.get()));
+            index = list.size() - 1;
+        }
+
+        for (ModelGroup child : group.children)
+        {
+            collect(list, child, index, form);
+        }
+    }
 
     final Replay replay;
     final List<Bone> bones = new ArrayList<>();
@@ -86,44 +135,13 @@ final class RagdollSampler
             return null;
         }
 
-        for (ModelGroup group : model.topGroups)
+        for (Bone bone : bones(model, (ModelForm) replay.form.get()))
         {
-            sampler.collect(group, -1);
+            sampler.bones.add(bone);
+            sampler.ids.add(bone.id());
         }
 
         return sampler.bones.size() >= 2 ? sampler : null;
-    }
-
-    private void collect(ModelGroup group, int parent)
-    {
-        int index = parent;
-
-        if (!group.cubes.isEmpty())
-        {
-            Vector3f min = new Vector3f(Float.MAX_VALUE);
-            Vector3f max = new Vector3f(-Float.MAX_VALUE);
-
-            for (ModelCube cube : group.cubes)
-            {
-                min.min(cube.origin);
-                max.max(new Vector3f(cube.origin).add(cube.size));
-            }
-
-            Vector3f pivot = group.initial.translate;
-            Vector3f center = new Vector3f(min).add(max).mul(0.5F).sub(pivot).div(16F);
-            Vector3f half = new Vector3f(max).sub(min).mul(0.5F / 16F);
-
-            half.set(Math.max(0.03F, half.x), Math.max(0.03F, half.y), Math.max(0.03F, half.z));
-
-            this.bones.add(new Bone(group.id, parent, center, half));
-            this.ids.add(group.id);
-            index = this.bones.size() - 1;
-        }
-
-        for (ModelGroup child : group.children)
-        {
-            this.collect(child, index);
-        }
     }
 
     /** The world frame the film stands the entity in at a tick */

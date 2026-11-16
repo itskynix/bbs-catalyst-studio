@@ -834,14 +834,37 @@ public class UIFilmPreview extends UIElement
         }
     }
 
+    /**
+     * A physics tool takes the buttons before anything in or over the preview does: the panes, the overlays laid
+     * over the picture, picking, gizmos and the orbit. Only the toolbar keeps its own clicks.
+     */
+    @Override
+    protected IUIElement childrenMouseClicked(UIContext context)
+    {
+        boolean onToolbar = this.icons.isVisible() && this.icons.area.isInside(context);
+
+        if (!onToolbar && mchorse.bbs_mod.physics.PhysicsToolController.mouseClicked(context, this.panel, this.getViewport()))
+        {
+            return this;
+        }
+
+        return super.childrenMouseClicked(context);
+    }
+
+    @Override
+    protected IUIElement childrenMouseReleased(UIContext context)
+    {
+        if (mchorse.bbs_mod.physics.PhysicsToolController.mouseReleased(context, this.panel))
+        {
+            return this;
+        }
+
+        return super.childrenMouseReleased(context);
+    }
+
     @Override
     protected boolean subMouseClicked(UIContext context)
     {
-        /* A physics tool takes the buttons first, before panes, picking, gizmos and the orbit */
-        if (mchorse.bbs_mod.physics.PhysicsToolController.mouseClicked(context, this.panel, this.getViewport()))
-        {
-            return true;
-        }
 
         if (ViewportSet.showHeaders())
         {
@@ -903,10 +926,6 @@ public class UIFilmPreview extends UIElement
     @Override
     protected boolean subMouseReleased(UIContext context)
     {
-        if (mchorse.bbs_mod.physics.PhysicsToolController.mouseReleased(context, this.panel))
-        {
-            return true;
-        }
 
         if (this.panning && context.mouseButton == 2)
         {

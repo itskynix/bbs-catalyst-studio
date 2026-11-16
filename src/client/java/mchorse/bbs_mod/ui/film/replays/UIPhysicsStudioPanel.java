@@ -63,9 +63,13 @@ public class UIPhysicsStudioPanel extends UIElement
     private UITrackpad blastRadius;
     private UILabel cache;
 
-    public UIPhysicsStudioPanel(UIFilmPanel filmPanel)
+    /** Asked every frame: whether the Details area is the studio's right now */
+    private final java.util.function.BooleanSupplier shown;
+
+    public UIPhysicsStudioPanel(UIFilmPanel filmPanel, java.util.function.BooleanSupplier shown)
     {
         this.filmPanel = filmPanel;
+        this.shown = shown;
 
         this.status = new UILabel(UIKeys.FILM_PHYSICS_UNAVAILABLE).color(Colors.setA(Colors.WHITE, 0.6F));
         this.status.h(20);
@@ -489,9 +493,15 @@ public class UIPhysicsStudioPanel extends UIElement
     }
 
     @Override
+    public boolean isVisible()
+    {
+        return super.isVisible() && this.shown.getAsBoolean();
+    }
+
+    @Override
     public void render(UIContext context)
     {
-        this.area.render(context.batcher, Colors.A50 | 0x0B0F19);
+        this.area.render(context.batcher, 0xF20B0F19);
 
         int ticks = PhysicsStudio.cachedTicks();
 

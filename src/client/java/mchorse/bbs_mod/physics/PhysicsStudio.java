@@ -180,7 +180,15 @@ public final class PhysicsStudio
 
         for (Replay replay : replays)
         {
-            builder.append(replay.getId()).append('=').append(replay.physics.settingsKey()).append('#').append(System.identityHashCode(replay.form.get())).append(';');
+            builder.append(replay.getId()).append('=').append(replay.physics.settingsKey()).append('#').append(System.identityHashCode(replay.form.get()));
+
+            /* The form's physics mode and its bones' ragdoll settings change the bodies and joints themselves */
+            if (replay.form.get() instanceof mchorse.bbs_mod.forms.forms.ModelForm model)
+            {
+                builder.append('#').append(model.physicsMode.get()).append('#').append(model.bones.toData().toString().hashCode());
+            }
+
+            builder.append(';');
         }
 
         return builder.toString();

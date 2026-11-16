@@ -425,10 +425,9 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
         TrackCategories.registerShortcuts(this.keys(), () -> TrackCategories.values().stream()
             .filter(category -> this.tabButtons.get(category).getParent() != null).toList(), this::setCategory);
 
-        this.physicsPanel = new UIPhysicsStudioPanel(this.filmPanel);
-        this.physicsPanel.relative(this).x(1F, -UIPhysicsStudioPanel.width()).y(0).w(UIPhysicsStudioPanel.width()).h(1F);
-        this.physicsPanel.setVisible(false);
-        this.add(this.physicsPanel);
+        /* The physics studio lives in the Details area, in place of the keyframe hint, while the Physics tab is up
+         * for a replay and no keyframe is picked; a picked keyframe brings the keyframe editor back */
+        this.physicsPanel = new UIPhysicsStudioPanel(this.filmPanel, this::showsPhysicsPanel);
         this.add(this.iconBar, this.povBar, this.sectionsToggle, this.graphToggle, this.actionsToggle, this.povToggle, this.povActionsToggle, this.povBack, this.replayTransform);
         this.partHeader.relative(this).x(CATEGORY_BAR_WIDTH).y(0).w(120).h(TimelineRulerRenderer.RULER_BLOCK_HEIGHT);
         this.partHeader.add(new UIRenderable(context ->
@@ -656,18 +655,55 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
         }
     }
 
+    private boolean isPhysicsTab()
+    {
+        return !this.povMode && !this.actionsMode && !this.allMode && this.category == TrackCategory.PHYSICS && this.keyframeEditor != null;
+    }
+
+    /** Whether the Details area shows the physics studio right now */
+    private boolean showsPhysicsPanel()
+    {
+        return this.isPhysicsTab() && this.replay != null && this.keyframeEditor.editor == null && this.hasParent() && this.isVisible();
+    }
+
     /** The Physics tab makes room for the studio beside the timeline; every other view gives the whole width back */
     private void layoutPhysicsPanel()
     {
-        boolean physics = !this.povMode && !this.actionsMode && !this.allMode && this.category == TrackCategory.PHYSICS && this.keyframeEditor != null;
+        boolean physics = this.isPhysicsTab();
+        UIElement area = this.filmPanel.editArea;
 
-        if (physics)
+        if (area != null && this.physicsPanel.getParent() != area)
         {
-            this.keyframeEditor.relative(this).x(CATEGORY_BAR_WIDTH).y(0).w(1F, -CATEGORY_BAR_WIDTH - UIPhysicsStudioPanel.width()).h(1F);
+            this.physicsPanel.removeFromParent();
+            this.physicsPanel.relative(area).x(0).y(0).w(1F).h(1F);
+            area.add(this.physicsPanel);
+            area.resize();
         }
 
         this.physicsPanel.setReplay(this.replay);
-        this.physicsPanel.setVisible(physics);
+
+        if (this.keyframeEditor != null)
+        {
+            UIKeyframeEditor editor = this.keyframeEditor;
+
+            editor.setEmptyState(() ->
+            {
+                if (this.showsPhysicsPanel())
+                {
+                    return null;
+                }
+
+                for (UIKeyframeSheet sheet : editor.view.getGraph().getSheets())
+                {
+                    if (!sheet.channel.isEmpty())
+                    {
+                        return UIKeys.KEYFRAMES_EMPTY_PICK;
+                    }
+                }
+
+                return UIKeys.KEYFRAMES_EMPTY_ADD;
+            });
+        }
 
         /* Leaving the Physics tab puts a picked tool away; one held in hand stays */
         if (!physics)
