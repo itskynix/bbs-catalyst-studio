@@ -102,6 +102,9 @@ public class StudioMusicManager
         volatile Wave decoded;
         volatile boolean loading;
         boolean failed;
+        /** A failure that may pass (OpenAL not up yet, a source that could not be made): tried again a few times */
+        int retries;
+        long retryAt;
 
         Voice(Category category)
         {
@@ -280,7 +283,7 @@ public class StudioMusicManager
 
         if (voice.player == null)
         {
-            if (voice.target > 0F && !voice.failed)
+            if (voice.target > 0F && !voice.failed && System.nanoTime() >= voice.retryAt && alReady())
             {
                 this.load(voice, list);
             }
@@ -299,6 +302,34 @@ public class StudioMusicManager
         }
     }
 
+    /** Whether OpenAL has a context yet; before the sound engine is up there is nothing to play on */
+    private static boolean alReady()
+    {
+        try
+        {
+            return org.lwjgl.openal.AL.getCapabilities() != null;
+        }
+        catch (Throwable e)
+        {
+            return false;
+        }
+    }
+
+    /** A failed start is tried again in a second, up to five times, with the decoded track kept; then it is given up */
+    private void retryLater(Voice voice, Wave wave, Throwable e)
+    {
+        if (++voice.retries > 5)
+        {
+            voice.failed = true;
+            BBSMod.LOGGER.warn("The studio music " + voice.category.id + " could not be started", e);
+
+            return;
+        }
+
+        voice.decoded = wave;
+        voice.retryAt = System.nanoTime() + 1_000_000_000L;
+    }
+
     /** Reads the track on a thread of its own; its source is made here, on the render thread, once it is decoded */
     private void load(Voice voice, List<Link> list)
     {
@@ -312,6 +343,12 @@ public class StudioMusicManager
             {
                 voice.buffer = new SoundBuffer(voice.link, wave, null);
                 voice.player = new SoundPlayer(voice.buffer).configure2DStereo();
+
+                if (!voice.player.isValid())
+                {
+                    throw new IllegalStateException("No OpenAL source for the studio music");
+                }
+
                 voice.player.setLooping(list.size() == 1);
                 voice.player.setVolume(0F);
                 voice.player.play();
@@ -319,7 +356,7 @@ public class StudioMusicManager
             catch (Throwable e)
             {
                 voice.release();
-                voice.failed = true;
+                this.retryLater(voice, wave, e);
             }
 
             return;

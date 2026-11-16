@@ -739,10 +739,11 @@ public class UIOobeMenu extends UIBaseMenu
         mchorse.bbs_mod.audio.StudioMusicManager.get().setCategory(mchorse.bbs_mod.audio.StudioMusicManager.Category.OOBE);
     }
 
+    /* Not startRenderFrame: that one runs with the world's rendering, and the wizard opens with no world at all */
     @Override
-    public void startRenderFrame(float tickDelta)
+    protected void preRenderMenu(mchorse.bbs_mod.ui.framework.UIRenderingContext context)
     {
-        super.startRenderFrame(tickDelta);
+        super.preRenderMenu(context);
 
         mchorse.bbs_mod.audio.StudioMusicManager.get().frame();
     }
