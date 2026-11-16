@@ -29,12 +29,12 @@ public enum ViewportCameraSource
         this.icon = icon;
     }
 
-    /** The source that a camera mode and a clip choice amount to */
-    public static ViewportCameraSource of(int pov, int clipIndex)
+    /** The source that a camera mode and whether a clip is followed amount to */
+    public static ViewportCameraSource of(int pov, boolean clip)
     {
         if (pov == UIFilmController.CAMERA_MODE_CAMERA)
         {
-            return clipIndex >= 0 ? SPECIFIC_CLIP : RENDER_CAMERA;
+            return clip ? SPECIFIC_CLIP : RENDER_CAMERA;
         }
 
         if (pov == UIFilmController.CAMERA_MODE_FIRST_PERSON)

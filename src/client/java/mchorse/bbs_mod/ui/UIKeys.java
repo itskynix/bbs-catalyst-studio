@@ -650,7 +650,8 @@ public class UIKeys
     public static final IKey FILM_VIEWPORT_SOURCE_RENDER = L10n.lang("bbs.ui.film.viewport.source.render");
     public static final IKey FILM_VIEWPORT_SOURCE_ORBIT = L10n.lang("bbs.ui.film.viewport.source.orbit");
     public static final IKey FILM_VIEWPORT_SOURCE_CLIP = L10n.lang("bbs.ui.film.viewport.source.clip");
-    public static final IKey FILM_VIEWPORT_SOURCE_CLIP_ITEM = L10n.lang("bbs.ui.film.viewport.source.clip_item");
+    public static final IKey FILM_VIEWPORT_SOURCE_CLIP_DETAIL = L10n.lang("bbs.ui.film.viewport.source.clip_detail");
+    public static final IKey FILM_FULLBRIGHT = L10n.lang("bbs.ui.film.fullbright");
     public static final IKey FILM_VIEWPORT_SOURCE_ACTOR = L10n.lang("bbs.ui.film.viewport.source.actor");
 
     public static final IKey FILM_CONTROLLER_CONTROL_MODE_TOOLTIP = L10n.lang("bbs.ui.film.controller.control_mode-tooltip");

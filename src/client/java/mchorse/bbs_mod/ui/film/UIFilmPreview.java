@@ -98,6 +98,9 @@ public class UIFilmPreview extends UIElement
     public UIIcon loop;
     public UIIcon recordVideo;
 
+    /** The work light: dark scenes at full brightness in the preview, never in a recording */
+    public UIIcon fullbright;
+
     /** Cuts the preview into one to four panes, each with a camera of its own */
     public UIIcon viewportLayout;
 
@@ -434,6 +437,15 @@ public class UIFilmPreview extends UIElement
             this.shaders.noCulling();
         }
 
+        this.fullbright = new UIIcon(Icons.LIGHT, (b) ->
+        {
+            BBSRendering.setFullbright(!BBSRendering.isFullbright());
+            UIUtils.playClick();
+        });
+        this.fullbright.highlight(BBSRendering::isFullbright, Direction.BOTTOM);
+        this.fullbright.tooltip(UIKeys.FILM_FULLBRIGHT);
+        this.fullbright.noCulling();
+
         this.viewportLayout = new UIIcon(Icons.LAYOUT, (b) -> ViewportSet.openLayoutMenu(b.getContext(), this));
         this.viewportLayout.highlight(() -> ViewportSet.getLayout() != ViewportLayout.SINGLE, Direction.BOTTOM);
         this.viewportLayout.tooltip(UIKeys.FILM_VIEWPORT_LAYOUT);
@@ -450,7 +462,7 @@ public class UIFilmPreview extends UIElement
         this.recordVideo.noCulling();
 
         /* Assemble the 3-part symmetric control center */
-        this.leftWing.add(this.onionSkin, this.teleport, this.motionPath, this.flight, this.greenScreen);
+        this.leftWing.add(this.onionSkin, this.teleport, this.motionPath, this.flight, this.greenScreen, this.fullbright);
         this.centerCapsule.add(this.plause);
         this.rightWing.add(this.screenshot, this.recordReplay, this.loop, this.viewportLayout, this.recordVideo);
 
@@ -1239,6 +1251,8 @@ public class UIFilmPreview extends UIElement
 
         if (headers)
         {
+            ViewportSet.layoutHeaders(context, this, this.icons.area);
+
             for (int i = 0; i < ViewportSet.getVisibleCount(); i++)
             {
                 ViewportSet.renderHeader(context, ViewportSet.visiblePane(i), this);

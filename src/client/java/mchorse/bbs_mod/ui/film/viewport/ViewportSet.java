@@ -15,6 +15,7 @@ import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.UIScreen;
 import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.utils.Area;
+import mchorse.bbs_mod.ui.utils.context.DisabledContextAction;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.utils.clips.Clip;
 import mchorse.bbs_mod.utils.colors.Colors;
@@ -66,6 +67,9 @@ public final class ViewportSet
 
     /** The focused pane's camera as the world saw it; the world camera itself is whoever was drawn last */
     private static final Camera focusedCamera = new Camera();
+
+    /** The top edge of the preview, which the first row of panes sits on */
+    private static int top;
 
     private static ViewportPane clickedTitle;
     private static long clickedAt;
@@ -171,7 +175,7 @@ public final class ViewportSet
             ViewportPane first = PANES[0];
 
             first.pov = controller.getPovMode();
-            first.clipIndex = -1;
+            first.clip = null;
             first.orbit = controller.orbit.captureState();
             preview.exportView(first);
 
@@ -228,7 +232,7 @@ public final class ViewportSet
 
         if (old.pov != UIFilmController.CAMERA_MODE_CAMERA)
         {
-            old.clipIndex = -1;
+            old.clip = null;
         }
 
         preview.exportView(old);
@@ -257,10 +261,10 @@ public final class ViewportSet
     }
 
     /** A pane's camera is picked: the live pane takes it as the editor's camera mode, the others keep it for their frames */
-    public static void select(ViewportPane pane, ViewportCameraSource source, int clipIndex, UIFilmPreview preview)
+    public static void select(ViewportPane pane, ViewportCameraSource source, CameraClip clip, UIFilmPreview preview)
     {
         pane.pov = source.pov;
-        pane.clipIndex = source == ViewportCameraSource.SPECIFIC_CLIP ? clipIndex : -1;
+        pane.clip = source == ViewportCameraSource.SPECIFIC_CLIP ? clip : null;
 
         if (pane.index == focused)
         {
@@ -273,6 +277,8 @@ public final class ViewportSet
     /** Where the panes go inside the preview, to be called whenever the preview is drawn or clicked */
     public static void place(Area bounds)
     {
+        top = bounds.y;
+
         if (layout == ViewportLayout.SINGLE)
         {
             return;
@@ -322,25 +328,229 @@ public final class ViewportSet
 
     /* Titles */
 
-    private static String titleOf(ViewportPane pane, UIFilmPreview preview)
+    private static int povOf(ViewportPane pane, UIFilmPreview preview)
     {
-        int pov = pane.index == focused ? preview.getFilmPanel().getController().getPovMode() : pane.pov;
-        ViewportCameraSource source = ViewportCameraSource.of(pov, pane.clipIndex);
-        String label = source.label.get();
+        return pane.index == focused ? preview.getFilmPanel().getController().getPovMode() : pane.pov;
+    }
 
-        if (source == ViewportCameraSource.SPECIFIC_CLIP)
+    private static ViewportCameraSource sourceOf(ViewportPane pane, UIFilmPreview preview)
+    {
+        return ViewportCameraSource.of(povOf(pane, preview), pane.clip != null);
+    }
+
+    /** What a clip is called on the timeline: its title, or its kind when it has none */
+    private static String baseName(UIFilmPanel panel, CameraClip clip)
+    {
+        String title = clip.title.get();
+
+        if (!title.isEmpty())
         {
-            List<CameraClip> clips = cameraClips(preview.getFilmPanel());
+            return title;
+        }
 
-            if (pane.clipIndex < clips.size())
+        return UIKeys.C_CLIP.get(panel.cameraEditor.clips.getFactory().getType(clip)).get();
+    }
+
+    /** The clip's name, with its layer and tick added when another clip has the same one, so that the two can be told apart */
+    public static String clipName(UIFilmPanel panel, List<CameraClip> clips, CameraClip clip)
+    {
+        String name = baseName(panel, clip);
+        int same = 0;
+
+        for (CameraClip other : clips)
+        {
+            if (baseName(panel, other).equals(name))
             {
-                String name = clips.get(pane.clipIndex).title.get();
-
-                label += " " + (name.isEmpty() ? String.valueOf(pane.clipIndex + 1) : name);
+                same += 1;
             }
         }
 
-        return label;
+        if (same > 1)
+        {
+            name = UIKeys.FILM_VIEWPORT_SOURCE_CLIP_DETAIL.format(name, clip.layer.get() + 1, clip.tick.get()).get();
+        }
+
+        return name;
+    }
+
+    private static String titleOf(ViewportPane pane, UIFilmPreview preview)
+    {
+        ViewportCameraSource source = sourceOf(pane, preview);
+
+        if (source == ViewportCameraSource.SPECIFIC_CLIP && pane.clip != null)
+        {
+            UIFilmPanel panel = preview.getFilmPanel();
+
+            return clipName(panel, cameraClips(panel), pane.clip);
+        }
+
+        return source.label.get();
+    }
+
+    /** Whether another showing pane already has this camera: the film's, an actor's eyes or the clip */
+    private static boolean taken(ViewportPane self, ViewportCameraSource kind, CameraClip clip, UIFilmPreview preview)
+    {
+        if (kind == ViewportCameraSource.FREE_ORBIT)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < visibleCount(); i++)
+        {
+            ViewportPane other = visible(i);
+
+            if (other == self)
+            {
+                continue;
+            }
+
+            ViewportCameraSource has = sourceOf(other, preview);
+
+            if (has == kind && (kind != ViewportCameraSource.SPECIFIC_CLIP || other.clip == clip))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** A pane falls back to its own free camera */
+    private static void demote(ViewportPane pane, UIFilmPreview preview)
+    {
+        pane.pov = UIFilmController.CAMERA_MODE_ORBIT;
+        pane.clip = null;
+
+        if (pane.index == focused)
+        {
+            preview.getFilmPanel().getController().setPov(UIFilmController.CAMERA_MODE_ORBIT);
+        }
+    }
+
+    /**
+     * Two panes may not show the same camera. A clip that is gone from the film, or a camera that a
+     * second showing pane has too, sends that pane to its free camera; the live pane keeps its own.
+     */
+    private static void validate(UIFilmPreview preview)
+    {
+        List<CameraClip> clips = cameraClips(preview.getFilmPanel());
+        List<Object> claimed = new java.util.ArrayList<>();
+        int n = visibleCount();
+
+        for (int step = 0; step < n; step++)
+        {
+            ViewportPane pane = null;
+
+            if (step == 0)
+            {
+                for (int i = 0; i < n; i++)
+                {
+                    if (visible(i).index == focused)
+                    {
+                        pane = visible(i);
+                    }
+                }
+
+                if (pane == null)
+                {
+                    continue;
+                }
+            }
+            else
+            {
+                int seen = 0;
+
+                for (int i = 0; i < n; i++)
+                {
+                    if (visible(i).index != focused && ++seen == step)
+                    {
+                        pane = visible(i);
+                    }
+                }
+
+                if (pane == null)
+                {
+                    continue;
+                }
+            }
+
+            if (pane.clip != null)
+            {
+                boolean exists = false;
+
+                for (CameraClip clip : clips)
+                {
+                    exists |= clip == pane.clip;
+                }
+
+                if (!exists)
+                {
+                    demote(pane, preview);
+                }
+            }
+
+            ViewportCameraSource source = sourceOf(pane, preview);
+
+            if (source == ViewportCameraSource.FREE_ORBIT)
+            {
+                continue;
+            }
+
+            Object key = source == ViewportCameraSource.SPECIFIC_CLIP ? pane.clip : source;
+            boolean clash = false;
+
+            for (Object other : claimed)
+            {
+                clash |= other == key;
+            }
+
+            if (clash)
+            {
+                demote(pane, preview);
+            }
+            else
+            {
+                claimed.add(key);
+            }
+        }
+    }
+
+    /**
+     * Where the titles go. The top row's sit under the floating toolbar when that is in their way, all
+     * of them at the same height; each is its label and the arrow of its camera menu.
+     */
+    public static void layoutHeaders(UIContext context, UIFilmPreview preview, Area toolbar)
+    {
+        validate(preview);
+
+        int h = 14;
+        int offset = 0;
+
+        for (int i = 0; i < visibleCount(); i++)
+        {
+            ViewportPane pane = visible(i);
+            String label = titleOf(pane, preview);
+            int w = Math.min(context.batcher.getFont().getWidth(label) + 10, Math.max(0, pane.rect.w - 26));
+
+            pane.title.set(pane.rect.x + 4, pane.rect.y + 4, w, h);
+
+            if (pane.rect.y <= top + 1 && pane.title.x < toolbar.ex() + 4 && pane.title.x + w + 14 > toolbar.x - 4)
+            {
+                offset = Math.max(offset, toolbar.ey() + 4 - (pane.rect.y + 4));
+            }
+        }
+
+        for (int i = 0; i < visibleCount(); i++)
+        {
+            ViewportPane pane = visible(i);
+
+            if (pane.rect.y <= top + 1)
+            {
+                pane.title.y += offset;
+            }
+
+            pane.chevron.set(pane.title.ex(), pane.title.y, 14, h);
+        }
     }
 
     /** The title in the pane's top left corner with the arrow of its camera menu, and the frame of the live pane */
@@ -349,17 +559,13 @@ public final class ViewportSet
         boolean live = pane.index == focused;
         Area rect = pane.rect;
         String label = titleOf(pane, preview);
-        int textW = context.batcher.getFont().getWidth(label);
-        int h = 14;
-
-        pane.title.set(rect.x + 4, rect.y + 4, Math.min(textW + 10, Math.max(0, rect.w - 26)), h);
-        pane.chevron.set(pane.title.ex(), pane.title.y, 14, h);
+        int h = pane.title.h;
 
         context.batcher.box(pane.title.x, pane.title.y, pane.chevron.ex(), pane.chevron.ey(), Colors.A75 | 0x0B0F19);
 
         int color = live ? Colors.WHITE : 0xFFB8BCC6;
 
-        context.batcher.text(label, pane.title.x + 5, pane.title.y + (h - context.batcher.getFont().getHeight()) / 2, color);
+        context.batcher.text(context.batcher.getFont().limitToWidth(label, Math.max(0, pane.title.w - 8)), pane.title.x + 5, pane.title.y + (h - context.batcher.getFont().getHeight()) / 2, color);
         context.batcher.icon(Icons.ARROW_DOWN, color, pane.chevron.mx() - 8, pane.chevron.my() - 8);
 
         if (pane.chevron.isInside(context))
@@ -468,22 +674,37 @@ public final class ViewportSet
 
     private static void openMenu(UIContext context, ViewportPane pane, UIFilmPreview preview)
     {
-        ViewportCameraSource current = ViewportCameraSource.of(pane.index == focused ? preview.getFilmPanel().getController().getPovMode() : pane.pov, pane.clipIndex);
-        List<CameraClip> clips = cameraClips(preview.getFilmPanel());
+        ViewportCameraSource current = sourceOf(pane, preview);
+        UIFilmPanel panel = preview.getFilmPanel();
+        List<CameraClip> clips = cameraClips(panel);
 
         context.replaceContextMenu((menu) ->
         {
-            menu.action(ViewportCameraSource.RENDER_CAMERA.icon, ViewportCameraSource.RENDER_CAMERA.label, current == ViewportCameraSource.RENDER_CAMERA, () -> select(pane, ViewportCameraSource.RENDER_CAMERA, -1, preview));
-            menu.action(ViewportCameraSource.FREE_ORBIT.icon, ViewportCameraSource.FREE_ORBIT.label, current == ViewportCameraSource.FREE_ORBIT, () -> select(pane, ViewportCameraSource.FREE_ORBIT, -1, preview));
-            menu.action(ViewportCameraSource.ACTOR_POV.icon, ViewportCameraSource.ACTOR_POV.label, current == ViewportCameraSource.ACTOR_POV, () -> select(pane, ViewportCameraSource.ACTOR_POV, -1, preview));
-
-            for (int i = 0; i < clips.size() && i < 16; i++)
+            for (ViewportCameraSource kind : new ViewportCameraSource[] {ViewportCameraSource.RENDER_CAMERA, ViewportCameraSource.FREE_ORBIT, ViewportCameraSource.ACTOR_POV})
             {
-                int index = i;
-                String name = clips.get(i).title.get();
-                IKey label = UIKeys.FILM_VIEWPORT_SOURCE_CLIP_ITEM.format(name.isEmpty() ? String.valueOf(i + 1) : name);
+                if (taken(pane, kind, null, preview))
+                {
+                    menu.action(new DisabledContextAction(kind.icon, kind.label));
+                }
+                else
+                {
+                    menu.action(kind.icon, kind.label, current == kind, () -> select(pane, kind, null, preview));
+                }
+            }
 
-                menu.action(ViewportCameraSource.SPECIFIC_CLIP.icon, label, current == ViewportCameraSource.SPECIFIC_CLIP && pane.clipIndex == index, () -> select(pane, ViewportCameraSource.SPECIFIC_CLIP, index, preview));
+            for (int i = 0; i < clips.size() && i < 24; i++)
+            {
+                CameraClip clip = clips.get(i);
+                IKey label = IKey.constant(clipName(panel, clips, clip));
+
+                if (taken(pane, ViewportCameraSource.SPECIFIC_CLIP, clip, preview))
+                {
+                    menu.action(new DisabledContextAction(ViewportCameraSource.SPECIFIC_CLIP.icon, label));
+                }
+                else
+                {
+                    menu.action(ViewportCameraSource.SPECIFIC_CLIP.icon, label, current == ViewportCameraSource.SPECIFIC_CLIP && pane.clip == clip, () -> select(pane, ViewportCameraSource.SPECIFIC_CLIP, clip, preview));
+                }
             }
         });
     }
@@ -554,21 +775,21 @@ public final class ViewportSet
         savedOrbit = null;
 
         int pov;
-        int clip;
+        CameraClip clip;
 
         if (target == RECORD)
         {
             controller.applyTransientPov(UIFilmController.CAMERA_MODE_CAMERA);
 
             pov = UIFilmController.CAMERA_MODE_CAMERA;
-            clip = -1;
+            clip = null;
             sliceAuxiliary = false;
         }
         else if (sliceFocused)
         {
             pov = savedPov;
-            clip = target.clipIndex;
-            sliceAuxiliary = multi && (pov != UIFilmController.CAMERA_MODE_CAMERA || clip >= 0);
+            clip = target.clip;
+            sliceAuxiliary = multi && (pov != UIFilmController.CAMERA_MODE_CAMERA || clip != null);
         }
         else
         {
@@ -578,13 +799,13 @@ public final class ViewportSet
             controller.applyTransientPov(target.pov);
 
             pov = target.pov;
-            clip = target.clipIndex;
-            sliceAuxiliary = pov != UIFilmController.CAMERA_MODE_CAMERA || clip >= 0;
+            clip = target.clip;
+            sliceAuxiliary = pov != UIFilmController.CAMERA_MODE_CAMERA || clip != null;
         }
 
         RunnerCameraController runner = panel.getRunner();
 
-        runner.ticksOverride = pov == UIFilmController.CAMERA_MODE_CAMERA && clip >= 0 ? clipTick(panel, clip) : -1;
+        runner.ticksOverride = pov == UIFilmController.CAMERA_MODE_CAMERA && clip != null ? clipTick(panel, clip) : -1;
     }
 
     /** The focused pane on two frames of three, the others in turn on the third */
@@ -622,16 +843,8 @@ public final class ViewportSet
         return PANES[focused];
     }
 
-    private static int clipTick(UIFilmPanel panel, int clipIndex)
+    private static int clipTick(UIFilmPanel panel, CameraClip clip)
     {
-        List<CameraClip> clips = cameraClips(panel);
-
-        if (clipIndex >= clips.size())
-        {
-            return -1;
-        }
-
-        CameraClip clip = clips.get(clipIndex);
         int start = clip.tick.get();
         int end = start + Math.max(1, clip.duration.get()) - 1;
 

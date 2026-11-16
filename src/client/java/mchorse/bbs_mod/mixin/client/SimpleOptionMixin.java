@@ -11,6 +11,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(SimpleOption.class)
 public class SimpleOptionMixin
 {
+    /** The brightness setting far past the game's "Bright": every light level reads as full */
+    private static final Double FULLBRIGHT_GAMMA = 16D;
+
     @Inject(method = "getValue", at = @At("HEAD"), cancellable = true)
     public void onGetValue(CallbackInfoReturnable info)
     {
@@ -18,6 +21,13 @@ public class SimpleOptionMixin
 
         if (MinecraftClient.getInstance().options != null && option == MinecraftClient.getInstance().options.getGamma())
         {
+            if (BBSRendering.isFullbright())
+            {
+                info.setReturnValue(FULLBRIGHT_GAMMA);
+
+                return;
+            }
+
             Double value = BBSRendering.getBrightness();
 
             if (value != null)

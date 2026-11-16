@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.film.viewport;
 
+import mchorse.bbs_mod.camera.clips.CameraClip;
 import mchorse.bbs_mod.ui.film.controller.UIFilmController;
 import mchorse.bbs_mod.ui.utils.Area;
 import mchorse.bbs_mod.ui.utils.camera.OrbitViewportController;
@@ -12,10 +13,10 @@ public class ViewportPane
 {
     public final int index;
 
-    /** The camera mode of {@link UIFilmController}; the one at {@link #clipIndex} when that is not negative */
+    /** The camera mode of {@link UIFilmController}; the clip at {@link #clip} when there is one */
     public int pov = UIFilmController.CAMERA_MODE_CAMERA;
-    /** Which camera clip of the film this pane follows, or -1 for the film's camera as it is */
-    public int clipIndex = -1;
+    /** The camera clip of the film this pane follows, or null for the film's camera as it is */
+    public CameraClip clip;
     public OrbitViewportController.OrbitState orbit;
 
     public float zoom = 1F;
@@ -38,7 +39,7 @@ public class ViewportPane
 
     public ViewportCameraSource source()
     {
-        return ViewportCameraSource.of(this.pov, this.clipIndex);
+        return ViewportCameraSource.of(this.pov, this.clip != null);
     }
 
     public Framebuffer getTarget()

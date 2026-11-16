@@ -1277,6 +1277,30 @@ public class BBSRendering
         return value == null ? null : (long) (value * 1000L);
     }
 
+    /* Fullbright: a work light for the film editor's preview, never part of a recording */
+    private static boolean fullbright;
+
+    private static boolean inFilmEditor()
+    {
+        return UIScreen.getCurrentMenu() instanceof UIDashboard dashboard && dashboard.getPanels().panel instanceof UIFilmPanel;
+    }
+
+    /** Whether the preview is lit at full brightness; it lets go by itself when a video starts or the film editor is left */
+    public static boolean isFullbright()
+    {
+        if (fullbright && (BBSModClient.getVideoRecorder().isRecording() || !inFilmEditor()))
+        {
+            fullbright = false;
+        }
+
+        return fullbright;
+    }
+
+    public static void setFullbright(boolean enabled)
+    {
+        fullbright = enabled;
+    }
+
     public static Double getBrightness()
     {
         return getCurveValue(ShaderCurves.BRIGHTNESS, CurveClip::getValues);
