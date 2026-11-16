@@ -59,8 +59,8 @@ public class UICinematicCredits extends UIElement
 
     private static final Identifier STEVE = new Identifier("minecraft", "textures/entity/player/wide/steve.png");
     private static final Map<String, Skin> SKINS = new HashMap<>();
-    private static final int HEAD_SIZE = 32;
-    private static final int TESTER_HEAD_SIZE = 26;
+    private static final int HEAD_SIZE = 54;
+    private static final int TESTER_HEAD_SIZE = 44;
 
     /** A name in the credits and the key of its head: the file name, without .png, of the skin that is drawn for it */
     public record Entry(String name, String head)
@@ -122,6 +122,12 @@ public class UICinematicCredits extends UIElement
 
             return new Skin(STEVE, 64, 64, true);
         });
+    }
+
+    /** A head that has no file of its own is Steve's, which has no empty margin like the avatars do: it is drawn smaller to look as big as they do */
+    private static int fitted(String head, int size)
+    {
+        return skin(head).id().equals(STEVE) ? Math.round(size * 0.7F) : size;
     }
 
     /** Pictures much bigger than the box are smoothed when they are shrunk, once */
@@ -258,7 +264,7 @@ public class UICinematicCredits extends UIElement
         Object[][] people = {
             {"Kynix", UIKeys.CREDITS_ROLE_KYNIX, null, 0xFFB48CFF},
             {"McHorse", UIKeys.CREDITS_ROLE_MCHORSE, UIKeys.CREDITS_LICENSE_MIT, 0xFF4C9CFF},
-            {"Wemppy", UIKeys.CREDITS_ROLE_WEMPPY, null, 0xFF6CE08A},
+            {"Wemppy", UIKeys.CREDITS_ROLE_WEMPPY, UIKeys.CREDITS_LICENSE_MIT, 0xFF6CE08A},
             {"qualett", UIKeys.CREDITS_ROLE_QUALETT, UIKeys.CREDITS_LICENSE_MIT, 0xFFFFB347},
             {"Glaxium", UIKeys.CREDITS_ROLE_GLAXIUM, null, 0xFFFF7A90}
         };
@@ -268,7 +274,8 @@ public class UICinematicCredits extends UIElement
 
         for (Object[] person : people)
         {
-            lines.add(Line.head(heads[at++], HEAD_SIZE, 10));
+            lines.add(Line.head(heads[at], fitted(heads[at], HEAD_SIZE), 12));
+            at += 1;
             lines.add(new Line((String) person[0], 1.8F, (Integer) person[3], 8));
             lines.add(new Line(((IKey) person[1]).get(), 1F, soft, person[2] == null ? 44 : 6));
 
@@ -285,7 +292,7 @@ public class UICinematicCredits extends UIElement
 
             for (Entry tester : TESTERS)
             {
-                lines.add(Line.head(tester.head(), TESTER_HEAD_SIZE, 8));
+                lines.add(Line.head(tester.head(), fitted(tester.head(), TESTER_HEAD_SIZE), 10));
                 lines.add(new Line(tester.name(), 1.2F, white, 18));
             }
 
