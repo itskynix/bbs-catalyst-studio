@@ -42,8 +42,31 @@ import java.util.Set;
 final class RagdollSampler
 {
     /** One bone of the ragdoll: its name, the nearest ancestor that is also a body, and its box in its own frame */
-    record Bone(String id, int parent, Vector3f center, Vector3f half, int joint)
+    /**
+     * One bone of the ragdoll: its name, the body it is jointed to, its box in its own frame and the joint the form
+     * picked. {@code detached} marks a bone with no body anywhere above it in the model: its parent in the model
+     * does not move with the ragdoll, so it is placed by a shift of its own instead of riding a parent body.
+     */
+    record Bone(String id, int parent, Vector3f center, Vector3f half, int joint, boolean detached)
     {}
+
+    /**
+     * The frame the render stands the model's bones in, from the frame the film stands the entity in: the form's
+     * own transform, then the half turn about Y every model is drawn with. Bodies built in any other frame would
+     * stand mirrored against the limbs they belong to.
+     */
+    static Matrix4f renderBase(Matrix4f entityWorld, Form form)
+    {
+        Matrix4f base = new Matrix4f(entityWorld);
+        mchorse.bbs_mod.forms.renderers.FormRenderer renderer = form == null ? null : FormUtilsClient.getRenderer(form);
+
+        if (renderer != null)
+        {
+            base.mul(renderer.createEvaluatedTransform(0F).createMatrix());
+        }
+
+        return base.rotateY((float) Math.PI);
+    }
 
     /**
      * The ragdoll bones of a model: groups with cubes whose collision the form did not switch off, each with its
@@ -56,6 +79,41 @@ final class RagdollSampler
         for (ModelGroup group : model.topGroups)
         {
             collect(list, group, -1, form);
+        }
+
+        /* Bones under cubeless groups (an anchor, a low_body pivot) come out with no body above them. They are all
+         * jointed to the main body, so the whole skeleton is one connected ragdoll instead of loose pieces */
+        int main = -1;
+        float biggest = -1F;
+
+        for (int i = 0; i < list.size(); i++)
+        {
+            Bone bone = list.get(i);
+
+            if (bone.parent() >= 0)
+            {
+                continue;
+            }
+
+            String id = bone.id().toLowerCase();
+            boolean named = id.contains("body") || id.contains("torso") || id.contains("chest") || id.contains("spine") || id.contains("pelvis") || id.contains("hip") || id.contains("waist");
+            float volume = bone.half().x * bone.half().y * bone.half().z + (named ? 1000F : 0F);
+
+            if (volume > biggest)
+            {
+                biggest = volume;
+                main = i;
+            }
+        }
+
+        for (int i = 0; i < list.size(); i++)
+        {
+            Bone bone = list.get(i);
+
+            if (bone.parent() < 0 && i != main && main >= 0)
+            {
+                list.set(i, new Bone(bone.id(), main, bone.center(), bone.half(), bone.joint(), true));
+            }
         }
 
         return list;
@@ -84,7 +142,7 @@ final class RagdollSampler
 
             half.set(Math.max(0.03F, half.x), Math.max(0.03F, half.y), Math.max(0.03F, half.z));
 
-            list.add(new Bone(group.id, parent, center, half, settings == null ? 0 : settings.ragdollJoint.get()));
+            list.add(new Bone(group.id, parent, center, half, settings == null ? 0 : settings.ragdollJoint.get(), parent < 0));
             index = list.size() - 1;
         }
 
@@ -147,7 +205,7 @@ final class RagdollSampler
     /** The world frame the film stands the entity in at a tick */
     private Matrix4f world()
     {
-        return FilmMatrices.getMatrixForRenderWithRotation(this.entity, 0D, 0D, 0D, 0F);
+        return renderBase(FilmMatrices.getMatrixForRenderWithRotation(this.entity, 0D, 0D, 0D, 0F), this.entity.getForm());
     }
 
     /** Every ragdoll bone's pivot frame in the world at a tick, as the channels pose it */

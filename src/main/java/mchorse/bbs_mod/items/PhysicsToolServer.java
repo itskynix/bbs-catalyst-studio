@@ -382,6 +382,13 @@ public final class PhysicsToolServer
                 entity.velocityModified = true;
                 entity.fallDistance = 0F;
 
+                /* Every tick, not at the entity's own tracking rate (a falling block's is once a second): clients
+                 * glide between these, so a held thing moves smoothly for everyone who sees it */
+                if (entity.getWorld() instanceof net.minecraft.server.world.ServerWorld world)
+                {
+                    world.getChunkManager().sendToNearbyPlayers(entity, new net.minecraft.network.packet.s2c.play.EntityPositionS2CPacket(entity));
+                }
+
                 if (entity instanceof FallingBlockEntity falling)
                 {
                     /* A falling block that floats too long turns into an item; held, it never runs out of time */

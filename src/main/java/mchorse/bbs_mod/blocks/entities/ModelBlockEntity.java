@@ -184,11 +184,29 @@ public class ModelBlockEntity extends BlockEntity
 
         BaseType baseType = DataStorageUtils.readFromNbtCompound(nbt, "Properties");
 
+        /* A model block in the local player's physics gun is moved on this side every frame; the server's copy of
+         * the same move arrives a tick late, and taking it would pull the form back for a frame each time */
+        mchorse.bbs_mod.utils.pose.Transform held = null;
+
+        if (this.world != null && this.world.isClient() && CLIENT_HELD.test(this.pos))
+        {
+            held = new mchorse.bbs_mod.utils.pose.Transform();
+            held.copy(this.properties.getTransform());
+        }
+
         if (baseType instanceof MapType mapType)
         {
             this.properties.fromData(mapType);
         }
+
+        if (held != null)
+        {
+            this.properties.getTransform().copy(held);
+        }
     }
+
+    /** Whether the local player holds the model block at a position; set by the client's physics gun */
+    public static java.util.function.Predicate<BlockPos> CLIENT_HELD = (pos) -> false;
 
     public void updateForm(MapType data, World world)
     {

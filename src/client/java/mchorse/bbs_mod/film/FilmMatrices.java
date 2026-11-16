@@ -210,7 +210,7 @@ public class FilmMatrices
         matrix.translate((float) x, (float) y, (float) z);
 
         /* A replay the physics studio simulates turns the way its body does, which is more than a facing */
-        org.joml.Quaternionf turn = mchorse.bbs_mod.physics.PhysicsStudio.turnOf(entity);
+        org.joml.Quaternionf turn = mchorse.bbs_mod.physics.PhysicsStudio.turnOf(entity, tickDelta);
 
         if (turn != null)
         {

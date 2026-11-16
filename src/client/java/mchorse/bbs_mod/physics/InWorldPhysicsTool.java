@@ -58,9 +58,15 @@ public final class InWorldPhysicsTool
     private static boolean attackWasDown;
     /** The game repeats the right button while it is held; one press is one action */
     private static boolean useLatched;
-    private static boolean turning;
-    private static float lockedYaw;
-    private static float lockedPitch;
+    /* The turn the mouse gave while Shift was down, sent with the next tick */
+    private static float pendingYaw;
+    private static float pendingPitch;
+
+    /* What is drawn and predicted every frame: the hold point eased towards where the look puts it */
+    private static Vec3d shown;
+    private static long shownAt;
+    private static BlockPos heldModel;
+    private static final Vector3f predictedRotate = new Vector3f();
     private static Vec3d flash;
     private static int flashTicks;
     private static boolean flashGravity;
@@ -71,6 +77,8 @@ public final class InWorldPhysicsTool
     public static void register()
     {
         ClientTickEvents.END_CLIENT_TICK.register((mc) -> tick());
+        net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.START.register((context) -> frame(context./*$ wtd*/tickDelta()/**/));
+        ModelBlockEntity.CLIENT_HELD = (pos) -> holding && pos.equals(heldModel);
     }
 
     /** The tool in the player's main hand, or null */
@@ -258,7 +266,18 @@ public final class InWorldPhysicsTool
         distance = pull ? GRAVITY_HOLD : Math.max(1.5D, aim.distance());
         target = aim.point();
         previous = target;
+        shown = target;
+        shownAt = System.nanoTime();
         attackWasDown = true;
+        pendingYaw = 0F;
+        pendingPitch = 0F;
+        heldModel = null;
+
+        if (aim.kind() == PhysicsToolServer.KIND_MODEL_BLOCK && MinecraftClient.getInstance().world.getBlockEntity(aim.pos()) instanceof ModelBlockEntity model)
+        {
+            heldModel = aim.pos();
+            predictedRotate.set(model.getProperties().getTransform().rotate);
+        }
     }
 
     private static void launch()
@@ -305,7 +324,64 @@ public final class InWorldPhysicsTool
     private static void stop()
     {
         holding = false;
-        turning = false;
+        heldModel = null;
+        pendingYaw = 0F;
+        pendingPitch = 0F;
+    }
+
+    /**
+     * The mouse while Shift is down and something is held: it turns the held thing, not the view. The turn is
+     * predicted on a held model block at once, and sent to the server with the next tick.
+     */
+    public static boolean consumeLook(double dx, double dy)
+    {
+        if (!holding || !active() || !MinecraftClient.getInstance().options.sneakKey.isPressed())
+        {
+            return false;
+        }
+
+        float yaw = (float) dx * 0.15F;
+        float pitch = (float) dy * 0.15F;
+
+        pendingYaw += yaw;
+        pendingPitch += pitch;
+
+        if (heldModel != null)
+        {
+            predictedRotate.y += (float) Math.toRadians(-yaw);
+            predictedRotate.x += (float) Math.toRadians(pitch);
+        }
+
+        return true;
+    }
+
+    /** Every frame, before the world is drawn: the hold point eased towards the look, and a held model block moved there */
+    private static void frame(float delta)
+    {
+        MinecraftClient mc = MinecraftClient.getInstance();
+
+        if (!holding || mc.player == null || shown == null)
+        {
+            return;
+        }
+
+        long now = System.nanoTime();
+        float seconds = Math.min(0.1F, Math.max(0F, (now - shownAt) / 1.0E9F));
+        double ease = 1D - Math.exp(-seconds * 24D);
+        Vec3d wanted = mc.player.getCameraPosVec(delta).add(mc.player.getRotationVec(delta).multiply(distance));
+
+        shownAt = now;
+        shown = shown.add(wanted.subtract(shown).multiply(ease));
+
+        if (heldModel != null && mc.world.getBlockEntity(heldModel) instanceof ModelBlockEntity model)
+        {
+            mchorse.bbs_mod.utils.pose.Transform transform = model.getProperties().getTransform();
+            Vec3d base = new Vec3d(heldModel.getX() + 0.5D, heldModel.getY(), heldModel.getZ() + 0.5D);
+            Vec3d offset = shown.subtract(base);
+
+            transform.translate.set((float) offset.x, (float) offset.y, (float) offset.z);
+            transform.rotate.set(predictedRotate);
+        }
     }
 
     private static void flash(Vec3d point, boolean gravity)
@@ -369,31 +445,12 @@ public final class InWorldPhysicsTool
 
         attackWasDown = attackDown;
 
-        float yaw = 0F;
-        float pitch = 0F;
+        /* The turn the mouse gave since the last tick (see consumeLook) */
+        float yaw = pendingYaw;
+        float pitch = pendingPitch;
 
-        /* Shift turns what is held with the mouse, and the view stays where it was */
-        if (mc.options.sneakKey.isPressed())
-        {
-            if (!turning)
-            {
-                turning = true;
-                lockedYaw = player.getYaw();
-                lockedPitch = player.getPitch();
-            }
-
-            yaw = player.getYaw() - lockedYaw;
-            pitch = player.getPitch() - lockedPitch;
-
-            player.setYaw(lockedYaw);
-            player.setPitch(lockedPitch);
-            player.prevYaw = lockedYaw;
-            player.prevPitch = lockedPitch;
-        }
-        else
-        {
-            turning = false;
-        }
+        pendingYaw = 0F;
+        pendingPitch = 0F;
 
         Vec3d eye = player.getCameraPosVec(1F);
 
@@ -427,7 +484,7 @@ public final class InWorldPhysicsTool
             return;
         }
 
-        Vec3d end = holding ? target : flashTicks > 0 ? flash : null;
+        Vec3d end = holding ? (shown != null ? shown : target) : flashTicks > 0 ? flash : null;
 
         if (end == null)
         {

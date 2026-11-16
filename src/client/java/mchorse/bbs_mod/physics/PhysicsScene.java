@@ -1247,6 +1247,9 @@ final class PhysicsScene implements AutoCloseable
     /* A live hold: a body in the physics gun's hands while the rest of the world moves around it */
 
     private int liveTick = -1;
+    /** Every rig's poses before the last live step, and when that step was, to draw the hold between steps */
+    private float[][] livePrevious;
+    private long liveStepAt;
     private Rig liveRig;
     private int liveBody = -1;
 
@@ -1300,6 +1303,15 @@ final class PhysicsScene implements AutoCloseable
             return;
         }
 
+        this.livePrevious = new float[this.rigs.size()][];
+
+        for (int i = 0; i < this.rigs.size(); i++)
+        {
+            this.livePrevious[i] = this.liveBodies(i);
+        }
+
+        this.liveStepAt = System.nanoTime();
+
         for (Rig rig : this.rigs)
         {
             if (rig.bones != null || rig != this.liveRig)
@@ -1325,11 +1337,27 @@ final class PhysicsScene implements AutoCloseable
         this.liveTick = -1;
         this.liveRig = null;
         this.liveBody = -1;
+        this.livePrevious = null;
         this.rewind(tick);
     }
 
-    /** Every body of a rig as it is in the live world right now */
+    /** Every body of a rig in the live world, between the last two steps by the time since the last one */
     float[] livePoses(int rig)
+    {
+        float[] now = this.liveBodies(rig);
+
+        if (this.livePrevious == null || rig >= this.livePrevious.length || this.livePrevious[rig].length != now.length)
+        {
+            return now;
+        }
+
+        float alpha = Math.min(1F, (System.nanoTime() - this.liveStepAt) / (DELTA * 1.0E9F));
+
+        return PhysicsStudio.blend(this.livePrevious[rig], now, alpha);
+    }
+
+    /** Every body of a rig as it is in the live world right now */
+    private float[] liveBodies(int rig)
     {
         Rig built = this.rigs.get(rig);
         float[] out = new float[built.bodyCount() * 7];

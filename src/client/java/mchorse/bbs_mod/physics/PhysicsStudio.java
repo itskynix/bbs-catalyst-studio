@@ -42,14 +42,44 @@ public final class PhysicsStudio
     private static final long CHECK_NANOS = 120_000_000L;
 
     /** The turn a simulated replay is drawn with, in place of its facing; read by the matrix every actor is drawn under */
-    private static final Map<IEntity, Quaternionf> TURNS = Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<IEntity, Quaternionf[]> TURNS = Collections.synchronizedMap(new WeakHashMap<>());
 
     private static PhysicsScene scene;
     private static long checkedAt;
 
     /** A ragdoll's pose for one frame: every bone body's centre and turn, and the animated frames they were pulled from */
-    private record RagdollPose(RagdollSampler sampler, float[] bodies, Map<String, PivotFrame> animated)
-    {}
+    /**
+     * A ragdoll's pose: every bone body's centre and turn and the animated frames they were pulled from, at the
+     * tick and at the tick before. The render blends the two by its own partial tick, so a fall is as smooth as
+     * the frame rate however few ticks the film runs at.
+     */
+    private record RagdollPose(RagdollSampler sampler, float[] previous, float[] bodies, Map<String, PivotFrame> previousAnimated, Map<String, PivotFrame> animated)
+    {
+        RagdollPose(RagdollSampler sampler, float[] bodies, Map<String, PivotFrame> animated)
+        {
+            this(sampler, bodies, bodies, animated, animated);
+        }
+
+        RagdollPose at(float transition)
+        {
+            if (this.previous == this.bodies || transition >= 1F)
+            {
+                return this;
+            }
+
+            Map<String, PivotFrame> frames = new HashMap<>();
+
+            for (Map.Entry<String, PivotFrame> entry : this.animated.entrySet())
+            {
+                PivotFrame before = this.previousAnimated.get(entry.getKey());
+                PivotFrame now = entry.getValue();
+
+                frames.put(entry.getKey(), before == null ? now : new PivotFrame(new Vector3f(before.position()).lerp(now.position(), transition), now.parentRotation(), now.worldRotation(), now.scale()));
+            }
+
+            return new RagdollPose(this.sampler, blend(this.previous, this.bodies, Math.max(0F, transition)), frames);
+        }
+    }
 
     private static final Map<IEntity, RagdollPose> RAGDOLLS = Collections.synchronizedMap(new WeakHashMap<>());
 
@@ -65,7 +95,7 @@ public final class PhysicsStudio
             {
                 Matrix4f frame = base != null ? base : FilmMatrices.getMatrixForRenderWithRotation(entity, 0D, 0D, 0D, transition);
 
-                orientBones(cubic, pose, frame);
+                orientBones(cubic, pose.at(transition), frame);
             }
         });
     }
@@ -100,7 +130,9 @@ public final class PhysicsStudio
             Quaternionf world = new Quaternionf(b[i * 7 + 3], b[i * 7 + 4], b[i * 7 + 5], b[i * 7 + 6]).normalize();
             Quaternionf worldAnimated = new Quaternionf(frame.worldRotation()).normalize();
             Quaternionf parentAnimated = new Quaternionf(frame.parentRotation()).normalize();
-            Quaternionf parent = bone.parent() >= 0 && simulated[bone.parent()] != null
+            /* A bone hanging from a body takes the turn that body took on top of its animated frame; a detached bone's
+             * parent in the model stands where the animation put it */
+            Quaternionf parent = !bone.detached() && bone.parent() >= 0 && simulated[bone.parent()] != null
                 ? new Quaternionf(simulated[bone.parent()]).mul(new Quaternionf(animated[bone.parent()]).conjugate()).mul(parentAnimated)
                 : parentAnimated;
 
@@ -110,7 +142,7 @@ public final class PhysicsStudio
 
             PivotFrame start = pose.animated().get(bone.id());
 
-            if (bone.parent() < 0 && start != null)
+            if (bone.detached() && start != null)
             {
                 /* The body's pivot is its centre less the bone's own offset to the centre, turned */
                 Vector3f scale = start.scale();
@@ -134,9 +166,17 @@ public final class PhysicsStudio
     }
 
     /** The turn of a simulated replay, or null when it is drawn by its keys alone */
-    public static Quaternionf turnOf(IEntity entity)
+    /** The turn of a simulated replay at the render's partial tick, or null when it is drawn by its keys alone */
+    public static Quaternionf turnOf(IEntity entity, float transition)
     {
-        return TURNS.get(entity);
+        Quaternionf[] turns = TURNS.get(entity);
+
+        if (turns == null)
+        {
+            return null;
+        }
+
+        return new Quaternionf(turns[0]).slerp(turns[1], Math.max(0F, Math.min(1F, transition)));
     }
 
     /** How many ticks of the film are simulated and cached, or -1 when nothing is */
@@ -262,56 +302,68 @@ public final class PhysicsStudio
         float clamped = Math.max(0F, tick);
         int low = (int) Math.floor(clamped);
         int high = low + 1;
+        float k = clamped - low;
+
+        /* A whole tick comes from the film's own tick: the pose of the tick before goes in as where the entity was,
+         * and the render blends the two by its partial tick. A tick in between is already blended here. */
+        boolean whole = k == 0F && low > 0;
 
         scene.advanceTo(high, BUDGET);
 
-        float k = clamped - low;
         PhysicsScene.Rig built = scene.rigs.get(rig);
 
         if (built.ragdoll != null)
         {
             /* A ragdoll stands where its keys stand it; the bones carry the rest */
             TURNS.remove(entity);
-            RAGDOLLS.put(entity, new RagdollPose(built.ragdoll, blend(scene.poses(rig, low), scene.poses(rig, high), k), built.target(Math.min(low, scene.computed()))));
+
+            Map<String, PivotFrame> animated = built.target(Math.min(low, scene.computed()));
+
+            if (whole && !scene.live())
+            {
+                RAGDOLLS.put(entity, new RagdollPose(built.ragdoll, scene.poses(rig, low - 1), scene.poses(rig, low), built.target(Math.min(low - 1, scene.computed())), animated));
+            }
+            else
+            {
+                RAGDOLLS.put(entity, new RagdollPose(built.ragdoll, blend(scene.poses(rig, low), scene.poses(rig, high), k), animated));
+            }
 
             return;
         }
 
         RAGDOLLS.remove(entity);
 
-        float[] a = scene.pose(rig, low);
-        float[] b = scene.pose(rig, high);
-        float[] pose = new float[7];
-
-        for (int i = 0; i < 3; i++)
-        {
-            pose[i] = a[i] + (b[i] - a[i]) * k;
-        }
-
-        Quaternionf q = new Quaternionf(a[3], a[4], a[5], a[6]).nlerp(new Quaternionf(b[3], b[4], b[5], b[6]), k).normalize();
-
-        pose[3] = q.x;
-        pose[4] = q.y;
-        pose[5] = q.z;
-        pose[6] = q.w;
-
-        /* A body in the hands of a tool is where the tool holds it, not where the simulation left it */
+        float centerY = built.box.centerY();
         float[] held = PhysicsToolController.heldPose(replay);
+        float[] now;
+        float[] before;
 
         if (held != null)
         {
-            pose = held;
-            q = new Quaternionf(held[3], held[4], held[5], held[6]);
+            /* A body in the hands of a tool is where the tool holds it, not where the simulation left it */
+            now = held;
+            before = held;
+        }
+        else if (whole && !scene.live())
+        {
+            now = scene.pose(rig, low);
+            before = scene.pose(rig, low - 1);
+        }
+        else
+        {
+            now = blend(scene.pose(rig, low), scene.pose(rig, high), k);
+            before = now;
         }
 
-        Vector3f feet = PhysicsScene.feet(pose, scene.rigs.get(rig).box.centerY());
+        Vector3f feet = PhysicsScene.feet(now, centerY);
+        Vector3f was = PhysicsScene.feet(before, centerY);
 
         entity.setPosition(feet.x, feet.y, feet.z);
-        entity.setPrevX(feet.x);
-        entity.setPrevY(feet.y);
-        entity.setPrevZ(feet.z);
+        entity.setPrevX(was.x);
+        entity.setPrevY(was.y);
+        entity.setPrevZ(was.z);
 
-        TURNS.put(entity, q);
+        TURNS.put(entity, new Quaternionf[] {new Quaternionf(before[3], before[4], before[5], before[6]).normalize(), new Quaternionf(now[3], now[4], now[5], now[6]).normalize()});
     }
 
     /** What a ray from the camera hits first among the simulated bodies at a tick: the replay, which of its bodies, and how far along the ray */
@@ -431,7 +483,8 @@ public final class PhysicsStudio
         }
 
         PhysicsScene.Rig built = scene.rigs.get(rig);
-        float[] poses = scene.livePoses(rig);
+        /* Exactly what is on screen this frame, the live hold's in-between pose included, so nothing shifts on the freeze */
+        float[] poses = scene.poses(rig, tick);
         Map<String, PivotFrame> animated = built.target(Math.min(tick, Math.max(0, built.targets.size() - 1)));
 
         scene.endLive();
@@ -440,7 +493,7 @@ public final class PhysicsStudio
         {
             if (model.model instanceof Model cubic)
             {
-                orientBones(cubic, new RagdollPose(built.ragdoll, poses, animated), world);
+                orientBones(cubic, new RagdollPose(built.ragdoll, poses, animated), RagdollSampler.renderBase(world, replay.form.get()));
             }
         });
 
@@ -498,7 +551,7 @@ public final class PhysicsStudio
     }
 
     /** Every body of two poses blended: positions straight, turns along the shorter way */
-    private static float[] blend(float[] a, float[] b, float k)
+    static float[] blend(float[] a, float[] b, float k)
     {
         float[] out = new float[a.length];
 
@@ -587,7 +640,7 @@ public final class PhysicsStudio
             {
                 if (model.model instanceof Model cubic)
                 {
-                    orientBones(cubic, new RagdollPose(built.ragdoll, baked.poses(rig, tick), built.target(Math.min(tick, computed))), world);
+                    orientBones(cubic, new RagdollPose(built.ragdoll, baked.poses(rig, tick), built.target(Math.min(tick, computed))), RagdollSampler.renderBase(world, replay.form.get()));
                 }
             });
 

@@ -55,8 +55,13 @@ public final class PhysicsToolController
     private static long liveAt;
     private static float distance;
     private static float centerY;
+    /* What is drawn chases where the mouse puts it on every frame, eased like a spring, so carrying and turning
+     * are smooth at any frame rate and never jump with the mouse's steps */
     private static final Vector3f point = new Vector3f();
     private static final Quaternionf turn = new Quaternionf();
+    private static final Vector3f targetPoint = new Vector3f();
+    private static final Quaternionf targetTurn = new Quaternionf();
+    private static long smoothedAt;
     private static final Vector3f velocity = new Vector3f();
     private static long movedAt;
     private static int lastMouseX;
@@ -276,6 +281,9 @@ public final class PhysicsToolController
                     centerY = hit.centerY();
                     point.set(hit.pose()[0], hit.pose()[1], hit.pose()[2]);
                     turn.set(hit.pose()[3], hit.pose()[4], hit.pose()[5], hit.pose()[6]);
+                    targetPoint.set(point);
+                    targetTurn.set(turn);
+                    smoothedAt = System.nanoTime();
                     velocity.zero();
                     movedAt = System.nanoTime();
                     lastMouseX = aim[0];
@@ -446,11 +454,23 @@ public final class PhysicsToolController
                 float dx = (aim[0] - lastMouseX) * 0.02F;
                 float dy = (aim[1] - lastMouseY) * 0.02F;
 
-                turn.premul(new Quaternionf().rotateY(dx)).premul(new Quaternionf().rotateX(dy)).normalize();
+                targetTurn.premul(new Quaternionf().rotateY(dx)).premul(new Quaternionf().rotateX(dy)).normalize();
             }
             else
             {
-                Vector3f next = new Vector3f(ray[0]).add(new Vector3f(ray[1]).mul(distance));
+                targetPoint.set(new Vector3f(ray[0]).add(new Vector3f(ray[1]).mul(distance)));
+            }
+
+            {
+                /* The spring: the share of the gap closed this frame depends on the frame's length, not its count */
+                long clock = System.nanoTime();
+                float frame = Math.min(0.1F, Math.max(0F, (clock - smoothedAt) / 1.0E9F));
+                float ease = 1F - (float) Math.exp(-frame * 22F);
+
+                smoothedAt = clock;
+                turn.slerp(targetTurn, ease).normalize();
+
+                Vector3f next = new Vector3f(point).lerp(targetPoint, ease);
                 long now = System.nanoTime();
                 float seconds = Math.max(1e-3F, (now - movedAt) / 1.0E9F);
 
