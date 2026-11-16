@@ -729,6 +729,35 @@ public class UIOobeMenu extends UIBaseMenu
         WelcomeManager.setSeenWelcomeScreen(true);
     }
 
+    /* The wizard has its own music; it crossfades into the hub's when the dashboard opens next */
+
+    @Override
+    public void onOpen(mchorse.bbs_mod.ui.framework.UIBaseMenu oldMenu)
+    {
+        super.onOpen(oldMenu);
+
+        mchorse.bbs_mod.audio.StudioMusicManager.get().setCategory(mchorse.bbs_mod.audio.StudioMusicManager.Category.OOBE);
+    }
+
+    @Override
+    public void startRenderFrame(float tickDelta)
+    {
+        super.startRenderFrame(tickDelta);
+
+        mchorse.bbs_mod.audio.StudioMusicManager.get().frame();
+    }
+
+    @Override
+    public void onClose(mchorse.bbs_mod.ui.framework.UIBaseMenu nextMenu)
+    {
+        super.onClose(nextMenu);
+
+        /* The screen that replaces this one is not known yet (a screen is told it is removed before the next
+         * one is shown), so the stop waits a moment: if the dashboard has taken the music over by then, the
+         * wizard's track crossfades into the hub's, otherwise it is stopped */
+        mchorse.bbs_mod.audio.StudioMusicManager.get().stopUnlessTaken();
+    }
+
     @Override
     protected void closeMenu()
     {

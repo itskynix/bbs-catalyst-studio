@@ -39,6 +39,8 @@ public class StudioMusicManager
     {
         /** The welcome screen and the central hub */
         HUB("hub"),
+        /** The first-run setup wizard */
+        OOBE("oobe"),
         CATALYST("catalyst"),
         /** The film editor and mMotion */
         FILM("film"),
@@ -130,6 +132,8 @@ public class StudioMusicManager
     private Category wanted;
     private float duck = 1F;
     private boolean ducked;
+    /** A screen closed without saying what comes next; the next category asked for claims the music */
+    private boolean unclaimed;
     private long last;
 
     private StudioMusicManager()
@@ -152,7 +156,14 @@ public class StudioMusicManager
     /** The workspace on screen changed: its kind of music takes over, unless it is already the one playing */
     public void setCategory(Category category)
     {
-        if (category == null || category == this.wanted)
+        if (category == null)
+        {
+            return;
+        }
+
+        this.unclaimed = false;
+
+        if (category == this.wanted)
         {
             return;
         }
@@ -164,6 +175,24 @@ public class StudioMusicManager
     public void setDucked(boolean ducked)
     {
         this.ducked = ducked;
+    }
+
+    /**
+     * The screen playing the music closes and does not know what comes next: if nobody asks for a
+     * category before the next client tick, the music stops, otherwise it carries on and crossfades.
+     */
+    public void stopUnlessTaken()
+    {
+        this.unclaimed = true;
+
+        net.minecraft.client.MinecraftClient.getInstance().send(() ->
+        {
+            if (this.unclaimed)
+            {
+                this.unclaimed = false;
+                this.stop();
+            }
+        });
     }
 
     /** The dashboard closes: the music stops and its sources are freed */
@@ -240,7 +269,7 @@ public class StudioMusicManager
 
     private float base(Category category)
     {
-        return MathUtils.clamp(category == Category.HUB ? BBSSettings.welcomeMusicVolume.get() : BBSSettings.studioMusicVolume.get(), 0F, 1F);
+        return MathUtils.clamp(category == Category.HUB || category == Category.OOBE ?BBSSettings.welcomeMusicVolume.get() : BBSSettings.studioMusicVolume.get(), 0F, 1F);
     }
 
     private void update(Voice voice, float dt)
