@@ -83,6 +83,80 @@ public abstract class OrbitViewportController implements ICameraController
         this.reset();
     }
 
+    /** Where an orbit stands, for the preview panes that each keep a view of their own */
+    public static final class OrbitState
+    {
+        private final Vector2f targetRotation = new Vector2f();
+        private final Vector3f targetPivot = new Vector3f();
+        private float targetDistance;
+        private final Vector2f rotation = new Vector2f();
+        private final Vector3f pivot = new Vector3f();
+        private float distance;
+        private boolean positioned;
+        private boolean ortho;
+        private boolean autoOrtho;
+        private final Vector3d anchorPosition = new Vector3d();
+        private float anchorYaw;
+
+        public OrbitState copy()
+        {
+            OrbitState state = new OrbitState();
+
+            state.targetRotation.set(this.targetRotation);
+            state.targetPivot.set(this.targetPivot);
+            state.targetDistance = this.targetDistance;
+            state.rotation.set(this.rotation);
+            state.pivot.set(this.pivot);
+            state.distance = this.distance;
+            state.positioned = this.positioned;
+            state.ortho = this.ortho;
+            state.autoOrtho = this.autoOrtho;
+            state.anchorPosition.set(this.anchorPosition);
+            state.anchorYaw = this.anchorYaw;
+
+            return state;
+        }
+    }
+
+    public OrbitState captureState()
+    {
+        OrbitState state = new OrbitState();
+
+        state.targetRotation.set(this.targetRotation);
+        state.targetPivot.set(this.targetPivot);
+        state.targetDistance = this.targetDistance;
+        state.rotation.set(this.rotation);
+        state.pivot.set(this.pivot);
+        state.distance = this.distance;
+        state.positioned = this.positioned;
+        state.ortho = this.ortho;
+        state.autoOrtho = this.autoOrtho;
+        state.anchorPosition.set(this.anchorPosition);
+        state.anchorYaw = this.anchorYaw;
+
+        return state;
+    }
+
+    public void restoreState(OrbitState state)
+    {
+        if (state == null)
+        {
+            return;
+        }
+
+        this.targetRotation.set(state.targetRotation);
+        this.targetPivot.set(state.targetPivot);
+        this.targetDistance = state.targetDistance;
+        this.rotation.set(state.rotation);
+        this.pivot.set(state.pivot);
+        this.distance = state.distance;
+        this.positioned = state.positioned;
+        this.ortho = state.ortho;
+        this.autoOrtho = state.autoOrtho;
+        this.anchorPosition.set(state.anchorPosition);
+        this.anchorYaw = state.anchorYaw;
+    }
+
     /* What a host has to answer */
 
     protected abstract UIContext getContext();

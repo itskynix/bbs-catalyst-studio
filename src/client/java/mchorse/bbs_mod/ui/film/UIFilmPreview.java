@@ -26,6 +26,9 @@ import mchorse.bbs_mod.ui.film.controller.UIMotionPathContextMenu;
 import mchorse.bbs_mod.ui.film.controller.UIOnionSkinContextMenu;
 import mchorse.bbs_mod.ui.film.controller.OrbitViewGizmo;
 import mchorse.bbs_mod.ui.film.controller.UIFilmController;
+import mchorse.bbs_mod.ui.film.viewport.ViewportLayout;
+import mchorse.bbs_mod.ui.film.viewport.ViewportPane;
+import mchorse.bbs_mod.ui.film.viewport.ViewportSet;
 import mchorse.bbs_mod.ui.film.utils.UICameraUtils;
 import mchorse.bbs_mod.ui.framework.UIBaseMenu;
 import mchorse.bbs_mod.ui.framework.UIContext;
@@ -95,6 +98,9 @@ public class UIFilmPreview extends UIElement
     public UIIcon loop;
     public UIIcon recordVideo;
 
+    /** Cuts the preview into one to four panes, each with a camera of its own */
+    public UIIcon viewportLayout;
+
     public UIIcon control;
     public UIIcon perspective;
 
@@ -133,6 +139,7 @@ public class UIFilmPreview extends UIElement
     public UIFilmPreview(UIFilmPanel filmPanel)
     {
         this.panel = filmPanel;
+        ViewportSet.reset();
         this.placementGizmo = new UIPlacementGizmo(filmPanel);
 
         this.icons = new UIElement()
@@ -427,6 +434,11 @@ public class UIFilmPreview extends UIElement
             this.shaders.noCulling();
         }
 
+        this.viewportLayout = new UIIcon(Icons.LAYOUT, (b) -> ViewportSet.openLayoutMenu(b.getContext(), this));
+        this.viewportLayout.highlight(() -> ViewportSet.getLayout() != ViewportLayout.SINGLE, Direction.BOTTOM);
+        this.viewportLayout.tooltip(UIKeys.FILM_VIEWPORT_LAYOUT);
+        this.viewportLayout.noCulling();
+
         /* Prevent culling on toolbar buttons */
         this.onionSkin.noCulling();
         this.teleport.noCulling();
@@ -440,7 +452,7 @@ public class UIFilmPreview extends UIElement
         /* Assemble the 3-part symmetric control center */
         this.leftWing.add(this.onionSkin, this.teleport, this.motionPath, this.flight, this.greenScreen);
         this.centerCapsule.add(this.plause);
-        this.rightWing.add(this.screenshot, this.recordReplay, this.loop, this.recordVideo);
+        this.rightWing.add(this.screenshot, this.recordReplay, this.loop, this.viewportLayout, this.recordVideo);
 
         if (this.shaders != null)
         {
@@ -664,21 +676,53 @@ public class UIFilmPreview extends UIElement
         }
     }
 
-    /** The picture fitted into the preview at the render's aspect ratio, before any zoom or pan. */
-    public Area getFrameArea()
+    public UIFilmPanel getFilmPanel()
+    {
+        return this.panel;
+    }
+
+    /** What the picture lives in: the whole preview, or the live pane of a split one */
+    public Area bounds()
+    {
+        return ViewportSet.focusedRect(this.area);
+    }
+
+    /** The zoom and pan of the live pane go to the pane that is giving up the focus */
+    public void exportView(ViewportPane pane)
+    {
+        pane.zoom = this.zoom;
+        pane.panX = this.panX;
+        pane.panY = this.panY;
+    }
+
+    /** And the pane that takes the focus brings its own */
+    public void importView(ViewportPane pane)
+    {
+        this.zoom = pane.zoom;
+        this.panX = pane.panX;
+        this.panY = pane.panY;
+        this.panning = false;
+    }
+
+    /** The picture fitted into a rectangle at the render's aspect ratio, before any zoom or pan. */
+    private static Area fit(Area bounds)
     {
         int width = BBSRendering.getVideoWidth();
         int height = BBSRendering.getVideoHeight();
-        int w = this.area.w;
-        int h = this.area.h;
 
-        Vector2i size = Vectors.resize(width / (float) Math.max(1, height), w, h);
+        Vector2i size = Vectors.resize(width / (float) Math.max(1, height), bounds.w, bounds.h);
         Area area = new Area();
 
         area.setSize(size.x, size.y);
-        area.setPos(this.area.mx() - area.w / 2, this.area.my() - area.h / 2);
+        area.setPos(bounds.mx() - area.w / 2, bounds.my() - area.h / 2);
 
         return area;
+    }
+
+    /** The picture fitted into the preview at the render's aspect ratio, before any zoom or pan. */
+    public Area getFrameArea()
+    {
+        return fit(this.bounds());
     }
 
     /**
@@ -781,10 +825,26 @@ public class UIFilmPreview extends UIElement
     @Override
     protected boolean subMouseClicked(UIContext context)
     {
+        if (ViewportSet.showHeaders())
+        {
+            ViewportSet.place(this.area);
+
+            /* A pane's title, its camera menu, or a click that only gives it the focus */
+            if (this.area.isInside(context) && ViewportSet.click(context, this))
+            {
+                return true;
+            }
+
+            if (context.mouseButton == 2)
+            {
+                ViewportSet.focusUnder(context, this);
+            }
+        }
+
         Area area = this.getViewport();
 
         /* Panning the zoomed picture: the middle button, unless the camera has it */
-        if (context.mouseButton == 2 && this.area.isInside(context) && (Window.isAltPressed() || !this.cameraOwnsMouse()))
+        if (context.mouseButton == 2 && this.bounds().isInside(context) && (Window.isAltPressed() || !this.cameraOwnsMouse()))
         {
             this.panning = true;
             this.panLastX = context.mouseX;
@@ -793,7 +853,7 @@ public class UIFilmPreview extends UIElement
             return true;
         }
 
-        if (area.isInside(context) && this.area.isInside(context))
+        if (area.isInside(context) && this.bounds().isInside(context))
         {
             /* The arrows and tabs of a POV screen in the frame turn its pages and tabs, as in the game */
             if (context.mouseButton == 0 && PovGuiRenderer.click((context.mouseX - area.x) / (float) area.w, (context.mouseY - area.y) / (float) area.h))
@@ -847,6 +907,9 @@ public class UIFilmPreview extends UIElement
         {
             return super.subMouseScrolled(context);
         }
+
+        /* The wheel goes to the pane under the mouse, which becomes the live one */
+        ViewportSet.focusUnder(context, this);
 
         /* Alt always zooms the picture; without it the camera keeps the wheel where it uses it */
         if (Window.isAltPressed() || !this.cameraOwnsMouse())
@@ -1007,17 +1070,50 @@ public class UIFilmPreview extends UIElement
             this.resetZoom();
         }
 
+        boolean multi = ViewportSet.isMulti();
+        boolean headers = ViewportSet.showHeaders();
+
+        if (headers)
+        {
+            ViewportSet.place(this.area);
+        }
+
+        /* Each frame of the world was drawn from one pane's camera: it goes into that pane's buffer now */
+        if (multi)
+        {
+            ViewportSet.capture(fb);
+        }
+
         Area frame = this.getFrameArea();
         Area area = this.getViewport();
         Camera camera = this.panel.getCamera();
 
-        camera.copy(this.panel.getWorldCamera());
+        camera.copy(headers ? ViewportSet.getFocusedCamera() : this.panel.getWorldCamera());
         camera.view.set(this.panel.lastView);
         camera.projection.set(this.panel.lastProjection);
         int fogColor = new Color(BBSRendering.getFogRed(), BBSRendering.getFogGreen(), BBSRendering.getFogBlue(), 1F).getARGBColor();
 
+        if (multi)
+        {
+            for (int i = 0; i < ViewportSet.getVisibleCount(); i++)
+            {
+                ViewportPane pane = ViewportSet.visiblePane(i);
+
+                if (pane != ViewportSet.getFocused())
+                {
+                    this.renderOtherPane(context, pane, fogColor);
+                }
+            }
+
+            ViewportPane live = ViewportSet.getFocused();
+
+            /* The live pane's own buffer stands in for the world's frame */
+            fb = live.hasContent() ? live.getTarget() : null;
+            texture = null;
+        }
+
         /* A zoomed picture reaches past the preview; only the preview's part of it is drawn */
-        context.batcher.clip(this.area, context);
+        context.batcher.clip(this.bounds(), context);
 
         context.batcher.box(area.x, area.y, area.ex(), area.ey(), fogColor);
 
@@ -1141,6 +1237,14 @@ public class UIFilmPreview extends UIElement
 
         context.batcher.unclip(context);
 
+        if (headers)
+        {
+            for (int i = 0; i < ViewportSet.getVisibleCount(); i++)
+            {
+                ViewportSet.renderHeader(context, ViewportSet.visiblePane(i), this);
+            }
+        }
+
         this.panel.getController().renderHUD(context, this.hud, this.navBlock);
 
         if (this.zoom != 1F)
@@ -1207,6 +1311,29 @@ public class UIFilmPreview extends UIElement
 
         context.batcher.clip(this.area, context);
         super.render(context);
+        context.batcher.unclip(context);
+    }
+
+    /** A pane that is not the live one: the last frame drawn for it, fitted into it, with its own zoom */
+    private void renderOtherPane(UIContext context, ViewportPane pane, int fogColor)
+    {
+        Area frame = fit(pane.rect);
+        int w = Math.max(1, Math.round(frame.w * pane.zoom));
+        int h = Math.max(1, Math.round(frame.h * pane.zoom));
+        Area picture = new Area();
+
+        picture.set(frame.mx() - w / 2 + Math.round(pane.panX), frame.my() - h / 2 + Math.round(pane.panY), w, h);
+
+        context.batcher.clip(pane.rect, context);
+        context.batcher.box(picture.x, picture.y, picture.ex(), picture.ey(), fogColor);
+
+        if (pane.hasContent())
+        {
+            Framebuffer buffer = pane.getTarget();
+
+            context.batcher.texturedBox(buffer.getColorAttachment(), Colors.WHITE, picture.x, picture.y, picture.w, picture.h, 0, buffer.textureHeight, buffer.textureWidth, 0, buffer.textureWidth, buffer.textureHeight);
+        }
+
         context.batcher.unclip(context);
     }
 

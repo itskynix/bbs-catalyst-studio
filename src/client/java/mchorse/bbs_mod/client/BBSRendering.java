@@ -612,6 +612,9 @@ public class BBSRendering
 
     public static void onWorldRenderBegin()
     {
+        /* A split film preview draws the world from one pane's camera at a time; a single one does nothing here */
+        mchorse.bbs_mod.ui.film.viewport.ViewportSet.worldBegin();
+
         if (orthoDistance > 0F)
         {
             /* Give back the culling disabled for the previous ortho frame
@@ -701,7 +704,15 @@ public class BBSRendering
         /* The post-process volumes first: they are part of the world's look, and the film's own
          * post-production (bars, grain, the 2D transform) is laid over them. Here and not at
          * WorldRenderEvents.LAST, which under a shader pack comes before its composite */
-        mchorse.bbs_mod.forms.renderers.PostProcessFormRenderer.flush();
+        if (mchorse.bbs_mod.ui.film.viewport.ViewportSet.skipPostEffects())
+        {
+            /* A helper pane of a split preview is drawn plain and fast */
+            mchorse.bbs_mod.forms.renderers.PostProcessFormRenderer.clearQueue();
+        }
+        else
+        {
+            mchorse.bbs_mod.forms.renderers.PostProcessFormRenderer.flush();
+        }
 
         if (BBSModClient.getCameraController().getCurrent() instanceof PlayCameraController controller)
         {
@@ -725,6 +736,8 @@ public class BBSRendering
         }
 
         renderingWorld = false;
+
+        mchorse.bbs_mod.ui.film.viewport.ViewportSet.worldEnd();
     }
 
     public static void onRenderBeforeScreen()

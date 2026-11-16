@@ -329,6 +329,13 @@ public class UIFilmController extends UIElement implements GizmoViewport
         return this.pov;
     }
 
+    /** A camera mode for one frame, without touching the saved setting: a preview pane draws with its own */
+    public void applyTransientPov(int pov)
+    {
+        this.pov = Math.floorMod(pov, 6);
+        this.orbit.enabled = this.pov > 1;
+    }
+
     public void setPov(int pov)
     {
         /* Shift-cycling down from 0 (or a setting saved by an older build) may hand a value

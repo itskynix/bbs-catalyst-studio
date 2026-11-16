@@ -3598,7 +3598,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
 
         /* Only the main view's camera: a portal or mirror draws the scene again from its own,
          * and the pick pass and the gizmos would then line up with that view instead */
-        if (!BBSRendering.isIrisShadowPass() && !mchorse.bbs_mod.forms.FormPortals.isPassActive())
+        if (!BBSRendering.isIrisShadowPass() && !mchorse.bbs_mod.forms.FormPortals.isPassActive() && mchorse.bbs_mod.ui.film.viewport.ViewportSet.tracksFocusedView())
         {
             this.lastProjection.set(RenderSystem.getProjectionMatrix());
             this.lastView.set(context.matrixStack().peek().getPositionMatrix());

@@ -641,6 +641,17 @@ public class UIKeys
     public static final IKey FILM_BACKUPS_DESCRIPTION = L10n.lang("bbs.ui.film.backups.description");
     public static final IKey FILM_BACKUPS_EXISTS = L10n.lang("bbs.ui.film.backups.exists");
     public static final IKey FILM_PREVIEW_LOADING_SCENE = L10n.lang("bbs.ui.film.preview.loading_scene");
+    public static final IKey FILM_VIEWPORT_LAYOUT = L10n.lang("bbs.ui.film.viewport.layout");
+    public static final IKey FILM_VIEWPORT_LAYOUT_SINGLE = L10n.lang("bbs.ui.film.viewport.layout.single");
+    public static final IKey FILM_VIEWPORT_LAYOUT_VERTICAL = L10n.lang("bbs.ui.film.viewport.layout.vertical");
+    public static final IKey FILM_VIEWPORT_LAYOUT_HORIZONTAL = L10n.lang("bbs.ui.film.viewport.layout.horizontal");
+    public static final IKey FILM_VIEWPORT_LAYOUT_THREE = L10n.lang("bbs.ui.film.viewport.layout.three");
+    public static final IKey FILM_VIEWPORT_LAYOUT_QUAD = L10n.lang("bbs.ui.film.viewport.layout.quad");
+    public static final IKey FILM_VIEWPORT_SOURCE_RENDER = L10n.lang("bbs.ui.film.viewport.source.render");
+    public static final IKey FILM_VIEWPORT_SOURCE_ORBIT = L10n.lang("bbs.ui.film.viewport.source.orbit");
+    public static final IKey FILM_VIEWPORT_SOURCE_CLIP = L10n.lang("bbs.ui.film.viewport.source.clip");
+    public static final IKey FILM_VIEWPORT_SOURCE_CLIP_ITEM = L10n.lang("bbs.ui.film.viewport.source.clip_item");
+    public static final IKey FILM_VIEWPORT_SOURCE_ACTOR = L10n.lang("bbs.ui.film.viewport.source.actor");
 
     public static final IKey FILM_CONTROLLER_CONTROL_MODE_TOOLTIP = L10n.lang("bbs.ui.film.controller.control_mode-tooltip");
     public static final IKey FILM_CONTROLLER_FREE_LOOK_TOOLTIP = L10n.lang("bbs.ui.film.controller.free_look-tooltip");

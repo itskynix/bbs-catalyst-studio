@@ -93,7 +93,7 @@ public class FilmControllerHud
         {
             if (zoomed)
             {
-                this.renderSelectionZoomed(context, area, image, preview.area, replay);
+                this.renderSelectionZoomed(context, area, image, preview.bounds(), replay);
             }
             else
             {
@@ -158,7 +158,7 @@ public class FilmControllerHud
         BBSProfiler.begin(BBSProfiler.Timer.PICK_PREVIEW);
         /* The highlight is the pick buffer laid over the picture: over the zoomed and panned one,
          * which is also what the pick read the cursor against, cut to the preview */
-        context.batcher.clip(preview.area, context);
+        context.batcher.clip(preview.bounds(), context);
         this.controller.picker.renderPreview(context, image);
         context.batcher.unclip(context);
         BBSProfiler.end(BBSProfiler.Timer.PICK_PREVIEW);

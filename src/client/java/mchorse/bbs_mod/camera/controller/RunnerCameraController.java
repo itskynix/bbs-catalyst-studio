@@ -15,6 +15,9 @@ public class RunnerCameraController extends CameraWorkCameraController
 {
     public int ticks;
 
+    /** A tick the camera is read at instead of the cursor, for the preview pane that follows one clip; -1 for none */
+    public int ticksOverride = -1;
+
     private float cursorFraction;
     private float lastTransition;
 
@@ -163,7 +166,7 @@ public class RunnerCameraController extends CameraWorkCameraController
             /* kms */
             boolean free = this.panel.getController().getPovMode() == UIFilmController.CAMERA_MODE_FREE;
 
-            this.apply(free ? null : camera, this.ticks, this.getTransition(transition));
+            this.apply(free ? null : camera, this.ticksOverride >= 0 ? this.ticksOverride : this.ticks, this.getTransition(transition));
         }
 
         this.panel.getController().handleCamera(camera, transition);
