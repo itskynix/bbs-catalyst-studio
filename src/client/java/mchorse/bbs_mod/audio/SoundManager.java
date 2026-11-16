@@ -219,6 +219,12 @@ public class SoundManager implements IWatchDogListener
         }
     }
 
+    /** Whether the link's sound is still being read in the background */
+    public boolean isLoading(Link link)
+    {
+        return link != null && this.loadingBuffers.contains(link);
+    }
+
     public SoundBuffer get(Link link, boolean includeWaveform)
     {
         /* 1. Pick up any wave loaded asynchronously in background */

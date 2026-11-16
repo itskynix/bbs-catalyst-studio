@@ -74,6 +74,83 @@ public class CatalystProject
         return newAsset;
     }
 
+    /** Whether a clip's source is a file on disk (video, audio, image) rather than a film id or text */
+    public static boolean usesFile(CatalystLayer layer)
+    {
+        return layer.layerType == CatalystLayer.LayerType.VIDEO || layer.layerType == CatalystLayer.LayerType.AUDIO || layer.layerType == CatalystLayer.LayerType.IMAGE;
+    }
+
+    /** Whether a media path points at nothing: an absolute path with no file there. Paths inside the assets (links) are not judged. */
+    public static boolean isMissing(String path)
+    {
+        if (path == null || path.trim().isEmpty())
+        {
+            return false;
+        }
+
+        File file = new File(path.trim());
+
+        return file.isAbsolute() && !file.isFile();
+    }
+
+    /** The media paths the project uses - pool entries and clips - that are missing on disk, each once */
+    public List<String> collectMissingMedia()
+    {
+        java.util.LinkedHashSet<String> missing = new java.util.LinkedHashSet<>();
+
+        for (CatalystMediaAsset asset : this.mediaPool)
+        {
+            if (isMissing(asset.path))
+            {
+                missing.add(asset.path);
+            }
+        }
+
+        for (CatalystComposition comp : this.compositions)
+        {
+            for (CatalystLayer layer : comp.layers)
+            {
+                if (usesFile(layer) && isMissing(layer.resourcePath))
+                {
+                    missing.add(layer.resourcePath.trim());
+                }
+            }
+        }
+
+        return new ArrayList<>(missing);
+    }
+
+    /** Points every pool entry and clip that used {@code oldPath} at {@code newFile} */
+    public void relinkMedia(String oldPath, File newFile)
+    {
+        String replacement = newFile.getAbsolutePath().replace('\\', '/');
+        String old = oldPath.replace('\\', '/');
+
+        for (CatalystMediaAsset asset : this.mediaPool)
+        {
+            if (asset.path != null && asset.path.replace('\\', '/').equals(old))
+            {
+                asset.path = replacement;
+                asset.name = newFile.getName();
+            }
+        }
+
+        for (CatalystComposition comp : this.compositions)
+        {
+            for (CatalystLayer layer : comp.layers)
+            {
+                if (usesFile(layer) && layer.resourcePath != null && layer.resourcePath.trim().replace('\\', '/').equals(old))
+                {
+                    layer.resourcePath = replacement;
+                    layer.cachedWaveformPath = null;
+                    layer.cachedImagePath = null;
+                }
+            }
+        }
+
+        this.lastModified = System.currentTimeMillis();
+    }
+
     public boolean removeAsset(CatalystMediaAsset asset)
     {
         if (asset != null && this.mediaPool.remove(asset))
@@ -197,6 +274,71 @@ public class CatalystProject
     {
         this.ensureCompositions();
         return this.compositions.get(this.activeCompositionIndex);
+    }
+
+    public CatalystComposition getComposition(String id)
+    {
+        for (CatalystComposition comp : this.compositions)
+        {
+            if (comp.id.equals(id))
+            {
+                return comp;
+            }
+        }
+
+        return null;
+    }
+
+    /** A new timeline of the project's size, added without being switched to: for nesting clips into it */
+    public CatalystComposition newComposition(String name)
+    {
+        CatalystComposition comp = new CatalystComposition(name, this.fps, this.duration);
+        CatalystComposition main = this.compositions.isEmpty() ? null : this.compositions.get(0);
+
+        comp.width = main != null ? main.width : this.width;
+        comp.height = main != null ? main.height : this.height;
+        comp.fps = main != null ? main.fps : comp.fps;
+        comp.refreshDuration();
+        this.compositions.add(comp);
+
+        return comp;
+    }
+
+    /** Whether {@code outer} plays {@code inner}, straight or through other nested timelines */
+    public boolean nestsInside(CatalystComposition outer, CatalystComposition inner)
+    {
+        return this.nestsInside(outer, inner, 0);
+    }
+
+    private boolean nestsInside(CatalystComposition outer, CatalystComposition inner, int depth)
+    {
+        if (depth > 16)
+        {
+            return true;
+        }
+
+        for (CatalystLayer layer : outer.layers)
+        {
+            if (!layer.isNested())
+            {
+                continue;
+            }
+
+            CatalystComposition child = this.getComposition(layer.resourcePath);
+
+            if (child == inner || (child != null && this.nestsInside(child, inner, depth + 1)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** A timeline can go into another one unless that would make it play itself, however far round */
+    public boolean canNest(CatalystComposition host, CatalystComposition child)
+    {
+        return host != null && child != null && host != child && !this.nestsInside(child, host);
     }
 
     public CatalystComposition addComposition(String name)

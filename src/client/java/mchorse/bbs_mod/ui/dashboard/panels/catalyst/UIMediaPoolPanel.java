@@ -76,6 +76,9 @@ public class UIMediaPoolPanel extends UIElement
     public UIScrollView scroll;
 
     public CatalystMediaAsset selectedAsset = null;
+
+    /** The folder picked in the library's side column: only media of this type, or everything when null */
+    public CatalystMediaAsset.MediaType typeFilter = null;
     private CatalystMediaAsset pressedAsset = null;
     private int pressX = 0;
     private int pressY = 0;
@@ -105,7 +108,7 @@ public class UIMediaPoolPanel extends UIElement
 
         /* ── Header ── */
         this.header = new UIElement();
-        this.header.relative(this).w(1F).h(24);
+        this.header.relative(this).w(1F).h(20);
         this.header.add(new UIRenderable((context) ->
         {
             Area a = this.header.area;
@@ -114,39 +117,39 @@ public class UIMediaPoolPanel extends UIElement
 
             CatalystProject project = this.projectSupplier != null ? this.projectSupplier.get() : null;
             int count = project != null ? project.mediaPool.size() : 0;
-            String title = "Media Pool (" + count + ")";
+            String title = mchorse.bbs_mod.ui.UIKeys.CATALYST_NLE_LIB_MEDIA.get() + "  " + count;
             FontRenderer font = context.batcher.getFont();
             context.batcher.textCard(title, a.x + 6, a.y + (a.h - font.getHeight()) / 2, Colors.WHITE, 0, 0, false);
         }));
 
         this.openFolderBtn = new UIIcon(Icons.FOLDER, (b) -> this.openMediaFolder());
-        this.openFolderBtn.tooltip(IKey.raw("Open Media Folder"));
-        this.openFolderBtn.relative(this.header).x(1F, -22).y(2).w(20).h(20);
+        this.openFolderBtn.tooltip(mchorse.bbs_mod.ui.UIKeys.CATALYST_NLE_POOL_OPEN_FOLDER);
+        this.openFolderBtn.relative(this.header).x(1F, -20).y(1).w(18).h(18);
 
         this.cleanBtn = new UIIcon(Icons.TRASH, (b) -> this.cleanUnused());
-        this.cleanBtn.tooltip(IKey.raw("Clean Unused Media"));
-        this.cleanBtn.relative(this.header).x(1F, -44).y(2).w(20).h(20);
+        this.cleanBtn.tooltip(mchorse.bbs_mod.ui.UIKeys.CATALYST_NLE_POOL_CLEAN);
+        this.cleanBtn.relative(this.header).x(1F, -40).y(1).w(18).h(18);
 
         this.importBtn = new UIIcon(Icons.DOWNLOAD, (b) -> this.importMediaDialog());
-        this.importBtn.tooltip(IKey.raw("Import Media (.mp4, .mov, .wav, .mp3, .png...)"));
-        this.importBtn.relative(this.header).x(1F, -66).y(2).w(20).h(20);
+        this.importBtn.tooltip(mchorse.bbs_mod.ui.UIKeys.CATALYST_NLE_IMPORT);
+        this.importBtn.relative(this.header).x(1F, -60).y(1).w(18).h(18);
 
         this.header.add(this.importBtn, this.cleanBtn, this.openFolderBtn);
 
         /* ── Search bar & view toggle buttons ── */
         this.search = new UITextbox(120, (text) -> this.rebuildList());
-        this.search.placeholder(IKey.raw("Filter Media..."));
-        this.search.relative(this).y(26).x(4).w(1F, -46).h(18);
+        this.search.placeholder(mchorse.bbs_mod.ui.UIKeys.CATALYST_NLE_SEARCH);
+        this.search.relative(this).y(22).x(4).w(1F, -46).h(16);
 
         this.listViewBtn = new UIIcon(Icons.LIST, (b) -> this.setViewMode(ViewMode.LIST));
-        this.listViewBtn.tooltip(IKey.raw("List View"));
+        this.listViewBtn.tooltip(mchorse.bbs_mod.ui.UIKeys.CATALYST_NLE_POOL_LIST);
         this.listViewBtn.highlight(() -> currentViewMode == ViewMode.LIST, Direction.BOTTOM);
-        this.listViewBtn.relative(this).y(26).x(1F, -40).w(18).h(18);
+        this.listViewBtn.relative(this).y(22).x(1F, -40).w(18).h(16);
 
         this.gridViewBtn = new UIIcon(Icons.GALLERY, (b) -> this.setViewMode(ViewMode.GRID));
-        this.gridViewBtn.tooltip(IKey.raw("Grid View"));
+        this.gridViewBtn.tooltip(mchorse.bbs_mod.ui.UIKeys.CATALYST_NLE_POOL_GRID);
         this.gridViewBtn.highlight(() -> currentViewMode == ViewMode.GRID, Direction.BOTTOM);
-        this.gridViewBtn.relative(this).y(26).x(1F, -20).w(18).h(18);
+        this.gridViewBtn.relative(this).y(22).x(1F, -20).w(18).h(16);
 
         /* ── Scroll view for media items ── */
         this.scroll = new UIScrollView(ScrollDirection.VERTICAL)
@@ -260,7 +263,7 @@ public class UIMediaPoolPanel extends UIElement
             }
         };
 
-        this.scroll.relative(this).y(46).w(1F).h(1F, -46);
+        this.scroll.relative(this).y(40).w(1F).h(1F, -40);
         this.scroll.scroll.scrollSpeed = 24;
 
         this.scroll.add(new UIRenderable((context) -> this.renderMediaList(context)));
@@ -298,6 +301,11 @@ public class UIMediaPoolPanel extends UIElement
                     this.probedOrAttempted.add(asset.path);
                     this.probeAsset(asset, project.fps);
                 }
+            }
+
+            if (this.typeFilter != null && asset.type != this.typeFilter)
+            {
+                continue;
             }
 
             if (filter.isEmpty() || asset.name.toLowerCase(Locale.ROOT).contains(filter))
@@ -378,7 +386,10 @@ public class UIMediaPoolPanel extends UIElement
                     boolean isHovered = context.mouseX >= a.x + 2 && context.mouseX < a.ex() - 2
                         && context.mouseY >= itemY && context.mouseY < itemY + 36;
 
-                    int bg = isSelected ? 0xDD2A3A55 : (isHovered ? 0xAA222834 : 0x66181C24);
+                    /* Offline: the file is not where the project says - dark red, and labelled so */
+                    boolean offline = CatalystMedia.isOffline(asset.path);
+                    int bg = offline ? (isSelected ? 0xEE6A1820 : (isHovered ? 0xDD561218 : 0xCC451016))
+                        : (isSelected ? 0xDD2A3A55 : (isHovered ? 0xAA222834 : 0x66181C24));
                     context.batcher.box(a.x + 2, itemY, a.ex() - 2, itemY + 36, bg);
 
                     if (isSelected)
@@ -421,7 +432,16 @@ public class UIMediaPoolPanel extends UIElement
                         }
                         displayName += "...";
                     }
-                    context.batcher.text(displayName, a.x + 26, itemY + 4, Colors.WHITE, false);
+                    context.batcher.text(displayName, a.x + 26, itemY + 4, offline ? 0xFFFF8A8A : Colors.WHITE, false);
+
+                    if (offline)
+                    {
+                        String tag = mchorse.bbs_mod.ui.UIKeys.CATALYST_NLE_OFFLINE.get();
+                        int tagW = font.getWidth(tag) + 6;
+
+                        context.batcher.box(a.ex() - 6 - tagW, itemY + 3, a.ex() - 6, itemY + 14, 0xFFE81123);
+                        context.batcher.text(tag, a.ex() - 3 - tagW, itemY + 5, Colors.WHITE, false);
+                    }
 
                     /* Subtitle: Size & Duration */
                     String subtitle = asset.formatSize();
@@ -470,7 +490,10 @@ public class UIMediaPoolPanel extends UIElement
                     boolean isHovered = context.mouseX >= cardX && context.mouseX < cardX + cardW
                         && context.mouseY >= cardY && context.mouseY < cardY + cardH;
 
-                    int bg = isSelected ? 0xDD2A3A55 : (isHovered ? 0xAA222834 : 0x66181C24);
+                    /* Offline: the file is not where the project says - dark red, and labelled so */
+                    boolean offline = CatalystMedia.isOffline(asset.path);
+                    int bg = offline ? (isSelected ? 0xEE6A1820 : (isHovered ? 0xDD561218 : 0xCC451016))
+                        : (isSelected ? 0xDD2A3A55 : (isHovered ? 0xAA222834 : 0x66181C24));
                     context.batcher.box(cardX, cardY, cardX + cardW, cardY + cardH, bg);
 
                     if (isSelected)
@@ -560,14 +583,27 @@ public class UIMediaPoolPanel extends UIElement
                         displayName += "...";
                     }
                     int nameX = cardX + (cardW - font.getWidth(displayName)) / 2;
-                    context.batcher.text(displayName, nameX, cardY + thumbH + 4, Colors.WHITE, false);
+                    context.batcher.text(displayName, nameX, cardY + thumbH + 4, offline ? 0xFFFF8A8A : Colors.WHITE, false);
+
+                    if (offline)
+                    {
+                        /* Over the thumbnail, last, so nothing covers it */
+                        String tag = font.limitToWidth(mchorse.bbs_mod.ui.UIKeys.CATALYST_NLE_OFFLINE.get(), thumbW - 4);
+                        int tagW = font.getWidth(tag) + 6;
+                        int tagX = thumbX + (thumbW - tagW) / 2;
+                        int tagY = thumbY + thumbH - 14;
+
+                        context.batcher.box(thumbX, thumbY, thumbX + thumbW, thumbY + thumbH, 0x99300A0E);
+                        context.batcher.box(tagX, tagY, tagX + tagW, tagY + 11, 0xFFE81123);
+                        context.batcher.text(tag, tagX + 3, tagY + 2, Colors.WHITE, false);
+                    }
                 }
             }
         }
 
         if (list.isEmpty())
         {
-            String emptyMsg = project.mediaPool.isEmpty() ? "No media assets. Click Import or drag files here." : "No matching assets.";
+            String emptyMsg = project.mediaPool.isEmpty() ? mchorse.bbs_mod.ui.UIKeys.CATALYST_NLE_POOL_EMPTY.get() : mchorse.bbs_mod.ui.UIKeys.CATALYST_NLE_POOL_NO_MATCH.get();
             context.batcher.textCard(emptyMsg, a.x + 10, a.y + 20, 0xFF888899, 0, 0, false);
         }
     }
@@ -576,7 +612,7 @@ public class UIMediaPoolPanel extends UIElement
     {
         context.replaceContextMenu((menu) ->
         {
-            menu.action(Icons.ADD, IKey.raw("Insert to Timeline (At Playhead)"), () ->
+            menu.action(Icons.ADD, mchorse.bbs_mod.ui.UIKeys.CATALYST_NLE_POOL_INSERT, () ->
             {
                 if (this.onAssetDoubleClicked != null)
                 {
@@ -584,7 +620,7 @@ public class UIMediaPoolPanel extends UIElement
                 }
             });
 
-            menu.action(Icons.REFRESH, IKey.raw("Reload Asset"), () ->
+            menu.action(Icons.REFRESH, mchorse.bbs_mod.ui.UIKeys.CATALYST_NLE_POOL_RELOAD, () ->
             {
                 CatalystProject project = this.projectSupplier != null ? this.projectSupplier.get() : null;
                 if (project != null)
@@ -603,7 +639,7 @@ public class UIMediaPoolPanel extends UIElement
                 }
             });
 
-            menu.action(Icons.FOLDER, IKey.raw("Open Containing Folder"), () ->
+            menu.action(Icons.FOLDER, mchorse.bbs_mod.ui.UIKeys.CATALYST_NLE_POOL_CONTAINING, () ->
             {
                 File file = new File(asset.path);
                 if (file.exists())
@@ -612,7 +648,7 @@ public class UIMediaPoolPanel extends UIElement
                 }
             });
 
-            menu.action(Icons.TRASH, IKey.raw("Delete from Pool"), () ->
+            menu.action(Icons.TRASH, mchorse.bbs_mod.ui.UIKeys.CATALYST_NLE_POOL_DELETE, () ->
             {
                 CatalystProject project = this.projectSupplier != null ? this.projectSupplier.get() : null;
                 if (project != null)
@@ -645,14 +681,11 @@ public class UIMediaPoolPanel extends UIElement
             return;
         }
 
-        File folder = BBSMod.getAssetsPath("catalyst_media");
-        if (!folder.exists())
-        {
-            folder.mkdirs();
-        }
+        /* Media stays where it is on disk: the dialog opens on the user's own folders */
+        File folder = new File(System.getProperty("user.home", "."));
 
         String[] filters = new String[]{"*.mp4", "*.mov", "*.wav", "*.mp3", "*.ogg", "*.png", "*.jpg", "*.jpeg"};
-        UIFileDialogs.pickFile(IKey.raw("Import Media"), folder, filters, IKey.raw("Supported Media Files"), (file) ->
+        UIFileDialogs.pickFile(mchorse.bbs_mod.ui.UIKeys.CATALYST_NLE_IMPORT, folder, filters, mchorse.bbs_mod.ui.UIKeys.CATALYST_NLE_IMPORT_FILTER, (file) ->
         {
             if (file != null && file.exists())
             {
@@ -679,32 +712,9 @@ public class UIMediaPoolPanel extends UIElement
             return;
         }
 
-        File destFolder = BBSMod.getAssetsPath("catalyst_media");
-        if (!destFolder.exists())
-        {
-            destFolder.mkdirs();
-        }
-
-        File targetFile = file;
-
-        if (!file.getAbsolutePath().startsWith(destFolder.getAbsolutePath()))
-        {
-            try
-            {
-                File copyDest = new File(destFolder, file.getName());
-                if (!copyDest.exists() || copyDest.length() != file.length())
-                {
-                    Files.copy(file.toPath(), copyDest.toPath(), StandardCopyOption.REPLACE_EXISTING);
-                }
-                targetFile = copyDest;
-            }
-            catch (Exception ignored)
-            {
-                targetFile = file;
-            }
-        }
-
-        CatalystMediaAsset asset = project.addAsset(targetFile);
+        /* The project keeps the file's own full path: nothing is copied into the assets. Projects from
+         * before, whose media was copied there, still open - those paths are just as real. */
+        CatalystMediaAsset asset = project.addAsset(file);
 
         if (asset != null)
         {

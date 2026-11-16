@@ -154,6 +154,14 @@ public class VideoManager
         return adopted;
     }
 
+    /** The owner's player if it has one, without making one or keeping it alive */
+    public VideoPlayer peekPlayer(Object owner)
+    {
+        PlayerEntry entry = this.ownedPlayers.get(owner);
+
+        return entry == null ? null : entry.player;
+    }
+
     /**
      * Dispose of an owner's player right away, for the owners whose death IS
      * observable (a clip's context shutting down).

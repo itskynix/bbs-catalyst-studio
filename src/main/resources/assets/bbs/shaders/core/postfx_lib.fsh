@@ -1010,11 +1010,58 @@ vec3 effect(int mode, vec2 uv, vec3 base)
     return base;
 }
 
+/* ---- Catalyst Studio's composite: a clip drawn on its own (Sampler1, premultiplied) laid over
+ * what is under it (Sampler0) with a blend mode: 100 normal, 101 add, 102 multiply, 103 screen,
+ * 104 overlay. P is the clip's crop rectangle in uv (x1, y1, x2, y2); Tint.x and Tint.y flip the
+ * clip around the point in DepthInfo.xy. ---- */
+
+vec3 blendMode(int mode, vec3 b, vec3 l)
+{
+    if (mode == 101) return b + l;
+    if (mode == 102) return b * l;
+    if (mode == 103) return 1.0 - (1.0 - b) * (1.0 - l);
+    if (mode == 104) return mix(2.0 * b * l, 1.0 - 2.0 * (1.0 - b) * (1.0 - l), step(0.5, b));
+
+    return l;
+}
+
+vec4 composite(int mode, vec2 uv)
+{
+    vec4 b = texture(Sampler0, uv);
+    vec2 at = uv;
+
+    if (Tint.x > 0.5) at.x = 2.0 * DepthInfo.x - at.x;
+    if (Tint.y > 0.5) at.y = 2.0 * DepthInfo.y - at.y;
+
+    vec4 l = texture(Sampler1, clamp(at, vec2(0.0), vec2(1.0)));
+
+    if (at.x < 0.0 || at.x > 1.0 || at.y < 0.0 || at.y > 1.0 || uv.x < P.x || uv.x > P.z || uv.y < P.y || uv.y > P.w)
+    {
+        l = vec4(0.0);
+    }
+
+    float a = clamp(l.a * Intensity, 0.0, 1.0);
+    vec3 color = l.a > 0.0001 ? l.rgb / l.a : vec3(0.0);
+
+    return vec4(mix(b.rgb, clamp(blendMode(mode, b.rgb, color), 0.0, 1.0), a), max(b.a, a));
+}
+
 void main()
 {
     vec2 uv = texCoord0;
-    vec3 base = scene(uv);
-    vec3 c = effect(int(Mode + 0.5), uv, base);
+    int mode = int(Mode + 0.5);
 
-    fragColor = vec4(clamp(mix(base, c, clamp(Intensity, 0.0, 1.0)), 0.0, 1.0), 1.0);
+    if (mode >= 100)
+    {
+        fragColor = composite(mode, uv);
+
+        return;
+    }
+
+    vec4 source = texture(Sampler0, uv);
+    vec3 base = source.rgb;
+    vec3 c = effect(mode, uv, base);
+
+    /* The alpha is kept: a clip drawn on its own stays see-through where it was */
+    fragColor = vec4(clamp(mix(base, c, clamp(Intensity, 0.0, 1.0)), 0.0, 1.0), source.a);
 }

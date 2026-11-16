@@ -430,10 +430,11 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
             UI.column(UI.label(key("fps")), this.fpsTrackpad)
         );
 
-        UIElement rateRow = UI.row(
+        /* The rate control takes a line of its own; the quality and the bit rate share the one under it, with room for their numbers */
+        UIElement rateRow = UI.column(
+            4, 0,
             UI.column(UI.label(key("rate_control")), this.rateControlCirculate),
-            UI.column(UI.label(key("quality")), this.qualityTrackpad),
-            UI.column(UI.label(key("bitrate")), this.bitrateTrackpad)
+            UI.row(8, UI.column(UI.label(key("quality")), this.qualityTrackpad), UI.column(UI.label(key("bitrate")), this.bitrateTrackpad))
         );
 
         this.exportVideoToggle = new UIToggle(key("export_video"), this.currentProfile.isExportVideo(), (t) ->
@@ -1245,6 +1246,18 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
                 }
             }
         });
+    }
+
+    @Override
+    public int getMinWidth()
+    {
+        return 440;
+    }
+
+    @Override
+    public int getMinHeight()
+    {
+        return 400;
     }
 
     @Override

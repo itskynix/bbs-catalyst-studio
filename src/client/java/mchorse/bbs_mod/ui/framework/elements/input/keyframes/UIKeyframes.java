@@ -360,6 +360,22 @@ public class UIKeyframes extends UITimelineCanvas
         }
     }
 
+    /** The surfaces the view paints its rows and margins with: a host with a palette of its own overrides them */
+    public int baseSurface()
+    {
+        return BBSSettings.baseSurface();
+    }
+
+    public int deepSurface()
+    {
+        return BBSSettings.deepSurface();
+    }
+
+    public int sunkenSurface()
+    {
+        return BBSSettings.sunkenSurface();
+    }
+
     public UIKeyframeDopeSheet getDopeSheet()
     {
         return this.dopeSheet;
@@ -1665,8 +1681,8 @@ public class UIKeyframes extends UITimelineCanvas
      */
     protected void renderBackground(UIContext context)
     {
-        this.area.render(context.batcher, BBSSettings.baseSurface());
-        this.graphArea.render(context.batcher, BBSSettings.deepSurface());
+        this.area.render(context.batcher, this.baseSurface());
+        this.graphArea.render(context.batcher, this.deepSurface());
 
         int duration = this.getDuration();
 

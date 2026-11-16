@@ -30,8 +30,6 @@ public class UICatalystNewProjectDialog extends UIOverlayPanel
 
     public final UITextbox nameBox;
     public final UITrackpad fpsInput;
-    public final UITrackpad durationSecondsInput;
-    public final UILabel durationCalcLabel;
     public final UITrackpad widthInput;
     public final UITrackpad heightInput;
     public final UIButton createBtn;
@@ -53,23 +51,14 @@ public class UICatalystNewProjectDialog extends UIOverlayPanel
         /* 2. Framerate & Duration */
         UILabel fpsLabel = UI.label(UIKeys.CATALYST_PROJECTS_FPS);
         fpsLabel.labelAnchor(0, 0.5F).h(14);
-        UILabel durationLabel = UI.label(UIKeys.CATALYST_PROJECTS_DURATION);
-        durationLabel.labelAnchor(0, 0.5F).h(14);
-        UIElement fpsDurationLabels = UI.row(5, 0, 14, fpsLabel, durationLabel).h(14);
+        UIElement fpsDurationLabels = UI.row(5, 0, 14, fpsLabel).h(14);
 
-        this.fpsInput = new UITrackpad((v) -> this.updateDurationCalcLabel());
+        this.fpsInput = new UITrackpad((v) -> {});
         this.fpsInput.limit(1, 240, true);
         this.fpsInput.setValue(60);
         this.fpsInput.h(20);
 
-        this.durationSecondsInput = new UITrackpad((v) -> this.updateDurationCalcLabel());
-        this.durationSecondsInput.limit(0.1, 3600.0);
-        this.durationSecondsInput.setValue(5.0);
-        this.durationSecondsInput.h(20);
-        UIElement fpsDurationInputs = UI.row(5, 0, 20, this.fpsInput, this.durationSecondsInput).h(20);
-
-        this.durationCalcLabel = new UILabel(IKey.raw("5.0s (300 Frame @ 60 FPS)"), Colors.GRAY);
-        this.durationCalcLabel.labelAnchor(0, 0.5F).h(12);
+        UIElement fpsDurationInputs = UI.row(5, 0, 20, this.fpsInput).h(20);
 
         /* 3. Resolution */
         UILabel resLabel = UI.label(UIKeys.CATALYST_PROJECTS_RESOLUTION);
@@ -129,7 +118,6 @@ public class UICatalystNewProjectDialog extends UIOverlayPanel
             this.nameBox,
             fpsDurationLabels.marginTop(2),
             fpsDurationInputs,
-            this.durationCalcLabel,
             resLabel.marginTop(2),
             resInputs,
             presetsRow
@@ -137,7 +125,6 @@ public class UICatalystNewProjectDialog extends UIOverlayPanel
         form.relative(this.content).xy(0, 0).w(1F).h(1F);
 
         this.content.add(form);
-        this.updateDurationCalcLabel();
     }
 
     private static final int FOOTER = 36;
@@ -158,19 +145,6 @@ public class UICatalystNewProjectDialog extends UIOverlayPanel
     public int getMinHeight()
     {
         return 320;
-    }
-
-    private void updateDurationCalcLabel()
-    {
-        double sec = this.durationSecondsInput != null ? this.durationSecondsInput.getValue() : 5.0;
-        int fps = this.fpsInput != null ? (int) this.fpsInput.getValue() : 60;
-        int total = (int) Math.round(sec * fps);
-
-        if (this.durationCalcLabel != null)
-        {
-            this.durationCalcLabel.label = IKey.raw(
-                String.format(Locale.ROOT, "%.1fs (%d Frame @ %d FPS)", sec, total, fps));
-        }
     }
 
     @Override
@@ -195,7 +169,8 @@ public class UICatalystNewProjectDialog extends UIOverlayPanel
         }
 
         int fps = (int) this.fpsInput.getValue();
-        double durationSeconds = this.durationSecondsInput.getValue();
+        /* No length to ask for: the timeline grows with its clips, and an empty one shows ten seconds of ruler */
+        double durationSeconds = 10.0;
         int width = (int) this.widthInput.getValue();
         int height = (int) this.heightInput.getValue();
 

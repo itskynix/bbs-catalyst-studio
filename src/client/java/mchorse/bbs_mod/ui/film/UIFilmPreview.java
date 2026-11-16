@@ -355,7 +355,7 @@ public class UIFilmPreview extends UIElement
             }
 
             mchorse.bbs_mod.ui.film.export.UIDeliverOverlayPanel deliver = new mchorse.bbs_mod.ui.film.export.UIDeliverOverlayPanel(this.panel);
-            UIOverlay.addOverlay(this.getContext(), deliver, 720, 450);
+            UIOverlay.addOverlay(this.getContext(), deliver, 720, 480);
         });
         this.recordVideo.tooltip(UIKeys.CAMERA_TOOLTIPS_RECORD);
         this.recordVideo.context((menu) ->

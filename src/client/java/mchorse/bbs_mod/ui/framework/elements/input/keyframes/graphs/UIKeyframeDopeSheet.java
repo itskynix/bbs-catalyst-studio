@@ -1093,7 +1093,7 @@ public class UIKeyframeDopeSheet implements IUIKeyframeGraph
         {
             int leftEx = Math.min(startX, area.ex());
 
-            context.batcher.box(area.x, contentY, leftEx, area.ey(), BBSSettings.sunkenSurface());
+            context.batcher.box(area.x, contentY, leftEx, area.ey(), this.keyframes.sunkenSurface());
         }
 
         int endX = this.keyframes.toGraphX(this.keyframes.getDuration());
@@ -1101,7 +1101,7 @@ public class UIKeyframeDopeSheet implements IUIKeyframeGraph
         {
             int rightX = Math.max(endX, area.x);
 
-            context.batcher.box(rightX, contentY, area.ex(), area.ey(), BBSSettings.sunkenSurface());
+            context.batcher.box(rightX, contentY, area.ex(), area.ey(), this.keyframes.sunkenSurface());
         }
     }
 
@@ -1262,7 +1262,7 @@ public class UIKeyframeDopeSheet implements IUIKeyframeGraph
 
         int trackWidth = BBSSettings.editorTrackWidth.get();
 
-        int surface = row % 2 == 0 ? BBSSettings.deepSurface() : BBSSettings.baseSurface();
+        int surface = row % 2 == 0 ? this.keyframes.deepSurface() : this.keyframes.baseSurface();
 
         context.batcher.box(area.x, y, area.ex(), y + bh, surface);
 

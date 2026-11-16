@@ -667,6 +667,63 @@ public class PostFxRenderer
 
     private static boolean libraryFailed;
 
+    /**
+     * One pass of the post-process library into any framebuffer, for Catalyst Studio's own buffers:
+     * {@code first} is what the pass reads (Sampler0), {@code second} the other texture (Sampler1,
+     * the clip laid over for the composite modes 100 and up). No depth: effects that want it fall
+     * back to their screen space look. Blending and the depth test are off for the pass and the
+     * caller binds back what it needs. False when the library can't draw.
+     */
+    public static boolean drawLibrary(int target, int w, int h, int first, int second, float mode, float intensity, float p0, float p1, float p2, float p3, float r, float g, float b, float seconds, float extraX, float extraY)
+    {
+        ShaderProgram library = BBSShaders.getPostFxLibraryProgram();
+
+        if (library == null || libraryFailed || w <= 0 || h <= 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, target);
+            GlStateManager._viewport(0, 0, w, h);
+
+            RenderSystem.disableDepthTest();
+            RenderSystem.disableBlend();
+            RenderSystem.setShader(() -> library);
+            RenderSystem.setShaderTexture(0, first);
+            RenderSystem.setShaderTexture(1, second);
+
+            set(library, "Mode", mode);
+            set(library, "Size", w, h);
+            set(library, "Time", seconds);
+            set(library, "Intensity", intensity);
+            set(library, "P", p0, p1, p2, p3);
+            set(library, "Tint", r, g, b);
+            set(library, "DepthInfo", extraX, extraY, 0F);
+
+            BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE_COLOR);
+
+            builder.vertex(-1, -1, 0).texture(0F, 0F).color(1F, 1F, 1F, 1F)/*$ nx*/.next()/**/;
+            builder.vertex(1, -1, 0).texture(1F, 0F).color(1F, 1F, 1F, 1F)/*$ nx*/.next()/**/;
+            builder.vertex(1, 1, 0).texture(1F, 1F).color(1F, 1F, 1F, 1F)/*$ nx*/.next()/**/;
+            builder.vertex(-1, 1, 0).texture(0F, 1F).color(1F, 1F, 1F, 1F)/*$ nx*/.next()/**/;
+
+            Bufs.draw(builder);
+
+            return true;
+        }
+        catch (Throwable e)
+        {
+            libraryFailed = true;
+
+            System.err.println("[BBS] The post-process effect library (postfx_lib) failed in Catalyst Studio (mode " + (int) mode + ") and is switched off for this session:");
+            e.printStackTrace();
+
+            return false;
+        }
+    }
+
     private static void drawLibraryPass(ShaderProgram library, Framebuffer main, FxOverlay overlay, boolean depth)
     {
 

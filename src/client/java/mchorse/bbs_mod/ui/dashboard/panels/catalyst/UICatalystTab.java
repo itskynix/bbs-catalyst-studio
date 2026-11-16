@@ -5,6 +5,7 @@ import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIClickable;
 import mchorse.bbs_mod.ui.framework.elements.utils.FontRenderer;
+import mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw;
 import mchorse.bbs_mod.ui.utils.icons.Icon;
 import mchorse.bbs_mod.utils.colors.Colors;
 
@@ -42,15 +43,15 @@ public class UICatalystTab extends UIClickable<UICatalystTab>
         boolean isAct = this.active != null && this.active.getAsBoolean();
         int primary = BBSSettings.primaryColor.get();
 
-        if (isAct)
-        {
-            context.batcher.box(this.area.x, this.area.y, this.area.ex(), this.area.ey(), primary | Colors.A75);
-            context.batcher.box(this.area.x, this.area.ey() - 2, this.area.ex(), this.area.ey(), Colors.WHITE);
-        }
-        else if (this.hover)
-        {
-            context.batcher.box(this.area.x, this.area.y, this.area.ex(), this.area.ey(), 0x22FFFFFF);
-        }
+        /* Rounded glass: tinted with the accent when it is the tab on screen, a lighter wash under the mouse */
+        int fill = isAct ? Colors.setA(primary, 0.55F) : (this.hover ? 0x2cffffff : 0x16ffffff);
+        int edge = isAct ? (Colors.A100 | primary) : (this.hover ? 0x55ffffff : 0x30ffffff);
+        boolean opened = RoundedDraw.begin(context.batcher);
+
+        RoundedDraw.fill(context.batcher, this.area.x, this.area.y, this.area.ex(), this.area.ey(), 5, RoundedDraw.ALL, fill);
+        RoundedDraw.band(context.batcher, this.area.x, this.area.y, this.area.ex(), this.area.ey(), 5, RoundedDraw.ALL, this.area.y, this.area.y + 3, 0x14ffffff);
+        RoundedDraw.outline(context.batcher, this.area.x, this.area.y, this.area.ex(), this.area.ey(), 5, RoundedDraw.ALL, edge);
+        RoundedDraw.end(context.batcher, opened);
 
         int x = this.area.x + 6;
 

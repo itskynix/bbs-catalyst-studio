@@ -2137,6 +2137,11 @@ public class UICatalystTimeline extends UITimelineCanvas
         }
     }
 
+    /**
+     * Hands the layer the waveform of its file. The waveform is kept per file path, so a clip cut
+     * in two, or the same sound used twice, shares one instead of making it again and each draws
+     * only its own slice of it.
+     */
     public static void ensureWaveformLoaded(CatalystLayer layer)
     {
         if (layer.layerType != CatalystLayer.LayerType.AUDIO) return;
@@ -2148,45 +2153,16 @@ public class UICatalystTimeline extends UITimelineCanvas
         }
 
         String path = layer.resourcePath.trim();
-        if (path.equals(layer.cachedWaveformPath) && (layer.cachedWaveform != null || layer.isWaveformLoading))
+
+        if (layer.cachedWaveform != null && path.equals(layer.cachedWaveformPath))
         {
             return;
         }
 
-        layer.cachedWaveformPath = path;
-        layer.cachedWaveform = null;
-        layer.isWaveformLoading = true;
+        Object shared = CatalystMedia.waveform(path);
 
-        new Thread(() ->
-        {
-            try
-            {
-                File f = new File(path);
-                Wave wave = null;
-                if (f.exists() && f.isFile())
-                {
-                    wave = AudioReader.readWave(f);
-                }
-                if (wave == null)
-                {
-                    Link link = Link.create(path);
-                    wave = AudioReader.read(BBSMod.getProvider(), link);
-                }
-                if (wave != null)
-                {
-                    Waveform wf = new Waveform();
-                    wf.generate(wave, null, BBSSettings.audioWaveformDensity.get(), 40);
-                    layer.cachedWaveform = wf;
-                }
-            }
-            catch (Throwable ignored)
-            {
-                /* Silently swallow EOFException, FileNotFoundException, etc. */
-            }
-            finally
-            {
-                layer.isWaveformLoading = false;
-            }
-        }, "CatalystWaveformLoader-" + layer.id).start();
+        layer.cachedWaveformPath = path;
+        layer.cachedWaveform = shared;
+        layer.isWaveformLoading = shared == null && CatalystMedia.isWaveformLoading(path);
     }
 }

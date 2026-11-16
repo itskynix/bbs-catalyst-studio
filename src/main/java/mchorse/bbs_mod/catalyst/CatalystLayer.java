@@ -23,7 +23,7 @@ public class CatalystLayer
 {
     public enum LayerType
     {
-        SOLID, AUDIO, ADJUSTMENT, NULL, TEXT, SCENE, VIDEO, IMAGE;
+        SOLID, AUDIO, ADJUSTMENT, NULL, TEXT, SCENE, VIDEO, IMAGE, NESTED, NESTED_AUDIO;
 
         public static LayerType fromString(String s)
         {
@@ -45,6 +45,11 @@ public class CatalystLayer
                     return SCENE;
                 case "VIDEO":
                     return VIDEO;
+                case "NESTED":
+                case "SUBSEQUENCE":
+                    return NESTED;
+                case "NESTED_AUDIO":
+                    return NESTED_AUDIO;
                 case "IMAGE":
                 case "PICTURE":
                     return IMAGE;
@@ -64,6 +69,8 @@ public class CatalystLayer
                 case SCENE:       return 0xFF2980B9; // Blue
                 case VIDEO:       return 0xFF8E44AD; // Purple
                 case IMAGE:       return 0xFF16A085; // Teal
+                case NESTED:      return 0xFF3E7C9C; // Steel blue
+                case NESTED_AUDIO: return 0xFF2F6B5A; // Deep green
                 default:          return 0xFF6B4A82; // Magenta (SOLID)
             }
         }
@@ -105,11 +112,52 @@ public class CatalystLayer
 
     /* ── Media & Audio Properties ── */
     public float     volume       = 1.0F; // 0.0 to 1.0
+    /** The gain put on the clip over its volume, in decibels: -24 to +24 from the gain window */
+    public float     gainDb       = 0.0F;
     public float     pan          = 0.0F; // -1.0 (Left) .. 0.0 (Center) .. +1.0 (Right)
     public int       audioOffset  = 0; // Frame offset
     public int       mediaOffset  = 0; // In-point cut/split offset in frames
     public int       mediaDuration = 0; // Cached media duration in frames (if known)
     public int       filmFps      = 20; // FPS / tick-rate for SCENE/Film layer (default 20 TPS)
+
+    /* ── Edit timeline ── */
+    /** The track the clip sits on, counted within its kind (audio clips on audio tracks, the rest on video ones); -1 until placed */
+    public int       track        = -1;
+
+    /** Crop, as fractions of the picture cut off each side (0 to 1) */
+    public float     cropLeft     = 0F;
+    public float     cropRight    = 0F;
+    public float     cropTop      = 0F;
+    public float     cropBottom   = 0F;
+    public boolean   flipH        = false;
+    public boolean   flipV        = false;
+    /** Zoom X and Y are edited together */
+    public boolean   scaleLocked  = true;
+
+    /** The clip's post-process effects, from the effect library */
+    public final mchorse.bbs_mod.camera.clips.fx.PostEffectStack effects = new mchorse.bbs_mod.camera.clips.fx.PostEffectStack("effects");
+
+    /** A video clip and the audio clip made from its sound share this id; empty when the clip stands alone */
+    public String    linkId       = "";
+    /** A video clip whose sound lives on a linked audio clip plays none of its own */
+    public boolean   muteOwnAudio = false;
+
+    /** How the clip comes in: "" (cut), "cross_dissolve", "dip_to_black" or "slide", over transitionFrames */
+    public String    transitionIn     = "";
+    public int       transitionFrames = 15;
+
+    /** Whether the clip lives on the audio tracks */
+    /** An audio clip sits on the audio tracks: a sound, or the sound of a nested timeline */
+    public boolean isAudioClip()
+    {
+        return this.layerType == LayerType.AUDIO || this.layerType == LayerType.NESTED_AUDIO;
+    }
+
+    /** A clip that plays another timeline of the project, whose id is the clip's path */
+    public boolean isNested()
+    {
+        return this.layerType == LayerType.NESTED || this.layerType == LayerType.NESTED_AUDIO;
+    }
 
     /* ── Transient Cache (Waveform, Video, Image & Profiler) ── */
     public transient volatile Object  cachedWaveform = null;
@@ -158,6 +206,185 @@ public class CatalystLayer
     public final KeyframeChannel<Float> channelAnchorY  = new KeyframeChannel<>("anchorY", KeyframeFactories.FLOAT);
     public final KeyframeChannel<Float> channelVolume   = new KeyframeChannel<>("volume", KeyframeFactories.FLOAT);
     public final KeyframeChannel<Float> channelPan      = new KeyframeChannel<>("pan", KeyframeFactories.FLOAT);
+
+    /** The channel of one axis, named by a SUB_PROP_ constant */
+    public KeyframeChannel<Float> channelFor(int singleProp)
+    {
+        switch (singleProp)
+        {
+            case SUB_PROP_POS_X:    return this.channelPosX;
+            case SUB_PROP_POS_Y:    return this.channelPosY;
+            case SUB_PROP_SCALE_X:  return this.channelScaleX;
+            case SUB_PROP_SCALE_Y:  return this.channelScaleY;
+            case SUB_PROP_ROTATION: return this.channelRotation;
+            case SUB_PROP_OPACITY:  return this.channelOpacity;
+            case SUB_PROP_ANCHOR_X: return this.channelAnchorX;
+            case SUB_PROP_ANCHOR_Y: return this.channelAnchorY;
+            case SUB_PROP_VOLUME:   return this.channelVolume;
+            case SUB_PROP_PAN:      return this.channelPan;
+            default: return null;
+        }
+    }
+
+    /**
+     * The diamond of a field: a key is put down at the frame holding what the field shows there, or
+     * the key that is there is taken away. Returns whether the frame has a key now.
+     */
+    public boolean toggleKeyframeSingle(int singleProp, int frame)
+    {
+        if (this.hasKeyframeAtSingle(singleProp, frame))
+        {
+            this.removeKeyframeSingle(singleProp, frame);
+
+            return false;
+        }
+
+        float[] e = this.computeEffective(frame);
+
+        switch (singleProp)
+        {
+            case SUB_PROP_POS_X:    this.posX = e[0]; break;
+            case SUB_PROP_POS_Y:    this.posY = e[1]; break;
+            case SUB_PROP_SCALE_X:  this.scaleX = e[2]; break;
+            case SUB_PROP_SCALE_Y:  this.scaleY = e[3]; break;
+            case SUB_PROP_ROTATION: this.rotation = e[4]; break;
+            case SUB_PROP_OPACITY:  this.opacity = Math.round(e[5]); break;
+            case SUB_PROP_ANCHOR_X: this.anchorX = e[6]; break;
+            case SUB_PROP_ANCHOR_Y: this.anchorY = e[7]; break;
+            case SUB_PROP_VOLUME:   this.volume = e[8]; break;
+            case SUB_PROP_PAN:      this.pan = e[9]; break;
+            default: return false;
+        }
+
+        this.addKeyframeSingle(singleProp, frame);
+
+        return true;
+    }
+
+    /** The frame of the closest key before ({@code direction} -1) or after (1) a frame on a channel, or -1 */
+    public static int neighbourKey(KeyframeChannel<?> channel, int frame, int direction)
+    {
+        if (channel == null)
+        {
+            return -1;
+        }
+
+        int found = -1;
+
+        for (Keyframe<?> key : channel.getKeyframes())
+        {
+            int tick = Math.round(key.getTick());
+
+            if (direction < 0 && tick < frame && tick > found)
+            {
+                found = tick;
+            }
+            else if (direction > 0 && tick > frame && (found < 0 || tick < found))
+            {
+                found = tick;
+            }
+        }
+
+        return found;
+    }
+
+    /** Keys made or removed in the curve editor: a channel with keys animates, one without does not */
+    public void syncAnimFlags()
+    {
+        this.animPosX = !this.channelPosX.isEmpty();
+        this.animPosY = !this.channelPosY.isEmpty();
+        this.animScaleX = !this.channelScaleX.isEmpty();
+        this.animScaleY = !this.channelScaleY.isEmpty();
+        this.animRotation = !this.channelRotation.isEmpty();
+        this.animOpacity = !this.channelOpacity.isEmpty();
+        this.animAnchorX = !this.channelAnchorX.isEmpty();
+        this.animAnchorY = !this.channelAnchorY.isEmpty();
+        this.animVolume = !this.channelVolume.isEmpty();
+        this.animPan = !this.channelPan.isEmpty();
+    }
+
+    /**
+     * Takes the clip that follows this one into it: it runs on to the end of the other, and the keys of
+     * the other's channels, the effects' too, come across, apart from any that sit where this one's already are.
+     */
+    public void absorb(CatalystLayer next)
+    {
+        this.duration += next.duration;
+
+        mergeKeys(this.channelPosX, next.channelPosX);
+        mergeKeys(this.channelPosY, next.channelPosY);
+        mergeKeys(this.channelScaleX, next.channelScaleX);
+        mergeKeys(this.channelScaleY, next.channelScaleY);
+        mergeKeys(this.channelRotation, next.channelRotation);
+        mergeKeys(this.channelOpacity, next.channelOpacity);
+        mergeKeys(this.channelAnchorX, next.channelAnchorX);
+        mergeKeys(this.channelAnchorY, next.channelAnchorY);
+        mergeKeys(this.channelVolume, next.channelVolume);
+        mergeKeys(this.channelPan, next.channelPan);
+
+        List<mchorse.bbs_mod.camera.clips.fx.PostEffectStack.Layer> mine = this.effects.getAllTyped();
+        List<mchorse.bbs_mod.camera.clips.fx.PostEffectStack.Layer> theirs = next.effects.getAllTyped();
+
+        for (int i = 0; i < Math.min(mine.size(), theirs.size()); i++)
+        {
+            if (mine.get(i).effect.get().equals(theirs.get(i).effect.get()))
+            {
+                List<KeyframeChannel<Double>> to = mine.get(i).channels();
+                List<KeyframeChannel<Double>> from = theirs.get(i).channels();
+
+                for (int c = 0; c < to.size(); c++)
+                {
+                    mergeKeys(to.get(c), from.get(c));
+                }
+            }
+        }
+
+        this.syncAnimFlags();
+    }
+
+    private static <T> void mergeKeys(KeyframeChannel<T> into, KeyframeChannel<T> from)
+    {
+        for (Keyframe<T> key : from.getKeyframes())
+        {
+            boolean there = false;
+
+            for (Keyframe<T> own : into.getKeyframes())
+            {
+                there |= Math.abs(own.getTick() - key.getTick()) < 0.5F;
+            }
+
+            if (!there)
+            {
+                Keyframe<T> copy = new Keyframe<>(key.getId(), key.getFactory());
+
+                copy.copy(key);
+                into.add(copy);
+            }
+        }
+
+        into.sort();
+    }
+
+    /** Slides every key of the clip's ten channels by some frames, for a clip that is moved along the timeline */
+    public void moveKeyframes(int delta)
+    {
+        if (delta == 0)
+        {
+            return;
+        }
+
+        this.channelPosX.moveX(delta);
+        this.channelPosY.moveX(delta);
+        this.channelScaleX.moveX(delta);
+        this.channelScaleY.moveX(delta);
+        this.channelRotation.moveX(delta);
+        this.channelOpacity.moveX(delta);
+        this.channelAnchorX.moveX(delta);
+        this.channelAnchorY.moveX(delta);
+        this.channelVolume.moveX(delta);
+        this.channelPan.moveX(delta);
+        this.effects.moveX(delta);
+    }
 
     public boolean hasAnyKeyframes(int propBit)
     {
@@ -447,6 +674,18 @@ public class CatalystLayer
         return dest;
     }
 
+    /** The gain as the factor it multiplies the sound by */
+    public float gainFactor()
+    {
+        return this.gainDb == 0F ? 1F : (float) Math.pow(10D, this.gainDb / 20D);
+    }
+
+    /** The volume at a frame with the gain on it: what is played and mixed */
+    public float computeVolumeWithGain(int frame)
+    {
+        return this.computeEffectiveVolume(frame) * this.gainFactor();
+    }
+
     public float computeEffectiveVolume(int frame)
     {
         return (this.animVolume && !this.channelVolume.isEmpty()) ? this.channelVolume.interpolate(frame, this.volume) : this.volume;
@@ -473,6 +712,56 @@ public class CatalystLayer
         this.anchorY = eff[7];
         this.volume = eff[8];
         this.pan = eff[9];
+    }
+
+    private static final String[] CHANNEL_KEYS = {"channelPosX", "channelPosY", "channelScaleX", "channelScaleY", "channelRotation", "channelOpacity", "channelAnchorX", "channelAnchorY", "channelVolume", "channelPan"};
+
+    /** A copy of the clip with an id of its own, keyframes and all */
+    public CatalystLayer duplicate()
+    {
+        CatalystLayer copy = new CatalystLayer();
+
+        copy.fromData(this.toData());
+        copy.id = UUID.randomUUID().toString().substring(0, 8);
+        /* A copy is not part of the original's pair */
+        copy.linkId = "";
+
+        return copy;
+    }
+
+    /**
+     * Cuts the clip in two at {@code frame}: this clip keeps what is before it, the returned one gets
+     * the rest - the same media from where the cut is, and the keyframes past it. Null when the frame
+     * isn't inside the clip. The second part comes in with a plain cut.
+     */
+    public CatalystLayer splitAt(int frame)
+    {
+        if (frame <= this.startFrame || frame >= this.startFrame + this.duration)
+        {
+            return null;
+        }
+
+        MapType data = this.toData();
+
+        for (String key : CHANNEL_KEYS)
+        {
+            data.remove(key);
+        }
+
+        CatalystLayer second = new CatalystLayer();
+        int first = frame - this.startFrame;
+
+        second.fromData(data);
+        second.id = UUID.randomUUID().toString().substring(0, 8);
+        second.startFrame = frame;
+        second.duration = this.duration - first;
+        second.mediaOffset = this.mediaOffset + first;
+        second.transitionIn = "";
+
+        this.duration = first;
+        this.splitChannelsAt(frame, second);
+
+        return second;
     }
 
     public void splitChannelsAt(int splitFrame, CatalystLayer target)
@@ -696,11 +985,31 @@ public class CatalystLayer
 
         /* Media & Audio properties */
         data.putFloat ("volume",       this.volume);
+        data.putFloat ("gainDb",       this.gainDb);
         data.putFloat ("pan",          this.pan);
         data.putInt   ("audioOffset",  this.audioOffset);
         data.putInt   ("mediaOffset",  this.mediaOffset);
         data.putInt   ("mediaDuration", this.mediaDuration);
         data.putInt   ("filmFps",      this.filmFps);
+
+        /* Edit timeline */
+        data.putInt   ("track",        this.track);
+        data.putFloat ("cropLeft",     this.cropLeft);
+        data.putFloat ("cropRight",    this.cropRight);
+        data.putFloat ("cropTop",      this.cropTop);
+        data.putFloat ("cropBottom",   this.cropBottom);
+        data.putBool  ("flipH",        this.flipH);
+        data.putBool  ("flipV",        this.flipV);
+        data.putBool  ("scaleLocked",  this.scaleLocked);
+        data.putString("linkId",       this.linkId);
+        data.putBool  ("muteOwnAudio", this.muteOwnAudio);
+        data.putString("transitionIn", this.transitionIn);
+        data.putInt   ("transitionFrames", this.transitionFrames);
+
+        if (!this.effects.getAllTyped().isEmpty())
+        {
+            data.put("effects", this.effects.toData());
+        }
 
         /* Text properties */
         data.putInt   ("textColor",    this.textColor);
@@ -763,11 +1072,35 @@ public class CatalystLayer
 
         /* Media & Audio properties */
         if (data.has("volume"))       this.volume       = data.getFloat("volume");
+        if (data.has("gainDb"))       this.gainDb       = data.getFloat("gainDb");
         if (data.has("pan"))          this.pan          = data.getFloat("pan");
         if (data.has("audioOffset"))  this.audioOffset  = data.getInt("audioOffset");
         if (data.has("mediaOffset"))  this.mediaOffset  = data.getInt("mediaOffset");
         if (data.has("mediaDuration")) this.mediaDuration = data.getInt("mediaDuration");
         if (data.has("filmFps"))      this.filmFps      = Math.max(1, data.getInt("filmFps"));
+
+        /* Edit timeline */
+        if (data.has("track"))        this.track        = data.getInt("track");
+        if (data.has("cropLeft"))     this.cropLeft     = data.getFloat("cropLeft");
+        if (data.has("cropRight"))    this.cropRight    = data.getFloat("cropRight");
+        if (data.has("cropTop"))      this.cropTop      = data.getFloat("cropTop");
+        if (data.has("cropBottom"))   this.cropBottom   = data.getFloat("cropBottom");
+        if (data.has("flipH"))        this.flipH        = data.getBool("flipH");
+        if (data.has("flipV"))        this.flipV        = data.getBool("flipV");
+        if (data.has("scaleLocked"))  this.scaleLocked  = data.getBool("scaleLocked");
+        if (data.has("linkId"))       this.linkId       = data.getString("linkId");
+        if (data.has("muteOwnAudio")) this.muteOwnAudio = data.getBool("muteOwnAudio");
+        if (data.has("transitionIn")) this.transitionIn = data.getString("transitionIn");
+        if (data.has("transitionFrames")) this.transitionFrames = Math.max(1, data.getInt("transitionFrames"));
+
+        if (data.has("effects"))
+        {
+            this.effects.fromData(data.get("effects"));
+        }
+        else
+        {
+            this.effects.fromData(new mchorse.bbs_mod.data.types.ListType());
+        }
 
         /* Text properties */
         if (data.has("textColor"))    this.textColor    = data.getInt("textColor");

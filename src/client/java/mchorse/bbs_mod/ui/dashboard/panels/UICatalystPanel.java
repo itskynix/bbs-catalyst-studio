@@ -109,6 +109,22 @@ import mchorse.bbs_mod.audio.Wave;
  *  - Timeline supports click-to-scrub and drag-scrub (mouseDown + mouseScroll mapped).
  *  - Play/Pause advances currentFrame at ~60 FPS via render-tick counter; playhead updates live.
  */
+import mchorse.bbs_mod.ui.dashboard.panels.catalyst.CatalystAiTools;
+import mchorse.bbs_mod.ui.dashboard.panels.catalyst.CatalystDock;
+import mchorse.bbs_mod.ui.dashboard.panels.catalyst.UIAudioGainOverlayPanel;
+import mchorse.bbs_mod.ui.framework.elements.input.keyframes.UIKeyframeEditor;
+import mchorse.bbs_mod.ui.framework.elements.input.keyframes.UIKeyframeSheet;
+import mchorse.bbs_mod.ui.framework.elements.input.keyframes.UIKeyframes;
+import mchorse.bbs_mod.ui.framework.elements.utils.UITimelineCanvas;
+import mchorse.bbs_mod.utils.keyframes.KeyframeChannel;
+import mchorse.bbs_mod.ui.dashboard.panels.catalyst.CatalystLayouts;
+import mchorse.bbs_mod.ui.dashboard.panels.catalyst.CatalystMedia;
+import mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw;
+import mchorse.bbs_mod.ui.dashboard.panels.catalyst.UINleInspector;
+import mchorse.bbs_mod.ui.dashboard.panels.catalyst.UINleLibrary;
+import mchorse.bbs_mod.ui.dashboard.panels.catalyst.UINleTimeline;
+import mchorse.bbs_mod.ui.dashboard.panels.catalyst.UINleToolbar;
+
 public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod.ui.dashboard.menu.IGlobalMenuProvider
 {
     @Override
@@ -122,6 +138,165 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
     {
         menu.action(Icons.UNDO, UIKeys.MENU_EDIT_UNDO, this::undo).key(org.lwjgl.glfw.GLFW.GLFW_KEY_Z, org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT_CONTROL);
         menu.action(Icons.REDO, UIKeys.MENU_EDIT_REDO, this::redo).key(org.lwjgl.glfw.GLFW.GLFW_KEY_Y, org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT_CONTROL);
+    }
+
+    /** The Window and Layout menu is the edit page's own while it is up: panels, templates, reset and lock */
+    @Override
+    public boolean hasWindowMenu()
+    {
+        return this.currentTab == CatalystTab.EDITOR && this.activeProject != null && this.catalystDock != null;
+    }
+
+    @Override
+    public void fillWindowMenu(mchorse.bbs_mod.ui.utils.context.ContextMenuManager menu)
+    {
+        this.catalystDock.fillWindowMenu(menu);
+    }
+
+    /** The menu bar's tools menu is the smart tools while the edit page is up */
+    @Override
+    public boolean hasToolsMenu()
+    {
+        return this.currentTab == CatalystTab.EDITOR && this.activeProject != null;
+    }
+
+    @Override
+    public mchorse.bbs_mod.l10n.keys.IKey getToolsMenuTitle()
+    {
+        return UIKeys.CATALYST_NLE_AI_TOOLS;
+    }
+
+    @Override
+    public void fillToolsMenu(mchorse.bbs_mod.ui.utils.context.ContextMenuManager menu)
+    {
+        menu.action(Icons.CUT, UIKeys.CATALYST_NLE_AI_AUTO_CUT, this.aiTools::autoCut);
+        menu.action(Icons.SHIFT_BACKWARD, UIKeys.CATALYST_NLE_AI_J_CUT, this.aiTools::jCut);
+        menu.action(Icons.SHIFT_FORWARD, UIKeys.CATALYST_NLE_AI_L_CUT, this.aiTools::lCut);
+        menu.action(Icons.BOOKMARK, UIKeys.CATALYST_NLE_AI_BEAT_SYNC, this.aiTools::beatSync);
+        menu.action(Icons.SOUND, UIKeys.CATALYST_NLE_AI_DUCKING, this.aiTools::ducking);
+        menu.action(Icons.FILM, UIKeys.CATALYST_NLE_AI_SCENE_CUT, this.aiTools::sceneCuts);
+        menu.action(Icons.SPARKLES, UIKeys.CATALYST_NLE_AI_CLOSE_GAPS, this.aiTools::closeAllGaps);
+    }
+
+    public boolean isAiBusy()
+    {
+        return this.aiBusy;
+    }
+
+    /** A tool starts: the timeline is locked and the playhead will sweep from one frame to the other as the work goes */
+    public void beginAi(mchorse.bbs_mod.l10n.keys.IKey name, int from, int to)
+    {
+        this.isPlaying = false;
+        this.stopAllAudio();
+        this.aiName = name;
+        this.aiFrom = Math.max(0, from);
+        this.aiTo = Math.max(this.aiFrom + 1, to);
+        this.aiProgress = 0D;
+        this.aiCancelled = false;
+        this.aiBusy = true;
+    }
+
+    public boolean isAiCancelled()
+    {
+        return this.aiCancelled;
+    }
+
+    /** Stops the tool: its reading ends, and nothing it found is put on the timeline */
+    public void cancelAi()
+    {
+        this.aiCancelled = true;
+    }
+
+    public void setAiProgress(double progress)
+    {
+        this.aiProgress = Math.max(0D, Math.min(1D, progress));
+    }
+
+    /** The tool is done: the timeline is free again and the playhead is back at the start */
+    public void endAi()
+    {
+        CatalystComposition comp = this.getActiveComposition();
+
+        this.aiBusy = false;
+        this.currentFrame = 0;
+
+        if (comp != null)
+        {
+            comp.playhead = 0;
+        }
+    }
+
+    /** A glass badge over the monitor: the name of the tool and its progress */
+    private void renderAiBadge(UIContext context, Area area)
+    {
+        if (!this.aiBusy)
+        {
+            return;
+        }
+
+        FontRenderer font = context.batcher.getFont();
+        String title = "AI " + this.aiName.get();
+        String percent = Math.round(this.aiProgress * 100D) + "%";
+        int w = Math.min(Math.max(120, area.w - 24), 300);
+        int x = area.mx() - w / 2;
+        int y = area.y + 14;
+        int accent = Colors.A100 | BBSSettings.primaryColor.get();
+
+        RoundedDraw.fill(context.batcher, x, y, x + w, y + 38, 8, RoundedDraw.ALL, 0xd911161f);
+        RoundedDraw.outline(context.batcher, x, y, x + w, y + 38, 8, RoundedDraw.ALL, 0x40ffffff);
+        /* The stop button at the right corner */
+        this.aiStop[0] = x + w - 26;
+        this.aiStop[1] = y + 4;
+        this.aiStop[2] = x + w - 8;
+        this.aiStop[3] = y + 20;
+
+        boolean stopHover = context.mouseX >= this.aiStop[0] && context.mouseX < this.aiStop[2] && context.mouseY >= this.aiStop[1] && context.mouseY < this.aiStop[3];
+
+        RoundedDraw.fill(context.batcher, this.aiStop[0], this.aiStop[1], this.aiStop[2], this.aiStop[3], 4, RoundedDraw.ALL, stopHover ? 0xccd9302c : 0x33ffffff);
+        context.batcher.icon(Icons.CLOSE, 0xffffffff, this.aiStop[0] + 1, this.aiStop[1], 1F, 0F);
+
+        context.batcher.text(font.limitToWidth(title, w - 90), x + 12, y + 8, 0xffe8edf5, false);
+        context.batcher.text(percent, x + w - 34 - font.getWidth(percent), y + 8, 0xffbfe0ff, false);
+        context.batcher.box(x + 12, y + 24, x + w - 12, y + 28, 0x33ffffff);
+        context.batcher.box(x + 12, y + 24, x + 12 + (int) Math.round((w - 24) * this.aiProgress), y + 28, accent);
+    }
+
+    /** Work for the render thread, from a thread that read a file */
+    public void runLater(Runnable task)
+    {
+        this.mainQueue.add(task);
+    }
+
+    /** The tools are done with their changes: the length follows the clips, the project is saved */
+    public void toolsDone()
+    {
+        this.ensureDuration();
+        this.saveAndRefresh();
+        this.updateInspectorForm();
+    }
+
+    /** G: the gain window for the picked sound clips */
+    public void openGainDialog()
+    {
+        List<CatalystLayer> sounds = new ArrayList<>();
+
+        for (CatalystLayer layer : this.catalystTimeline.getSelectedLayers())
+        {
+            if (layer.layerType == CatalystLayer.LayerType.AUDIO || layer.layerType == CatalystLayer.LayerType.NESTED_AUDIO)
+            {
+                sounds.add(layer);
+            }
+        }
+
+        if (sounds.isEmpty())
+        {
+            this.getContext().notifyError(UIKeys.CATALYST_NLE_GAIN_NEED_AUDIO);
+
+            return;
+        }
+
+        this.pushUndo();
+        UIAudioGainOverlayPanel.open(this.getContext(), this, sounds);
     }
 
     public enum CatalystTab { PROJECTS, EDITOR }
@@ -144,13 +319,10 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
     public UICatalystTab   tabEditor;
     public UILabel         activeProjectLabel;
     public UIElement       editorActions;
-    public UIIcon          playPauseButton;
     public UIIcon          splitButton;
     public UIIcon          settingsButton;
     public UIIcon          renderExportButton;
     public UIIcon          fullscreenButton;
-    public UIIcon          mediaPoolToggleBtn;
-    public boolean         showMediaPool = false;
     public UIMediaPoolPanel mediaPoolPanel;
     public CatalystMediaAsset draggedAsset = null;
     private org.lwjgl.glfw.GLFWDropCallback prevDropCallback = null;
@@ -177,83 +349,121 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
     public UIButton      deleteProjectButton;
     public UIButton      clearFormButton;
 
-    /* ── View 2: Editor ── */
+    /* ── View 2: Editor (the edit page) ── */
     public UIElement     previewArea;
 
-    /* AE-style Comp Tab Strip */
+    /* The composition tab strip of the layer stack days: kept off screen, the monitor's timeline menu replaced it */
     public UIElement     compTabStrip;
     public UIScrollView  compTabScroll;
     public UIIcon        addCompButton;
 
-    public UIElement     bottomArea;
-    public UIElement     layersContainer;
-    public UIElement     layersHeader;
-    public UIScrollView  layersList;
-    public UICatalystTimeline catalystTimeline;
+    /** Library (left), inspector (right, full height), the strip over the timeline, the timeline and the page bar */
+    public UINleLibrary  library;
+    public UINleInspector inspector;
+    public UINleToolbar  nleToolbar;
+    public UINleTimeline catalystTimeline;
+    public UIElement     monitorBar;
+    public UIElement     transportBar;
 
-    /* ── Inspector Panel ── */
-    public UIElement     inspectorContainer;
-    public UIElement     inspectorHeader;
-    public UIScrollView  inspectorScroll;
-    public UIElement     inspectorForm;
-    public UILabel       inspectorEmptyLabel;
-    public UITextbox     layerNameInput;
-    public UILabel       layerTypeLabel;
-    public UITrackpad    layerOpacityInput;
+    /* The dockable edit page: its host, the monitor and the timeline panel (each made of several parts), and the dock */
+    public UIElement     editor;
+    public UIElement     monitorPanel;
+    public UIElement     timelinePanel;
+    public CatalystDock  catalystDock;
 
-    /* Text Layer controls */
-    public UIElement     textControlsGroup;
-    public UITextarea    layerTextarea;
-    public UITrackpad    layerFontSizeInput;
-    public UIColor       layerTextColorPicker;
-    public UIButton      layerLineWrapButton;
-    public UIButton      layerShadowButton;
+    /* The keyframe and curve editor under the timeline: whether it is open, and for which clip it was last filled */
+    public UIKeyframeEditor keyEditor;
+    private boolean      keysOpen = false;
+    private CatalystLayer keysShown;
+    private int          keysSignature;
+    private double       syncZoom = -1D;
+    /** Which headings of the curve editor are folded: they start open, and stay as the user left them */
+    private final mchorse.bbs_mod.ui.framework.elements.input.items.FoldState<String> keyFolds = new mchorse.bbs_mod.ui.framework.elements.input.items.FoldState<>(true);
+    private double       syncShift = -1D;
+    private boolean      exportLayout = false;
 
-    /* Transform / Pivot controls */
-    public UIElement     transformGroup;
-    public UIButton      layerResetTransformBtn;
-    public UITrackpad    layerPosX;
-    public UITrackpad    layerPosY;
-    public UITrackpad    layerScaleX;
-    public UITrackpad    layerScaleY;
-    public UITrackpad    layerRotation;
-    public UITrackpad    layerAnchorX;
-    public UITrackpad    layerAnchorY;
+    /* The smart tools at work: the page shows what is running, the timeline is locked and the playhead sweeps the clips */
+    private volatile boolean aiBusy = false;
+    private volatile boolean aiCancelled = false;
+    /** Where the stop button of the badge was drawn last: x, y, to x, to y */
+    private final int[] aiStop = new int[4];
+    private volatile double  aiProgress = 0D;
+    private mchorse.bbs_mod.l10n.keys.IKey aiName = mchorse.bbs_mod.l10n.keys.IKey.EMPTY;
+    private int              aiFrom;
+    private int              aiTo;
 
-    /* Resource label & media controls */
-    public UILabel       layerResourceLabel;
-    public UIElement     mediaGroup;
-    public UIElement     audioControlsGroup;
-    public UITrackpad    layerVolumeInput;
-    public UITrackpad    layerPanInput;
-    public UITrackpad    layerAudioOffsetInput;
-    public UIButton      layerExtendDurationBtn;
-    public UILabel       layerFilmFpsLabel;
-    public UITrackpad    layerFilmFpsInput;
+    /* One player per file for the pieces of a cut: the stream goes on from one piece to the next */
+    private static final Map<String, Object> PATH_OWNERS = new HashMap<>();
 
-    public UIElement     layerColorRow;
-    public UIColor       layerColorPicker;
-    private CatalystLayer lastInspectedLayer = null;
+    /* The smart tools, and the work they hand back to the render thread when a thread of theirs is done reading */
+    private final CatalystAiTools aiTools = new CatalystAiTools(this);
+    private final java.util.concurrent.ConcurrentLinkedQueue<Runnable> mainQueue = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    /** The project and timeline shown in the top bar, as the bar cuts it to fit */
+    private String       projectPath = "";
 
-    /* ── Inline Timeline Property Direct Input ── */
-    public UITextbox inlinePropInput;
-    private CatalystLayer editingPropLayer = null;
-    private int editingPropBit = 0;
-    private int editingPropComponent = 0;
-    private long lastPropClickTime = 0L;
-    private CatalystLayer lastClickedPropLayer = null;
-    private int lastClickedPropBit = 0;
-    private int lastClickedPropComp = 0;
-    /* ── Splitter / Resizable Panels State (Stage 83) ── */
-    public static float horizontalSplitRatio = 0.53F;
-    public static int leftPanelWidth = 220;
-    public static int rightPanelWidth = 220;
+    /* Nested timelines: how deep the monitor is inside them, the opacity they hand down, and the stand-ins for the sounds inside */
+    /**
+     * What owns the video player of a clip. The pieces a file was cut into all share one player, so the
+     * ffmpeg stream that is decoding carries on from piece to piece instead of one being started for each.
+     * A clip that overlaps another piece of the same file in time, or that sits in a nested timeline, keeps a player of its own.
+     */
+    private Object videoOwner(CatalystLayer layer)
+    {
+        CatalystComposition comp = this.getActiveComposition();
 
-    private int activeSplitter = 0; // 0 = none, 1 = horizontal, 2 = vertical left, 3 = vertical right
-    private int splitterDragStartMouse = 0;
-    private float splitterInitialRatio = 0.53F;
-    private int splitterInitialLeftW = 220;
-    private int splitterInitialRightW = 220;
+        if (comp == null || layer.resourcePath == null || layer.resourcePath.trim().isEmpty())
+        {
+            return layer;
+        }
+
+        String key = layer.resourcePath.trim();
+        boolean found = false;
+
+        for (CatalystLayer other : comp.layers)
+        {
+            if (other == layer)
+            {
+                found = true;
+            }
+            else if (other.layerType == CatalystLayer.LayerType.VIDEO && other.resourcePath != null && key.equals(other.resourcePath.trim())
+                && other.startFrame < layer.startFrame + layer.duration && layer.startFrame < other.startFrame + other.duration)
+            {
+                return layer;
+            }
+        }
+
+        return found ? PATH_OWNERS.computeIfAbsent(key, (k) -> new Object()) : layer;
+    }
+
+    private int nestDepth = 0;
+    private float nestAlpha = 1F;
+    private final Map<String, CatalystLayer> nestedAudioCache = new HashMap<>();
+    private final Map<CatalystLayer, Integer> nestedAudioShift = new HashMap<>();
+    private boolean      safeAreasBeforeFullscreen = true;
+
+    /** The program monitor's zoom: 0 fits the frame, otherwise a percentage of its pixels */
+    public static int    monitorZoom = 0;
+    public boolean       loopPlayback = true;
+    public float         masterVolume = 1F;
+
+
+    /* Saving after edits, a moment after the last one, and one undo step per run of edits to one thing */
+    private long         dirtyAt = 0L;
+    private String       lastUndoKey = null;
+    public UIElement     fullscreenBar;
+    private int          lastMouseX = -1;
+    private int          lastMouseY = -1;
+    private long         lastMouseMoveAt = 0L;
+    private float        volumeBeforeMute = 1F;
+    /** The fullscreen bar goes away this long after the mouse last moved */
+    private static final long FULLSCREEN_BAR_MS = 3000L;
+    /** When Ctrl+S last saved, for the badge that says so */
+    private long         savedAt = 0L;
+    private long         lastUndoAt = 0L;
+
+    public static final int MONITOR_BAR_H = 20;
+    public static final int TRANSPORT_H = 24;
+
     private boolean isUpdatingLayout = false;
 
     /* ── Preview Quality / Resolution (Stage 84) ── */
@@ -358,10 +568,7 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
         this.setupEditorView();
 
         /* Order matters: projectsView on top of editor elements so no bleed */
-        this.add(this.topBar,
-                 this.mediaPoolPanel,
-                 this.previewArea, this.compTabStrip, this.bottomArea,
-                 this.projectsView);
+        this.add(this.topBar, this.editor, this.fullscreenBar, this.projectsView);
 
         this.onAppear(() ->
         {
@@ -439,6 +646,7 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
                 this.previewFboTexture.delete();
                 this.previewFboTexture = null;
             }
+            this.deleteFxBuffers();
         });
 
         this.onClose(() ->
@@ -477,6 +685,7 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
                 this.previewFboTexture.delete();
                 this.previewFboTexture = null;
             }
+            this.deleteFxBuffers();
         });
     }
 
@@ -535,17 +744,14 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
         /* Projects view renders its own full opaque background; hide it in editor mode */
         this.projectsView.setVisible(!isEditor);
 
-        /* Editor elements shown only when in editor mode */
-        this.previewArea.setVisible(isEditor);
-        this.compTabStrip.setVisible(isEditor);
-        this.bottomArea.setVisible(isEditor);
-        this.editorActions.setVisible(isEditor);
-
-        if (this.mediaPoolPanel != null)
+        /* The edit page's panels live in the dock; its host shows and hides them all together */
+        if (this.editor != null)
         {
-            this.mediaPoolPanel.setVisible(isEditor && this.showMediaPool && !this.isFullscreen);
+            this.layoutPreview(this.isFullscreen && isEditor);
+            this.editor.setVisible(isEditor && !this.isFullscreen && !this.exportLayout);
         }
 
+        this.editorActions.setVisible(isEditor);
         this.updateTitleLabel();
 
         if (isEditor)
@@ -564,14 +770,11 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
             double durS = (comp != null && comp.duration > 0 && fps > 0)
                 ? (double) comp.duration / (double) fps
                 : this.activeProject.durationSeconds;
-            String info = " • " + this.activeProject.name + compName
-                        + " [" + fps + " FPS / "
-                        + String.format(java.util.Locale.ROOT, "%.1fs", durS) + "]";
-            this.activeProjectLabel.label = IKey.raw(info);
+            this.projectPath = this.activeProject.name + (comp != null ? " › " + comp.name : "") + " [" + fps + " FPS]";
         }
         else
         {
-            this.activeProjectLabel.label = IKey.raw("");
+            this.projectPath = "";
         }
     }
 
@@ -589,6 +792,13 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
         if (project != null)
         {
             project.ensureCompositions();
+
+            /* Every timeline is as long as its last clip */
+            for (CatalystComposition timeline : project.compositions)
+            {
+                timeline.refreshDuration();
+            }
+
             project.syncMediaPoolWithLayers();
             if (this.mediaPoolPanel != null)
             {
@@ -607,9 +817,35 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
             if (this.deleteProjectButton != null) this.deleteProjectButton.setVisible(true);
 
             this.rebuildCompTabs();
+            this.scanMissingMedia(project);
         }
 
         this.updateTitleLabel();
+    }
+
+    /** As a project opens: every file it uses is looked for, and what is missing is put to the user to relink or leave offline */
+    private void scanMissingMedia(CatalystProject project)
+    {
+        mchorse.bbs_mod.ui.dashboard.panels.catalyst.CatalystMedia.refresh();
+
+        List<String> missing = project.collectMissingMedia();
+        UIContext context = this.getContext();
+
+        if (missing.isEmpty() || context == null)
+        {
+            return;
+        }
+
+        UIOverlay.addOverlay(context, new mchorse.bbs_mod.ui.dashboard.panels.catalyst.UIMissingMediaOverlayPanel(project, missing, () ->
+        {
+            cleanupProjectResources(project);
+            CatalystProjectManager.saveProject(project);
+
+            if (this.mediaPoolPanel != null)
+            {
+                this.mediaPoolPanel.rebuildList();
+            }
+        }), 580, 320);
     }
 
     public void refreshProjects()
@@ -672,10 +908,13 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
         {
             if (hasSolo && !layer.solo) continue;
             if (layer.muted) continue;
+            if (this.isTrackSilent(comp, layer)) continue;
+            if (layer.layerType == CatalystLayer.LayerType.VIDEO && layer.muteOwnAudio) continue;
+            if (mchorse.bbs_mod.ui.dashboard.panels.catalyst.CatalystMedia.isOffline(layer)) continue;
             if ((layer.layerType == CatalystLayer.LayerType.AUDIO || layer.layerType == CatalystLayer.LayerType.VIDEO)
                 && frame >= layer.startFrame && frame < layer.startFrame + layer.duration
                 && layer.resourcePath != null && !layer.resourcePath.trim().isEmpty()
-                && (layer.animVolume || layer.computeEffectiveVolume(frame) > 0))
+                && (layer.animVolume || layer.computeVolumeWithGain(frame) > 0))
             {
                 if (layer.layerType == CatalystLayer.LayerType.VIDEO)
                 {
@@ -693,6 +932,16 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
                 list.add(layer);
             }
         }
+        /* The sound of nested timelines: a stand-in clip for each sound inside, placed on this timeline */
+        for (CatalystLayer layer : comp.layers)
+        {
+            if (layer.layerType == CatalystLayer.LayerType.NESTED_AUDIO && !layer.muted && !(hasSolo && !layer.solo)
+                && !this.isTrackSilent(comp, layer) && frame >= layer.startFrame && frame < layer.startFrame + layer.duration)
+            {
+                this.collectNestedAudio(layer, layer.startFrame - layer.mediaOffset, layer.startFrame, layer.startFrame + layer.duration, 0, layer.id, layer.computeVolumeWithGain(frame), frame, list);
+            }
+        }
+
         return list;
     }
 
@@ -759,7 +1008,7 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
                     if (audioLink.equals(existingLink))
                     {
                         float effOpacity = layer.computeEffective(this.currentFrame)[5];
-                        float vol = layer.computeEffectiveVolume(this.currentFrame) * (effOpacity / 100.0F);
+                        float vol = layer.computeVolumeWithGain(this.currentFrame) * (effOpacity / 100.0F) * this.masterVolume;
                         player.setVolume(vol);
                         player.setPan(layer.computeEffectivePan(this.currentFrame));
 
@@ -802,7 +1051,7 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
                     float effOpacity = layer.computeEffective(this.currentFrame)[5];
                     newPlayer.setPan(layer.computeEffectivePan(this.currentFrame));
                     newPlayer.setPlaybackPosition(relSec);
-                    newPlayer.setVolume(layer.computeEffectiveVolume(this.currentFrame) * (effOpacity / 100.0F));
+                    newPlayer.setVolume(layer.computeVolumeWithGain(this.currentFrame) * (effOpacity / 100.0F) * this.masterVolume);
 
                     if (this.isPlaying)
                     {
@@ -829,7 +1078,10 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
         }
 
         int fps = comp.fps > 0 ? comp.fps : 60;
+        /* The end is where the last clip ends: a stale length must not keep the clock running past it */
+        int endFrame = Math.max(1, comp.endFrame() > 0 ? comp.endFrame() : comp.duration);
         this.syncAudioPlayback(comp, false);
+        this.prewarmUpcoming(comp, fps);
 
         /* 1. Follow primary audio master clock if any active stream is playing */
         CatalystLayer masterLayer = null;
@@ -859,12 +1111,24 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
             }
         }
 
+        /* A clock that reads a place outside its own clip is not telling the time of the timeline */
+        if (masterLayer != null && masterPlayer != null)
+        {
+            int probe = (masterLayer.startFrame - masterLayer.mediaOffset) + (int) Math.round(masterPlayer.getPlaybackPosition() * fps) - masterLayer.audioOffset;
+
+            if (probe < masterLayer.startFrame - fps || probe > masterLayer.startFrame + masterLayer.duration + fps)
+            {
+                masterLayer = null;
+                masterPlayer = null;
+            }
+        }
+
         if (masterLayer != null && masterPlayer != null)
         {
             this.masterClockPlayer = masterPlayer;
             float audioSec = masterPlayer.getPlaybackPosition();
             int mediaRelFrame = (int) Math.round(audioSec * fps) - masterLayer.audioOffset;
-            int syncedFrame = (masterLayer.startFrame - masterLayer.mediaOffset) + mediaRelFrame;
+            int syncedFrame = Math.max(0, (masterLayer.startFrame - masterLayer.mediaOffset) + mediaRelFrame);
 
             /* Audio stream drives the master timeline playhead smoothly */
             if (syncedFrame >= this.currentFrame)
@@ -877,8 +1141,18 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
                 this.currentFrame = syncedFrame;
             }
 
-            if (this.currentFrame >= comp.duration)
+            if (this.currentFrame >= endFrame)
             {
+                if (!this.loopPlayback)
+                {
+                    this.currentFrame = Math.max(0, endFrame - 1);
+                    this.isPlaying = false;
+                    this.stopAllAudio();
+                    comp.playhead = this.currentFrame;
+
+                    return;
+                }
+
                 this.currentFrame = 0;
                 this.stopAllAudio();
                 this.syncAudioPlayback(comp, true);
@@ -907,8 +1181,18 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
             this.lastTickMs += (long) advance * 1000L / fps;
             this.currentFrame += advance;
 
-            if (this.currentFrame >= comp.duration)
+            if (this.currentFrame >= endFrame)
             {
+                if (!this.loopPlayback)
+                {
+                    this.currentFrame = Math.max(0, endFrame - 1);
+                    this.isPlaying = false;
+                    this.stopAllAudio();
+                    comp.playhead = this.currentFrame;
+
+                    return;
+                }
+
                 this.currentFrame = 0; /* loop */
                 this.stopAllAudio();
             }
@@ -918,7 +1202,649 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
         }
     }
 
-    /** Scrubbing (manual timeline slide) seeks audio and video instantly with synchronous frame decoding */
+    /* ── Keyframe and curve editor ── */
+
+    /** Opens or closes the keyframe editor over the lower half of the timeline panel */
+    public void toggleKeys()
+    {
+        this.keysOpen = !this.keysOpen;
+        this.keyEditor.setVisible(this.keysOpen);
+        this.catalystTimeline.relative(this.timelinePanel).x(0).y(UINleToolbar.HEIGHT).w(1F).h(this.keysOpen ? 0.5F : 1F, -UINleToolbar.HEIGHT);
+        this.timelinePanel.resize();
+        this.keysShown = null;
+        this.syncZoom = -1D;
+        this.refreshKeyEditor();
+    }
+
+    /** Fills the editor with the channels of the picked clip, and of the effects on it, when either has changed */
+    private void refreshKeyEditor()
+    {
+        if (!this.keysOpen || this.keyEditor == null)
+        {
+            return;
+        }
+
+        CatalystLayer layer = this.getSelectedLayer();
+        int signature = 0;
+
+        if (layer != null)
+        {
+            signature = layer.isAudioClip() ? 1 : 0;
+
+            for (mchorse.bbs_mod.camera.clips.fx.PostEffectStack.Layer effect : layer.effects.getAllTyped())
+            {
+                signature = signature * 31 + effect.effect.get().hashCode();
+            }
+        }
+
+        if (layer == this.keysShown && signature == this.keysSignature)
+        {
+            return;
+        }
+
+        this.keysShown = layer;
+        this.keysSignature = signature;
+
+        List<KeyframeChannel<?>> channels = new ArrayList<>();
+        Map<KeyframeChannel<?>, IKey> titles = new java.util.IdentityHashMap<>();
+        Map<KeyframeChannel<?>, UIKeyframeSheet.Section> sections = new java.util.IdentityHashMap<>();
+
+        if (layer != null)
+        {
+            if (layer.isAudioClip())
+            {
+                UIKeyframeSheet.Section audio = new UIKeyframeSheet.Section("cat_audio", UIKeys.CATALYST_NLE_KEY_SECTION_AUDIO, Icons.SOUND, 0x2eb67d);
+
+                this.keyTitle(channels, titles, sections, layer.channelVolume, UIKeys.CATALYST_NLE_KEY_VOLUME, audio);
+                this.keyTitle(channels, titles, sections, layer.channelPan, UIKeys.CATALYST_NLE_KEY_PAN, audio);
+            }
+            else
+            {
+                UIKeyframeSheet.Section transform = new UIKeyframeSheet.Section("cat_transform", UIKeys.CATALYST_NLE_KEY_SECTION_TRANSFORM, Icons.MAXIMIZE, 0x4aa3ff);
+                UIKeyframeSheet.Section composite = new UIKeyframeSheet.Section("cat_composite", UIKeys.CATALYST_NLE_KEY_SECTION_COMPOSITE, Icons.VISIBLE, 0xe8c43a);
+
+                this.keyTitle(channels, titles, sections, layer.channelPosX, UIKeys.CATALYST_NLE_KEY_POS_X, transform);
+                this.keyTitle(channels, titles, sections, layer.channelPosY, UIKeys.CATALYST_NLE_KEY_POS_Y, transform);
+                this.keyTitle(channels, titles, sections, layer.channelScaleX, UIKeys.CATALYST_NLE_KEY_ZOOM_X, transform);
+                this.keyTitle(channels, titles, sections, layer.channelScaleY, UIKeys.CATALYST_NLE_KEY_ZOOM_Y, transform);
+                this.keyTitle(channels, titles, sections, layer.channelRotation, UIKeys.CATALYST_NLE_KEY_ROTATION, transform);
+                this.keyTitle(channels, titles, sections, layer.channelAnchorX, UIKeys.CATALYST_NLE_KEY_ANCHOR_X, transform);
+                this.keyTitle(channels, titles, sections, layer.channelAnchorY, UIKeys.CATALYST_NLE_KEY_ANCHOR_Y, transform);
+                this.keyTitle(channels, titles, sections, layer.channelOpacity, UIKeys.CATALYST_NLE_KEY_OPACITY, composite);
+            }
+
+            int number = 0;
+
+            for (mchorse.bbs_mod.camera.clips.fx.PostEffectStack.Layer effect : layer.effects.getAllTyped())
+            {
+                mchorse.bbs_mod.camera.clips.fx.PostEffect definition = mchorse.bbs_mod.camera.clips.fx.PostEffect.get(effect.effect.get());
+
+                if (definition == null)
+                {
+                    continue;
+                }
+
+                /* Each effect is a heading of its own, named for it, under the effects */
+                String name = UIKeys.CATALYST_NLE_KEY_SECTION_EFFECTS.get() + " \u203a " + mchorse.bbs_mod.ui.film.clips.UIPostEffectPicker.effectName(definition).get();
+                UIKeyframeSheet.Section section = new UIKeyframeSheet.Section("cat_fx_" + number, IKey.raw(name), Icons.SPARKLES, 0xc77dff);
+
+                number += 1;
+                this.keyTitle(channels, titles, sections, effect.intensityChannel, UIKeys.POST_FX_INTENSITY, section);
+
+                for (int i = 0; i < definition.params.length; i++)
+                {
+                    this.keyTitle(channels, titles, sections, effect.paramChannels[i], mchorse.bbs_mod.ui.film.clips.UIPostEffectPicker.paramName(definition.params[i].name()), section);
+                }
+            }
+        }
+
+        this.keyEditor.setChannels(channels, (channel) -> titles.getOrDefault(channel, IKey.raw(channel.getId())));
+
+        for (UIKeyframeSheet sheet : this.keyEditor.view.getGraph().getSheets())
+        {
+            sheet.section = sections.get(sheet.channel);
+        }
+
+        /* The headings are in: the dope sheet counts its rows again, with them open, and the view is laid out afresh */
+        this.keyEditor.view.getDopeSheet().setExpanded(this.keyFolds);
+        this.keyEditor.view.resetView();
+        this.keyEditor.resize();
+    }
+
+    private void keyTitle(List<KeyframeChannel<?>> channels, Map<KeyframeChannel<?>, IKey> titles, Map<KeyframeChannel<?>, UIKeyframeSheet.Section> sections, KeyframeChannel<?> channel, IKey title, UIKeyframeSheet.Section section)
+    {
+        channels.add(channel);
+        titles.put(channel, title);
+        sections.put(channel, section);
+    }
+
+    /**
+     * The curve editor and the timeline share one horizontal view: the zoom and the first visible
+     * frame follow whichever of the two was moved. The timeline leads when the editor opens.
+     */
+    private void syncKeyAxis()
+    {
+        mchorse.bbs_mod.ui.utils.Scale axis = this.keyEditor.view.getXAxis();
+        UINleTimeline timeline = this.catalystTimeline;
+
+        if (this.syncZoom < 0D)
+        {
+            axis.setZoom(timeline.zoom);
+            axis.setShift(timeline.scrollX);
+        }
+        else if (axis.getZoom() != this.syncZoom || axis.getShift() != this.syncShift)
+        {
+            timeline.setZoom(axis.getZoom());
+            timeline.scrollX = Math.max(0D, axis.getShift());
+        }
+        else if (timeline.zoom != this.syncZoom || timeline.scrollX != this.syncShift)
+        {
+            axis.setZoom(timeline.zoom);
+            axis.setShift(timeline.scrollX);
+        }
+
+        this.syncZoom = axis.getZoom();
+        this.syncShift = axis.getShift();
+    }
+
+    /** Keys made, moved or taken away in the editor: a channel with keys animates its property from here on */
+    private void keysEdited()
+    {
+        if (this.keysShown != null)
+        {
+            this.keysShown.syncAnimFlags();
+        }
+
+        this.markDirty();
+    }
+
+    /** The jump arrows of the inspector's fields: the playhead goes to a frame and the clips stop */
+    public void jumpToFrame(int frame)
+    {
+        this.seekAndStop(frame);
+    }
+
+    /* ── Nested timelines ── */
+
+    /** The frame of the nested timeline that the host's playhead falls on, at the nested timeline's own rate */
+    private int nestedFrame(CatalystLayer layer, CatalystComposition child, int playhead, int hostFps)
+    {
+        int childFps = child.fps > 0 ? child.fps : Math.max(1, hostFps);
+        int rel = playhead - layer.startFrame + layer.mediaOffset;
+
+        return Math.max(0, Math.round(rel * (float) childFps / Math.max(1, hostFps)));
+    }
+
+    /** The timeline inside a nested clip, drawn into the clip's frame: its layers, its effects, its own nested timelines */
+    private void renderNested(UIContext context, CatalystLayer layer, float lx, float ly, float layerW, float layerH, int compW, int compH, int playhead, int fps, float alpha)
+    {
+        CatalystComposition child = this.activeProject == null ? null : this.activeProject.getComposition(layer.resourcePath);
+
+        if (child == null || this.nestDepth >= 6)
+        {
+            return;
+        }
+
+        MatrixStack stack = context.batcher.getContext().getMatrices();
+        float previous = this.nestAlpha;
+
+        stack.push();
+        stack.translate(lx, ly, 0);
+        stack.scale(layerW / Math.max(1, compW), layerH / Math.max(1, compH), 1F);
+        this.nestDepth += 1;
+        this.nestAlpha = alpha;
+
+        try
+        {
+            this.renderCompositionLayers(context, child, this.nestedFrame(layer, child, playhead, fps), compW, compH, fps);
+        }
+        finally
+        {
+            this.nestAlpha = previous;
+            this.nestDepth -= 1;
+            stack.pop();
+        }
+    }
+
+    /** Whether a timeline has a sound in it: a sound clip, a video with its own, or a nested timeline with one */
+    private boolean timelineHasSound(CatalystComposition timeline, int depth)
+    {
+        for (CatalystLayer layer : timeline.layers)
+        {
+            if (layer.layerType == CatalystLayer.LayerType.AUDIO || (layer.layerType == CatalystLayer.LayerType.VIDEO && !layer.muteOwnAudio) || layer.layerType == CatalystLayer.LayerType.NESTED_AUDIO)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private CatalystLayer nestedClip(CatalystComposition child, CatalystLayer.LayerType type, int start, int duration)
+    {
+        CatalystLayer clip = new CatalystLayer();
+
+        clip.layerType = type;
+        clip.name = child.name;
+        clip.resourcePath = child.id;
+        clip.color = type.defaultColor();
+        clip.startFrame = Math.max(0, start);
+        clip.duration = Math.max(1, duration);
+        clip.mediaDuration = clip.duration;
+
+        return clip;
+    }
+
+    /** The timeline's clip on a video track, and its sound, if it has any, linked to it on an audio track */
+    public void addNestedClip(CatalystComposition child, int start)
+    {
+        CatalystComposition comp = this.getActiveComposition();
+
+        if (comp == null || child == null)
+        {
+            return;
+        }
+
+        if (!this.activeProject.canNest(comp, child))
+        {
+            this.getContext().notifyError(UIKeys.CATALYST_NLE_NEST_LOOP);
+
+            return;
+        }
+
+        this.pushUndo();
+        child.refreshDuration();
+
+        int hostFps = comp.fps > 0 ? comp.fps : 60;
+        int childFps = child.fps > 0 ? child.fps : hostFps;
+        int frames = Math.max(1, Math.round(child.duration * (float) hostFps / childFps));
+        CatalystLayer video = this.nestedClip(child, CatalystLayer.LayerType.NESTED, start, frames);
+
+        video.track = this.catalystTimeline.freeTrack(comp, false, video.startFrame, video.duration);
+        comp.layers.add(video);
+
+        if (this.timelineHasSound(child, 0))
+        {
+            CatalystLayer sound = this.nestedClip(child, CatalystLayer.LayerType.NESTED_AUDIO, start, frames);
+
+            sound.linkId = video.linkId = java.util.UUID.randomUUID().toString().substring(0, 8);
+            sound.track = this.catalystTimeline.freeTrack(comp, true, sound.startFrame, sound.duration);
+            comp.layers.add(sound);
+        }
+
+        this.catalystTimeline.setSelected(video);
+        this.ensureDuration();
+        this.saveAndRefresh();
+        this.updateInspectorForm();
+    }
+
+    /** The selected clips move into a new timeline of their own, and one nested clip takes their place */
+    public void nestSelection(java.util.Set<CatalystLayer> selected)
+    {
+        CatalystComposition comp = this.getActiveComposition();
+
+        if (comp == null || selected.isEmpty())
+        {
+            return;
+        }
+
+        this.pushUndo();
+
+        int first = Integer.MAX_VALUE;
+        int last = 0;
+        List<CatalystLayer> moved = new ArrayList<>();
+
+        for (CatalystLayer layer : selected)
+        {
+            if (comp.layers.contains(layer))
+            {
+                moved.add(layer);
+                first = Math.min(first, layer.startFrame);
+                last = Math.max(last, layer.startFrame + layer.duration);
+            }
+        }
+
+        if (moved.isEmpty())
+        {
+            return;
+        }
+
+        CatalystComposition inner = this.activeProject.newComposition(UIKeys.CATALYST_NLE_NEST_NAME.get() + " " + this.activeProject.compositions.size());
+
+        inner.width = comp.width;
+        inner.height = comp.height;
+        inner.fps = comp.fps;
+        inner.ensureTracks();
+
+        while (inner.videoTracks.size() < comp.videoTracks.size()) inner.videoTracks.add(new mchorse.bbs_mod.catalyst.CatalystTrack());
+        while (inner.audioTracks.size() < comp.audioTracks.size()) inner.audioTracks.add(new mchorse.bbs_mod.catalyst.CatalystTrack());
+
+        for (CatalystLayer layer : moved)
+        {
+            comp.layers.remove(layer);
+            layer.startFrame -= first;
+            layer.moveKeyframes(-first);
+            layer.linkId = "";
+            inner.layers.add(layer);
+        }
+
+        for (CatalystLayer layer : moved)
+        {
+            cleanupLayerResources(layer);
+        }
+
+        inner.refreshDuration();
+
+        CatalystLayer video = this.nestedClip(inner, CatalystLayer.LayerType.NESTED, first, last - first);
+
+        video.track = this.catalystTimeline.freeTrack(comp, false, video.startFrame, video.duration);
+        comp.layers.add(video);
+
+        if (this.timelineHasSound(inner, 0))
+        {
+            CatalystLayer sound = this.nestedClip(inner, CatalystLayer.LayerType.NESTED_AUDIO, first, last - first);
+
+            sound.linkId = video.linkId = java.util.UUID.randomUUID().toString().substring(0, 8);
+            sound.track = this.catalystTimeline.freeTrack(comp, true, sound.startFrame, sound.duration);
+            comp.layers.add(sound);
+        }
+
+        this.catalystTimeline.setSelected(video);
+        this.ensureDuration();
+        this.library.refresh();
+        this.saveAndRefresh();
+        this.updateInspectorForm();
+    }
+
+    /** A double click on a nested clip: the timeline inside it opens for editing */
+    public void openNested(CatalystLayer layer)
+    {
+        if (this.activeProject == null)
+        {
+            return;
+        }
+
+        CatalystComposition child = this.activeProject.getComposition(layer.resourcePath);
+        int index = this.activeProject.compositions.indexOf(child);
+
+        if (child == null || index < 0)
+        {
+            return;
+        }
+
+        this.stopAllAudio();
+        this.activeProject.activeCompositionIndex = index;
+        this.currentFrame = Math.max(0, Math.min(child.playhead, Math.max(0, child.duration - 1)));
+        this.catalystTimeline.clearSelection();
+        this.updateTitleLabel();
+        this.updateInspectorForm();
+    }
+
+    /**
+     * The sounds inside a nested clip as stand-in clips placed on the host timeline: each keeps one
+     * stand-in between frames, so its player lives on. {@code shift} turns a frame of the nested timeline into
+     * the host's, {@code lo} and {@code hi} are what the clip covers, {@code onlyAt} (-1 for none) the frame wanted.
+     */
+    private void collectNestedAudio(CatalystLayer nested, int shift, int lo, int hi, int depth, String path, float gain, int onlyAt, List<CatalystLayer> out)
+    {
+        CatalystComposition inner = this.activeProject == null ? null : this.activeProject.getComposition(nested.resourcePath);
+
+        if (inner == null || depth > 5)
+        {
+            return;
+        }
+
+        for (CatalystLayer l : inner.layers)
+        {
+            boolean deeper = l.layerType == CatalystLayer.LayerType.NESTED_AUDIO;
+            boolean sound = l.layerType == CatalystLayer.LayerType.AUDIO || (l.layerType == CatalystLayer.LayerType.VIDEO && !l.muteOwnAudio);
+
+            if ((!deeper && !sound) || l.muted || this.isTrackSilent(inner, l))
+            {
+                continue;
+            }
+
+            int start = l.startFrame + shift;
+            int from = Math.max(start, lo);
+            int to = Math.min(start + l.duration, hi);
+
+            if (to <= from || (onlyAt >= 0 && (onlyAt < from || onlyAt >= to)))
+            {
+                continue;
+            }
+
+            if (deeper)
+            {
+                this.collectNestedAudio(l, shift + l.startFrame - l.mediaOffset, from, to, depth + 1, path + "/" + l.id, gain * l.volume, onlyAt, out);
+
+                continue;
+            }
+
+            if (l.resourcePath == null || l.resourcePath.trim().isEmpty() || CatalystMedia.isOffline(l))
+            {
+                continue;
+            }
+
+            CatalystLayer stand = this.nestedAudioCache.computeIfAbsent(path + "/" + l.id, (key) ->
+            {
+                CatalystLayer copy = l.duplicate();
+
+                copy.layerType = CatalystLayer.LayerType.AUDIO;
+                copy.linkId = "";
+
+                return copy;
+            });
+
+            stand.track = -1;
+            stand.solo = true;
+            stand.muted = false;
+            stand.opacity = 100;
+            stand.animOpacity = false;
+            stand.resourcePath = l.resourcePath;
+            stand.startFrame = from;
+            stand.duration = to - from;
+            stand.mediaOffset = l.mediaOffset + (from - start);
+            stand.audioOffset = l.audioOffset;
+            stand.gainDb = 0F;
+            stand.volume = l.volume * l.gainFactor() * gain;
+            stand.pan = l.pan;
+
+            /* Its keys count in the nested timeline's frames: they ride along to the host's */
+            int placed = this.nestedAudioShift.getOrDefault(stand, 0);
+
+            if (placed != shift)
+            {
+                stand.moveKeyframes(shift - placed);
+                this.nestedAudioShift.put(stand, shift);
+            }
+
+            out.add(stand);
+        }
+    }
+
+    /** What the export mixes: the timeline's clips, and the sounds inside its nested clips as stand-ins */
+    private List<CatalystLayer> exportAudioSources(CatalystComposition comp)
+    {
+        List<CatalystLayer> list = new ArrayList<>(comp.layers);
+
+        for (CatalystLayer layer : comp.layers)
+        {
+            if (layer.layerType == CatalystLayer.LayerType.NESTED_AUDIO && !layer.muted && !this.isTrackSilent(comp, layer))
+            {
+                this.collectNestedAudio(layer, layer.startFrame - layer.mediaOffset, layer.startFrame, layer.startFrame + layer.duration, 0, layer.id, layer.volume * layer.gainFactor(), -1, list);
+            }
+        }
+
+        return list;
+    }
+
+    /* ── Loading and pre-buffering ── */
+
+    /**
+     * A video clip about to start under the playhead, within a second and a half, is asked for ahead of
+     * time: its player begins decoding at its first frame, so the cut finds the picture waiting
+     * instead of holding the last one while the decoder starts.
+     */
+    private void prewarmUpcoming(CatalystComposition comp, int fps)
+    {
+        int window = Math.max(1, Math.round(fps * 1.5F));
+        int compW = comp.width > 0 ? comp.width : 1920;
+        int compH = comp.height > 0 ? comp.height : 1080;
+
+        /* The players of the clips that are playing now: a shared one is not to be sent ahead to another place */
+        java.util.Set<Object> playing = new java.util.HashSet<>();
+
+        for (CatalystLayer other : comp.layers)
+        {
+            if (other.layerType == CatalystLayer.LayerType.VIDEO && this.currentFrame >= other.startFrame && this.currentFrame < other.startFrame + other.duration)
+            {
+                playing.add(this.videoOwner(other));
+            }
+        }
+
+        for (CatalystLayer layer : comp.layers)
+        {
+            if (layer.layerType != CatalystLayer.LayerType.VIDEO || layer.startFrame <= this.currentFrame || layer.startFrame > this.currentFrame + window
+                || layer.resourcePath == null || layer.resourcePath.trim().isEmpty()
+                || CatalystMedia.isOffline(layer) || this.isTrackHidden(comp, layer))
+            {
+                continue;
+            }
+
+            Object owner = this.videoOwner(layer);
+
+            if (playing.contains(owner))
+            {
+                continue;
+            }
+
+            try
+            {
+                VideoPlayer player = BBSModClient.getVideos().getPlayer(owner, Link.create(layer.resourcePath.trim()));
+
+                if (player != null)
+                {
+                    player.setMaxSize(compW, compH);
+                    player.prewarm((float) (layer.mediaOffset + layer.audioOffset) / fps);
+                }
+            }
+            catch (Exception ignored)
+            {}
+        }
+    }
+
+    /** Whether a clip's picture or sound is still being made ready, for the throbber on its edge in the timeline */
+    private boolean isClipLoading(CatalystLayer layer)
+    {
+        if (layer.resourcePath == null || layer.resourcePath.trim().isEmpty())
+        {
+            return false;
+        }
+
+        if (layer.layerType == CatalystLayer.LayerType.VIDEO)
+        {
+            CatalystComposition comp = this.getActiveComposition();
+            int fps = comp != null && comp.fps > 0 ? comp.fps : 60;
+            boolean near = this.currentFrame >= layer.startFrame - Math.round(fps * 1.5F) && this.currentFrame < layer.startFrame + layer.duration;
+            VideoPlayer player = near ? BBSModClient.getVideos().peekPlayer(this.videoOwner(layer)) : null;
+
+            return player != null && !player.isInvalid() && !player.isWarm();
+        }
+
+        if (layer.layerType == CatalystLayer.LayerType.AUDIO)
+        {
+            return layer.isWaveformLoading || BBSModClient.getSounds().isLoading(Link.create(layer.resourcePath.trim()));
+        }
+
+        return false;
+    }
+
+    /** Whether a video clip has a frame on hand, for the render strip over the ruler */
+    private boolean isClipBuffered(CatalystLayer layer)
+    {
+        VideoPlayer player = BBSModClient.getVideos().peekPlayer(this.videoOwner(layer));
+
+        return player != null && !player.isInvalid() && player.isWarm();
+    }
+
+    /** What the monitor is waiting for right now: the picture of a video clip, the sound of a clip */
+    private List<String> loadingNow(CatalystComposition comp)
+    {
+        List<String> now = new ArrayList<>();
+        boolean video = false;
+        boolean audio = false;
+
+        if (comp == null)
+        {
+            return now;
+        }
+
+        for (CatalystLayer layer : comp.layers)
+        {
+            if (this.currentFrame < layer.startFrame || this.currentFrame >= layer.startFrame + layer.duration
+                || layer.resourcePath == null || layer.resourcePath.trim().isEmpty() || CatalystMedia.isOffline(layer))
+            {
+                continue;
+            }
+
+            if (layer.layerType == CatalystLayer.LayerType.VIDEO)
+            {
+                VideoPlayer player = BBSModClient.getVideos().peekPlayer(this.videoOwner(layer));
+
+                video |= player != null && !player.isInvalid() && !player.isWarm();
+            }
+
+            if ((layer.layerType == CatalystLayer.LayerType.VIDEO && !layer.muteOwnAudio) || layer.layerType == CatalystLayer.LayerType.AUDIO)
+            {
+                audio |= BBSModClient.getSounds().isLoading(Link.create(layer.resourcePath.trim()));
+            }
+        }
+
+        if (video)
+        {
+            now.add(UIKeys.CATALYST_NLE_VIDEO_LOADING.get());
+        }
+
+        if (audio)
+        {
+            now.add(UIKeys.CATALYST_NLE_AUDIO_LOADING.get());
+        }
+
+        return now;
+    }
+
+    /** A slim badge in the corner of the monitor for each thing it is waiting on, with a light running along its foot */
+    private void renderLoadingBadge(UIContext context, Area area, CatalystComposition comp)
+    {
+        List<String> now = this.loadingNow(comp);
+
+        if (now.isEmpty())
+        {
+            return;
+        }
+
+        FontRenderer font = context.batcher.getFont();
+        double phase = (System.currentTimeMillis() % 1000L) / 1000D;
+        int y = area.y + 8;
+
+        for (String text : now)
+        {
+            int w = font.getWidth(text) + 26;
+            int x = area.ex() - w - 8;
+            int segment = Math.max(12, w / 3);
+            int from = x + 4 + (int) Math.round(phase * (w - 8 + segment)) - segment;
+
+            RoundedDraw.fill(context.batcher, x, y, x + w, y + 18, 5, RoundedDraw.ALL, 0xd911161f);
+            RoundedDraw.outline(context.batcher, x, y, x + w, y + 18, 5, RoundedDraw.ALL, 0x40ffffff);
+            context.batcher.box(x + 4, y + 15, x + w - 4, y + 17, 0x40ffffff);
+            context.batcher.box(Math.max(x + 4, from), y + 15, Math.min(x + w - 4, from + segment), y + 17, 0xf0bfe0ff);
+            context.batcher.text(text, x + 13, y + 4, 0xffe8edf5, false);
+
+            y += 22;
+        }
+    }
+
+    /** Scrubbing (manual timeline slide): moves the playhead and seeks the audio; the video follows when the monitor draws */
     public void seekToFrame(int frame)
     {
         CatalystComposition comp = this.activeProject != null ? this.activeProject.getActiveComposition() : null;
@@ -929,36 +1855,9 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
 
         int fps = comp.fps > 0 ? comp.fps : 60;
 
-        /* Seek all video layers immediately for instant scrubbing preview */
-        for (CatalystLayer layer : comp.layers)
-        {
-            if (layer.visible && layer.layerType == CatalystLayer.LayerType.VIDEO
-                && layer.resourcePath != null && !layer.resourcePath.trim().isEmpty()
-                && this.currentFrame >= layer.startFrame && this.currentFrame < layer.startFrame + layer.duration)
-            {
-                try
-                {
-                    Link link = Link.create(layer.resourcePath.trim());
-                    VideoPlayer player = BBSModClient.getVideos().getPlayer(layer, link);
-                    if (player != null)
-                    {
-                        int relativeFrame = (this.currentFrame - layer.startFrame) + layer.mediaOffset;
-                        float relSec = (float) (relativeFrame + layer.audioOffset) / fps;
-                        Texture tex = player.seekFrame(relSec);
-                        if (tex != null && tex.isValid())
-                        {
-                            layer.cachedVideoTexture = tex;
-                            float playerFps = player.getFps() > 0 ? player.getFps() : 30F;
-                            layer.lastVideoFrameIndex = Math.max(0, (int) (relSec * playerFps));
-                        }
-                    }
-                }
-                catch (Exception e)
-                {
-                    BBSMod.LOGGER.warn("Error seeking video layer during timeline scrub", e);
-                }
-            }
-        }
+        /* The video clips need nothing here: the monitor asks each player for the playhead's frame
+         * as it draws, and the player's prefetch worker jumps there off the render thread. Decoding
+         * here, once per mouse move and for every clip, was what made scrubbing stall. */
 
         /* Seek all active audio layers */
         this.syncAudioPlayback(comp, true);
@@ -1025,7 +1924,7 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
                 int totalSrcSamples = wave.data.length / (wave.numChannels * 2);
 
                 float effOpacity = layer.computeEffective(frame)[5];
-                float vol = layer.computeEffectiveVolume(frame) * (effOpacity / 100.0F);
+                float vol = layer.computeVolumeWithGain(frame) * (effOpacity / 100.0F) * this.masterVolume;
                 float pan = Math.max(-1.0F, Math.min(1.0F, layer.computeEffectivePan(frame)));
                 float panL = pan <= 0.0F ? 1.0F : (1.0F - pan);
                 float panR = pan >= 0.0F ? 1.0F : (1.0F + pan);
@@ -1147,51 +2046,57 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
             Area a = this.topBar.area;
             context.batcher.box(a.x, a.y, a.ex(), a.ey(), BBSSettings.chromeSurface());
             context.batcher.box(a.x, a.ey() - 1, a.ex(), a.ey(), BBSSettings.dividerColor());
+
+            /* The name of the studio, in the middle of the bar */
+            FontRenderer titleFont = context.batcher.getFont();
+            String title = "Catalyst Studio";
+
+            context.batcher.text(title, a.mx() - titleFont.getWidth(title) / 2, a.my() - titleFont.getHeight() / 2, 0xffe8edf5, false);
         }));
 
         /* Tab buttons */
         this.tabProjects = new UICatalystTab(Icons.FOLDER, UIKeys.CATALYST_TAB_PROJECTS,
             () -> this.currentTab == CatalystTab.PROJECTS,
             (b) -> this.setTab(CatalystTab.PROJECTS));
-        this.tabProjects.relative(this.topBar).x(4).y(2).w(80).h(20);
+        FontRenderer tabFont = mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D.getDefaultTextRenderer();
+        int projectsW = 6 + 18 + tabFont.getWidth(UIKeys.CATALYST_TAB_PROJECTS.get()) + 10;
+        int editorW = 6 + 18 + tabFont.getWidth(UIKeys.CATALYST_TAB_EDITOR.get()) + 10;
+        int pathX = 4 + projectsW + 4 + editorW + 14;
+
+        this.tabProjects.relative(this.topBar).x(4).y(2).w(projectsW).h(20);
 
         this.tabEditor = new UICatalystTab(Icons.FILM, UIKeys.CATALYST_TAB_EDITOR,
             () -> this.currentTab == CatalystTab.EDITOR,
             (b) -> this.setTab(CatalystTab.EDITOR));
-        this.tabEditor.relative(this.topBar).x(88).y(2).w(75).h(20);
+        this.tabEditor.relative(this.topBar).x(4 + projectsW + 4).y(2).w(editorW).h(20);
 
-        this.activeProjectLabel = new UILabel(IKey.raw(""));
+        /* The path of the project and its timeline, cut to the room between the tabs and the studio's name */
+        this.activeProjectLabel = new UILabel(IKey.raw(""))
+        {
+            @Override
+            public void render(UIContext context)
+            {
+                this.label = IKey.raw(context.batcher.getFont().limitToWidth(UICatalystPanel.this.projectPath, Math.max(0, this.area.w)));
+                super.render(context);
+            }
+        };
         this.activeProjectLabel.labelAnchor(0F, 0.5F);
-        this.activeProjectLabel.relative(this.topBar).x(170).y(0).w(450).h(24);
+        this.activeProjectLabel.relative(this.topBar).x(pathX).y(0).w(0.5F, -(pathX + 76)).h(24);
 
         /* Action buttons — editor-only group */
         this.editorActions = new UIElement();
-        this.editorActions.relative(this.topBar).x(1F, -118).y(2).w(114).h(20);
-
-        this.mediaPoolToggleBtn = new UIIcon(Icons.FOLDER, (b) -> this.toggleMediaPool());
-        this.mediaPoolToggleBtn.tooltip(IKey.raw("Toggle Media Pool (B)"));
-        this.mediaPoolToggleBtn.highlight(() -> this.showMediaPool, Direction.BOTTOM);
-
-        this.playPauseButton = new UIIcon(() -> this.isPlaying ? Icons.PAUSE : Icons.PLAY, (b) -> this.togglePlayback());
-        this.playPauseButton.tooltip(IKey.raw("Play / Pause (Space)"));
-
-        this.settingsButton = new UIIcon(Icons.GEAR, (b) -> this.openCompositionSettingsModal());
-        this.settingsButton.tooltip(IKey.raw("Composition Settings"));
+        this.editorActions.relative(this.topBar).x(1F, -50).y(2).w(46).h(20);
 
         this.renderExportButton = new UIIcon(Icons.VIDEO_CAMERA, (b) -> this.openExportModal());
-        this.renderExportButton.tooltip(IKey.raw("Render / Export Video"));
+        this.renderExportButton.tooltip(UIKeys.CATALYST_NLE_EXPORT_VIDEO);
 
         this.fullscreenButton = new UIIcon(Icons.FULLSCREEN, (b) -> this.toggleFullscreen());
-        this.fullscreenButton.tooltip(IKey.raw("Maximize Viewport"));
+        this.fullscreenButton.tooltip(UIKeys.CATALYST_NLE_FULLSCREEN);
 
-        this.mediaPoolToggleBtn.relative(this.editorActions).x(0).w(20).h(20);
-        this.playPauseButton.relative(this.editorActions).x(22).w(20).h(20);
-        this.settingsButton.relative(this.editorActions).x(44).w(20).h(20);
-        this.renderExportButton.relative(this.editorActions).x(66).w(20).h(20);
-        this.fullscreenButton.relative(this.editorActions).x(88).w(20).h(20);
+        this.renderExportButton.relative(this.editorActions).x(0).w(20).h(20);
+        this.fullscreenButton.relative(this.editorActions).x(22).w(20).h(20);
 
-        this.editorActions.add(this.mediaPoolToggleBtn, this.playPauseButton,
-                               this.settingsButton, this.renderExportButton, this.fullscreenButton);
+        this.editorActions.add(this.renderExportButton, this.fullscreenButton);
 
         this.topBar.add(this.tabProjects, this.tabEditor, this.activeProjectLabel, this.editorActions);
     }
@@ -1207,99 +2112,79 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
         /* When starting playback, tickPlayback() will call ensureAudioPlaying() on the next render frame */
     }
 
-    public void clampSplitterDimensions()
-    {
-        if (this.area.w <= 0 || this.area.h <= 0) return;
-
-        int minTimelineW = Math.min(200, Math.max(100, this.area.w / 3));
-        int availableForPanels = this.area.w - minTimelineW;
-        if (availableForPanels > 0 && (leftPanelWidth + rightPanelWidth) > availableForPanels)
-        {
-            float ratio = (float) leftPanelWidth / (float) (leftPanelWidth + rightPanelWidth);
-            leftPanelWidth = Math.max(140, Math.round(availableForPanels * ratio));
-            rightPanelWidth = Math.max(140, availableForPanels - leftPanelWidth);
-        }
-
-        if (this.area.h > 0)
-        {
-            float minRatio = Math.min(0.7F, 146.0F / (float) this.area.h);
-            float maxRatio = Math.max(minRatio, (this.area.h - 120.0F) / (float) this.area.h);
-            horizontalSplitRatio = Math.max(minRatio, Math.min(maxRatio, horizontalSplitRatio));
-        }
-    }
-
+    /**
+     * The edit page: the dock holds the library, the monitor, the inspector and the timeline. Here it is
+     * shown or hidden as a whole, and the monitor's picture is lifted out of it for fullscreen and for
+     * an export, where it fills the page.
+     */
     public void updateEditorLayout()
     {
         boolean isEditor = (this.currentTab == CatalystTab.EDITOR && this.activeProject != null);
-        if (!isEditor || this.previewArea == null || this.bottomArea == null || isUpdatingLayout)
+
+        if (!isEditor || this.editor == null || this.isUpdatingLayout)
         {
             return;
         }
 
-        isUpdatingLayout = true;
+        this.isUpdatingLayout = true;
+
         try
         {
-            this.clampSplitterDimensions();
+            boolean full = this.isFullscreen;
 
-            if (this.isFullscreen)
+            this.layoutPreview(full || this.exportLayout);
+            this.editor.setVisible(!full && !this.exportLayout);
+
+            if (!this.exportLayout)
             {
-                this.previewArea.relative(this).xy(0, 24).w(1F).h(1F, -24);
-                if (this.compTabStrip != null) this.compTabStrip.setVisible(false);
-                if (this.bottomArea != null) this.bottomArea.setVisible(false);
-                if (this.mediaPoolPanel != null) this.mediaPoolPanel.setVisible(false);
-                this.resize();
-                return;
+                this.topBar.setVisible(!full);
             }
 
-            if (this.compTabStrip != null) this.compTabStrip.setVisible(true);
-            if (this.bottomArea != null) this.bottomArea.setVisible(true);
-
-            /* 1. Horizontal Split (Preview & CompTabs vs Bottom Area) */
-            if (this.compTabStrip != null)
+            if (full)
             {
-                this.compTabStrip.relative(this).y(horizontalSplitRatio, -22).w(1F).h(22);
-            }
-            this.bottomArea.relative(this).y(horizontalSplitRatio).w(1F).h(1.0F - horizontalSplitRatio);
-
-            /* 2. Top Area (Media Pool & Preview Area) */
-            if (this.mediaPoolPanel != null)
-            {
-                if (this.showMediaPool)
-                {
-                    this.mediaPoolPanel.setVisible(true);
-                    this.mediaPoolPanel.relative(this).x(0).y(24).w(leftPanelWidth).h(horizontalSplitRatio, -46);
-                    this.previewArea.relative(this).x(leftPanelWidth).y(24).w(1F, -leftPanelWidth).h(horizontalSplitRatio, -46);
-                }
-                else
-                {
-                    this.mediaPoolPanel.setVisible(false);
-                    this.previewArea.relative(this).x(0).y(24).w(1F).h(horizontalSplitRatio, -46);
-                }
+                /* The monitor alone, edge to edge; its controls are the bar that comes with the mouse */
+                this.fullscreenBar.relative(this).x(0.5F).y(1F, -52).w(0.7F).h(42).anchorX(0.5F);
             }
             else
             {
-                this.previewArea.relative(this).x(0).y(24).w(1F).h(horizontalSplitRatio, -46);
-            }
-
-            /* 3. Bottom Area (Layers List, Timeline, Inspector) */
-            if (this.layersContainer != null)
-            {
-                this.layersContainer.relative(this.bottomArea).x(0).w(leftPanelWidth).h(1F);
-            }
-            if (this.inspectorContainer != null)
-            {
-                this.inspectorContainer.relative(this.bottomArea).x(1F, -rightPanelWidth).w(rightPanelWidth).h(1F);
-            }
-            if (this.catalystTimeline != null)
-            {
-                this.catalystTimeline.relative(this.bottomArea).x(leftPanelWidth).w(1F, -(leftPanelWidth + rightPanelWidth)).h(1F);
+                this.fullscreenBar.setVisible(false);
             }
 
             this.resize();
         }
         finally
         {
-            isUpdatingLayout = false;
+            this.isUpdatingLayout = false;
+        }
+    }
+
+    /**
+     * The monitor's picture sits in the monitor panel; lifted out it is a child of the page itself,
+     * under the fullscreen bar, and fills it.
+     */
+    private void layoutPreview(boolean lifted)
+    {
+        UIElement parent = this.previewArea.getParent();
+
+        if (lifted)
+        {
+            if (parent != this)
+            {
+                this.previewArea.removeFromParent();
+                this.addBefore(this.fullscreenBar, this.previewArea);
+            }
+
+            this.previewArea.relative(this).xy(0, 0).w(1F).h(1F);
+        }
+        else
+        {
+            if (parent != this.monitorPanel)
+            {
+                this.previewArea.removeFromParent();
+                this.monitorPanel.add(this.previewArea);
+            }
+
+            this.previewArea.relative(this.monitorPanel).x(0).y(MONITOR_BAR_H).w(1F).h(1F, -MONITOR_BAR_H - TRANSPORT_H);
         }
     }
 
@@ -1310,14 +2195,111 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
 
     public void toggleMediaPool()
     {
-        this.showMediaPool = !this.showMediaPool;
-        this.updateEditorLayout();
+        this.catalystDock.togglePanel(CatalystLayouts.MEDIA);
     }
 
     public void toggleFullscreen()
     {
         this.isFullscreen = !this.isFullscreen;
+        this.lastMouseMoveAt = System.currentTimeMillis();
+
+        /* The guides are off while the monitor is fullscreen, and come back as they were */
+        if (this.isFullscreen)
+        {
+            this.safeAreasBeforeFullscreen = showSafeAreas;
+            showSafeAreas = false;
+        }
+        else
+        {
+            showSafeAreas = this.safeAreasBeforeFullscreen;
+        }
+
         this.updateEditorLayout();
+    }
+
+    /** Mute: the master volume goes to nothing and comes back to what it was */
+    public void toggleMute()
+    {
+        if (this.masterVolume > 0.0001F)
+        {
+            this.volumeBeforeMute = this.masterVolume;
+            this.masterVolume = 0F;
+        }
+        else
+        {
+            this.masterVolume = this.volumeBeforeMute > 0.0001F ? this.volumeBeforeMute : 1F;
+        }
+    }
+
+    /**
+     * The fullscreen player's bar: a scrubber across it, play, loop, mute and the volume, the
+     * timecode and the way out. It is only there while the monitor is fullscreen and the mouse has
+     * moved in the last ten seconds.
+     */
+    private void setupFullscreenBar()
+    {
+        this.fullscreenBar = new UIElement()
+        {
+            @Override
+            protected boolean subMouseClicked(UIContext context)
+            {
+                return this.area.isInside(context);
+            }
+
+            @Override
+            public void render(UIContext context)
+            {
+                Area a = this.area;
+                CatalystComposition comp = UICatalystPanel.this.getActiveComposition();
+                int fps = comp != null && comp.fps > 0 ? comp.fps : 60;
+                FontRenderer font = context.batcher.getFont();
+                String code = UINleTimeline.timecode(UICatalystPanel.this.currentFrame, fps) + " / " + UINleTimeline.timecode(UICatalystPanel.this.timelineEnd(), fps);
+
+                mchorse.bbs_mod.ui.framework.elements.windows.GlassChrome.shadow(context, a.x, a.y, a.ex(), a.ey(), 8, 0.45F);
+                mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw.fill(context.batcher, a.x, a.y, a.ex(), a.ey(), 6, mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw.ALL, 0xd911161f);
+                mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw.outline(context.batcher, a.x, a.y, a.ex(), a.ey(), 6, mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw.ALL, 0x40ffffff);
+                context.batcher.text(code, a.mx() - font.getWidth(code) / 2, a.y + 24, 0xffe8edf5, false);
+
+                super.render(context);
+            }
+        };
+
+        UINleToolbar.Slider scrub = new UINleToolbar.Slider(
+            () -> this.currentFrame / (double) Math.max(1, this.timelineEnd()),
+            (v) -> this.seekAndStop((int) Math.round(v * this.timelineEnd())));
+        scrub.relative(this.fullscreenBar).x(12).y(5).w(1F, -24).h(12);
+
+        UIElement left = new UIElement();
+        left.relative(this.fullscreenBar).x(10).y(20).w(4 * 24 + 70).h(18);
+
+        this.transportButton(left, 0, () -> this.isPlaying ? Icons.PAUSE : Icons.PLAY, UIKeys.CATALYST_NLE_PLAY, this::togglePlayback, () -> this.isPlaying);
+        this.transportButton(left, 1, () -> Icons.REFRESH, UIKeys.CATALYST_NLE_LOOP, () -> this.loopPlayback = !this.loopPlayback, () -> this.loopPlayback);
+        this.transportButton(left, 2, () -> Icons.SOUND, UIKeys.CATALYST_NLE_MUTE, this::toggleMute, () -> this.masterVolume <= 0.0001F);
+
+        UINleToolbar.Slider volume = new UINleToolbar.Slider(() -> this.masterVolume / 2D, (v) -> this.masterVolume = (float) (v * 2D));
+        volume.tooltip(UIKeys.CATALYST_NLE_MASTER_VOLUME);
+        volume.relative(left).x(3 * 24 + 4).y(3).w(64).h(12);
+        left.add(volume);
+
+        UIElement right = new UIElement();
+        right.relative(this.fullscreenBar).x(1F, -34).y(20).w(24).h(18);
+        this.transportButton(right, 0, () -> Icons.MINIMIZE, UIKeys.CATALYST_NLE_EXIT_FULLSCREEN, this::toggleFullscreen, () -> false);
+
+        /* The preview quality, which is not on the picture while it is fullscreen */
+        UIButton quality = new UIButton(IKey.EMPTY, (b) -> this.cyclePreviewResolution())
+        {
+            @Override
+            protected void renderSkin(UIContext context)
+            {
+                this.label = IKey.raw("[" + previewResolution.title + "]");
+                super.renderSkin(context);
+            }
+        };
+        quality.tooltip(UIKeys.CATALYST_NLE_PREVIEW_QUALITY);
+        quality.relative(this.fullscreenBar).x(1F, -110).y(20).w(68).h(18);
+
+        this.fullscreenBar.add(scrub, left, right, quality);
+        this.fullscreenBar.setVisible(false);
     }
 
     public void setPreviewResolution(PreviewResolution res)
@@ -1610,8 +2592,542 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
         this.setupMediaPoolPanel();
         this.setupPreviewArea();
         this.setupCompTabStrip();
-        this.setupBottomArea();
-        this.updateEditorLayout();
+
+        this.library = new UINleLibrary(new UINleLibrary.Host()
+        {
+            @Override
+            public void addFilm(String filmId)
+            {
+                UICatalystPanel.this.addFilmClip(filmId, UICatalystPanel.this.currentFrame);
+            }
+
+            @Override
+            public void addEffectToSelection(mchorse.bbs_mod.camera.clips.fx.PostEffect effect)
+            {
+                if (UICatalystPanel.this.getSelectedLayer() == null)
+                {
+                    UICatalystPanel.this.getContext().notifyError(UIKeys.CATALYST_NLE_NEED_CLIP);
+
+                    return;
+                }
+
+                UICatalystPanel.this.inspector.addEffect(effect);
+            }
+
+            @Override
+            public void addAdjustmentClip()
+            {
+                UICatalystPanel.this.catalystTimeline.addClip(CatalystLayer.LayerType.ADJUSTMENT, UICatalystPanel.this.currentFrame, 1);
+            }
+
+            @Override
+            public void setTransition(String transition)
+            {
+                CatalystLayer layer = UICatalystPanel.this.getSelectedLayer();
+
+                if (layer == null)
+                {
+                    UICatalystPanel.this.getContext().notifyError(UIKeys.CATALYST_NLE_NEED_CLIP);
+
+                    return;
+                }
+
+                UICatalystPanel.this.pushUndo();
+                layer.transitionIn = transition;
+                UICatalystPanel.this.markDirty();
+            }
+
+            @Override
+            public void addTitle(boolean lowerThird)
+            {
+                CatalystLayer layer = UICatalystPanel.this.catalystTimeline.addClip(CatalystLayer.LayerType.TEXT, UICatalystPanel.this.currentFrame, 1);
+                CatalystComposition comp = UICatalystPanel.this.getActiveComposition();
+
+                if (layer != null && lowerThird && comp != null)
+                {
+                    layer.name = UIKeys.CATALYST_NLE_TITLE_LOWER_THIRD.get();
+                    layer.resourcePath = UIKeys.CATALYST_NLE_TITLE_LOWER_THIRD.get();
+                    layer.fontSize = 28;
+                    layer.posY = comp.height * 0.32F;
+                    layer.scaleY = 0.2F;
+                }
+            }
+
+            @Override
+            public java.util.List<CatalystComposition> timelines()
+            {
+                return UICatalystPanel.this.activeProject == null ? new ArrayList<>() : UICatalystPanel.this.activeProject.compositions;
+            }
+
+            @Override
+            public void dragTimeline(CatalystComposition timeline)
+            {
+                CatalystMediaAsset asset = new CatalystMediaAsset();
+
+                asset.type = CatalystMediaAsset.MediaType.TIMELINE;
+                asset.path = timeline.id;
+                asset.name = timeline.name;
+                UICatalystPanel.this.draggedAsset = asset;
+            }
+        }, this.mediaPoolPanel);
+
+        this.catalystTimeline = new UINleTimeline(this::getActiveComposition, () -> this.currentFrame, (frame) ->
+        {
+            this.isPlaying = false;
+            this.lastTickMs = 0;
+            this.stopAllAudio();
+            this.seekToFrame(frame);
+        });
+        this.catalystTimeline.onPreModify = this::pushUndo;
+        this.catalystTimeline.onModified = () ->
+        {
+            this.ensureDuration();
+            this.saveAndRefresh();
+            this.updateInspectorForm();
+        };
+        this.catalystTimeline.onSelectionChanged = this::updateInspectorForm;
+        this.catalystTimeline.onNest = this::nestSelection;
+        this.catalystTimeline.onGain = this::openGainDialog;
+        this.catalystTimeline.interactionLocked = () -> this.aiBusy;
+        this.catalystTimeline.onOpenNested = this::openNested;
+
+        this.nleToolbar = new UINleToolbar(this.catalystTimeline, () -> this.currentFrame,
+            () -> this.getActiveComposition() != null && this.getActiveComposition().fps > 0 ? this.getActiveComposition().fps : 60,
+            () -> this.masterVolume, (v) -> this.masterVolume = (float) v, this::toggleMute);
+
+        this.inspector = new UINleInspector(this);
+
+        this.catalystTimeline.loading = this::isClipLoading;
+        this.catalystTimeline.buffered = this::isClipBuffered;
+
+        this.setupMonitorBars();
+        this.setupFullscreenBar();
+
+        /* The monitor panel is its bar, the picture and the transport; the timeline panel is the tool strip over the tracks */
+        this.monitorPanel = new UIElement();
+        this.monitorBar.relative(this.monitorPanel).x(0).y(0).w(1F).h(MONITOR_BAR_H);
+        this.previewArea.relative(this.monitorPanel).x(0).y(MONITOR_BAR_H).w(1F).h(1F, -MONITOR_BAR_H - TRANSPORT_H);
+        this.transportBar.relative(this.monitorPanel).x(0).y(1F, -TRANSPORT_H).w(1F).h(TRANSPORT_H);
+        this.monitorPanel.add(this.monitorBar, this.previewArea, this.transportBar);
+
+        this.timelinePanel = new UIElement();
+        this.nleToolbar.relative(this.timelinePanel).x(0).y(0).w(1F).h(UINleToolbar.HEIGHT);
+        this.catalystTimeline.relative(this.timelinePanel).x(0).y(UINleToolbar.HEIGHT).w(1F).h(1F, -UINleToolbar.HEIGHT);
+        this.timelinePanel.add(this.nleToolbar, this.catalystTimeline);
+
+        /* The dope sheet and the flow graph of BBS, on the channels of the picked clip */
+        this.keyEditor = new UIKeyframeEditor((consumer) -> new UIKeyframes(consumer)
+        {
+            @Override
+            public float getPlayheadTick(UIContext context)
+            {
+                return UICatalystPanel.this.currentFrame;
+            }
+
+            /* The ruler scrubs: the playhead and the monitor follow the mouse */
+            @Override
+            protected boolean hasCursor()
+            {
+                return true;
+            }
+
+            @Override
+            protected void moveNoKeyframes(UIContext context)
+            {
+                UICatalystPanel.this.jumpToFrame(Math.max(0, (int) Math.round(this.fromGraphX(context.mouseX))));
+            }
+
+            /* The names of the channels need room: never narrower than 170 pixels */
+            @Override
+            public int getLabelWidth()
+            {
+                return Math.max(170, super.getLabelWidth());
+            }
+
+            /* The timeline's own dark palette */
+            @Override
+            public int baseSurface()
+            {
+                return 0xff181d27;
+            }
+
+            @Override
+            public int deepSurface()
+            {
+                return 0xff12161e;
+            }
+
+            @Override
+            public int sunkenSurface()
+            {
+                return 0xff0e1218;
+            }
+
+            @Override
+            protected void renderOverlay(UIContext context)
+            {
+                CatalystComposition comp = UICatalystPanel.this.getActiveComposition();
+                int fps = comp != null && comp.fps > 0 ? comp.fps : 60;
+
+                context.batcher.clip(this.graphArea, context);
+                UITimelineCanvas.renderCursor(context, UINleTimeline.timecode(UICatalystPanel.this.currentFrame, fps), this.area, this.toGraphX(UICatalystPanel.this.currentFrame) - 1);
+                context.batcher.unclip(context);
+
+                super.renderOverlay(context);
+            }
+        });
+        this.keyEditor.view.duration(() ->
+        {
+            CatalystComposition comp = this.getActiveComposition();
+
+            return comp == null ? 300 : Math.max(1, comp.duration);
+        });
+        this.keyEditor.view.changed(this::keysEdited);
+        this.keyEditor.relative(this.timelinePanel).x(0).y(0.5F).w(1F).h(0.5F);
+        this.keyEditor.setVisible(false);
+        this.timelinePanel.add(this.keyEditor);
+
+        this.nleToolbar.keysOpen = () -> this.keysOpen;
+        this.nleToolbar.toggleKeys = this::toggleKeys;
+
+        this.editor = new UIElement();
+        this.editor.relative(this).y(24).w(1F).h(1F, -24);
+        this.editor.setVisible(false);
+        this.catalystDock = new CatalystDock(this.editor, this.library, this.monitorPanel, this.inspector, this.timelinePanel);
+    }
+
+    /* ════════════════════════════════════════════════════════
+     *  EDIT PAGE: MONITOR, TRANSPORT, PAGE BAR
+     * ════════════════════════════════════════════════════════ */
+
+    private void setupMonitorBars()
+    {
+        this.monitorBar = new UIElement()
+        {
+            @Override
+            public void render(UIContext context)
+            {
+                Area a = this.area;
+                CatalystComposition comp = UICatalystPanel.this.getActiveComposition();
+                int fps = comp != null && comp.fps > 0 ? comp.fps : 60;
+                FontRenderer font = context.batcher.getFont();
+                String code = UINleTimeline.timecode(UICatalystPanel.this.currentFrame, fps);
+
+                context.batcher.box(a.x, a.y, a.ex(), a.ey(), 0xff181d27);
+                context.batcher.box(a.x, a.ey() - 1, a.ex(), a.ey(), 0xff262d3a);
+                context.batcher.text(code, a.ex() - font.getWidth(code) - 8, a.my() - 4, 0xffe8edf5, false);
+
+                super.render(context);
+            }
+        };
+
+        UIButton zoom = new UIButton(IKey.EMPTY, (b) -> this.monitorZoomMenu())
+        {
+            @Override
+            protected void renderSkin(UIContext context)
+            {
+                this.label = monitorZoom <= 0 ? UIKeys.CATALYST_NLE_ZOOM_FIT : IKey.raw("%" + monitorZoom);
+                super.renderSkin(context);
+            }
+        };
+        zoom.tooltip(UIKeys.CATALYST_NLE_MONITOR_ZOOM);
+        zoom.relative(this.monitorBar).x(4).y(2).w(52).h(16);
+
+        UIButton timeline = new UIButton(IKey.EMPTY, (b) -> this.timelineMenu())
+        {
+            @Override
+            protected void renderSkin(UIContext context)
+            {
+                CatalystComposition comp = UICatalystPanel.this.getActiveComposition();
+
+                this.label = IKey.raw(context.batcher.getFont().limitToWidth(comp == null ? "-" : comp.name, Math.max(10, this.area.w - 30)));
+                super.renderSkin(context);
+                context.batcher.icon(Icons.ARROW_DOWN, 0xccffffff, this.area.ex() - 18, this.area.my() - 8);
+            }
+        };
+        timeline.background(false);
+        timeline.tooltip(UIKeys.CATALYST_NLE_TIMELINES);
+        timeline.relative(this.monitorBar).x(0.5F).y(2).w(160).h(16).anchorX(0.5F);
+
+        this.monitorBar.add(zoom, timeline);
+
+        this.transportBar = new UIElement()
+        {
+            @Override
+            public void render(UIContext context)
+            {
+                Area a = this.area;
+                CatalystComposition comp = UICatalystPanel.this.getActiveComposition();
+                FontRenderer font = context.batcher.getFont();
+
+                context.batcher.box(a.x, a.y, a.ex(), a.ey(), 0xff181d27);
+                context.batcher.box(a.x, a.y, a.ex(), a.y + 1, 0xff262d3a);
+
+                /* The frame's size, rate and preview quality on the left, the frame count on the right, off the picture */
+                if (comp != null && a.w > 360)
+                {
+                    String info = String.format(java.util.Locale.ROOT, "%dx%d  %d FPS  %s", comp.width, comp.height, comp.fps, previewResolution.fraction);
+
+                    context.batcher.text(info, a.x + 8, a.my() - 4, 0xff8c96aa, false);
+                }
+
+                super.render(context);
+            }
+        };
+
+        UIElement buttons = new UIElement();
+        buttons.relative(this.transportBar).x(0.5F).y(3).w(6 * 24).h(18).anchorX(0.5F);
+
+        this.transportButton(buttons, 0, () -> Icons.SHIFT_BACKWARD, UIKeys.CATALYST_NLE_GO_START, () -> this.seekAndStop(0), () -> false);
+        this.transportButton(buttons, 1, () -> Icons.FRAME_PREV, UIKeys.CATALYST_NLE_PREV_FRAME, () -> this.seekAndStop(Math.max(0, this.currentFrame - 1)), () -> false);
+        this.transportButton(buttons, 2, () -> this.isPlaying ? Icons.PAUSE : Icons.PLAY, UIKeys.CATALYST_NLE_PLAY, this::togglePlayback, () -> this.isPlaying);
+        this.transportButton(buttons, 3, () -> Icons.FRAME_NEXT, UIKeys.CATALYST_NLE_NEXT_FRAME, () -> this.seekAndStop(this.currentFrame + 1), () -> false);
+        this.transportButton(buttons, 4, () -> Icons.SHIFT_FORWARD, UIKeys.CATALYST_NLE_GO_END, () -> this.seekAndStop(this.timelineEnd()), () -> false);
+        this.transportButton(buttons, 5, () -> Icons.REFRESH, UIKeys.CATALYST_NLE_LOOP, () -> this.loopPlayback = !this.loopPlayback, () -> this.loopPlayback);
+
+        this.transportBar.add(buttons);
+    }
+
+    private void transportButton(UIElement row, int index, java.util.function.Supplier<mchorse.bbs_mod.ui.utils.icons.Icon> icon, IKey tooltip, Runnable action, java.util.function.BooleanSupplier lit)
+    {
+        UIIcon button = new UIIcon(icon, (b) -> action.run())
+        {
+            @Override
+            protected void renderSkin(UIContext context)
+            {
+                if (lit.getAsBoolean() || this.hover)
+                {
+                    mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw.fill(context.batcher, this.area.x, this.area.y, this.area.ex(), this.area.ey(), 4,
+                        mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw.ALL, lit.getAsBoolean() ? Colors.setA(BBSSettings.primaryColor.get(), 0.55F) : 0x22ffffff);
+                }
+
+                super.renderSkin(context);
+            }
+        };
+
+        button.tooltip(tooltip);
+        button.relative(row).x(index * 24).y(0).wh(20, 18);
+        row.add(button);
+    }
+
+    private void seekAndStop(int frame)
+    {
+        this.isPlaying = false;
+        this.lastTickMs = 0;
+        this.stopAllAudio();
+        this.seekToFrame(Math.max(0, frame));
+    }
+
+    /** The end of the last clip, or of the composition when it is empty */
+    private int timelineEnd()
+    {
+        CatalystComposition comp = this.getActiveComposition();
+
+        if (comp == null)
+        {
+            return 0;
+        }
+
+        int end = 0;
+
+        for (CatalystLayer layer : comp.layers)
+        {
+            end = Math.max(end, layer.startFrame + layer.duration);
+        }
+
+        return Math.max(0, (end > 0 ? end : comp.duration) - 1);
+    }
+
+    /** The composition runs at least to the end of its last clip */
+    private void ensureDuration()
+    {
+        CatalystComposition comp = this.getActiveComposition();
+
+        if (comp != null)
+        {
+            comp.refreshDuration();
+        }
+    }
+
+    private void monitorZoomMenu()
+    {
+        this.getContext().replaceContextMenu((menu) ->
+        {
+            menu.action(monitorZoom <= 0 ? Icons.CHECKMARK : Icons.NONE, UIKeys.CATALYST_NLE_ZOOM_FIT, () -> monitorZoom = 0);
+
+            for (int percent : new int[] {25, 50, 100, 200})
+            {
+                menu.action(monitorZoom == percent ? Icons.CHECKMARK : Icons.NONE, IKey.raw("%" + percent), () -> monitorZoom = percent);
+            }
+
+            menu.action(showSafeAreas ? Icons.CHECKMARK : Icons.NONE, UIKeys.CATALYST_NLE_SAFE_AREAS, this::toggleSafeAreas);
+
+            for (PreviewResolution res : PreviewResolution.values())
+            {
+                menu.action(res == previewResolution ? Icons.CHECKMARK : Icons.NONE, IKey.raw(res.fraction), () -> this.setPreviewResolution(res));
+            }
+        });
+    }
+
+    /** The timelines of the project (its compositions): switch, add one, or change the picked one's settings */
+    private void timelineMenu()
+    {
+        if (this.activeProject == null)
+        {
+            return;
+        }
+
+        this.getContext().replaceContextMenu((menu) ->
+        {
+            for (int i = 0; i < this.activeProject.compositions.size(); i++)
+            {
+                int index = i;
+                CatalystComposition comp = this.activeProject.compositions.get(i);
+
+                menu.action(index == this.activeProject.activeCompositionIndex ? Icons.CHECKMARK : Icons.FILM, IKey.raw(comp.name), () ->
+                {
+                    this.stopAllAudio();
+                    this.activeProject.activeCompositionIndex = index;
+                    this.currentFrame = this.activeProject.getActiveComposition().playhead;
+                    this.catalystTimeline.clearSelection();
+                    this.updateTitleLabel();
+                });
+            }
+
+            menu.action(Icons.ADD, UIKeys.CATALYST_NLE_NEW_TIMELINE, () ->
+            {
+                this.activeProject.addComposition(UIKeys.CATALYST_NLE_TIMELINE.get() + " " + (this.activeProject.compositions.size() + 1));
+                this.currentFrame = 0;
+                this.catalystTimeline.clearSelection();
+                CatalystProjectManager.saveProject(this.activeProject);
+                this.updateTitleLabel();
+            });
+            menu.action(Icons.GEAR, UIKeys.CATALYST_NLE_TIMELINE_SETTINGS, this::openCompositionSettingsModal);
+        });
+    }
+
+    /* ════════════════════════════════════════════════════════
+     *  EDIT HELPERS
+     * ════════════════════════════════════════════════════════ */
+
+    public int getCurrentFrame()
+    {
+        return this.currentFrame;
+    }
+
+    /** Undo for a run of edits to one thing (a trackpad being dragged): one step, not one per frame */
+    public void pushUndoFor(String key)
+    {
+        long now = System.currentTimeMillis();
+
+        if (!key.equals(this.lastUndoKey) || now - this.lastUndoAt > 1500L)
+        {
+            this.pushUndo();
+        }
+
+        this.lastUndoKey = key;
+        this.lastUndoAt = now;
+    }
+
+    /** An edit landed: saved a moment after the last one, not on every step of a drag */
+    public void markDirty()
+    {
+        this.dirtyAt = System.currentTimeMillis();
+    }
+
+    /** A BBS film as a clip on a free video track */
+    public void addFilmClip(String filmId, int frame)
+    {
+        CatalystComposition comp = this.getActiveComposition();
+
+        if (comp == null || filmId == null || filmId.isEmpty())
+        {
+            return;
+        }
+
+        this.pushUndo();
+
+        CatalystLayer layer = new CatalystLayer();
+        int fps = comp.fps > 0 ? comp.fps : 60;
+
+        layer.layerType = CatalystLayer.LayerType.SCENE;
+        layer.color = CatalystLayer.LayerType.SCENE.defaultColor();
+        layer.name = filmId;
+        layer.resourcePath = filmId;
+        layer.startFrame = Math.max(0, frame);
+
+        try
+        {
+            mchorse.bbs_mod.film.Film film = BBSMod.getFilms().load(filmId);
+            int ticks = film == null ? 0 : film.camera.calculateDuration();
+
+            layer.duration = ticks > 0 ? Math.max(1, Math.round(ticks / 20F * fps)) : fps * 5;
+            layer.mediaDuration = ticks > 0 ? layer.duration : 0;
+        }
+        catch (Exception e)
+        {
+            layer.duration = fps * 5;
+        }
+
+        layer.track = this.catalystTimeline.freeTrack(comp, false, layer.startFrame, layer.duration);
+        comp.layers.add(layer);
+        this.catalystTimeline.setSelected(layer);
+        this.ensureDuration();
+        this.saveAndRefresh();
+    }
+
+    /** Whether a clip's track keeps it from being heard: an audio track that is muted, or not soloed while another is */
+    private boolean isTrackSilent(CatalystComposition comp, CatalystLayer layer)
+    {
+        if (comp == null || !layer.isAudioClip())
+        {
+            return false;
+        }
+
+        mchorse.bbs_mod.catalyst.CatalystTrack track = comp.trackOf(layer);
+        boolean solo = false;
+
+        for (mchorse.bbs_mod.catalyst.CatalystTrack t : comp.audioTracks)
+        {
+            solo |= t.solo;
+        }
+
+        return track != null && (track.muted || (solo && !track.solo));
+    }
+
+    /** Whether a clip's track keeps it from being seen: a hidden video track, or not soloed while another is */
+    private boolean isTrackHidden(CatalystComposition comp, CatalystLayer layer)
+    {
+        if (comp == null || layer.isAudioClip())
+        {
+            return false;
+        }
+
+        mchorse.bbs_mod.catalyst.CatalystTrack track = comp.trackOf(layer);
+        boolean solo = false;
+
+        for (mchorse.bbs_mod.catalyst.CatalystTrack t : comp.videoTracks)
+        {
+            solo |= t.solo;
+        }
+
+        return track != null && (track.muted || (solo && !track.solo));
+    }
+
+    /** How large the monitor draws the frame: fitted with a margin, or at the zoom's share of its pixels */
+    public float previewScale(Area area, int compW, int compH)
+    {
+        if (monitorZoom > 0)
+        {
+            float gui = (float) MinecraftClient.getInstance().getWindow().getScaleFactor();
+
+            return monitorZoom / 100F / Math.max(gui, 0.01F);
+        }
+
+        int margin = 12;
+        float scale = Math.min((float) (area.w - margin * 2) / compW, (float) (area.h - margin * 2) / compH);
+
+        return scale <= 0.0001F ? 1F : scale;
     }
 
     private void setupMediaPoolPanel()
@@ -1627,8 +3143,16 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
     public void dropAssetToTimeline(CatalystMediaAsset asset, int startFrame)
     {
         CatalystComposition comp = this.activeProject != null ? this.activeProject.getActiveComposition() : null;
-        if (comp == null || asset == null)
+        if (comp == null || asset == null || this.aiBusy)
         {
+            return;
+        }
+
+        /* A timeline dropped from the library plays on a video track as one clip */
+        if (asset.type == CatalystMediaAsset.MediaType.TIMELINE)
+        {
+            this.addNestedClip(this.activeProject.getComposition(asset.path), Math.max(0, startFrame));
+
             return;
         }
 
@@ -1675,13 +3199,53 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
             layer.color = 0xAA6633;
         }
 
+        layer.track = this.catalystTimeline.freeTrack(comp, layer.isAudioClip(), layer.startFrame, layer.duration);
         comp.layers.add(layer);
-        if (this.catalystTimeline != null)
+
+        /* A video with sound: the sound goes onto the first free audio track as a clip of its own,
+         * linked to the picture, and the video clip itself plays none */
+        if (layer.layerType == CatalystLayer.LayerType.VIDEO && this.videoHasAudio(normPath))
         {
-            this.catalystTimeline.setSelected(layer);
+            CatalystLayer audio = new CatalystLayer();
+
+            audio.layerType = CatalystLayer.LayerType.AUDIO;
+            audio.name = asset.name;
+            audio.resourcePath = normPath;
+            audio.color = 0x228855;
+            audio.startFrame = layer.startFrame;
+            audio.duration = layer.duration;
+            audio.mediaDuration = layer.mediaDuration;
+            audio.linkId = layer.linkId = java.util.UUID.randomUUID().toString().substring(0, 8);
+            audio.track = this.catalystTimeline.freeTrack(comp, true, audio.startFrame, audio.duration);
+            layer.muteOwnAudio = true;
+
+            comp.layers.add(audio);
+            UICatalystTimeline.ensureWaveformLoaded(audio);
         }
+
+        this.catalystTimeline.setSelected(layer);
+        this.ensureDuration();
         this.saveAndRefresh();
         this.updateInspectorForm();
+    }
+
+    private boolean videoHasAudio(String path)
+    {
+        try
+        {
+            VideoPlayer player = BBSModClient.getVideos().get(Link.create(path));
+
+            if (player != null)
+            {
+                player.ensureProbed();
+
+                return player.isValid() && player.hasAudio();
+            }
+        }
+        catch (Exception e)
+        {}
+
+        return false;
     }
 
     private void setupPreviewArea()
@@ -1691,17 +3255,25 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
             @Override
             protected boolean subMouseClicked(UIContext context)
             {
+                if (aiBusy)
+                {
+                    if (context.mouseButton == 0 && context.mouseX >= aiStop[0] && context.mouseX < aiStop[2] && context.mouseY >= aiStop[1] && context.mouseY < aiStop[3])
+                    {
+                        cancelAi();
+                    }
+
+                    return this.area.isInside(context);
+                }
+
                 if (this.area.isInside(context) && context.mouseButton == 0)
                 {
                     CatalystLayer sel = getSelectedLayer();
                     CatalystComposition comp = activeProject != null ? activeProject.getActiveComposition() : null;
                     if (sel != null && comp != null)
                     {
-                        int margin = 16;
                         int compW = comp.width > 0 ? comp.width : 1920;
                         int compH = comp.height > 0 ? comp.height : 1080;
-                        float scale = Math.min((float) (this.area.w - margin * 2) / compW, (float) (this.area.h - margin * 2) / compH);
-                        if (scale <= 0.0001F) scale = 1.0F;
+                        float scale = UICatalystPanel.this.previewScale(this.area, compW, compH);
                         float offsetX = this.area.x + (this.area.w - compW * scale) / 2.0F;
                         float offsetY = this.area.y + (this.area.h - compH * scale) / 2.0F;
 
@@ -1808,11 +3380,9 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
                     CatalystComposition comp = activeProject != null ? activeProject.getActiveComposition() : null;
                     if (sel != null && comp != null)
                     {
-                        int margin = 16;
                         int compW = comp.width > 0 ? comp.width : 1920;
                         int compH = comp.height > 0 ? comp.height : 1080;
-                        float scale = Math.min((float) (this.area.w - margin * 2) / compW, (float) (this.area.h - margin * 2) / compH);
-                        if (scale <= 0.0001F) scale = 1.0F;
+                        float scale = UICatalystPanel.this.previewScale(this.area, compW, compH);
 
                         float vDx = (context.mouseX - viewportDragStartX) / scale;
                         float vDy = (context.mouseY - viewportDragStartY) / scale;
@@ -1851,11 +3421,28 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
                 }
                 else
                 {
-                    if (previewResolutionBtn != null) previewResolutionBtn.setVisible(true);
-                    if (safeAreasToggleBtn != null) safeAreasToggleBtn.setVisible(true);
+                    if (previewResolutionBtn != null) previewResolutionBtn.setVisible(!UICatalystPanel.this.isFullscreen);
+                    if (safeAreasToggleBtn != null) safeAreasToggleBtn.setVisible(!UICatalystPanel.this.isFullscreen);
                     tickPlayback(comp);
                 }
-                renderPreviewCanvas(context, this.area, comp);
+                try
+                {
+                    renderPreviewCanvas(context, this.area, comp);
+                }
+                finally
+                {
+                    /* Whatever the film clips left in the GL state (they drive the world render), the
+                     * rest of the interface is drawn in the menu's own */
+                    context.batcher.flush();
+                    mchorse.bbs_mod.utils.GuiState.restoreInMenu();
+                }
+
+                if (!isExporting)
+                {
+                    renderLoadingBadge(context, this.area, comp);
+                    renderAiBadge(context, this.area);
+                }
+
                 super.render(context);
             }
         };
@@ -1873,7 +3460,7 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
                     context.replaceContextMenu((menu) ->
                     {
                         menu.action(showSafeAreas ? Icons.CHECKMARK : Icons.NONE,
-                            IKey.raw("Show Guides & Safe Areas"),
+                            UIKeys.CATALYST_NLE_SAFE_AREAS,
                             () -> toggleSafeAreas());
                     });
                     return true;
@@ -1881,7 +3468,7 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
                 return super.subMouseClicked(context);
             }
         };
-        this.safeAreasToggleBtn.tooltip(IKey.raw("Toggle Guides & Safe Areas (Rule of Thirds, Title/Action Safe)"));
+        this.safeAreasToggleBtn.tooltip(UIKeys.CATALYST_NLE_SAFE_AREAS);
         this.safeAreasToggleBtn.highlight(() -> showSafeAreas, Direction.BOTTOM);
         this.safeAreasToggleBtn.relative(this.previewArea).x(1F, -100).y(1F, -26).w(20).h(18);
         this.previewArea.add(this.safeAreasToggleBtn);
@@ -1907,7 +3494,7 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
                 return super.subMouseClicked(context);
             }
         };
-        this.previewResolutionBtn.tooltip(IKey.raw("Preview Resolution / Quality (Click to cycle, right-click for menu)"));
+        this.previewResolutionBtn.tooltip(UIKeys.CATALYST_NLE_PREVIEW_QUALITY);
         this.previewResolutionBtn.relative(this.previewArea).x(1F, -76).y(1F, -26).w(68).h(18);
         this.previewArea.add(this.previewResolutionBtn);
 
@@ -2078,7 +3665,7 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
                 try
                 {
                     Link link = Link.create(layer.resourcePath.trim());
-                    VideoPlayer player = BBSModClient.getVideos().getPlayer(layer, link);
+                    VideoPlayer player = BBSModClient.getVideos().getPlayer(this.videoOwner(layer), link);
                     if (player != null)
                     {
                         player.setMaxSize(compW, compH);
@@ -2218,8 +3805,7 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
 
         if (maxW <= 0 || maxH <= 0) return;
 
-        float scale = Math.min((float) maxW / compW, (float) maxH / compH);
-        if (scale <= 0.0001F) scale = 1.0F;
+        float scale = this.previewScale(area, compW, compH);
         float offsetX = area.x + (area.w - compW * scale) / 2.0F;
         float offsetY = area.y + (area.h - compH * scale) / 2.0F;
 
@@ -2230,7 +3816,7 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
         Area canvasArea = new Area(canvasX, canvasY, canvasW, canvasH);
 
         boolean renderedViaFbo = false;
-        if (previewResolution != PreviewResolution.FULL)
+        if (previewResolution != PreviewResolution.FULL || this.compositionNeedsFx(comp, playhead))
         {
             float q = previewResolution.scale;
             int fboW = Math.max(16, ((int) (compW * q) / 2) * 2);
@@ -2450,19 +4036,428 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
 
         overlayStack.pop();
 
-        /* OSD Info (Left Bottom, above timecode) */
-        String compName = (comp != null ? comp.name.toUpperCase() : "COMP");
-        String info     = String.format(java.util.Locale.ROOT, "%s • %d×%d [%s %s] • %d FPS • Rec.709 • Comp: %.1f ms",
-            compName, compW, compH, previewResolution.title, previewResolution.fraction, targetFps, this.lastCompRenderMs);
-        context.batcher.textCard(info, area.x + 8, area.ey() - 34, Colors.LIGHTEST_GRAY, 0x88000000, 2);
-
-        /* Timecode */
-        int secs   = playhead / Math.max(1, targetFps);
-        int frames = playhead % Math.max(1, targetFps);
-        String timecode = String.format("00:00:%02d:%02d  [Frame %d / %d]", secs, frames, playhead, totalDur);
-        context.batcher.textCard(timecode, area.x + 8, area.ey() - 18, Colors.WHITE, 0x88000000, 2);
-
         context.batcher.box(area.x, area.ey() - 1, area.ex(), area.ey(), BBSSettings.dividerColor());
+    }
+
+    /* ════════════════════════════════════════════════════════
+     *  CLIP EFFECTS, BLEND MODES, ADJUSTMENT CLIPS
+     * ════════════════════════════════════════════════════════ */
+
+    private static final String[] BLEND_MODES = {"NORMAL", "ADD", "MULTIPLY", "SCREEN", "OVERLAY"};
+
+    /** Scratch buffers at the composition's size: the clip drawn alone, its effects' ping-pong, a copy of what is under it */
+    private final mchorse.bbs_mod.graphics.Framebuffer[] fxFbos = new mchorse.bbs_mod.graphics.Framebuffer[3];
+    private final Texture[] fxTextures = new Texture[3];
+    private int fxTarget;
+    private final int[] fxViewport = new int[4];
+    private boolean fxScissor;
+
+    private static boolean hasActiveEffects(CatalystLayer layer)
+    {
+        for (mchorse.bbs_mod.camera.clips.fx.PostEffectStack.Layer effect : layer.effects.getAllTyped())
+        {
+            if (effect.enabled.get() && (effect.intensity.get() > 0.001F || !effect.intensityChannel.isEmpty()) && mchorse.bbs_mod.camera.clips.fx.PostEffect.get(effect.effect.get()) != null)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static boolean isTextShaped(CatalystLayer layer)
+    {
+        return layer.layerType == CatalystLayer.LayerType.TEXT
+            && (layer.flipH || layer.flipV || layer.cropLeft > 0F || layer.cropRight > 0F || layer.cropTop > 0F || layer.cropBottom > 0F);
+    }
+
+    /** Whether a clip is drawn on its own and laid over: effects, a blend mode other than normal, or a cropped or flipped text */
+    private static boolean needsLayerPass(CatalystLayer layer)
+    {
+        if (layer.layerType == CatalystLayer.LayerType.ADJUSTMENT || layer.layerType == CatalystLayer.LayerType.NULL || layer.layerType == CatalystLayer.LayerType.NESTED || layer.isAudioClip())
+        {
+            return false;
+        }
+
+        return hasActiveEffects(layer) || !"NORMAL".equalsIgnoreCase(layer.blendMode) || isTextShaped(layer);
+    }
+
+    /** Whether the frame at the playhead needs the buffers: with none of it the monitor draws straight to the screen */
+    public boolean compositionNeedsFx(CatalystComposition comp, int playhead)
+    {
+        if (comp == null || mchorse.bbs_mod.client.BBSShaders.getPostFxLibraryProgram() == null)
+        {
+            return false;
+        }
+
+        for (CatalystLayer layer : comp.layers)
+        {
+            if (layer.visible && playhead >= layer.startFrame && playhead < layer.startFrame + layer.duration
+                && (needsLayerPass(layer) || (layer.layerType == CatalystLayer.LayerType.ADJUSTMENT && hasActiveEffects(layer))))
+            {
+                return true;
+            }
+
+            /* A nested timeline needs the buffers when something inside it does */
+            if (layer.layerType == CatalystLayer.LayerType.NESTED && layer.visible && this.activeProject != null && this.nestDepth < 6
+                && playhead >= layer.startFrame && playhead < layer.startFrame + layer.duration)
+            {
+                CatalystComposition child = this.activeProject.getComposition(layer.resourcePath);
+
+                if (child != null)
+                {
+                    this.nestDepth += 1;
+
+                    try
+                    {
+                        if (this.compositionNeedsFx(child, this.nestedFrame(layer, child, playhead, comp.fps)))
+                        {
+                            return true;
+                        }
+                    }
+                    finally
+                    {
+                        this.nestDepth -= 1;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private mchorse.bbs_mod.graphics.Framebuffer fxBuffer(int index, int w, int h)
+    {
+        if (this.fxTextures[index] == null)
+        {
+            this.fxTextures[index] = new Texture();
+            this.fxTextures[index].setFormat(TextureFormat.RGBA_U8);
+            this.fxTextures[index].setFilter(GL11.GL_LINEAR);
+        }
+
+        Texture texture = this.fxTextures[index];
+
+        if (this.fxFbos[index] == null || texture.width != w || texture.height != h)
+        {
+            if (this.fxFbos[index] != null)
+            {
+                this.fxFbos[index].delete();
+            }
+
+            texture.bind();
+            texture.setSize(w, h);
+            texture.setFilter(GL11.GL_LINEAR);
+            texture.unbind();
+
+            this.fxFbos[index] = new mchorse.bbs_mod.graphics.Framebuffer();
+            this.fxFbos[index].attach(texture, GL30.GL_COLOR_ATTACHMENT0);
+            this.fxFbos[index].attachments(1);
+            this.fxFbos[index].unbind();
+        }
+
+        return this.fxFbos[index];
+    }
+
+    /** Frees the scratch buffers (the panel going away) */
+    private void deleteFxBuffers()
+    {
+        for (int i = 0; i < this.fxFbos.length; i++)
+        {
+            if (this.fxFbos[i] != null) this.fxFbos[i].delete();
+            if (this.fxTextures[i] != null) this.fxTextures[i].delete();
+
+            this.fxFbos[i] = null;
+            this.fxTextures[i] = null;
+        }
+    }
+
+    /** The buffer being drawn into and its size; false when it is the screen, which the passes don't work on */
+    private boolean captureTarget()
+    {
+        this.fxTarget = GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
+        GL11.glGetIntegerv(GL11.GL_VIEWPORT, this.fxViewport);
+
+        /* Blits and the passes are cut by the scissor test: off while they run */
+        this.fxScissor = GL11.glIsEnabled(GL11.GL_SCISSOR_TEST);
+        GL11.glDisable(GL11.GL_SCISSOR_TEST);
+
+        return this.fxTarget != 0 && this.fxViewport[2] > 0 && this.fxViewport[3] > 0;
+    }
+
+    private void restoreTarget()
+    {
+        GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, this.fxTarget);
+        com.mojang.blaze3d.systems.RenderSystem.viewport(this.fxViewport[0], this.fxViewport[1], this.fxViewport[2], this.fxViewport[3]);
+        com.mojang.blaze3d.systems.RenderSystem.enableBlend();
+        com.mojang.blaze3d.systems.RenderSystem.defaultBlendFunc();
+
+        if (this.fxScissor)
+        {
+            GL11.glEnable(GL11.GL_SCISSOR_TEST);
+        }
+    }
+
+    /**
+     * Runs a clip's effects over a buffer, ping-ponging between the scratch buffers from
+     * {@code source}; the last one is drawn into {@code finalTarget} when given. Returns the index
+     * of the buffer holding the result, or -1 when it went into {@code finalTarget}.
+     */
+    private int runEffects(CatalystLayer layer, int source, int finalTarget, float scale, int playhead, int fps)
+    {
+        int w = this.fxViewport[2];
+        int h = this.fxViewport[3];
+        float seconds = (playhead - layer.startFrame) / (float) Math.max(1, fps);
+        List<mchorse.bbs_mod.camera.clips.fx.PostEffectStack.Layer> active = new ArrayList<>();
+
+        for (mchorse.bbs_mod.camera.clips.fx.PostEffectStack.Layer effect : layer.effects.getAllTyped())
+        {
+            if (effect.enabled.get() && effect.value(-1, playhead) > 0.001D && mchorse.bbs_mod.camera.clips.fx.PostEffect.get(effect.effect.get()) != null)
+            {
+                active.add(effect);
+            }
+        }
+
+        int current = source;
+
+        for (int i = 0; i < active.size(); i++)
+        {
+            mchorse.bbs_mod.camera.clips.fx.PostEffectStack.Layer effect = active.get(i);
+            mchorse.bbs_mod.camera.clips.fx.PostEffect definition = mchorse.bbs_mod.camera.clips.fx.PostEffect.get(effect.effect.get());
+            boolean last = i == active.size() - 1 && finalTarget != 0;
+            int next = current == 0 ? 1 : 0;
+            int target = last ? finalTarget : this.fxBuffer(next, w, h).id;
+            int color = definition.hasColor() ? effect.color.get() : 0xffffff;
+
+            mchorse.bbs_mod.ui.film.PostFxRenderer.drawLibrary(target, w, h, this.fxTextures[current].id, this.fxTextures[current].id,
+                definition.mode, Math.min(1F, (float) effect.value(-1, playhead) * scale),
+                (float) effect.value(0, playhead), (float) effect.value(1, playhead), (float) effect.value(2, playhead), (float) effect.value(3, playhead),
+                ((color >> 16) & 0xff) / 255F, ((color >> 8) & 0xff) / 255F, (color & 0xff) / 255F, seconds, 0F, 0F);
+
+            current = last ? -1 : next;
+        }
+
+        return current;
+    }
+
+    /** An adjustment clip: its effects over a copy of what is under it, written back */
+    private void applyAdjustment(UIContext context, CatalystLayer layer, float alpha, int playhead, int fps)
+    {
+        if (!hasActiveEffects(layer))
+        {
+            return;
+        }
+
+        context.batcher.flush();
+
+        if (!this.captureTarget())
+        {
+            return;
+        }
+
+        int w = this.fxViewport[2];
+        int h = this.fxViewport[3];
+
+        try
+        {
+            mchorse.bbs_mod.graphics.Framebuffer copy = this.fxBuffer(0, w, h);
+
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, this.fxTarget);
+            GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, copy.id);
+            GL30.glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL11.GL_COLOR_BUFFER_BIT, GL11.GL_NEAREST);
+
+            this.runEffects(layer, 0, this.fxTarget, alpha, playhead, fps);
+        }
+        finally
+        {
+            this.restoreTarget();
+        }
+    }
+
+    /** Before a clip that is drawn on its own: into a clear buffer of the composition's size */
+    private boolean beginLayerPass(UIContext context, CatalystLayer layer)
+    {
+        if (!needsLayerPass(layer) || mchorse.bbs_mod.client.BBSShaders.getPostFxLibraryProgram() == null)
+        {
+            return false;
+        }
+
+        context.batcher.flush();
+
+        if (!this.captureTarget())
+        {
+            return false;
+        }
+
+        mchorse.bbs_mod.graphics.Framebuffer alone = this.fxBuffer(0, this.fxViewport[2], this.fxViewport[3]);
+
+        GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, alone.id);
+        com.mojang.blaze3d.systems.RenderSystem.viewport(0, 0, this.fxViewport[2], this.fxViewport[3]);
+        com.mojang.blaze3d.systems.RenderSystem.clearColor(0F, 0F, 0F, 0F);
+        com.mojang.blaze3d.systems.RenderSystem.clear(GL11.GL_COLOR_BUFFER_BIT, false);
+
+        /* Premultiplied: the colour times its alpha, and the alpha itself */
+        com.mojang.blaze3d.systems.RenderSystem.enableBlend();
+        com.mojang.blaze3d.systems.RenderSystem.blendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ONE_MINUS_SRC_ALPHA);
+
+        return true;
+    }
+
+    /** After it: its effects, then laid over the composition with its blend mode, its crop and (text) flips */
+    private void endLayerPass(UIContext context, CatalystLayer layer, float lx, float ly, float layerW, float layerH, int compW, int compH, int playhead, int fps)
+    {
+        context.batcher.flush();
+
+        int w = this.fxViewport[2];
+        int h = this.fxViewport[3];
+
+        try
+        {
+            int result = this.runEffects(layer, 0, 0, 1F, playhead, fps);
+
+            /* What is under the clip, for the blend */
+            mchorse.bbs_mod.graphics.Framebuffer under = this.fxBuffer(2, w, h);
+
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, this.fxTarget);
+            GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, under.id);
+            GL30.glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL11.GL_COLOR_BUFFER_BIT, GL11.GL_NEAREST);
+
+            /* The text's crop and flips, in the buffer's uv (y up); the rest crop through their texture */
+            float u1 = 0F, v1 = 0F, u2 = 1F, v2 = 1F, flipH = 0F, flipV = 0F;
+            float cu = (lx + layerW / 2F) / compW;
+            float cv = 1F - (ly + layerH / 2F) / compH;
+
+            if (layer.layerType == CatalystLayer.LayerType.TEXT)
+            {
+                float x1 = lx + layerW * layer.cropLeft;
+                float x2 = lx + layerW * (1F - layer.cropRight);
+                float y1 = ly + layerH * layer.cropTop;
+                float y2 = ly + layerH * (1F - layer.cropBottom);
+                boolean cropped = layer.cropLeft > 0F || layer.cropRight > 0F || layer.cropTop > 0F || layer.cropBottom > 0F;
+
+                if (cropped)
+                {
+                    u1 = Math.min(x1, x2) / compW;
+                    u2 = Math.max(x1, x2) / compW;
+                    v1 = 1F - Math.max(y1, y2) / compH;
+                    v2 = 1F - Math.min(y1, y2) / compH;
+                }
+
+                flipH = layer.flipH ? 1F : 0F;
+                flipV = layer.flipV ? 1F : 0F;
+            }
+
+            int mode = 0;
+
+            for (int i = 0; i < BLEND_MODES.length; i++)
+            {
+                if (BLEND_MODES[i].equalsIgnoreCase(layer.blendMode))
+                {
+                    mode = i;
+                }
+            }
+
+            mchorse.bbs_mod.ui.film.PostFxRenderer.drawLibrary(this.fxTarget, w, h, this.fxTextures[2].id, this.fxTextures[result].id,
+                100 + mode, 1F, u1, v1, u2, v2, flipH, flipV, 0F, 0F, cu, cv);
+        }
+        finally
+        {
+            this.restoreTarget();
+        }
+    }
+
+    /** A clip whose file is gone: a dark red frame with a warning triangle and MEDIA OFFLINE, never a crash */
+    private void renderOffline(UIContext context, float lx, float ly, float layerW, float layerH, float alpha)
+    {
+        int x1 = (int) Math.min(lx, lx + layerW);
+        int x2 = (int) Math.max(lx, lx + layerW);
+        int y1 = (int) Math.min(ly, ly + layerH);
+        int y2 = (int) Math.max(ly, ly + layerH);
+        int cx = (x1 + x2) / 2;
+        int cy = (y1 + y2) / 2;
+        int size = Math.max(12, Math.min(x2 - x1, y2 - y1) / 5);
+        int red = Colors.setA(0xe81123, alpha);
+
+        context.batcher.box(x1, y1, x2, y2, Colors.setA(0x2a0a0e, alpha));
+        context.batcher.outline(x1, y1, x2, y2, red, Math.max(2, size / 12));
+
+        /* The triangle, a row at a time, with its exclamation mark cut out in the dark */
+        int top = cy - size;
+
+        for (int row = 0; row < size; row += 2)
+        {
+            int half = row / 2 + 1;
+
+            context.batcher.box(cx - half, top + row, cx + half, top + row + 2, red);
+        }
+
+        int bar = Math.max(2, size / 10);
+
+        context.batcher.box(cx - bar / 2, top + size * 2 / 5, cx + bar / 2 + 1, top + size * 3 / 4, Colors.setA(0x2a0a0e, alpha));
+        context.batcher.box(cx - bar / 2, top + size * 4 / 5, cx + bar / 2 + 1, top + size * 9 / 10, Colors.setA(0x2a0a0e, alpha));
+
+        FontRenderer font = context.batcher.getFont();
+        String text = UIKeys.CATALYST_NLE_MEDIA_OFFLINE.get();
+        float scale = Math.max(1F, size / 12F);
+        MatrixStack textStack = context.batcher.getContext().getMatrices();
+
+        textStack.push();
+        textStack.translate(cx - font.getWidth(text) * scale / 2F, cy + size * 0.2F, 0);
+        textStack.scale(scale, scale, 1F);
+        context.batcher.text(text, 0, 0, Colors.setA(0xff8a8a, alpha), false);
+        textStack.pop();
+    }
+
+    /** Whether a film clip's render failure was logged already: once a session, not every frame */
+    private static boolean filmErrorLogged;
+
+    /** The clips that draw a picture, lowest video track first; on one track, later clips over earlier ones */
+    private List<CatalystLayer> drawOrder(CatalystComposition comp)
+    {
+        List<CatalystLayer> order = new ArrayList<>();
+
+        for (CatalystLayer layer : comp.layers)
+        {
+            if (!layer.isAudioClip())
+            {
+                order.add(layer);
+            }
+        }
+
+        order.sort(java.util.Comparator.comparingInt((CatalystLayer layer) -> layer.track));
+
+        return order;
+    }
+
+    /**
+     * A picture with the clip's crop and flips: the crop cuts the drawn rectangle and the texture
+     * alike, as fractions of each side, and a flip mirrors which part of the texture lands where.
+     * {@code flippedSource} is for textures stored upside down (the world's framebuffer).
+     */
+    private void drawCropped(UIContext context, int texture, int texW, int texH, int color, CatalystLayer layer, float x, float y, float w, float h, boolean flippedSource)
+    {
+        float cl = Math.max(0F, layer.cropLeft);
+        float cr = Math.max(0F, layer.cropRight);
+        float ct = Math.max(0F, layer.cropTop);
+        float cb = Math.max(0F, layer.cropBottom);
+
+        if (cl + cr >= 0.999F || ct + cb >= 0.999F)
+        {
+            return;
+        }
+
+        float x1 = x + w * cl;
+        float x2 = x + w * (1F - cr);
+        float y1 = y + h * ct;
+        float y2 = y + h * (1F - cb);
+
+        /* Where a fraction across the drawn picture reads the texture */
+        float uFrom = layer.flipH ? 1F - cl : cl;
+        float uTo = layer.flipH ? cr : 1F - cr;
+        boolean invertV = flippedSource != layer.flipV;
+        float vFrom = invertV ? 1F - ct : ct;
+        float vTo = invertV ? cb : 1F - cb;
+
+        context.batcher.texturedBox(texture, color, x1, y1, x2 - x1, y2 - y1, uFrom * texW, vFrom * texH, uTo * texW, vTo * texH, texW, texH);
     }
 
     /**
@@ -2504,11 +4499,11 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
             }
         }
 
-        for (int i = comp.layers.size() - 1; i >= 0; i--)
+        for (CatalystLayer layer : this.drawOrder(comp))
         {
-            CatalystLayer layer = comp.layers.get(i);
             if (hasSolo && !layer.solo) continue;
             if (!layer.visible) continue;
+            if (this.isTrackHidden(comp, layer)) continue;
             if (playhead < layer.startFrame || playhead >= layer.startFrame + layer.duration) continue;
 
             /* Evaluate keyframe animations for current playhead frame without mutating base values */
@@ -2522,8 +4517,28 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
             float effAnchorX = eff[6];
             float effAnchorY = eff[7];
 
-            float alpha = Math.max(0F, Math.min(1F, effOpacity / 100.0F));
+            float alpha = Math.max(0F, Math.min(1F, effOpacity / 100.0F)) * this.nestAlpha;
+            int sinceStart = playhead - layer.startFrame;
+            float enter = !layer.transitionIn.isEmpty() && sinceStart < layer.transitionFrames
+                ? Math.min(1F, (sinceStart + 1F) / Math.max(1, layer.transitionFrames)) : 1F;
+
+            if ("cross_dissolve".equals(layer.transitionIn))
+            {
+                alpha *= enter;
+            }
+            else if ("slide".equals(layer.transitionIn))
+            {
+                effPosX += compW * (1F - enter) * (1F - enter);
+            }
+
             if (alpha <= 0.001F) continue;
+
+            /* An adjustment clip: its effects go over everything drawn under it so far */
+            if (layer.layerType == CatalystLayer.LayerType.ADJUSTMENT)
+            {
+                this.applyAdjustment(context, layer, alpha, playhead, targetFps);
+                continue;
+            }
 
             long layerStartNano = System.nanoTime();
 
@@ -2549,6 +4564,9 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
                 continue;
             }
 
+            /* Effects, a blend mode or a text crop: the clip is drawn on its own first */
+            boolean layerPass = this.beginLayerPass(context, layer);
+
             MatrixStack stack = context.batcher.getContext().getMatrices();
             stack.push();
             float px = lx + layerW * effAnchorX;
@@ -2560,9 +4578,26 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
             }
             stack.translate(-px, -py, 0);
 
-            if (layer.layerType == CatalystLayer.LayerType.SOLID)
+            if (mchorse.bbs_mod.ui.dashboard.panels.catalyst.CatalystMedia.isOffline(layer))
             {
-                context.batcher.box((int) lx, (int) ly, (int) (lx + layerW), (int) (ly + layerH), renderColor);
+                this.renderOffline(context, lx, ly, layerW, layerH, alpha);
+            }
+            else if (layer.layerType == CatalystLayer.LayerType.ADJUSTMENT || layer.layerType == CatalystLayer.LayerType.NULL)
+            {
+                /* Nothing of its own to draw */
+            }
+            else if (layer.layerType == CatalystLayer.LayerType.NESTED)
+            {
+                this.renderNested(context, layer, lx, ly, layerW, layerH, compW, compH, playhead, targetFps, alpha);
+            }
+            else if (layer.layerType == CatalystLayer.LayerType.SOLID)
+            {
+                float cx1 = lx + layerW * layer.cropLeft;
+                float cx2 = lx + layerW * (1F - layer.cropRight);
+                float cy1 = ly + layerH * layer.cropTop;
+                float cy2 = ly + layerH * (1F - layer.cropBottom);
+
+                context.batcher.box((int) Math.min(cx1, cx2), (int) Math.min(cy1, cy2), (int) Math.max(cx1, cx2), (int) Math.max(cy1, cy2), renderColor);
             }
             else if (layer.layerType == CatalystLayer.LayerType.IMAGE)
             {
@@ -2575,7 +4610,7 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
                         if (texture != null && texture.isValid())
                         {
                             int imgColor = Colors.setA(0xFFFFFFFF, alpha);
-                            context.batcher.texturedBox(texture, imgColor, lx, ly, layerW, layerH, 0, 0, texture.width, texture.height);
+                            this.drawCropped(context, texture.id, texture.width, texture.height, imgColor, layer, lx, ly, layerW, layerH, false);
                             rendered = true;
                         }
                     }
@@ -2594,7 +4629,7 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
                     try
                     {
                         Link link = Link.create(layer.resourcePath.trim());
-                        VideoPlayer player = BBSModClient.getVideos().getPlayer(layer, link);
+                        VideoPlayer player = BBSModClient.getVideos().getPlayer(this.videoOwner(layer), link);
                         if (player != null)
                         {
                             player.setMaxSize(compW, compH);
@@ -2603,40 +4638,25 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
                             float playerFps = player.getFps() > 0 ? player.getFps() : 30F;
                             int videoFrameIdx = Math.max(0, (int) (relSec * playerFps));
 
-                            Texture frameTex = null;
-                            if (layer.cachedVideoTexture instanceof Texture && layer.lastVideoFrameIndex == videoFrameIdx && ((Texture) layer.cachedVideoTexture).isValid())
+                            /* An export wants the exact frame and waits for it; the monitor never waits:
+                             * playing, paused or scrubbing, it shows the closest frame the player's
+                             * prefetch worker has decoded and lets the worker catch up or jump */
+                            Texture frameTex = this.isExporting ? player.getFrame(relSec) : player.getFramePrefetched(relSec);
+
+                            if (frameTex != null && frameTex.isValid())
+                            {
+                                layer.cachedVideoTexture = frameTex;
+                                layer.lastVideoFrameIndex = videoFrameIdx;
+                            }
+                            else if (layer.cachedVideoTexture instanceof Texture && ((Texture) layer.cachedVideoTexture).isValid())
                             {
                                 frameTex = (Texture) layer.cachedVideoTexture;
-                            }
-                            else
-                            {
-                                if (this.isExporting || this.isPlaying)
-                                {
-                                    /* Playing or Exporting: use sequential stream decode without process restarts */
-                                    frameTex = player.getFrame(relSec);
-                                }
-                                else
-                                {
-                                    /* Paused: decode synchronously so frame appears immediately without waiting or returning null */
-                                    frameTex = player.seekFrame(relSec);
-                                }
-
-                                if (frameTex != null && frameTex.isValid())
-                                {
-                                    layer.cachedVideoTexture = frameTex;
-                                    layer.lastVideoFrameIndex = videoFrameIdx;
-                                }
-                                else if (layer.cachedVideoTexture instanceof Texture && ((Texture) layer.cachedVideoTexture).isValid())
-                                {
-                                    /* Frame skip / lag fallback: draw last loaded texture without stalling the UI thread */
-                                    frameTex = (Texture) layer.cachedVideoTexture;
-                                }
                             }
 
                             if (frameTex != null && frameTex.isValid())
                             {
                                 int videoColor = Colors.setA(0xFFFFFFFF, alpha);
-                                context.batcher.texturedBox(frameTex, videoColor, lx, ly, layerW, layerH, 0, 0, frameTex.width, frameTex.height);
+                                this.drawCropped(context, frameTex.id, frameTex.width, frameTex.height, videoColor, layer, lx, ly, layerW, layerH, false);
                                 rendered = true;
                             }
                         }
@@ -2707,16 +4727,34 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
                                 BBSRendering.setCustomSize(true);
                             }
 
+                            /* The world as the film camera saw it: the live framebuffer, the way the film
+                             * editor's preview reads it. BBSRendering.getTexture() is only filled while a
+                             * video is exported, so outside of that it held nothing to show */
+                            int filmColor = Colors.setA(0xFFFFFFFF, alpha);
+                            net.minecraft.client.gl.Framebuffer world = BBSRendering.getFramebuffer();
                             Texture texture = BBSRendering.getTexture();
-                            if (texture != null && texture.isValid() && texture.width > 0 && texture.height > 0)
+
+                            if (!this.isExporting && world != null && world.getColorAttachment() > 0 && world.textureWidth > 0)
                             {
-                                int filmColor = Colors.setA(0xFFFFFFFF, alpha);
-                                context.batcher.texturedBox(texture.id, filmColor, lx, ly, layerW, layerH, 0, texture.height, texture.width, 0, texture.width, texture.height);
+                                this.drawCropped(context, world.getColorAttachment(), world.textureWidth, world.textureHeight, filmColor, layer, lx, ly, layerW, layerH, true);
+                                filmRendered = true;
+                            }
+                            else if (texture != null && texture.isValid() && texture.width > 0 && texture.height > 0)
+                            {
+                                this.drawCropped(context, texture.id, texture.width, texture.height, filmColor, layer, lx, ly, layerW, layerH, true);
                                 filmRendered = true;
                             }
                         }
                     }
-                    catch (Exception ignored) {}
+                    catch (Throwable e)
+                    {
+                        /* A film that fails to draw must not take the interface with it: once in the log, then a placeholder */
+                        if (!filmErrorLogged)
+                        {
+                            filmErrorLogged = true;
+                            BBSMod.LOGGER.error("[Catalyst] Film clip '" + layer.resourcePath + "' failed to render; it shows a placeholder until fixed", e);
+                        }
+                    }
                 }
 
                 /* If no film is in range or couldn't render, deactivate scene camera */
@@ -2800,863 +4838,22 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
 
             stack.pop();
 
+            if (layerPass)
+            {
+                this.endLayerPass(context, layer, lx, ly, layerW, layerH, compW, compH, playhead, targetFps);
+            }
+
+            if ("dip_to_black".equals(layer.transitionIn) && enter < 1F)
+            {
+                context.batcher.box(0, 0, compW, compH, Colors.setA(0, 1F - enter));
+            }
+
             layer.lastRenderMs = (System.nanoTime() - layerStartNano) / 1_000_000.0;
         }
     }
 
-    /* ════════════════════════════════════════════════════════
-     *  BOTTOM AREA (Layers + Timeline)
-     * ════════════════════════════════════════════════════════ */
 
-    private void setupBottomArea()
-    {
-        this.bottomArea = new UIElement();
-        this.bottomArea.relative(this).y(horizontalSplitRatio).w(1F).h(1.0F - horizontalSplitRatio);
-
-        /* ── Left: Layers list ── */
-        this.layersContainer = new UIElement();
-        this.layersContainer.relative(this.bottomArea).x(0).w(leftPanelWidth).h(1F);
-
-        this.layersHeader = new UIElement();
-        this.layersHeader.relative(this.layersContainer).w(1F).h(20);
-        this.layersHeader.add(new UIRenderable((context) ->
-        {
-            Area a = this.layersHeader.area;
-            context.batcher.box(a.x, a.y, a.ex(), a.ey(), BBSSettings.chromeSurface());
-            context.batcher.box(a.x, a.ey() - 1, a.ex(), a.ey(), BBSSettings.dividerColor());
-
-            CatalystComposition comp = (this.activeProject != null) ? this.activeProject.getActiveComposition() : null;
-            int count = (comp != null) ? comp.layers.size() : 0;
-            String headerTitle = UIKeys.CATALYST_LAYERS.get() + " (" + count + ")";
-            context.batcher.textCard(headerTitle, a.x + 6, a.y + 4, Colors.WHITE, 0, 0, false);
-        }));
-
-        this.inlinePropInput = new UITextbox((text) -> this.commitInlinePropInput(text))
-        {
-            @Override
-            public boolean subKeyPressed(UIContext context)
-            {
-                if (this.isFocused() && context.isPressed(GLFW.GLFW_KEY_ENTER))
-                {
-                    commitInlinePropInput(this.getText());
-                    context.unfocus();
-                    return true;
-                }
-                if (this.isFocused() && context.isPressed(GLFW.GLFW_KEY_ESCAPE))
-                {
-                    setVisible(false);
-                    editingPropLayer = null;
-                    editingPropBit = 0;
-                    editingPropComponent = 0;
-                    context.unfocus();
-                    return true;
-                }
-                return super.subKeyPressed(context);
-            }
-        };
-        this.inlinePropInput.delayedInput();
-        this.inlinePropInput.setVisible(false);
-
-        this.layersList = new UIScrollView(ScrollDirection.VERTICAL)
-        {
-            private CatalystLayer draggingPropLayer = null;
-            private int draggingPropBit = 0;
-            private int draggingPropComponent = 0;
-            private int dragStartX = 0;
-            private int dragStartY = 0;
-            private int dragPendingBoxX = 0;
-            private int dragPendingBoxY = 0;
-            private int dragPendingBoxW = 0;
-            private float dragInitialVal1 = 0F;
-            private float dragInitialVal2 = 0F;
-            private boolean hasDraggedProp = false;
-
-            /** Returns the total height of the layer panel content (sum of all expanded row heights). */
-            private int getTotalContentHeight(CatalystComposition comp)
-            {
-                if (comp == null) return 0;
-                int total = 0;
-                for (CatalystLayer l : comp.layers)
-                {
-                    total += getExpandedLayerPanelHeight(l);
-                }
-                return total;
-            }
-
-            private int getExpandedLayerPanelHeight(CatalystLayer l)
-            {
-                if (!l.expanded) return 24;
-                int count = mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.getSubRowCount(l);
-                return 24 + count * 18;
-            }
-
-            /** Find the layer under the given scroll-adjusted Y. Returns the layer and sets layerTopY_out[0]. */
-            private CatalystLayer getLayerAtY(CatalystComposition comp, int relY, int[] layerTopY_out)
-            {
-                if (comp == null) return null;
-                int cy = 0;
-                for (CatalystLayer l : comp.layers)
-                {
-                    int h = getExpandedLayerPanelHeight(l);
-                    if (relY >= cy && relY < cy + h)
-                    {
-                        if (layerTopY_out != null) layerTopY_out[0] = cy;
-                        return l;
-                    }
-                    cy += h;
-                }
-                return null;
-            }
-
-            @Override
-            protected boolean subMouseClicked(UIContext context)
-            {
-                if (context.mouseButton == 0 && this.area.isInside(context))
-                {
-                    CatalystComposition comp = (activeProject != null) ? activeProject.getActiveComposition() : null;
-                    if (comp != null && !comp.layers.isEmpty())
-                    {
-                        int scroll = (int) this.scroll.getScroll();
-                        int relY   = context.mouseY - this.area.y + scroll;
-                        int mx     = context.mouseX;
-                        int ax     = this.area.x;
-
-                        int[] topY = {0};
-                        CatalystLayer layer = getLayerAtY(comp, relY, topY);
-                        if (layer == null) return super.subMouseClicked(context);
-
-                        int ry = this.area.y + topY[0] - scroll; // screen Y of this layer's row top
-
-                        /* Only handle clicks in the base row (first 24px) for switches */
-                        if (context.mouseY < ry + 24)
-                        {
-                            /* EXPAND ARROW (x: 2..14) - Check first and consume cleanly */
-                            if (mx >= ax + 2 && mx < ax + 14)
-                            {
-                                layer.expanded = !layer.expanded;
-                                if (layer.expanded && layer.expandedProps == 0)
-                                {
-                                    int defaultMask = 0;
-                                    if (layer.layerType != CatalystLayer.LayerType.AUDIO)
-                                    {
-                                        defaultMask |= mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.MOTION_MASK;
-                                    }
-                                    if (layer.layerType == CatalystLayer.LayerType.AUDIO || layer.layerType == CatalystLayer.LayerType.VIDEO)
-                                    {
-                                        defaultMask |= mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.AUDIO_MASK;
-                                    }
-                                    layer.expandedProps = defaultMask;
-                                }
-                                else if (!layer.expanded)
-                                {
-                                    layer.expandedProps = 0;
-                                }
-                                return true;
-                            }
-                            /* EYE / VISIBLE (x: 14..26) */
-                            if (mx >= ax + 14 && mx < ax + 26)
-                            {
-                                layer.visible = !layer.visible;
-                                saveAndRefresh();
-                                updateInspectorForm();
-                                return true;
-                            }
-                            /* MUTE (x: 27..39) - Only active for audio/video layers */
-                            if (mx >= ax + 27 && mx < ax + 39)
-                            {
-                                if (layer.layerType == CatalystLayer.LayerType.AUDIO || layer.layerType == CatalystLayer.LayerType.VIDEO)
-                                {
-                                    layer.muted = !layer.muted;
-                                    saveAndRefresh();
-                                    return true;
-                                }
-                            }
-                            /* SOLO (x: 40..52) */
-                            if (mx >= ax + 40 && mx < ax + 52)
-                            {
-                                layer.solo = !layer.solo;
-                                saveAndRefresh();
-                                return true;
-                            }
-                            /* LOCK (x: 53..65) */
-                            if (mx >= ax + 53 && mx < ax + 65)
-                            {
-                                layer.locked = !layer.locked;
-                                saveAndRefresh();
-                                updateInspectorForm();
-                                return true;
-                            }
-                            /* BLEND MODE (x: 66..96) - Non-audio layers */
-                            if (mx >= ax + 66 && mx < ax + 97 && layer.layerType != CatalystLayer.LayerType.AUDIO)
-                            {
-                                if (context.mouseButton == 1)
-                                {
-                                    context.replaceContextMenu((menu) ->
-                                    {
-                                        String[] modes = new String[] {"NORMAL", "MULTIPLY", "SCREEN", "ADD", "OVERLAY"};
-                                        for (String mode : modes)
-                                        {
-                                            menu.action(mode.equalsIgnoreCase(layer.blendMode) ? Icons.CHECKMARK : Icons.NONE, IKey.raw(mode), () ->
-                                            {
-                                                UICatalystPanel.this.pushUndo();
-                                                layer.blendMode = mode;
-                                                saveAndRefresh();
-                                                updateInspectorForm();
-                                            });
-                                        }
-                                    });
-                                }
-                                else
-                                {
-                                    UICatalystPanel.this.cycleBlendMode(layer);
-                                }
-                                return true;
-                            }
-
-                            /* Click on layer name area = select */
-                            if (catalystTimeline != null)
-                            {
-                                catalystTimeline.setSelected(layer);
-                                updateInspectorForm();
-                            }
-                            return true;
-                        }
-                        else
-                        {
-                            /* Click in property sub-row area */
-                            if (layer.expanded && layer.expandedProps != 0)
-                            {
-                                int py = ry + 24;
-                                boolean supportsMotion = (layer.layerType != CatalystLayer.LayerType.AUDIO);
-                                boolean supportsAudio = (layer.layerType == CatalystLayer.LayerType.AUDIO || layer.layerType == CatalystLayer.LayerType.VIDEO);
-
-                                /* ── MOTION GROUP ── */
-                                if (supportsMotion && (layer.expandedProps & mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.MOTION_MASK) != 0)
-                                {
-                                    if (context.mouseY >= py && context.mouseY < py + 18)
-                                    {
-                                        layer.expandedProps ^= mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.MOTION_MASK;
-                                        if (layer.expandedProps == 0) layer.expanded = false;
-                                        return true;
-                                    }
-                                    py += 18;
-
-                                    int[] motionBits = {
-                                        mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_POSITION,
-                                        mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_SCALE,
-                                        mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_ROTATION,
-                                        mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_OPACITY,
-                                        mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_ANCHOR
-                                    };
-                                    for (int pBit : motionBits)
-                                    {
-                                        if ((layer.expandedProps & pBit) == 0) continue;
-                                        if (context.mouseY >= py && context.mouseY < py + 18)
-                                        {
-                                            return handlePropClick(context, layer, pBit, py, mx, context.mouseY, ax);
-                                        }
-                                        py += 18;
-                                    }
-                                }
-
-                                /* ── AUDIO GROUP ── */
-                                if (supportsAudio && (layer.expandedProps & mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.AUDIO_MASK) != 0)
-                                {
-                                    if (context.mouseY >= py && context.mouseY < py + 18)
-                                    {
-                                        layer.expandedProps ^= mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.AUDIO_MASK;
-                                        if (layer.expandedProps == 0) layer.expanded = false;
-                                        return true;
-                                    }
-                                    py += 18;
-
-                                    int[] audioBits = {
-                                        mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_VOLUME,
-                                        mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_PAN
-                                    };
-                                    for (int pBit : audioBits)
-                                    {
-                                        if ((layer.expandedProps & pBit) == 0) continue;
-                                        if (context.mouseY >= py && context.mouseY < py + 18)
-                                        {
-                                            return handlePropClick(context, layer, pBit, py, mx, context.mouseY, ax);
-                                        }
-                                        py += 18;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                return super.subMouseClicked(context);
-            }
-
-            private boolean handlePropClick(UIContext context, CatalystLayer layer, int pBit, int py, int mx, int my, int ax)
-            {
-                /* Check stopwatch click (x: ax + 4 .. ax + 20) */
-                if (mx >= ax + 4 && mx < ax + 20)
-                {
-                    pushUndo();
-                    layer.addKeyframe(pBit, currentFrame);
-                    saveAndRefresh();
-                    return true;
-                }
-
-                /* Check value area click/drag on the right side */
-                if (mx >= ax + 105)
-                {
-                    int valLeft = ax + 105;
-                    int valRight = this.area.ex() - 4;
-                    boolean is2Component = (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_POSITION ||
-                                            pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_SCALE ||
-                                            pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_ANCHOR);
-                    int valMid = valLeft + (valRight - valLeft) / 2;
-                    int compIdx = (is2Component && mx >= valMid) ? 1 : 0;
-                    int boxX = is2Component ? (compIdx == 0 ? valLeft : valMid) : valLeft;
-                    int boxW = is2Component ? (compIdx == 0 ? (valMid - valLeft) : (valRight - valMid)) : (valRight - valLeft);
-
-                    if (Window.isAltPressed() && is2Component)
-                    {
-                        pushUndo();
-                        int singleBit = CatalystLayer.getSinglePropBit(pBit, compIdx);
-                        if (layer.hasKeyframeAtSingle(singleBit, currentFrame))
-                        {
-                            layer.removeKeyframeSingle(singleBit, currentFrame);
-                        }
-                        else
-                        {
-                            layer.addKeyframeSingle(singleBit, currentFrame);
-                        }
-                        saveAndRefresh();
-                        return true;
-                    }
-
-                    long now = System.currentTimeMillis();
-                    boolean isDoubleClick = (now - lastPropClickTime < 350L) &&
-                                            (lastClickedPropLayer == layer) &&
-                                            (lastClickedPropBit == pBit) &&
-                                            (lastClickedPropComp == compIdx);
-                    lastPropClickTime = now;
-                    lastClickedPropLayer = layer;
-                    lastClickedPropBit = pBit;
-                    lastClickedPropComp = compIdx;
-
-                    if (isDoubleClick)
-                    {
-                        openInlinePropInput(context, layer, pBit, compIdx, boxX, py + 1, boxW, 16);
-                        return true;
-                    }
-
-                    pushUndo();
-                    draggingPropLayer = layer;
-                    draggingPropBit = pBit;
-                    draggingPropComponent = compIdx;
-                    dragStartX = mx;
-                    dragStartY = my;
-                    dragPendingBoxX = boxX;
-                    dragPendingBoxY = py + 1;
-                    dragPendingBoxW = boxW;
-                    hasDraggedProp = false;
-
-                    if (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_POSITION)
-                    {
-                        dragInitialVal1 = layer.posX;
-                        dragInitialVal2 = layer.posY;
-                    }
-                    else if (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_SCALE)
-                    {
-                        dragInitialVal1 = layer.scaleX;
-                        dragInitialVal2 = layer.scaleY;
-                    }
-                    else if (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_ROTATION)
-                    {
-                        dragInitialVal1 = layer.rotation;
-                    }
-                    else if (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_OPACITY)
-                    {
-                        dragInitialVal1 = (float) layer.opacity;
-                    }
-                    else if (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_ANCHOR)
-                    {
-                        dragInitialVal1 = layer.anchorX;
-                        dragInitialVal2 = layer.anchorY;
-                    }
-                    else if (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_VOLUME)
-                    {
-                        dragInitialVal1 = layer.computeEffectiveVolume(currentFrame);
-                    }
-                    else if (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_PAN)
-                    {
-                        dragInitialVal1 = layer.computeEffectivePan(currentFrame);
-                    }
-                    return true;
-                }
-
-                /* Click in prop row – select the layer */
-                if (catalystTimeline != null)
-                {
-                    catalystTimeline.setSelected(layer);
-                    updateInspectorForm();
-                }
-                return true;
-            }
-
-            @Override
-            protected boolean subMouseReleased(UIContext context)
-            {
-                if (draggingPropLayer != null)
-                {
-                    int dx = Math.abs(context.mouseX - dragStartX);
-                    int dy = Math.abs(context.mouseY - dragStartY);
-                    if (dx < 3 && dy < 3 && !hasDraggedProp)
-                    {
-                        openInlinePropInput(context, draggingPropLayer, draggingPropBit, draggingPropComponent, dragPendingBoxX, dragPendingBoxY, dragPendingBoxW, 16);
-                    }
-                    else
-                    {
-                        saveAndRefresh();
-                        updateInspectorForm();
-                    }
-                    draggingPropLayer = null;
-                    draggingPropBit = 0;
-                    draggingPropComponent = 0;
-                    hasDraggedProp = false;
-                    return true;
-                }
-                return super.subMouseReleased(context);
-            }
-
-            @Override
-            public void render(UIContext context)
-            {
-                if (draggingPropLayer != null && draggingPropBit != 0)
-                {
-                    float dx = (context.mouseX - dragStartX);
-                    if (Math.abs(dx) >= 3)
-                    {
-                        hasDraggedProp = true;
-                    }
-                    float factor = Window.isShiftPressed() ? 0.1F : (Window.isCtrlPressed() ? 5.0F : 1.0F);
-
-                    if (draggingPropBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_POSITION)
-                    {
-                        if (draggingPropComponent == 0)
-                        {
-                            float nv1 = dragInitialVal1 + dx * factor;
-                            draggingPropLayer.updatePropertyValue(draggingPropBit, currentFrame, nv1, dragInitialVal2);
-                        }
-                        else
-                        {
-                            float nv2 = dragInitialVal2 + dx * factor;
-                            draggingPropLayer.updatePropertyValue(draggingPropBit, currentFrame, dragInitialVal1, nv2);
-                        }
-                    }
-                    else if (draggingPropBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_SCALE)
-                    {
-                        float sclDelta = dx * 0.01F * factor;
-                        if (draggingPropComponent == 0)
-                        {
-                            float ns1 = Math.max(0.01F, dragInitialVal1 + sclDelta);
-                            draggingPropLayer.updatePropertyValue(draggingPropBit, currentFrame, ns1, dragInitialVal2);
-                        }
-                        else
-                        {
-                            float ns2 = Math.max(0.01F, dragInitialVal2 + sclDelta);
-                            draggingPropLayer.updatePropertyValue(draggingPropBit, currentFrame, dragInitialVal1, ns2);
-                        }
-                    }
-                    else if (draggingPropBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_ROTATION)
-                    {
-                        float nRot = (dragInitialVal1 + dx * factor) % 360F;
-                        draggingPropLayer.updatePropertyValue(draggingPropBit, currentFrame, nRot, 0F);
-                    }
-                    else if (draggingPropBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_OPACITY)
-                    {
-                        float nOp = Math.max(0F, Math.min(100F, dragInitialVal1 + dx * factor));
-                        draggingPropLayer.updatePropertyValue(draggingPropBit, currentFrame, nOp, 0F);
-                    }
-                    else if (draggingPropBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_ANCHOR)
-                    {
-                        if (draggingPropComponent == 0)
-                        {
-                            float nAx = Math.max(0F, Math.min(1F, dragInitialVal1 + dx * 0.005F * factor));
-                            draggingPropLayer.updatePropertyValue(draggingPropBit, currentFrame, nAx, dragInitialVal2);
-                        }
-                        else
-                        {
-                            float nAy = Math.max(0F, Math.min(1F, dragInitialVal2 + dx * 0.005F * factor));
-                            draggingPropLayer.updatePropertyValue(draggingPropBit, currentFrame, dragInitialVal1, nAy);
-                        }
-                    }
-                    else if (draggingPropBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_VOLUME)
-                    {
-                        float nVol = Math.max(0F, Math.min(2.0F, dragInitialVal1 + dx * 0.01F * factor));
-                        draggingPropLayer.updatePropertyValue(draggingPropBit, currentFrame, nVol, 0F);
-                    }
-                    else if (draggingPropBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_PAN)
-                    {
-                        float nPan = Math.max(-1F, Math.min(1F, dragInitialVal1 + dx * 0.01F * factor));
-                        draggingPropLayer.updatePropertyValue(draggingPropBit, currentFrame, nPan, 0F);
-                    }
-                }
-                super.render(context);
-            }
-        };
-        this.layersList.relative(this.layersContainer).y(20).w(1F).h(1F, -20);
-        this.layersList.scroll.scrollSpeed = 16;
-
-        this.layersList.add(new UIRenderable((context) ->
-        {
-            Area a = this.layersList.area;
-            context.batcher.box(a.x, a.y, a.ex(), a.ey(), BBSSettings.sunkenSurface());
-
-            CatalystComposition comp = (this.activeProject != null) ? this.activeProject.getActiveComposition() : null;
-            if (comp == null || comp.layers.isEmpty()) return;
-
-            int scroll = this.layersList.scroll != null ? (int) this.layersList.scroll.getScroll() : 0;
-            FontRenderer font = context.batcher.getFont();
-
-            int cy = 0; // cumulative y within content (pre-scroll)
-            for (int i = 0; i < comp.layers.size(); i++)
-            {
-                CatalystLayer layer = comp.layers.get(i);
-                int rowH  = 24;
-                int propH = layer.expanded ? mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.getSubRowCount(layer) * 18 : 0;
-                int totalH = rowH + propH;
-                int ry = a.y + cy - scroll;
-
-                if (ry + totalH < a.y || ry > a.ey())
-                {
-                    cy += totalH;
-                    continue;
-                }
-
-                boolean isSelected = this.catalystTimeline != null && this.catalystTimeline.isSelected(layer);
-                int bg = isSelected ? 0xFF2A2E3B : 0xFF1A1A20;
-
-                /* Base row background */
-                context.batcher.box(a.x + 2, ry + 1, a.ex() - 2, ry + rowH - 1, bg);
-                /* Color stripe */
-                context.batcher.box(a.x + 2, ry + 1, a.x + 4, ry + rowH - 1, layer.color);
-
-                if (isSelected)
-                {
-                    context.batcher.outline(a.x + 2, ry + 1, a.ex() - 2, ry + rowH - 1, Colors.WHITE, 1);
-                }
-
-                /* ── EXPAND ARROW (x=4..13) ── */
-                String arrow = layer.expanded ? "\u25BC" : "\u25BA"; // down vs right
-                context.batcher.text(arrow, a.x + 5, ry + 8, 0xFF8899AA, false);
-
-                /* ── LAYER SWITCHES (icons in 14-64 range) ── */
-                int iconY = ry + 4;
-
-                /* EYE icon (14..25) */
-                context.batcher.icon(layer.visible ? Icons.VISIBLE : Icons.INVISIBLE,
-                    layer.visible ? 0xFFFFFFFF : 0xFF555566, a.x + 14, iconY);
-
-                /* MUTE icon (27..38) - SOUND icon, dimmed if muted */
-                context.batcher.icon(Icons.SOUND,
-                    layer.muted ? 0xFF444455 : (layer.layerType == CatalystLayer.LayerType.AUDIO || layer.layerType == CatalystLayer.LayerType.VIDEO ? 0xFFFFFFFF : 0xFF888899),
-                    a.x + 27, iconY);
-
-                /* SOLO icon (40..51) - PLAYER icon, gold when active */
-                context.batcher.icon(Icons.PLAYER,
-                    layer.solo ? 0xFFE8C43A : 0xFF555566, a.x + 40, iconY);
-
-                /* LOCK icon (53..64) */
-                context.batcher.icon(layer.locked ? Icons.LOCKED : Icons.UNLOCKED,
-                    layer.locked ? 0xFFE85F50 : 0xFF555566, a.x + 53, iconY);
-
-                /* ── BLEND BADGE (66..96) ── */
-                if (layer.layerType != CatalystLayer.LayerType.AUDIO)
-                {
-                    int blendX = a.x + 66;
-                    int blendY = ry + 4;
-                    int blendW = 30;
-                    int blendH = 15;
-                    boolean isNorm = layer.blendMode == null || layer.blendMode.equalsIgnoreCase("NORMAL");
-                    int blendBg = isNorm ? 0x2A000000 : 0x55336699;
-                    int blendBorder = isNorm ? 0x33FFFFFF : 0x8855AAFF;
-                    context.batcher.box(blendX, blendY, blendX + blendW, blendY + blendH, blendBg);
-                    context.batcher.outline(blendX, blendY, blendX + blendW, blendY + blendH, blendBorder, 1);
-
-                    String bText = this.getBlendModeShort(layer.blendMode);
-                    int tw = font.getWidth(bText);
-                    int tx = blendX + (blendW - tw) / 2;
-                    int ty = blendY + (blendH - font.getHeight()) / 2;
-                    int textColor = isNorm ? 0xFFAAAAAA : 0xFFFFFFFF;
-                    context.batcher.text(bText, tx, ty, textColor, false);
-                }
-
-                /* ── LAYER NAME (x=100) ── */
-                int nameX = a.x + 100;
-                int nameMaxW = a.ex() - nameX - 30; // leave space for badge
-                String displayName = font.limitToWidth(layer.name, nameMaxW);
-                int nameColor = isSelected ? Colors.WHITE : (layer.visible ? Colors.LIGHTEST_GRAY : 0xFF555566);
-                context.batcher.text(displayName, nameX, ry + 8, nameColor, false);
-
-                /* ── TYPE BADGE (right side) ── */
-                String badge = layer.layerType != null ? layer.layerType.getBadge() : "";
-                int bw = font.getWidth(badge);
-                context.batcher.text(badge, a.ex() - bw - 4, ry + 8, 0xFF556677, false);
-
-                /* ── PROPERTY SUB-ROWS (twirl-down with Motion & Audio groups) ── */
-                if (layer.expanded && layer.expandedProps != 0)
-                {
-                    int py = ry + rowH;
-                    boolean supportsMotion = (layer.layerType != CatalystLayer.LayerType.AUDIO);
-                    boolean supportsAudio = (layer.layerType == CatalystLayer.LayerType.AUDIO || layer.layerType == CatalystLayer.LayerType.VIDEO);
-
-                    /* ── MOTION GROUP ── */
-                    if (supportsMotion && (layer.expandedProps & mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.MOTION_MASK) != 0)
-                    {
-                        /* Group Header: Motion */
-                        context.batcher.box(a.x + 2, py, a.ex() - 2, py + 17, 0xFF181820);
-                        context.batcher.box(a.x + 2, py + 16, a.ex() - 2, py + 17, 0xFF282830);
-                        context.batcher.text("\u25BC Motion", a.x + 6, py + 4, 0xFF7799AA, false);
-                        py += 18;
-
-                        int[] motionBits = {
-                            mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_POSITION,
-                            mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_SCALE,
-                            mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_ROTATION,
-                            mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_OPACITY,
-                            mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_ANCHOR
-                        };
-                        String[] motionNames = {"Position (X, Y)", "Scale (X, Y)", "Rotation", "Opacity", "Anchor (X, Y)"};
-
-                        for (int p = 0; p < motionBits.length; p++)
-                        {
-                            if ((layer.expandedProps & motionBits[p]) == 0) continue;
-                            this.renderLayerPropSubRow(context, font, a, layer, motionBits[p], motionNames[p], py);
-                            py += 18;
-                        }
-                    }
-
-                    /* ── AUDIO GROUP ── */
-                    if (supportsAudio && (layer.expandedProps & mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.AUDIO_MASK) != 0)
-                    {
-                        /* Group Header: Audio */
-                        context.batcher.box(a.x + 2, py, a.ex() - 2, py + 17, 0xFF181820);
-                        context.batcher.box(a.x + 2, py + 16, a.ex() - 2, py + 17, 0xFF282830);
-                        context.batcher.text("\u25BC Audio", a.x + 6, py + 4, 0xFF55BBAA, false);
-                        py += 18;
-
-                        int[] audioBits = {
-                            mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_VOLUME,
-                            mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_PAN
-                        };
-                        String[] audioNames = {"Volume", "Audio Pan"};
-
-                        for (int p = 0; p < audioBits.length; p++)
-                        {
-                            if ((layer.expandedProps & audioBits[p]) == 0) continue;
-                            this.renderLayerPropSubRow(context, font, a, layer, audioBits[p], audioNames[p], py);
-                            py += 18;
-                        }
-                    }
-                }
-
-                /* Row separator */
-                context.batcher.box(a.x + 2, ry + rowH - 1, a.ex() - 2, ry + rowH, 0xFF2A2A30);
-
-                cy += totalH;
-            }
-
-            context.batcher.box(a.ex() - 1, a.y, a.ex(), a.ey(), BBSSettings.dividerColor());
-        }));
-
-        this.layersContainer.add(this.layersHeader, this.layersList, this.inlinePropInput);
-
-        /* ── Center: Catalyst Timeline (extends UITimelineCanvas) ── */
-        this.catalystTimeline = new UICatalystTimeline(
-            () -> this.activeProject != null ? this.activeProject.getActiveComposition() : null,
-            () -> this.currentFrame,
-            (frame) ->
-            {
-                this.seekToFrame(frame);
-            },
-            () ->
-            {
-                /* Pause on scrub */
-                this.isPlaying  = false;
-                this.lastTickMs = 0;
-                this.stopAllAudio();
-            },
-            () ->
-            {
-                /* Auto-save on timeline modification */
-                this.saveAndRefresh();
-                this.updateInspectorForm();
-            }
-        );
-        this.catalystTimeline.onPreModify = this::pushUndo;
-        this.catalystTimeline.relative(this.bottomArea).x(leftPanelWidth).w(1F, -(leftPanelWidth + rightPanelWidth)).h(1F);
-
-        /* ── Right: Inspector Panel ── */
-        this.setupInspectorPanel();
-
-        this.bottomArea.add(this.layersContainer, this.catalystTimeline, this.inspectorContainer);
-    }
-
-    private void renderLayerPropSubRow(UIContext context, FontRenderer font, Area a, CatalystLayer layer, int pBit, String propName, int py)
-    {
-        /* Sub-row background */
-        context.batcher.box(a.x + 4, py, a.ex() - 2, py + 17, 0xFF141418);
-        context.batcher.box(a.x + 4, py + 16, a.ex() - 2, py + 17, 0xFF222228);
-
-        /* STOPWATCH icon on left: check if keyframed or anim active */
-        boolean hasKey = layer.hasKeyframeAt(pBit, this.currentFrame);
-        int stopwatchColor = hasKey ? 0xFF55AAFF : 0xFF4477AA;
-        context.batcher.icon(Icons.STOPWATCH, stopwatchColor, a.x + 5, py + 1);
-
-        /* Property name */
-        context.batcher.text(propName, a.x + 22, py + 4, 0xFF8899AA, false);
-
-        /* Value on right */
-        int valLeft = a.x + 105;
-        int valRight = a.ex() - 4;
-        int valMid = valLeft + (valRight - valLeft) / 2;
-
-        if (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_POSITION ||
-            pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_SCALE ||
-            pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_ANCHOR)
-        {
-            float v1 = (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_POSITION) ? layer.posX :
-                       (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_SCALE ? layer.scaleX : layer.anchorX);
-            float v2 = (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_POSITION) ? layer.posY :
-                       (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_SCALE ? layer.scaleY : layer.anchorY);
-
-            String strX = String.format(java.util.Locale.ROOT, "%.1f", v1);
-            String strY = String.format(java.util.Locale.ROOT, "%.1f", v2);
-
-            int wX = font.getWidth(strX);
-            int wY = font.getWidth(strY);
-
-            /* Left half for X */
-            context.batcher.text(strX, valMid - wX - 4, py + 4, 0xFFCCDDEE, false);
-            /* Divider */
-            context.batcher.box(valMid - 1, py + 3, valMid, py + 14, 0x44FFFFFF);
-            /* Right half for Y */
-            context.batcher.text(strY, valRight - wY - 2, py + 4, 0xFFCCDDEE, false);
-        }
-        else if (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_OPACITY)
-        {
-            String valStr = layer.opacity + "%";
-            int vw = font.getWidth(valStr);
-            context.batcher.text(valStr, valRight - vw - 2, py + 4, 0xFFCCDDEE, false);
-        }
-        else if (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_ROTATION)
-        {
-            String valStr = String.format(java.util.Locale.ROOT, "%.1f\u00B0", layer.rotation);
-            int vw = font.getWidth(valStr);
-            context.batcher.text(valStr, valRight - vw - 2, py + 4, 0xFFCCDDEE, false);
-        }
-        else if (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_VOLUME)
-        {
-            float vol = layer.computeEffectiveVolume(this.currentFrame);
-            String valStr = String.format(java.util.Locale.ROOT, "%.2f", vol);
-            int vw = font.getWidth(valStr);
-            context.batcher.text(valStr, valRight - vw - 2, py + 4, 0xFFCCDDEE, false);
-        }
-        else if (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_PAN)
-        {
-            float pan = layer.computeEffectivePan(this.currentFrame);
-            String valStr = String.format(java.util.Locale.ROOT, "%+.2f", pan);
-            int vw = font.getWidth(valStr);
-            context.batcher.text(valStr, valRight - vw - 2, py + 4, 0xFFCCDDEE, false);
-        }
-    }
-
-    private void openInlinePropInput(UIContext context, CatalystLayer layer, int pBit, int componentIndex, int boxX, int boxY, int boxW, int boxH)
-    {
-        if (this.inlinePropInput == null || layer == null) return;
-
-        this.editingPropLayer = layer;
-        this.editingPropBit = pBit;
-        this.editingPropComponent = componentIndex;
-
-        float currentVal = 0F;
-        if (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_POSITION)
-        {
-            currentVal = (componentIndex == 0) ? layer.posX : layer.posY;
-        }
-        else if (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_SCALE)
-        {
-            currentVal = (componentIndex == 0) ? layer.scaleX : layer.scaleY;
-        }
-        else if (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_ROTATION)
-        {
-            currentVal = layer.rotation;
-        }
-        else if (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_OPACITY)
-        {
-            currentVal = (float) layer.opacity;
-        }
-        else if (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_ANCHOR)
-        {
-            currentVal = (componentIndex == 0) ? layer.anchorX : layer.anchorY;
-        }
-        else if (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_VOLUME)
-        {
-            currentVal = layer.computeEffectiveVolume(this.currentFrame);
-        }
-        else if (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_PAN)
-        {
-            currentVal = layer.computeEffectivePan(this.currentFrame);
-        }
-
-        String formatted;
-        if (pBit == mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_OPACITY)
-        {
-            formatted = String.valueOf(Math.round(currentVal));
-        }
-        else if (currentVal == (long) currentVal)
-        {
-            formatted = String.format(java.util.Locale.ROOT, "%d", (long) currentVal);
-        }
-        else
-        {
-            formatted = String.format(java.util.Locale.ROOT, "%.2f", currentVal);
-        }
-
-        int relX = boxX - this.layersContainer.area.x;
-        int relY = boxY - this.layersContainer.area.y;
-
-        this.inlinePropInput.setText(formatted);
-        this.inlinePropInput.relative(this.layersContainer).x(relX).y(relY).w(Math.max(40, boxW)).h(boxH);
-        this.inlinePropInput.resize();
-        this.inlinePropInput.setVisible(true);
-
-        if (context != null)
-        {
-            context.focus(this.inlinePropInput);
-            this.inlinePropInput.selectAll(context);
-        }
-    }
-
-    private void commitInlinePropInput(String text)
-    {
-        if (this.editingPropLayer == null || this.editingPropBit == 0) return;
-
-        try
-        {
-            float val = Float.parseFloat(text.trim().replace(',', '.'));
-            this.pushUndo();
-            this.applyPropValue(this.editingPropLayer, this.editingPropBit, this.editingPropComponent, val);
-            this.saveAndRefresh();
-            this.updateInspectorForm();
-        }
-        catch (Exception ignored) {}
-
-        this.inlinePropInput.setVisible(false);
-        this.editingPropLayer = null;
-        this.editingPropBit = 0;
-        this.editingPropComponent = 0;
-    }
-
-    private void applyPropValue(CatalystLayer layer, int propBit, int componentIndex, float val)
+    public void applyPropValue(CatalystLayer layer, int propBit, int componentIndex, float val)
     {
         if (layer == null) return;
 
@@ -3701,440 +4898,6 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
         }
     }
 
-    private void setupInspectorPanel()
-    {
-        this.inspectorContainer = new UIElement();
-        this.inspectorContainer.relative(this.bottomArea).x(1F, -rightPanelWidth).w(rightPanelWidth).h(1F);
-
-        this.inspectorHeader = new UIElement();
-        this.inspectorHeader.relative(this.inspectorContainer).w(1F).h(20);
-        this.inspectorHeader.add(new UIRenderable((context) ->
-        {
-            Area a = this.inspectorHeader.area;
-            context.batcher.box(a.x, a.y, a.ex(), a.ey(), BBSSettings.chromeSurface());
-            context.batcher.box(a.x, a.ey() - 1, a.ex(), a.ey(), BBSSettings.dividerColor());
-            context.batcher.box(a.x, a.y, a.x + 1, a.ey(), BBSSettings.dividerColor());
-
-            context.batcher.icon(Icons.GEAR, Colors.WHITE, a.x + 4, a.my() - 8);
-            context.batcher.text(UIKeys.CATALYST_INSPECTOR.get(), a.x + 22, a.y + 5, Colors.WHITE, false);
-        }));
-
-        this.inspectorEmptyLabel = new UILabel(IKey.raw("No Layer Selected"), Colors.GRAY);
-
-        this.layerTypeLabel = new UILabel(IKey.raw("Type: SOLID"), Colors.LIGHTEST_GRAY);
-        this.layerTypeLabel.h(16);
-
-        this.layerNameInput = new UITextbox(120, (text) ->
-        {
-            CatalystLayer sel = this.getSelectedLayer();
-            if (sel != null && !text.trim().isEmpty())
-            {
-                sel.name = text.trim();
-                this.saveAndRefresh();
-            }
-        });
-        this.layerNameInput.h(20);
-
-        /* Read-only source asset label */
-        this.layerResourceLabel = new UILabel(IKey.raw("Source: (None)"), Colors.LIGHTEST_GRAY);
-        this.layerResourceLabel.h(14);
-
-        /* Text Layer Controls */
-        this.layerTextarea = new UITextarea((java.util.function.Consumer<String>) (text) ->
-        {
-            CatalystLayer sel = this.getSelectedLayer();
-            if (sel != null)
-            {
-                sel.resourcePath = text;
-                this.saveAndRefresh();
-            }
-        });
-        this.layerTextarea.background().wrap(true).h(64);
-
-        this.layerFontSizeInput = new UITrackpad((v) ->
-        {
-            CatalystLayer sel = this.getSelectedLayer();
-            if (sel != null)
-            {
-                sel.fontSize = (int) Math.round(v);
-                this.saveAndRefresh();
-            }
-        });
-        this.layerFontSizeInput.limit(6, 120, true).h(20);
-        this.layerFontSizeInput.setValue(16);
-
-        this.layerTextColorPicker = new UIColor((col) ->
-        {
-            CatalystLayer sel = this.getSelectedLayer();
-            if (sel != null)
-            {
-                sel.textColor = col;
-                this.saveAndRefresh();
-            }
-        });
-        this.layerTextColorPicker.withAlpha().h(20);
-
-        this.layerLineWrapButton = new UIButton(IKey.raw("Wrap: ON"), (b) ->
-        {
-            CatalystLayer sel = this.getSelectedLayer();
-            if (sel != null)
-            {
-                sel.lineWrapping = !sel.lineWrapping;
-                this.updateInspectorForm();
-                this.saveAndRefresh();
-            }
-        });
-        this.layerLineWrapButton.h(20);
-
-        this.layerShadowButton = new UIButton(IKey.raw("Shadow: ON"), (b) ->
-        {
-            CatalystLayer sel = this.getSelectedLayer();
-            if (sel != null)
-            {
-                sel.shadow = !sel.shadow;
-                this.updateInspectorForm();
-                this.saveAndRefresh();
-            }
-        });
-        this.layerShadowButton.h(20);
-
-        this.textControlsGroup = UI.column(
-            4,
-            UI.label(IKey.raw("Text Content:")).h(14),
-            this.layerTextarea,
-            UI.label(IKey.raw("Font Size & Color:")).h(14),
-            UI.row(this.layerFontSizeInput, this.layerTextColorPicker),
-            UI.row(this.layerLineWrapButton, this.layerShadowButton)
-        );
-
-        /* Opacity & Color controls */
-        this.layerOpacityInput = new UITrackpad((v) ->
-        {
-            CatalystLayer sel = this.getSelectedLayer();
-            if (sel != null)
-            {
-                sel.opacity = (int) Math.round(v);
-                this.saveAndRefresh();
-            }
-        });
-        this.layerOpacityInput.limit(0, 100, true).h(20);
-
-        /* Preset color swatches */
-        int[] palette = new int[] {
-            0xFF6B4A82, 0xFF2B5B84, 0xFF4A7C38, 0xFF88602A,
-            0xFFD63031, 0xFF0984E3, 0xFF00B894, 0xFFE17055
-        };
-
-        this.layerColorRow = new UIElement();
-        this.layerColorRow.h(18);
-
-        for (int i = 0; i < palette.length; i++)
-        {
-            final int col = palette[i];
-            UIButton swatch = new UIButton(IKey.raw(""), (btn) ->
-            {
-                CatalystLayer sel = this.getSelectedLayer();
-                if (sel != null)
-                {
-                    sel.color = col;
-                    this.layerColorPicker.setColor(col);
-                    this.saveAndRefresh();
-                }
-            });
-            swatch.color(col, col | 0x33FFFFFF);
-            swatch.relative(this.layerColorRow).x(i * 24).w(20).h(18);
-            this.layerColorRow.add(swatch);
-        }
-
-        this.layerColorPicker = new UIColor((col) ->
-        {
-            CatalystLayer sel = this.getSelectedLayer();
-            if (sel != null)
-            {
-                sel.color = col;
-                this.saveAndRefresh();
-            }
-        });
-        this.layerColorPicker.h(20);
-
-        /* Transform / Pivot Controls */
-        this.layerPosX = new UITrackpad((v) ->
-        {
-            CatalystLayer sel = this.getSelectedLayer();
-            if (sel != null)
-            {
-                sel.posX = (float) (double) v;
-                if (sel.animPosX || !sel.channelPosX.isEmpty())
-                {
-                    sel.channelPosX.insert(this.currentFrame, sel.posX);
-                }
-                this.saveAndRefresh();
-            }
-        });
-        this.layerPosX.h(20);
-
-        this.layerPosY = new UITrackpad((v) ->
-        {
-            CatalystLayer sel = this.getSelectedLayer();
-            if (sel != null)
-            {
-                sel.posY = (float) (double) v;
-                if (sel.animPosY || !sel.channelPosY.isEmpty())
-                {
-                    sel.channelPosY.insert(this.currentFrame, sel.posY);
-                }
-                this.saveAndRefresh();
-            }
-        });
-        this.layerPosY.h(20);
-
-        this.layerScaleX = new UITrackpad((v) ->
-        {
-            CatalystLayer sel = this.getSelectedLayer();
-            if (sel != null)
-            {
-                sel.scaleX = (float) (double) v;
-                if (sel.animScaleX || !sel.channelScaleX.isEmpty())
-                {
-                    sel.channelScaleX.insert(this.currentFrame, sel.scaleX);
-                }
-                this.saveAndRefresh();
-            }
-        });
-        this.layerScaleX.limit(-20.0, 20.0).h(20);
-        this.layerScaleX.setValue(1.0);
-
-        this.layerScaleY = new UITrackpad((v) ->
-        {
-            CatalystLayer sel = this.getSelectedLayer();
-            if (sel != null)
-            {
-                sel.scaleY = (float) (double) v;
-                if (sel.animScaleY || !sel.channelScaleY.isEmpty())
-                {
-                    sel.channelScaleY.insert(this.currentFrame, sel.scaleY);
-                }
-                this.saveAndRefresh();
-            }
-        });
-        this.layerScaleY.limit(-20.0, 20.0).h(20);
-        this.layerScaleY.setValue(1.0);
-
-        this.layerRotation = new UITrackpad((v) ->
-        {
-            CatalystLayer sel = this.getSelectedLayer();
-            if (sel != null)
-            {
-                sel.rotation = (float) (double) v;
-                if (sel.animRotation || !sel.channelRotation.isEmpty())
-                {
-                    sel.channelRotation.insert(this.currentFrame, sel.rotation);
-                }
-                this.saveAndRefresh();
-            }
-        });
-        this.layerRotation.limit(-360, 360).h(20);
-        this.layerRotation.setValue(0);
-
-        this.layerAnchorX = new UITrackpad((v) ->
-        {
-            CatalystLayer sel = this.getSelectedLayer();
-            if (sel != null)
-            {
-                sel.anchorX = (float) (double) v;
-                if (sel.animAnchorX || !sel.channelAnchorX.isEmpty())
-                {
-                    sel.channelAnchorX.insert(this.currentFrame, sel.anchorX);
-                }
-                this.saveAndRefresh();
-            }
-        });
-        this.layerAnchorX.limit(0.0, 1.0).h(20);
-        this.layerAnchorX.setValue(0.5);
-
-        this.layerAnchorY = new UITrackpad((v) ->
-        {
-            CatalystLayer sel = this.getSelectedLayer();
-            if (sel != null)
-            {
-                sel.anchorY = (float) (double) v;
-                if (sel.animAnchorY || !sel.channelAnchorY.isEmpty())
-                {
-                    sel.channelAnchorY.insert(this.currentFrame, sel.anchorY);
-                }
-                this.saveAndRefresh();
-            }
-        });
-        this.layerAnchorY.limit(0.0, 1.0).h(20);
-        this.layerAnchorY.setValue(0.5);
-
-        this.layerResetTransformBtn = new UIButton(IKey.raw("Reset"), (b) ->
-        {
-            CatalystLayer sel = this.getSelectedLayer();
-            if (sel != null)
-            {
-                this.pushUndo();
-                sel.posX = 0;
-                sel.posY = 0;
-                sel.scaleX = 1.0F;
-                sel.scaleY = 1.0F;
-                sel.rotation = 0;
-                sel.anchorX = 0.5F;
-                sel.anchorY = 0.5F;
-                this.updateInspectorForm();
-                this.saveAndRefresh();
-            }
-        });
-        this.layerResetTransformBtn.h(16);
-
-        this.transformGroup = UI.column(
-            4,
-            UI.row(UI.label(IKey.raw("Transform:")).h(16), this.layerResetTransformBtn).h(16),
-            UI.label(IKey.raw("Position (X, Y):")).h(14),
-            UI.row(this.layerPosX, this.layerPosY),
-            UI.label(IKey.raw("Scale (X, Y):")).h(14),
-            UI.row(this.layerScaleX, this.layerScaleY),
-            UI.label(IKey.raw("Rotation (Deg):")).h(14),
-            this.layerRotation,
-            UI.label(IKey.raw("Anchor Point (X, Y):")).h(14),
-            UI.row(this.layerAnchorX, this.layerAnchorY)
-        );
-
-        /* Media Volume & Offset controls */
-        this.layerVolumeInput = new UITrackpad((v) ->
-        {
-            CatalystLayer sel = this.getSelectedLayer();
-            if (sel != null)
-            {
-                float newVol = (float) (double) v;
-                if (sel.animVolume)
-                {
-                    this.pushUndo();
-                    sel.updatePropertyValue(mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_VOLUME, this.currentFrame, newVol, 0F);
-                }
-                else
-                {
-                    sel.volume = newVol;
-                }
-                this.saveAndRefresh();
-            }
-        });
-        this.layerVolumeInput.limit(0.0, 1.0).h(20);
-        this.layerVolumeInput.setValue(1.0);
-
-        this.layerPanInput = new UITrackpad((v) ->
-        {
-            CatalystLayer sel = this.getSelectedLayer();
-            if (sel != null)
-            {
-                float newPan = (float) (double) v;
-                if (sel.animPan)
-                {
-                    this.pushUndo();
-                    sel.updatePropertyValue(mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_PAN, this.currentFrame, newPan, 0F);
-                }
-                else
-                {
-                    sel.pan = newPan;
-                }
-                this.saveAndRefresh();
-            }
-        });
-        this.layerPanInput.limit(-1.0, 1.0).values(0.05, 0.1, 0.2).h(20);
-        this.layerPanInput.setValue(0.0);
-
-        this.layerAudioOffsetInput = new UITrackpad((v) ->
-        {
-            CatalystLayer sel = this.getSelectedLayer();
-            if (sel != null)
-            {
-                sel.audioOffset = (int) Math.round(v);
-                this.saveAndRefresh();
-            }
-        });
-        this.layerAudioOffsetInput.limit(-3600, 3600, true).h(20);
-        this.layerAudioOffsetInput.setValue(0);
-
-        this.layerExtendDurationBtn = new UIButton(IKey.raw("Extend to Media Length"), (b) ->
-        {
-            CatalystLayer sel = this.getSelectedLayer();
-            if (sel != null && sel.mediaDuration > 0)
-            {
-                this.pushUndo();
-                sel.duration = sel.mediaDuration;
-                this.saveAndRefresh();
-                this.updateInspectorForm();
-            }
-        });
-        this.layerExtendDurationBtn.h(20);
-
-        this.layerFilmFpsLabel = new UILabel(IKey.raw("Film FPS / Tick-Rate:"), Colors.LIGHTEST_GRAY);
-        this.layerFilmFpsLabel.h(14);
-        this.layerFilmFpsInput = new UITrackpad((v) ->
-        {
-            CatalystLayer sel = this.getSelectedLayer();
-            if (sel != null && sel.layerType == CatalystLayer.LayerType.SCENE)
-            {
-                sel.filmFps = Math.max(1, (int) Math.round(v));
-                this.saveAndRefresh();
-            }
-        });
-        this.layerFilmFpsInput.limit(1, 240, true).values(1, 5, 10).h(20);
-        this.layerFilmFpsInput.setValue(20);
-
-        this.audioControlsGroup = UI.column(
-            4,
-            UI.label(IKey.raw("Volume (0.0 - 1.0):")).h(14),
-            this.layerVolumeInput,
-            UI.label(IKey.raw("Audio Pan (-1.0 Left ... 1.0 Right):")).h(14),
-            this.layerPanInput,
-            UI.label(IKey.raw("Audio Offset (Frames):")).h(14),
-            this.layerAudioOffsetInput
-        );
-
-        this.mediaGroup = UI.column(
-            4,
-            this.audioControlsGroup,
-            this.layerExtendDurationBtn,
-            this.layerFilmFpsLabel,
-            this.layerFilmFpsInput
-        );
-
-        this.inspectorForm = UI.column(
-            4,
-            this.layerTypeLabel,
-            UI.label(IKey.raw("Layer Name:")).h(14),
-            this.layerNameInput,
-            this.textControlsGroup,
-            this.layerResourceLabel,
-            this.mediaGroup,
-            UI.label(IKey.raw("Opacity (%):")).h(14),
-            this.layerOpacityInput,
-            UI.label(IKey.raw("Layer Color:")).h(14),
-            this.layerColorRow,
-            this.layerColorPicker,
-            this.transformGroup
-        );
-
-        this.inspectorScroll = UI.scrollView(4, 6, this.inspectorEmptyLabel, this.inspectorForm);
-        this.inspectorScroll.relative(this.inspectorContainer).y(20).w(1F).h(1F, -20);
-        this.inspectorScroll.scroll.scrollSpeed = 16;
-        this.inspectorScroll.preRender((context) ->
-        {
-            Area a = this.inspectorScroll.area;
-            context.batcher.box(a.x, a.y, a.ex(), a.ey(), BBSSettings.deepSurface());
-            context.batcher.box(a.x, a.y, a.x + 1, a.ey(), BBSSettings.dividerColor());
-
-            CatalystLayer sel = this.getSelectedLayer();
-            if (sel != this.lastInspectedLayer)
-            {
-                this.lastInspectedLayer = sel;
-                this.updateInspectorForm();
-            }
-        });
-
-        this.inspectorContainer.add(this.inspectorHeader, this.inspectorScroll);
-    }
 
     public static void cleanupLayerResources(CatalystLayer layer)
     {
@@ -4148,6 +4911,11 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
             try
             {
                 BBSModClient.getVideos().release(layer);
+
+                if (layer.resourcePath != null && PATH_OWNERS.containsKey(layer.resourcePath.trim()))
+                {
+                    BBSModClient.getVideos().release(PATH_OWNERS.get(layer.resourcePath.trim()));
+                }
             }
             catch (Exception ignored) {}
             layer.cachedVideoTexture = null;
@@ -4237,119 +5005,12 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
 
     public void updateInspectorForm()
     {
-        CatalystLayer sel = this.getSelectedLayer();
-
-        if (sel == null)
+        if (this.inspector != null)
         {
-            this.inspectorEmptyLabel.setVisible(true);
-            this.inspectorForm.setVisible(false);
+            this.inspector.refresh();
         }
-        else
-        {
-            this.inspectorEmptyLabel.setVisible(false);
-            this.inspectorForm.setVisible(true);
 
-            this.layerNameInput.setText(sel.name);
-            this.layerTypeLabel.label = IKey.raw("Type: " + (sel.layerType != null ? sel.layerType.name() : "SOLID"));
-
-            boolean isText = sel.layerType == CatalystLayer.LayerType.TEXT;
-            boolean hasMedia = sel.layerType == CatalystLayer.LayerType.SCENE
-                || sel.layerType == CatalystLayer.LayerType.VIDEO
-                || sel.layerType == CatalystLayer.LayerType.IMAGE
-                || sel.layerType == CatalystLayer.LayerType.AUDIO;
-
-            this.textControlsGroup.setVisible(isText);
-            if (isText)
-            {
-                this.layerTextarea.setText(sel.resourcePath != null ? sel.resourcePath : "");
-                this.layerFontSizeInput.setValue(sel.fontSize > 0 ? sel.fontSize : 16);
-                this.layerTextColorPicker.setColor(sel.textColor);
-                this.layerLineWrapButton.label = IKey.raw("Wrap: " + (sel.lineWrapping ? "ON" : "OFF"));
-                this.layerShadowButton.label = IKey.raw("Shadow: " + (sel.shadow ? "ON" : "OFF"));
-            }
-
-            this.layerResourceLabel.setVisible(hasMedia);
-            if (hasMedia)
-            {
-                String sourceName = "(None)";
-                if (sel.resourcePath != null && !sel.resourcePath.trim().isEmpty())
-                {
-                    String trimmed = sel.resourcePath.trim();
-                    File f = new File(trimmed);
-                    String name = f.getName();
-                    sourceName = (!name.isEmpty()) ? name : trimmed;
-                }
-                this.layerResourceLabel.label = IKey.raw("Source: " + sourceName);
-            }
-
-            CatalystComposition comp = this.activeProject != null ? this.activeProject.getActiveComposition() : null;
-            int compFps = comp != null && comp.fps > 0 ? comp.fps : 60;
-            if (sel.layerType == CatalystLayer.LayerType.VIDEO && sel.resourcePath != null && !sel.resourcePath.trim().isEmpty())
-            {
-                try
-                {
-                    Link link = Link.create(sel.resourcePath.trim());
-                    VideoPlayer player = BBSModClient.getVideos().get(link);
-                    if (player != null)
-                    {
-                        player.ensureProbed();
-                        if (player.isValid() && player.getDuration() > 0)
-                        {
-                            int realMediaDur = Math.max(1, (int) Math.round(player.getDuration() * compFps));
-                            if (sel.mediaDuration <= 150 || (sel.mediaDuration == 300 && realMediaDur != 300))
-                            {
-                                sel.mediaDuration = realMediaDur;
-                            }
-                        }
-                    }
-                }
-                catch (Exception ignored) {}
-            }
-
-            boolean hasAudioSettings = sel.layerType == CatalystLayer.LayerType.AUDIO || sel.layerType == CatalystLayer.LayerType.VIDEO;
-            boolean isScene = sel.layerType == CatalystLayer.LayerType.SCENE;
-            boolean hasMediaDuration = sel.mediaDuration > 0;
-            boolean showMediaGroup = hasAudioSettings || hasMediaDuration || isScene;
-
-            this.mediaGroup.setVisible(showMediaGroup);
-            if (showMediaGroup)
-            {
-                this.audioControlsGroup.setVisible(hasAudioSettings);
-                if (hasAudioSettings)
-                {
-                    this.layerVolumeInput.setValue(sel.computeEffectiveVolume(this.currentFrame));
-                    this.layerPanInput.setValue(sel.computeEffectivePan(this.currentFrame));
-                    this.layerAudioOffsetInput.setValue(sel.audioOffset);
-                }
-                this.layerExtendDurationBtn.setVisible(hasMediaDuration);
-                if (hasMediaDuration)
-                {
-                    this.layerExtendDurationBtn.label = IKey.raw("Extend to Media Length (" + sel.mediaDuration + " f)");
-                }
-                this.layerFilmFpsLabel.setVisible(isScene);
-                this.layerFilmFpsInput.setVisible(isScene);
-                if (isScene)
-                {
-                    this.layerFilmFpsInput.setValue(sel.filmFps > 0 ? sel.filmFps : 20);
-                }
-            }
-
-            boolean hasTransform = sel.layerType != CatalystLayer.LayerType.AUDIO;
-            this.transformGroup.setVisible(hasTransform);
-            if (hasTransform)
-            {
-                this.layerPosX.setValue(sel.posX);
-                this.layerPosY.setValue(sel.posY);
-                this.layerScaleX.setValue(sel.scaleX);
-                this.layerScaleY.setValue(sel.scaleY);
-                this.layerRotation.setValue(sel.rotation);
-                this.layerAnchorX.setValue(sel.anchorX);
-                this.layerAnchorY.setValue(sel.anchorY);
-            }
-
-            this.layerOpacityInput.setValue(sel.opacity);
-            this.layerColorPicker.setColor(sel.color);
-        }
+        this.refreshKeyEditor();
     }
 
     public void openCompositionSettingsModal()
@@ -4358,34 +5019,15 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
         CatalystComposition comp = this.activeProject.getActiveComposition();
         if (comp == null) return;
 
-        UIOverlayPanel modal = new UIOverlayPanel(IKey.raw("Composition Settings"));
+        UIOverlayPanel modal = new UIOverlayPanel(UIKeys.CATALYST_NLE_TIMELINE_SETTINGS);
 
         UITextbox modalNameInput = new UITextbox(120, (t) -> {});
         modalNameInput.setText(comp.name);
         modalNameInput.h(20);
 
-        UILabel modalDurCalc = new UILabel(IKey.raw(""), Colors.GRAY);
-        modalDurCalc.h(14);
-
         UITrackpad modalFpsInput = new UITrackpad((v) -> {});
         modalFpsInput.limit(1, 240, true).setValue(comp.fps > 0 ? comp.fps : 60);
         modalFpsInput.h(20);
-
-        double curSecs = comp.fps > 0 ? (double) comp.duration / comp.fps : 5.0;
-        UITrackpad modalDurationInput = new UITrackpad((v) -> {});
-        modalDurationInput.limit(0.1, 3600.0).setValue(curSecs);
-        modalDurationInput.h(20);
-
-        Runnable updateCalc = () ->
-        {
-            int fps = (int) modalFpsInput.getValue();
-            double secs = modalDurationInput.getValue();
-            int frames = (int) Math.round(secs * fps);
-            modalDurCalc.label = IKey.raw(String.format("%.1f s (%d frames @ %d FPS)", secs, frames, fps));
-        };
-        modalFpsInput.callback = (v) -> updateCalc.run();
-        modalDurationInput.callback = (v) -> updateCalc.run();
-        updateCalc.run();
 
         UITrackpad modalWidthInput = new UITrackpad((v) -> {});
         modalWidthInput.limit(128, 7680, true).setValue(comp.width > 0 ? comp.width : 1920);
@@ -4395,18 +5037,16 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
         modalHeightInput.limit(128, 4320, true).setValue(comp.height > 0 ? comp.height : 1080);
         modalHeightInput.h(20);
 
-        UIButton applyCloseBtn = new UIButton(IKey.raw("Apply & Close"), (b) ->
+        UIButton applyCloseBtn = new UIButton(UIKeys.CATALYST_NLE_APPLY, (b) ->
         {
             this.pushUndo();
             String n = modalNameInput.getText().trim();
             if (!n.isEmpty()) comp.name = n;
             comp.fps = (int) modalFpsInput.getValue();
-            double durS = modalDurationInput.getValue();
-            comp.duration = (int) Math.round(durS * comp.fps);
             comp.width = (int) modalWidthInput.getValue();
             comp.height = (int) modalHeightInput.getValue();
+            comp.refreshDuration();
 
-            this.activeProject.durationSeconds = durS;
             this.activeProject.fps = comp.fps;
             this.activeProject.width = comp.width;
             this.activeProject.height = comp.height;
@@ -4418,27 +5058,24 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
         });
         applyCloseBtn.h(20);
 
-        UIButton cancelBtn = new UIButton(IKey.raw("Cancel"), (b) -> modal.close.clickItself());
+        UIButton cancelBtn = new UIButton(UIKeys.SANDBOX_CANCEL, (b) -> modal.close.clickItself());
         cancelBtn.h(20);
 
         UIElement container = new UIElement();
         container.relative(modal.content).xy(10, 6).w(1F, -20).hTo(modal.content.area, 1F, -6);
         container.column(6).vertical().stretch();
         container.add(
-            UI.label(IKey.raw("Composition Name:")).h(14),
+            UI.label(UIKeys.CATALYST_NLE_SETTINGS_NAME).h(14),
             modalNameInput,
-            UI.label(IKey.raw("Frame Rate (FPS):")).h(14),
+            UI.label(UIKeys.CATALYST_NLE_SETTINGS_FPS).h(14),
             modalFpsInput,
-            UI.label(IKey.raw("Duration (Seconds):")).h(14),
-            modalDurationInput,
-            modalDurCalc,
-            UI.label(IKey.raw("Resolution (W x H):")).h(14),
+            UI.label(UIKeys.CATALYST_NLE_SETTINGS_RESOLUTION).h(14),
             UI.row(modalWidthInput, modalHeightInput).h(20),
             UI.row(applyCloseBtn, cancelBtn).h(20)
         );
 
         modal.content.add(container);
-        UIOverlay.addOverlay(this.getContext(), modal, 340, 260);
+        UIOverlay.addOverlay(this.getContext(), modal, 340, 214);
     }
 
     public void pushUndo()
@@ -4493,237 +5130,174 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
             return true;
         }
 
-        if (!context.isFocused())
+        if (this.isFullscreen && context.isPressed(GLFW.GLFW_KEY_ESCAPE))
         {
-            if (context.isPressed(GLFW.GLFW_KEY_SPACE))
-            {
-                this.togglePlayback();
-                return true;
-            }
-            if (context.isPressed(GLFW.GLFW_KEY_Z) && Window.isCtrlPressed())
-            {
-                if (Window.isShiftPressed())
-                {
-                    this.redo();
-                }
-                else
-                {
-                    this.undo();
-                }
-                return true;
-            }
-            if (context.isPressed(GLFW.GLFW_KEY_Y) && Window.isCtrlPressed())
-            {
-                this.redo();
-                return true;
-            }
-
-            if (context.isPressed(GLFW.GLFW_KEY_LEFT))
-            {
-                int step = Window.isShiftPressed() ? 10 : 1;
-                this.seekToFrame(Math.max(0, this.currentFrame - step));
-                return true;
-            }
-
-            if (context.isPressed(GLFW.GLFW_KEY_RIGHT))
-            {
-                int step = Window.isShiftPressed() ? 10 : 1;
-                CatalystComposition comp = this.activeProject != null ? this.activeProject.getActiveComposition() : null;
-                int maxFrame = comp != null ? Math.max(0, comp.duration - 1) : Integer.MAX_VALUE;
-                this.seekToFrame(Math.min(maxFrame, this.currentFrame + step));
-                return true;
-            }
-
-            if (context.isPressed(GLFW.GLFW_KEY_N) && !Window.isCtrlPressed())
-            {
-                if (this.catalystTimeline != null)
-                {
-                    this.catalystTimeline.snapping = !this.catalystTimeline.snapping;
-                    return true;
-                }
-            }
-
-            if (context.isPressed(GLFW.GLFW_KEY_B) && !context.isFocused() && !Window.isCtrlPressed())
-            {
-                this.toggleMediaPool();
-                return true;
-            }
-
-            /* ── AE-style property shortcuts (P/S/R/T/A/U) ── */
-            CatalystLayer sel = this.getSelectedLayer();
-            if (sel != null && !context.isFocused())
-            {
-                boolean handled = false;
-
-                if (context.isPressed(GLFW.GLFW_KEY_P))
-                {
-                    /* Position */
-                    handled = this.toggleLayerProp(sel, mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_POSITION);
-                }
-                else if (context.isPressed(GLFW.GLFW_KEY_S))
-                {
-                    /* Scale */
-                    handled = this.toggleLayerProp(sel, mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_SCALE);
-                }
-                else if (context.isPressed(GLFW.GLFW_KEY_R))
-                {
-                    /* Rotation */
-                    handled = this.toggleLayerProp(sel, mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_ROTATION);
-                }
-                else if (context.isPressed(GLFW.GLFW_KEY_T))
-                {
-                    /* Opacity (Transparency) */
-                    handled = this.toggleLayerProp(sel, mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_OPACITY);
-                }
-                else if (context.isPressed(GLFW.GLFW_KEY_A))
-                {
-                    /* Anchor Point */
-                    handled = this.toggleLayerProp(sel, mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_ANCHOR);
-                }
-                else if (context.isPressed(GLFW.GLFW_KEY_L))
-                {
-                    /* L = AE standard: toggle Audio group (Volume and Pan) for audio/video layers */
-                    if (sel.layerType == CatalystLayer.LayerType.AUDIO || sel.layerType == CatalystLayer.LayerType.VIDEO)
-                    {
-                        int audioMask = mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.AUDIO_MASK;
-                        if (sel.expanded && (sel.expandedProps & audioMask) != 0)
-                        {
-                            sel.expandedProps &= ~audioMask;
-                            if (sel.expandedProps == 0) sel.expanded = false;
-                        }
-                        else
-                        {
-                            sel.expanded = true;
-                            sel.expandedProps |= audioMask;
-                        }
-                        handled = true;
-                    }
-                }
-                else if (context.isPressed(GLFW.GLFW_KEY_U))
-                {
-                    /* U = AE standard: toggle properties with keyframes */
-                    if (sel.expanded && sel.expandedProps != 0)
-                    {
-                        sel.expanded = false;
-                        sel.expandedProps = 0;
-                    }
-                    else
-                    {
-                        int mask = 0;
-                        if (sel.hasAnyKeyframes(mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_POSITION))
-                            mask |= mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_POSITION;
-                        if (sel.hasAnyKeyframes(mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_SCALE))
-                            mask |= mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_SCALE;
-                        if (sel.hasAnyKeyframes(mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_ROTATION))
-                            mask |= mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_ROTATION;
-                        if (sel.hasAnyKeyframes(mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_OPACITY))
-                            mask |= mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_OPACITY;
-                        if (sel.hasAnyKeyframes(mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_ANCHOR))
-                            mask |= mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_ANCHOR;
-                        if (sel.hasAnyKeyframes(mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_VOLUME))
-                            mask |= mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_VOLUME;
-                        if (sel.hasAnyKeyframes(mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_PAN))
-                            mask |= mchorse.bbs_mod.ui.dashboard.panels.catalyst.UICatalystTimeline.PROP_PAN;
-
-                        if (mask != 0)
-                        {
-                            sel.expanded = true;
-                            sel.expandedProps = mask;
-                        }
-                        else
-                        {
-                            sel.expanded = false;
-                            sel.expandedProps = 0;
-                        }
-                    }
-                    handled = true;
-                }
-                else if (context.isPressed(GLFW.GLFW_KEY_J))
-                {
-                    /* J = Jump to previous keyframe */
-                    if (this.catalystTimeline != null)
-                    {
-                        this.catalystTimeline.jumpToKeyframe(false);
-                    }
-                    handled = true;
-                }
-                else if (context.isPressed(GLFW.GLFW_KEY_K))
-                {
-                    /* K = Jump to next keyframe */
-                    if (this.catalystTimeline != null)
-                    {
-                        this.catalystTimeline.jumpToKeyframe(true);
-                    }
-                    handled = true;
-                }
-                else if (context.isPressed(GLFW.GLFW_KEY_M))
-                {
-                    /* M = add marker at playhead */
-                    if (this.catalystTimeline != null)
-                    {
-                        this.catalystTimeline.addMarkerAtPlayhead();
-                    }
-                    handled = true;
-                }
-
-                if (handled) return true;
-            }
-            else if (sel == null)
-            {
-                if (context.isPressed(GLFW.GLFW_KEY_J))
-                {
-                    if (this.catalystTimeline != null)
-                    {
-                        this.catalystTimeline.jumpToKeyframe(false);
-                    }
-                    return true;
-                }
-                if (context.isPressed(GLFW.GLFW_KEY_K))
-                {
-                    if (this.catalystTimeline != null)
-                    {
-                        this.catalystTimeline.jumpToKeyframe(true);
-                    }
-                    return true;
-                }
-                if (context.isPressed(GLFW.GLFW_KEY_M))
-                {
-                    /* M without selection: still add marker */
-                    if (this.catalystTimeline != null)
-                    {
-                        this.catalystTimeline.addMarkerAtPlayhead();
-                    }
-                    return true;
-                }
-            }
+            this.toggleFullscreen();
+            return true;
         }
+
+        if (this.aiBusy)
+        {
+            if (context.isPressed(GLFW.GLFW_KEY_ESCAPE))
+            {
+                this.cancelAi();
+            }
+
+            return true;
+        }
+
+        if (context.isFocused() || this.currentTab != CatalystTab.EDITOR || this.activeProject == null)
+        {
+            return super.subKeyPressed(context);
+        }
+
+        boolean ctrl = Window.isCtrlPressed();
+
+        if (context.isPressed(GLFW.GLFW_KEY_SPACE))
+        {
+            this.togglePlayback();
+            return true;
+        }
+
+        if (ctrl && context.isPressed(GLFW.GLFW_KEY_Z))
+        {
+            if (Window.isShiftPressed()) this.redo();
+            else this.undo();
+
+            return true;
+        }
+
+        if (ctrl && context.isPressed(GLFW.GLFW_KEY_Y))
+        {
+            this.redo();
+            return true;
+        }
+
+        if (ctrl && context.isPressed(GLFW.GLFW_KEY_S))
+        {
+            this.ensureDuration();
+            this.saveAndRefresh();
+            this.dirtyAt = 0L;
+            this.savedAt = System.currentTimeMillis();
+
+            return true;
+        }
+
+        if (ctrl && context.isPressed(GLFW.GLFW_KEY_D))
+        {
+            this.catalystTimeline.duplicateSelected();
+            return true;
+        }
+
+        if (ctrl && context.isPressed(GLFW.GLFW_KEY_B))
+        {
+            this.cutSelectedClip();
+            return true;
+        }
+
+        if (ctrl)
+        {
+            return super.subKeyPressed(context);
+        }
+
+        if (context.isPressed(GLFW.GLFW_KEY_LEFT) || context.isPressed(GLFW.GLFW_KEY_RIGHT))
+        {
+            int step = Window.isShiftPressed() ? 10 : 1;
+            int direction = context.isPressed(GLFW.GLFW_KEY_LEFT) ? -1 : 1;
+
+            this.seekAndStop(Math.max(0, this.currentFrame + step * direction));
+            return true;
+        }
+
+        if (context.isPressed(GLFW.GLFW_KEY_UP) || context.isPressed(GLFW.GLFW_KEY_DOWN))
+        {
+            this.catalystTimeline.jumpToEdge(context.isPressed(GLFW.GLFW_KEY_UP) ? -1 : 1);
+            return true;
+        }
+
+        if (context.isPressed(GLFW.GLFW_KEY_HOME))
+        {
+            this.seekAndStop(0);
+            return true;
+        }
+
+        if (context.isPressed(GLFW.GLFW_KEY_END))
+        {
+            this.seekAndStop(this.timelineEnd());
+            return true;
+        }
+
+        /* The edit tools: V select, T trim, C blade, S snapping, M marker */
+        if (context.isPressed(GLFW.GLFW_KEY_V))
+        {
+            this.catalystTimeline.tool = UINleTimeline.Tool.SELECT;
+            return true;
+        }
+
+        if (context.isPressed(GLFW.GLFW_KEY_T))
+        {
+            this.catalystTimeline.tool = UINleTimeline.Tool.TRIM;
+            return true;
+        }
+
+        if (context.isPressed(GLFW.GLFW_KEY_C))
+        {
+            this.catalystTimeline.tool = UINleTimeline.Tool.BLADE;
+            return true;
+        }
+
+        if (context.isPressed(GLFW.GLFW_KEY_S))
+        {
+            this.catalystTimeline.snapping = !this.catalystTimeline.snapping;
+            return true;
+        }
+
+        if (context.isPressed(GLFW.GLFW_KEY_M))
+        {
+            this.catalystTimeline.addMarkerAtPlayhead();
+            return true;
+        }
+
+        if (context.isPressed(GLFW.GLFW_KEY_DELETE) || context.isPressed(GLFW.GLFW_KEY_BACKSPACE))
+        {
+            /* A gap between clips that is selected: closed, the clips after it glide left */
+            if (this.catalystTimeline.closeSelectedGap())
+            {
+                return true;
+            }
+
+            /* Shift: a ripple delete, the rest of the track closes the gap */
+            this.catalystTimeline.deleteSelected(Window.isShiftPressed());
+            return true;
+        }
+
+        /* The ripple trims at the playhead: Q cuts away what is before it, W what is after */
+        if (context.isPressed(GLFW.GLFW_KEY_Q))
+        {
+            this.catalystTimeline.rippleTrim(true);
+            return true;
+        }
+
+        if (context.isPressed(GLFW.GLFW_KEY_W))
+        {
+            this.catalystTimeline.rippleTrim(false);
+            return true;
+        }
+
+        if (context.isPressed(GLFW.GLFW_KEY_G))
+        {
+            this.openGainDialog();
+            return true;
+        }
+
+        if (context.isPressed(GLFW.GLFW_KEY_B))
+        {
+            this.toggleMediaPool();
+            return true;
+        }
+
         return super.subKeyPressed(context);
     }
-
-    /**
-     * Toggles a property bit in a layer's expandedProps bitmask.
-     * If the bit was already on, turns it off. Also ensures the layer is expanded.
-     */
-    private boolean toggleLayerProp(CatalystLayer layer, int propBit)
-    {
-        if (layer == null) return false;
-        if (!layer.expanded)
-        {
-            layer.expanded = true;
-            layer.expandedProps = propBit;
-        }
-        else if ((layer.expandedProps & propBit) != 0)
-        {
-            layer.expandedProps &= ~propBit;
-            if (layer.expandedProps == 0) layer.expanded = false;
-        }
-        else
-        {
-            layer.expandedProps |= propBit;
-        }
-        return true;
-    }
-
 
     public CatalystLayer getSelectedLayer()
     {
@@ -4816,31 +5390,31 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
 
     public void enterExportMode()
     {
+        this.exportLayout = true;
         this.topBar.setVisible(false);
-        this.compTabStrip.setVisible(false);
-        this.bottomArea.setVisible(false);
         this.editorActions.setVisible(false);
         this.projectsView.setVisible(false);
+        this.editor.setVisible(false);
 
         this.renderMonitorHud.setVisible(true);
-        this.previewArea.relative(this).xy(0, 0).w(1F).h(1F);
+        this.layoutPreview(true);
         this.previewArea.resize();
         this.resize();
     }
 
     public void exitExportMode()
     {
+        this.exportLayout = false;
         this.renderMonitorHud.setVisible(false);
         this.topBar.setVisible(true);
-        this.compTabStrip.setVisible(true);
-        this.bottomArea.setVisible(true);
         this.editorActions.setVisible(true);
         this.projectsView.setVisible(false);
 
-        this.updateEditorLayout();
         this.updateVisibility();
+        this.updateEditorLayout();
         this.previewArea.resize();
         this.resize();
+
         if (this.getParent() != null)
         {
             this.getParent().resize();
@@ -4858,7 +5432,7 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
         if (comp == null) return;
 
         UIDeliverOverlayPanel deliver = new UIDeliverOverlayPanel(this);
-        UIOverlay.addOverlay(this.getContext(), deliver, 720, 450);
+        UIOverlay.addOverlay(this.getContext(), deliver, 720, 480);
     }
 
     public void startExport(CatalystComposition comp, File outputFile, int width, int height, int fps, int bitrateMbps)
@@ -4959,7 +5533,7 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
                 try
                 {
                     Link link = Link.create(layer.resourcePath.trim());
-                    VideoPlayer player = BBSModClient.getVideos().getPlayer(layer, link);
+                    VideoPlayer player = BBSModClient.getVideos().getPlayer(this.videoOwner(layer), link);
                     if (player != null)
                     {
                         player.setMaxSize(width, height);
@@ -4991,10 +5565,11 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
             List<AudioClip> audioClips = new ArrayList<>();
             int compFps = comp.fps > 0 ? comp.fps : 60;
 
-            for (CatalystLayer layer : comp.layers)
+            for (CatalystLayer layer : this.exportAudioSources(comp))
             {
                 if (hasSolo && !layer.solo) continue;
-                if (layer.muted || layer.volume <= 0) continue;
+                if (layer.muted || layer.volume <= 0 || this.isTrackSilent(comp, layer)) continue;
+                if (layer.layerType == CatalystLayer.LayerType.VIDEO && layer.muteOwnAudio) continue;
                 if ((layer.layerType == CatalystLayer.LayerType.AUDIO || layer.layerType == CatalystLayer.LayerType.VIDEO)
                     && layer.resourcePath != null && !layer.resourcePath.trim().isEmpty())
                 {
@@ -5008,7 +5583,7 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
                         clip.tick.set(tick);
                         clip.duration.set(durTicks);
                         clip.offset.set(offsetTicks);
-                        clip.volume.set(layer.volume);
+                        clip.volume.set(layer.volume * layer.gainFactor());
                         clip.pan.set(layer.pan);
                         clip.enabled.set(true);
                         audioClips.add(clip);
@@ -5036,7 +5611,8 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
                 for (CatalystLayer layer : comp.layers)
                 {
                     if (hasSolo && !layer.solo) continue;
-                    if (layer.muted || layer.volume <= 0) continue;
+                    if (layer.muted || layer.volume <= 0 || this.isTrackSilent(comp, layer)) continue;
+                if (layer.layerType == CatalystLayer.LayerType.VIDEO && layer.muteOwnAudio) continue;
                     if ((layer.layerType == CatalystLayer.LayerType.AUDIO || layer.layerType == CatalystLayer.LayerType.VIDEO)
                         && layer.resourcePath != null && !layer.resourcePath.trim().isEmpty())
                     {
@@ -5746,322 +6322,143 @@ public class UICatalystPanel extends UIDashboardPanel implements mchorse.bbs_mod
     }
 
     /* ════════════════════════════════════════════════════════
-     *  DYNAMIC SPLITTERS & RESIZABLE PANELS (Stage 83)
+     *  RESIZABLE COLUMNS: library | monitor | inspector, and the monitor over the timeline
      * ════════════════════════════════════════════════════════ */
 
-    private boolean handleSplitterClick(UIContext context)
+    /** "Project Saved" with a check, fading in and out over two seconds after Ctrl+S */
+    private void renderSavedBadge(UIContext context)
     {
-        if (this.currentTab != CatalystTab.EDITOR || this.activeProject == null || this.isFullscreen)
+        long elapsed = System.currentTimeMillis() - this.savedAt;
+
+        if (this.savedAt <= 0L || elapsed > 2000L)
         {
-            return false;
-        }
-
-        int horizY = this.compTabStrip != null ? this.compTabStrip.area.y : (int) (this.area.y + this.area.h * horizontalSplitRatio - 22);
-        int bottomY = this.bottomArea != null ? this.bottomArea.area.y : (int) (this.area.y + this.area.h * horizontalSplitRatio);
-        int leftX = this.area.x + leftPanelWidth;
-        int rightX = (this.bottomArea != null ? this.bottomArea.area.ex() : this.area.ex()) - rightPanelWidth;
-
-        int mx = context.mouseX;
-        int my = context.mouseY;
-
-        /* Don't intercept if clicking the '+' button on compTabStrip */
-        if (this.addCompButton != null && this.addCompButton.area.isInside(context))
-        {
-            return false;
-        }
-
-        /* 1. Check left vertical splitter (between Layers/Media Pool and Timeline) */
-        int leftTopY = (this.mediaPoolPanel != null && this.mediaPoolPanel.isVisible()) ? this.area.y + 24 : bottomY;
-        if (Math.abs(mx - leftX) <= 4 && my >= leftTopY && my <= this.area.ey())
-        {
-            this.activeSplitter = 2;
-            this.splitterDragStartMouse = mx;
-            this.splitterInitialLeftW = leftPanelWidth;
-            return true;
-        }
-
-        /* 2. Check right vertical splitter (between Timeline and Inspector) */
-        if (Math.abs(mx - rightX) <= 4 && my >= bottomY && my <= this.area.ey())
-        {
-            this.activeSplitter = 3;
-            this.splitterDragStartMouse = mx;
-            this.splitterInitialRightW = rightPanelWidth;
-            return true;
-        }
-
-        /* 3. Check horizontal splitter (between Preview and Timeline/Bottom Area) */
-        if ((Math.abs(my - horizY) <= 3 || Math.abs(my - bottomY) <= 2) && mx >= this.area.x && mx <= this.area.ex())
-        {
-            this.activeSplitter = 1;
-            this.splitterDragStartMouse = my;
-            this.splitterInitialRatio = horizontalSplitRatio;
-            return true;
-        }
-
-        return false;
-    }
-
-    private void updateAndRenderSplitters(UIContext context)
-    {
-        if (this.currentTab != CatalystTab.EDITOR || this.activeProject == null || this.isFullscreen)
-        {
-            this.activeSplitter = 0;
             return;
         }
 
-        /* If mouse button 0 was released outside, terminate active drag */
-        if (this.activeSplitter != 0 && !Window.isMouseButtonPressed(0))
+        float alpha = elapsed < 150L ? elapsed / 150F : (elapsed > 1500L ? 1F - (elapsed - 1500L) / 500F : 1F);
+
+        if (alpha <= 0.04F)
         {
-            this.activeSplitter = 0;
+            return;
         }
 
-        int horizY = this.compTabStrip != null ? this.compTabStrip.area.y : (int) (this.area.y + this.area.h * horizontalSplitRatio - 22);
-        int bottomY = this.bottomArea != null ? this.bottomArea.area.y : (int) (this.area.y + this.area.h * horizontalSplitRatio);
-        int leftX = this.area.x + leftPanelWidth;
-        int rightX = (this.bottomArea != null ? this.bottomArea.area.ex() : this.area.ex()) - rightPanelWidth;
+        FontRenderer font = context.batcher.getFont();
+        String text = UIKeys.CATALYST_NLE_SAVED.get();
+        int w = font.getWidth(text) + 34;
+        int x = this.area.mx() - w / 2;
+        int y = this.area.y + 30;
 
-        int mx = context.mouseX;
-        int my = context.mouseY;
-
-        boolean overAddComp = this.addCompButton != null && this.addCompButton.area.isInside(context);
-
-        int leftTopY = (this.mediaPoolPanel != null && this.mediaPoolPanel.isVisible()) ? this.area.y + 24 : bottomY;
-        boolean hoverLeft = (this.activeSplitter == 0 || this.activeSplitter == 2) &&
-                            Math.abs(mx - leftX) <= 4 &&
-                            (my >= leftTopY && my <= this.area.ey());
-
-        boolean hoverRight = (this.activeSplitter == 0 || this.activeSplitter == 3) &&
-                             Math.abs(mx - rightX) <= 4 &&
-                             (my >= bottomY && my <= this.area.ey());
-
-        boolean hoverHoriz = !overAddComp && (this.activeSplitter == 0 || this.activeSplitter == 1) &&
-                             (Math.abs(my - horizY) <= 3 || Math.abs(my - bottomY) <= 2) &&
-                             (mx >= this.area.x && mx <= this.area.ex());
-
-        /* Update cursor based on hover or active dragging */
-        if (this.activeSplitter == 2 || (this.activeSplitter == 0 && hoverLeft) ||
-            this.activeSplitter == 3 || (this.activeSplitter == 0 && hoverRight))
-        {
-            context.requestCursor(GLFW.GLFW_HRESIZE_CURSOR);
-        }
-        else if (this.activeSplitter == 1 || (this.activeSplitter == 0 && hoverHoriz))
-        {
-            context.requestCursor(GLFW.GLFW_VRESIZE_CURSOR);
-        }
-
-        /* Process active drag adjustments */
-        if (this.activeSplitter == 1)
-        {
-            int deltaY = my - this.splitterDragStartMouse;
-            float newRatio = ((this.area.h * this.splitterInitialRatio) + deltaY) / (float) Math.max(1, this.area.h);
-            float minRatio = 146.0F / Math.max(1, this.area.h);
-            float maxRatio = (this.area.h - 120.0F) / Math.max(1, this.area.h);
-
-            float clampedRatio = Math.max(minRatio, Math.min(maxRatio, newRatio));
-            if (Math.abs(clampedRatio - horizontalSplitRatio) > 0.001F)
-            {
-                horizontalSplitRatio = clampedRatio;
-                this.updateEditorLayout();
-            }
-        }
-        else if (this.activeSplitter == 2)
-        {
-            int deltaX = mx - this.splitterDragStartMouse;
-            int newLeftW = this.splitterInitialLeftW + deltaX;
-            int maxLeftW = this.area.w - rightPanelWidth - 200;
-            int clampedLeftW = Math.max(140, Math.min(maxLeftW, newLeftW));
-
-            if (clampedLeftW != leftPanelWidth)
-            {
-                leftPanelWidth = clampedLeftW;
-                this.updateEditorLayout();
-            }
-        }
-        else if (this.activeSplitter == 3)
-        {
-            int deltaX = mx - this.splitterDragStartMouse;
-            int newRightW = this.splitterInitialRightW - deltaX;
-            int maxRightW = this.area.w - leftPanelWidth - 200;
-            int clampedRightW = Math.max(140, Math.min(maxRightW, newRightW));
-
-            if (clampedRightW != rightPanelWidth)
-            {
-                rightPanelWidth = clampedRightW;
-                this.updateEditorLayout();
-            }
-        }
-
-        /* Render highlight / guideline on top */
-        int activeColor = 0xFF00E5FF;
-        int hoverColor = 0x6600E5FF;
-
-        if (this.activeSplitter == 1 || hoverHoriz)
-        {
-            int col = this.activeSplitter == 1 ? activeColor : hoverColor;
-            context.batcher.box(this.area.x, horizY - 1, this.area.ex(), horizY + 1, col);
-        }
-        if (this.activeSplitter == 2 || hoverLeft)
-        {
-            int col = this.activeSplitter == 2 ? activeColor : hoverColor;
-            context.batcher.box(leftX - 1, leftTopY, leftX + 1, this.area.ey(), col);
-        }
-        if (this.activeSplitter == 3 || hoverRight)
-        {
-            int col = this.activeSplitter == 3 ? activeColor : hoverColor;
-            context.batcher.box(rightX - 1, bottomY, rightX + 1, this.bottomArea.area.ey(), col);
-        }
-    }
-
-    @Override
-    protected IUIElement childrenMouseClicked(UIContext context)
-    {
-        if (this.currentTab == CatalystTab.EDITOR && this.activeProject != null && !this.isFullscreen)
-        {
-            if (context.mouseButton == 0 && this.handleSplitterClick(context))
-            {
-                return this;
-            }
-        }
-
-        return super.childrenMouseClicked(context);
-    }
-
-    @Override
-    protected IUIElement childrenMouseReleased(UIContext context)
-    {
-        if (this.activeSplitter != 0)
-        {
-            this.activeSplitter = 0;
-            return this;
-        }
-
-        return super.childrenMouseReleased(context);
-    }
-
-    @Override
-    public void resize()
-    {
-        if (!isUpdatingLayout && this.currentTab == CatalystTab.EDITOR && this.activeProject != null)
-        {
-            this.clampSplitterDimensions();
-            if (this.layersContainer != null && this.bottomArea != null)
-            {
-                this.layersContainer.relative(this.bottomArea).x(0).w(leftPanelWidth).h(1F);
-            }
-            if (this.inspectorContainer != null && this.bottomArea != null)
-            {
-                this.inspectorContainer.relative(this.bottomArea).x(1F, -rightPanelWidth).w(rightPanelWidth).h(1F);
-            }
-            if (this.catalystTimeline != null && this.bottomArea != null)
-            {
-                this.catalystTimeline.relative(this.bottomArea).x(leftPanelWidth).w(1F, -(leftPanelWidth + rightPanelWidth)).h(1F);
-            }
-        }
-        super.resize();
+        mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw.fill(context.batcher, x, y, x + w, y + 20, 6, mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw.ALL, Colors.setA(0x1c2433, 0.92F * alpha));
+        mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw.outline(context.batcher, x, y, x + w, y + 20, 6, mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw.ALL, Colors.setA(0x2eb67d, alpha));
+        context.batcher.icon(Icons.CHECKMARK, Colors.setA(0x2eb67d, alpha), x + 5, y + 2);
+        context.batcher.text(text, x + 24, y + 6, Colors.setA(Colors.WHITE, alpha), false);
     }
 
     @Override
     public void render(UIContext context)
     {
-        super.render(context);
-
-        this.updateAndRenderSplitters(context);
-
-        if (this.draggedAsset != null)
+        /* While a tool reads, the playhead runs over the clips it is reading */
+        if (this.aiBusy)
         {
-            /* If left mouse button was released, complete the drop operation */
-            if (!Window.isMouseButtonPressed(0))
+            CatalystComposition running = this.getActiveComposition();
+
+            if (running != null)
             {
-                if (this.catalystTimeline != null && this.catalystTimeline.area.isInside(context))
-                {
-                    int rawTick = this.catalystTimeline.fromGraphTick(context.mouseX);
-                    int dropTick = this.catalystTimeline.snapTick(rawTick);
-                    if (dropTick < 0)
-                    {
-                        dropTick = 0;
-                    }
-                    this.dropAssetToTimeline(this.draggedAsset, dropTick);
-                }
-                else if (this.layersContainer != null && this.layersContainer.area.isInside(context))
-                {
-                    this.dropAssetToTimeline(this.draggedAsset, this.currentFrame);
-                }
-                this.draggedAsset = null;
-            }
-            else
-            {
-                /* Asset is still actively being dragged */
-                FontRenderer font = context.batcher.getFont();
-
-                /* If cursor is over timeline, draw magnetic snap guideline & frame badge */
-                if (this.catalystTimeline != null && this.catalystTimeline.area.isInside(context))
-                {
-                    int rawTick = this.catalystTimeline.fromGraphTick(context.mouseX);
-                    int hoverTick = this.catalystTimeline.snapTick(rawTick);
-                    if (hoverTick < 0)
-                    {
-                        hoverTick = 0;
-                    }
-                    int lineX = this.catalystTimeline.toGraphX(hoverTick);
-                    if (lineX >= this.catalystTimeline.area.x && lineX <= this.catalystTimeline.area.ex())
-                    {
-                        context.batcher.box(lineX - 1, this.catalystTimeline.area.y, lineX + 1, this.catalystTimeline.area.ey(), 0xAA00E5FF);
-                        String badge = String.valueOf(hoverTick);
-                        int badgeW = font.getWidth(badge) + 8;
-                        int bx = lineX - badgeW / 2;
-                        int by = this.catalystTimeline.area.y + 4;
-                        context.batcher.box(bx, by, bx + badgeW, by + 13, 0xEE111625);
-                        context.batcher.outline(bx, by, bx + badgeW, by + 13, 0xFF00E5FF, 1);
-                        context.batcher.text(badge, bx + 4, by + 3, Colors.WHITE, false);
-                    }
-                }
-
-                /* Render floating preview card next to mouse cursor */
-                int previewW = 120;
-                int previewH = 24;
-                int px = context.mouseX + 12;
-                int py = context.mouseY + 12;
-
-                if (px + previewW > this.area.ex())
-                {
-                    px = context.mouseX - previewW - 4;
-                }
-                if (py + previewH > this.area.ey())
-                {
-                    py = context.mouseY - previewH - 4;
-                }
-
-                context.batcher.box(px, py, px + previewW, py + previewH, 0xEE181E29);
-                context.batcher.outline(px, py, px + previewW, py + previewH, 0xFF00E5FF, 1);
-
-                mchorse.bbs_mod.ui.utils.icons.Icon icon = Icons.IMAGE;
-                int iconColor = 0xFFEEAA44;
-                if (this.draggedAsset.type == CatalystMediaAsset.MediaType.VIDEO)
-                {
-                    icon = Icons.FILM;
-                    iconColor = 0xFF5599FF;
-                }
-                else if (this.draggedAsset.type == CatalystMediaAsset.MediaType.AUDIO)
-                {
-                    icon = Icons.SOUND;
-                    iconColor = 0xFF44DD88;
-                }
-
-                context.batcher.icon(icon, iconColor, px + 4, py + 4);
-
-                String displayName = this.draggedAsset.name;
-                int maxTextW = previewW - 28;
-                if (font.getWidth(displayName) > maxTextW)
-                {
-                    while (displayName.length() > 3 && font.getWidth(displayName + "...") > maxTextW)
-                    {
-                        displayName = displayName.substring(0, displayName.length() - 1);
-                    }
-                    displayName += "...";
-                }
-                context.batcher.text(displayName, px + 24, py + 8, Colors.WHITE, false);
+                this.currentFrame = Math.max(0, this.aiFrom + (int) Math.round((this.aiTo - this.aiFrom) * this.aiProgress));
+                running.playhead = this.currentFrame;
             }
         }
+
+        Runnable queued;
+
+        while ((queued = this.mainQueue.poll()) != null)
+        {
+            queued.run();
+        }
+
+        if (this.keysOpen)
+        {
+            this.refreshKeyEditor();
+            this.syncKeyAxis();
+        }
+
+        /* Edits are saved a moment after the last one */
+        if (this.dirtyAt > 0L && System.currentTimeMillis() - this.dirtyAt > 600L)
+        {
+            this.dirtyAt = 0L;
+            this.ensureDuration();
+            this.saveAndRefresh();
+        }
+
+        /* The fullscreen bar shows while the mouse moves, or rests on it, and for three seconds after */
+        if (context.mouseX != this.lastMouseX || context.mouseY != this.lastMouseY || (this.fullscreenBar != null && this.fullscreenBar.isVisible() && this.fullscreenBar.area.isInside(context)))
+        {
+            this.lastMouseX = context.mouseX;
+            this.lastMouseY = context.mouseY;
+            this.lastMouseMoveAt = System.currentTimeMillis();
+        }
+
+        if (this.fullscreenBar != null)
+        {
+            boolean show = this.isFullscreen && !this.isExporting && this.currentTab == CatalystTab.EDITOR && this.activeProject != null
+                && System.currentTimeMillis() - this.lastMouseMoveAt < FULLSCREEN_BAR_MS;
+
+            if (show != this.fullscreenBar.isVisible())
+            {
+                this.fullscreenBar.setVisible(show);
+            }
+        }
+
+        super.render(context);
+
+        this.renderSavedBadge(context);
+
+        if (this.draggedAsset == null)
+        {
+            return;
+        }
+
+        UINleTimeline timeline = this.catalystTimeline;
+        boolean overTimeline = timeline != null && timeline.isVisible() && timeline.area.isInside(context) && context.mouseX >= timeline.lanesLeft();
+
+        if (!Window.isMouseButtonPressed(0))
+        {
+            /* Dropped: on the timeline at the frame under the mouse, on the monitor at the playhead */
+            if (overTimeline)
+            {
+                this.dropAssetToTimeline(this.draggedAsset, Math.max(0, timeline.snapTick(timeline.fromGraphTick(context.mouseX))));
+            }
+            else if (this.previewArea.area.isInside(context))
+            {
+                this.dropAssetToTimeline(this.draggedAsset, this.currentFrame);
+            }
+
+            this.draggedAsset = null;
+
+            return;
+        }
+
+        FontRenderer font = context.batcher.getFont();
+
+        if (overTimeline)
+        {
+            int frame = Math.max(0, timeline.snapTick(timeline.fromGraphTick(context.mouseX)));
+            int x = timeline.toGraphX(frame);
+
+            context.batcher.box(x - 1, timeline.area.y, x + 1, timeline.area.ey(), Colors.setA(BBSSettings.primaryColor.get(), 0.7F));
+        }
+
+        /* The card that follows the mouse */
+        int w = 130;
+        int h = 22;
+        int px = Math.min(context.mouseX + 12, this.area.ex() - w);
+        int py = Math.min(context.mouseY + 12, this.area.ey() - h);
+        mchorse.bbs_mod.ui.utils.icons.Icon icon = this.draggedAsset.type == CatalystMediaAsset.MediaType.VIDEO ? Icons.FILM
+            : this.draggedAsset.type == CatalystMediaAsset.MediaType.AUDIO ? Icons.SOUND : Icons.IMAGE;
+
+        mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw.fill(context.batcher, px, py, px + w, py + h, 4, mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw.ALL, 0xee1c2433);
+        mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw.outline(context.batcher, px, py, px + w, py + h, 4, mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw.ALL, Colors.A100 | BBSSettings.primaryColor.get());
+        context.batcher.icon(icon, Colors.WHITE, px + 3, py + 3);
+        context.batcher.text(font.limitToWidth(this.draggedAsset.name, w - 28), px + 22, py + 7, Colors.WHITE, false);
     }
 }
-

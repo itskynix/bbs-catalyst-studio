@@ -178,6 +178,7 @@ public class VideoPlayer
 
         if (oldRenderW != 0 && (oldRenderW != this.renderWidth || oldRenderH != this.renderHeight))
         {
+            this.stopPrefetch();
             this.stop();
             if (this.frameBuffer != null)
             {
@@ -767,12 +768,506 @@ public class VideoPlayer
             this.texture.setWrap(GL13.GL_CLAMP_TO_EDGE);
         }
 
-        this.texture.bind();
-        this.texture.uploadTexture(GL11.GL_TEXTURE_2D, 0, this.renderWidth, this.renderHeight, this.frameBuffer);
-        this.texture.unbind();
+        this.uploadPixels(this.frameBuffer);
 
         this.currentFrame = frame;
         this.uploadVersion++;
+    }
+
+    /**
+     * Puts a decoded frame on the texture. The texture's storage is made once; after that a frame
+     * of the same size is written into it in place (glTexSubImage2D) instead of the storage being
+     * made anew for every frame.
+     */
+    private void uploadPixels(ByteBuffer pixels)
+    {
+        this.texture.bind();
+
+        if (this.texture.width == this.renderWidth && this.texture.height == this.renderHeight)
+        {
+            GL11.glPixelStorei(GL11.GL_UNPACK_ALIGNMENT, 1);
+            GL11.glPixelStorei(GL11.GL_UNPACK_ROW_LENGTH, this.renderWidth);
+            GL11.glPixelStorei(GL11.GL_UNPACK_SKIP_PIXELS, 0);
+            GL11.glPixelStorei(GL11.GL_UNPACK_SKIP_ROWS, 0);
+            GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, this.renderWidth, this.renderHeight, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, pixels);
+            GL11.glPixelStorei(GL11.GL_UNPACK_ROW_LENGTH, 0);
+        }
+        else
+        {
+            this.texture.uploadTexture(GL11.GL_TEXTURE_2D, 0, this.renderWidth, this.renderHeight, pixels);
+        }
+
+        this.texture.unbind();
+    }
+
+    /* ── Prefetch mode ──
+     *
+     * For an editor that plays and scrubs video all the time (Catalyst Studio). A worker thread owns
+     * an ffmpeg stream of its own and reads frames ahead into a small ring of buffers; the render
+     * thread never waits on the pipe - it takes the newest ready frame at or before the one asked
+     * for and uploads it. A jump (a scrub, a step back, falling too far behind) is a request the
+     * worker picks up when it is free, the latest one winning, so dragging the playhead restarts
+     * ffmpeg at the worker's pace and not once per mouse move on the render thread. */
+
+    private static final class Frame
+    {
+        public final int index;
+        public final ByteBuffer data;
+
+        public Frame(int index, ByteBuffer data)
+        {
+            this.index = index;
+            this.data = data;
+        }
+    }
+
+    /** The ring holds about this many bytes of frames, between 2 and 6 of them */
+    private static final long PREFETCH_BUDGET = 96L * 1024L * 1024L;
+
+    private final Object ringLock = new Object();
+    private final java.util.ArrayDeque<Frame> ready = new java.util.ArrayDeque<>();
+    private final java.util.ArrayDeque<ByteBuffer> free = new java.util.ArrayDeque<>();
+    private Thread prefetchThread;
+    private volatile boolean prefetchRunning;
+    /* Guarded by ringLock: the frame the worker should restart at (-1 none), and the one it decodes next */
+    private int prefetchSeek = -1;
+    private volatile int prefetchNext = -1;
+    private volatile boolean prefetchEnded;
+    private int lastSeekRequest = -1;
+    private int prefetchFrameBytes;
+    /* The worker's ffmpeg, so stopping can kill it and free a read blocked on its pipe */
+    private volatile Process prefetchProcess;
+
+    /**
+     * The frame at {@code seconds} without ever blocking: the texture with the closest frame decoded
+     * so far, null before the first one. Exact frames (an export) still go through
+     * {@link #getFrame(float)}. Render thread only.
+     */
+    public Texture getFramePrefetched(float seconds)
+    {
+        if (this.state == STATE_INVALID)
+        {
+            return null;
+        }
+
+        if (BBSModClient.getVideoRecorder().isRecording() || forcedRecording)
+        {
+            this.stopPrefetch();
+
+            return this.getFrame(seconds);
+        }
+
+        if (this.state == STATE_UNPROBED)
+        {
+            this.ensureProbed();
+        }
+
+        if (this.state != STATE_VALID || this.renderWidth <= 0 || this.renderHeight <= 0)
+        {
+            return null;
+        }
+
+        seconds = MathUtils.clamp(seconds, 0F, this.duration);
+
+        int target = Math.min((int) (seconds * this.fps), (int) (this.duration * this.fps));
+
+        if (this.texture != null && target == this.currentFrame)
+        {
+            return this.texture;
+        }
+
+        this.startPrefetch();
+
+        /* The newest ready frame that is not past the target; the ones before it are done with */
+        Frame best = null;
+
+        synchronized (this.ringLock)
+        {
+            while (!this.ready.isEmpty() && this.ready.peekFirst().index <= target)
+            {
+                if (best != null)
+                {
+                    this.free.add(best.data);
+                }
+
+                best = this.ready.pollFirst();
+            }
+
+            if (best != null)
+            {
+                this.ringLock.notifyAll();
+            }
+        }
+
+        if (best != null)
+        {
+            if (this.texture == null)
+            {
+                this.texture = new Texture();
+                this.texture.setFilter(GL11.GL_LINEAR);
+                this.texture.setWrap(GL13.GL_CLAMP_TO_EDGE);
+            }
+
+            this.uploadPixels(best.data);
+            this.currentFrame = best.index;
+            this.uploadVersion++;
+            /* The stream moved on: the same place may be asked for again later (a loop back to the start) */
+            this.lastSeekRequest = -1;
+
+            synchronized (this.ringLock)
+            {
+                this.free.add(best.data);
+                this.ringLock.notifyAll();
+            }
+
+            if (best.index == target)
+            {
+                return this.texture;
+            }
+        }
+
+        /* Does the stream lead to the target? Not when it lies before what is shown, or further
+         * ahead than half a second of what the worker decodes next: then the worker restarts there */
+        int window = Math.max(2, (int) (this.fps * SEQUENTIAL_AHEAD_SECONDS));
+        int next = this.prefetchNext;
+        boolean behind = this.currentFrame >= 0 && target < this.currentFrame;
+        boolean ahead = next < 0 || target > next + window;
+
+        if (this.prefetchEnded && next >= 0 && target >= next && !behind)
+        {
+            /* Past the last frame of the file: the last one stays up */
+            return this.texture;
+        }
+
+        if ((behind || ahead) && target != this.lastSeekRequest)
+        {
+            this.lastSeekRequest = target;
+
+            synchronized (this.ringLock)
+            {
+                this.prefetchSeek = target;
+                this.ringLock.notifyAll();
+            }
+        }
+
+        return this.texture;
+    }
+
+    /**
+     * Gets the worker decoding at {@code seconds} ahead of time, so the first
+     * {@link #getFramePrefetched(float)} there finds its frame waiting: a clip about to come up
+     * under the playhead is warmed with this. Nothing is uploaded. Render thread only.
+     */
+    public void prewarm(float seconds)
+    {
+        if (this.state == STATE_INVALID || BBSModClient.getVideoRecorder().isRecording() || forcedRecording)
+        {
+            return;
+        }
+
+        if (this.state == STATE_UNPROBED)
+        {
+            this.ensureProbed();
+        }
+
+        if (this.state != STATE_VALID || this.renderWidth <= 0 || this.renderHeight <= 0)
+        {
+            return;
+        }
+
+        int target = Math.min((int) (MathUtils.clamp(seconds, 0F, this.duration) * this.fps), (int) (this.duration * this.fps));
+
+        if (this.texture != null && target == this.currentFrame)
+        {
+            return;
+        }
+
+        this.startPrefetch();
+
+        synchronized (this.ringLock)
+        {
+            /* Already waiting at the head of the ring, or already asked for */
+            if ((!this.ready.isEmpty() && this.ready.peekFirst().index == target) || target == this.lastSeekRequest)
+            {
+                return;
+            }
+
+            this.lastSeekRequest = target;
+            this.prefetchSeek = target;
+            this.ringLock.notifyAll();
+        }
+    }
+
+    /** Whether a frame is on hand: one shown already, or one decoded ahead and waiting */
+    public boolean isWarm()
+    {
+        if (this.texture != null && this.currentFrame >= 0)
+        {
+            return true;
+        }
+
+        synchronized (this.ringLock)
+        {
+            return !this.ready.isEmpty();
+        }
+    }
+
+    private void startPrefetch()
+    {
+        if (this.prefetchThread != null && this.prefetchThread.isAlive())
+        {
+            return;
+        }
+
+        this.prefetchFrameBytes = this.renderWidth * this.renderHeight * 4;
+        this.prefetchRunning = true;
+        this.prefetchNext = -1;
+        this.prefetchEnded = false;
+        this.lastSeekRequest = -1;
+        this.prefetchThread = new Thread(this::prefetchLoop, "BBS Video Prefetch");
+        this.prefetchThread.setDaemon(true);
+        this.prefetchThread.start();
+    }
+
+    /** Stops the worker and frees its buffers; the texture keeps the last frame */
+    private void stopPrefetch()
+    {
+        Thread thread = this.prefetchThread;
+
+        if (thread == null)
+        {
+            return;
+        }
+
+        this.prefetchRunning = false;
+
+        synchronized (this.ringLock)
+        {
+            this.ringLock.notifyAll();
+        }
+
+        Process running = this.prefetchProcess;
+
+        if (running != null)
+        {
+            running.destroyForcibly();
+        }
+
+        thread.interrupt();
+
+        try
+        {
+            thread.join(1000);
+        }
+        catch (InterruptedException e)
+        {}
+
+        this.prefetchThread = null;
+
+        /* A worker that would not stop still owns its buffers: they are left to it rather than freed under it */
+        if (!thread.isAlive())
+        {
+            synchronized (this.ringLock)
+            {
+                for (Frame frame : this.ready)
+                {
+                    MemoryUtil.memFree(frame.data);
+                }
+
+                for (ByteBuffer buffer : this.free)
+                {
+                    MemoryUtil.memFree(buffer);
+                }
+
+                this.ready.clear();
+                this.free.clear();
+            }
+        }
+
+        this.prefetchNext = -1;
+        this.lastSeekRequest = -1;
+    }
+
+    private void prefetchLoop()
+    {
+        Process process = null;
+        ReadableByteChannel channel = null;
+        int bytes = this.prefetchFrameBytes;
+        int ring = (int) Math.max(2L, Math.min(6L, PREFETCH_BUDGET / Math.max(1, bytes)));
+        int allocated = 0;
+        int next = -1;
+
+        try
+        {
+            while (this.prefetchRunning)
+            {
+                int seek;
+                ByteBuffer buffer = null;
+
+                synchronized (this.ringLock)
+                {
+                    seek = this.prefetchSeek;
+                    this.prefetchSeek = -1;
+
+                    if (seek >= 0)
+                    {
+                        /* What was read ahead belongs to the old place */
+                        for (Frame frame : this.ready)
+                        {
+                            this.free.add(frame.data);
+                        }
+
+                        this.ready.clear();
+                    }
+                    else if (channel == null || this.prefetchEnded || this.ready.size() >= ring)
+                    {
+                        /* Nothing to do until a frame is taken or a jump is asked for */
+                        this.ringLock.wait(20);
+
+                        continue;
+                    }
+                    else
+                    {
+                        buffer = this.free.pollFirst();
+                    }
+                }
+
+                if (seek >= 0)
+                {
+                    close(process, channel);
+
+                    process = this.startDecoder(seek / this.fps);
+                    this.prefetchProcess = process;
+                    channel = process == null ? null : Channels.newChannel(process.getInputStream());
+                    next = seek;
+                    this.prefetchNext = next;
+                    this.prefetchEnded = channel == null;
+
+                    continue;
+                }
+
+                if (buffer == null)
+                {
+                    if (allocated >= ring + 2)
+                    {
+                        /* Every buffer is out (queued or being uploaded): wait for one to come back */
+                        Thread.sleep(1);
+
+                        continue;
+                    }
+
+                    buffer = MemoryUtil.memAlloc(bytes);
+                    allocated += 1;
+                }
+
+                buffer.clear();
+
+                boolean complete = true;
+
+                while (buffer.hasRemaining())
+                {
+                    if (channel.read(buffer) < 0)
+                    {
+                        complete = false;
+
+                        break;
+                    }
+                }
+
+                buffer.flip();
+
+                synchronized (this.ringLock)
+                {
+                    if (!complete || this.prefetchSeek >= 0)
+                    {
+                        /* The file ended, or a jump came in while this frame was being read */
+                        this.free.add(buffer);
+                        this.prefetchEnded = !complete;
+                    }
+                    else
+                    {
+                        this.ready.add(new Frame(next, buffer));
+                        next += 1;
+                        this.prefetchNext = next;
+                    }
+                }
+            }
+        }
+        catch (InterruptedException e)
+        {}
+        catch (Throwable e)
+        {
+            if (this.prefetchRunning)
+            {
+                BBSMod.LOGGER.error("Video prefetch failed for " + this.file, e);
+            }
+
+            this.prefetchEnded = true;
+        }
+        finally
+        {
+            close(process, channel);
+            this.prefetchProcess = null;
+        }
+    }
+
+    private static void close(Process process, ReadableByteChannel channel)
+    {
+        try
+        {
+            if (channel != null) channel.close();
+        }
+        catch (Exception e)
+        {}
+
+        if (process != null)
+        {
+            process.destroyForcibly();
+        }
+    }
+
+    /** An ffmpeg stream of raw RGBA frames from {@code seconds} on, at the render size; null when it can't start */
+    private Process startDecoder(float seconds)
+    {
+        if (this.file == null || !this.file.isFile())
+        {
+            return null;
+        }
+
+        try
+        {
+            java.util.List<String> cmd = new java.util.ArrayList<>();
+
+            cmd.add(FFMpegUtils.getFFMPEG());
+            cmd.add("-nostdin");
+            cmd.add("-loglevel"); cmd.add("error");
+            /* Before -i: ffmpeg jumps to the keyframe before the time and decodes on to it, the fast kind of seek */
+            cmd.add("-ss"); cmd.add(String.valueOf(seconds));
+            cmd.add("-i"); cmd.add(this.file.getAbsolutePath());
+            cmd.add("-an"); cmd.add("-sn"); cmd.add("-dn");
+
+            if (this.renderWidth != this.width || this.renderHeight != this.height)
+            {
+                cmd.add("-vf");
+                cmd.add("scale=" + this.renderWidth + ":" + this.renderHeight + ":flags=fast_bilinear");
+            }
+
+            cmd.add("-f"); cmd.add("rawvideo");
+            cmd.add("-pix_fmt"); cmd.add("rgba");
+            cmd.add("pipe:1");
+
+            ProcessBuilder builder = new ProcessBuilder(cmd);
+
+            builder.redirectError(ProcessBuilder.Redirect.DISCARD);
+
+            return builder.start();
+        }
+        catch (Exception e)
+        {
+            BBSMod.LOGGER.error("Failed to start the video prefetch stream for " + this.file, e);
+
+            return null;
+        }
     }
 
     /**
@@ -875,6 +1370,7 @@ public class VideoPlayer
     public void delete()
     {
         /* The worker writes into frameBuffer - it must be done before the buffer is freed */
+        this.stopPrefetch();
         this.stop();
         this.finishSeek();
 

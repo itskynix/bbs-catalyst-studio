@@ -13,7 +13,7 @@ public class CatalystMediaAsset
 {
     public enum MediaType
     {
-        VIDEO, AUDIO, IMAGE;
+        VIDEO, AUDIO, IMAGE, TIMELINE;
 
         public static MediaType fromPath(String path)
         {

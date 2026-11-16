@@ -212,6 +212,21 @@ public class UIGlobalMenuBar extends UIElement
     @Override
     public void render(UIContext context)
     {
+        /* A panel can show or hide its tools menu and rename it as its own tabs change */
+        if (this.provider != null)
+        {
+            boolean wantTools = this.provider.hasToolsMenu();
+            mchorse.bbs_mod.l10n.keys.IKey title = this.provider.getToolsMenuTitle() == null ? UIKeys.MENU_TOOLS : this.provider.getToolsMenuTitle();
+
+            if (wantTools != this.tools.isVisible() || this.tools.label != title)
+            {
+                this.tools.setVisible(wantTools);
+                this.tools.label = title;
+                this.layoutItems();
+                this.resize();
+            }
+        }
+
         /* The icons are measured by the panel that owns them, and that can change while it is on screen */
         if (this.borrowed != null && this.borrowed.getContentWidth() != this.borrowed.area.w)
         {

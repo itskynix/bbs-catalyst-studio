@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.dashboard.menu;
 
+import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.dashboard.panels.bar.UIPanelActionBar;
 import mchorse.bbs_mod.ui.utils.context.ContextMenuManager;
 
@@ -43,6 +44,12 @@ public interface IGlobalMenuProvider
 
     default void fillToolsMenu(ContextMenuManager menu)
     {}
+
+    /** What the tools menu is called in the bar, or null for the usual name */
+    default IKey getToolsMenuTitle()
+    {
+        return null;
+    }
 
     default void fillHelpMenu(ContextMenuManager menu)
     {}

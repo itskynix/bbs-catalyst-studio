@@ -481,11 +481,21 @@ public class BBSRendering
                 /* When the film panel is open, the UI draws the preview texture in its block; do not
                  * blit our framebuffer to the full window or the preview would stretch to full screen. */
                 UIBaseMenu currentMenu = UIScreen.getCurrentMenu();
+                /* Catalyst Studio draws the world into its own monitor too (its film clips) */
                 boolean filmPanelShowing = currentMenu instanceof UIDashboard dashboard
-                    && dashboard.getPanels().panel instanceof UIFilmPanel;
+                    && (dashboard.getPanels().panel instanceof UIFilmPanel
+                        || dashboard.getPanels().panel instanceof mchorse.bbs_mod.ui.dashboard.panels.UICatalystPanel);
                 if (!filmPanelShowing)
                 {
+                    /* Framebuffer.draw leaves the blit's projection in RenderSystem: pixels, depth
+                     * 1000 to 3000. The interface is drawn right after at z -11000, so every bit of it
+                     * fell outside that range and was clipped away, leaving only the full-screen passes
+                     * (the blur) on screen. Put the projection back as it was. */
+                    org.joml.Matrix4f projection = new org.joml.Matrix4f(RenderSystem.getProjectionMatrix());
+                    com.mojang.blaze3d.systems.VertexSorter sorting = RenderSystem.getVertexSorting();
+
                     framebuffer.draw(drawW, drawH);
+                    RenderSystem.setProjectionMatrix(projection, sorting);
                 }
             }
         }
