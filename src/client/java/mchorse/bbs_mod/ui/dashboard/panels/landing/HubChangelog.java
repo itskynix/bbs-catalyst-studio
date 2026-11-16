@@ -28,8 +28,8 @@ import java.util.List;
 public class HubChangelog
 {
     public static final String VERSION = "C1.4";
-    /** How many features each category holds: vehicles, lattice, setup, studio */
-    public static final int[] CATEGORIES = {5, 5, 5, 9};
+    /** How many features each category holds: the editing suite, image and camera, interface and forms, the studio experience */
+    public static final int[] CATEGORIES = {2, 4, 2, 1};
 
     private static final Link[] SLIDES = {
         Link.assets("textures/banners/bg1.png"),
@@ -45,7 +45,7 @@ public class HubChangelog
     private static final int MIN_TEXT_ALPHA = 10;
 
     private static final int HEADER_H = 34;
-    private static final int ITEM_H = 44;
+    private static final int ITEM_H = 58;
     private static final int GAP = 6;
 
     private static final int[] COLORS = {0xFF4C9CFF, 0xFFFFB347, 0xFF6CE08A, 0xFFB48CFF};
