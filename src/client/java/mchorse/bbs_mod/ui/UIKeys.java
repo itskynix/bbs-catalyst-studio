@@ -653,6 +653,11 @@ public class UIKeys
     public static final IKey FILM_VIEWPORT_SOURCE_CLIP_DETAIL = L10n.lang("bbs.ui.film.viewport.source.clip_detail");
     public static final IKey FILM_FULLBRIGHT = L10n.lang("bbs.ui.film.fullbright");
     public static final IKey FILM_PHYSICS_TITLE = L10n.lang("bbs.ui.film.physics.title");
+    public static final IKey PHYSICS_TOOL_CREATIVE = L10n.lang("bbs.ui.physics_tool.creative");
+    public static final IKey PHYSICS_TOOL_HINT_GRAB = L10n.lang("bbs.ui.physics_tool.hint.grab");
+    public static final IKey PHYSICS_TOOL_HINT_HOLD = L10n.lang("bbs.ui.physics_tool.hint.hold");
+    public static final IKey PHYSICS_TOOL_HINT_GRAVITY = L10n.lang("bbs.ui.physics_tool.hint.gravity");
+    public static final IKey PHYSICS_TOOL_HINT_GRAVITY_HOLD = L10n.lang("bbs.ui.physics_tool.hint.gravity_hold");
     public static final IKey FORMS_EDITORS_MODEL_RAGDOLL_TITLE = L10n.lang("bbs.ui.forms.editors.model.ragdoll.title");
     public static final IKey FORMS_EDITORS_MODEL_RAGDOLL_MODE = L10n.lang("bbs.ui.forms.editors.model.ragdoll.mode");
     public static final IKey FORMS_EDITORS_MODEL_RAGDOLL_MODE_OFF = L10n.lang("bbs.ui.forms.editors.model.ragdoll.mode.off");

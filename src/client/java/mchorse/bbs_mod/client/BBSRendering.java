@@ -931,6 +931,7 @@ public class BBSRendering
 
         BBSModClient.getFilms().renderHud(batcher2D, tickDelta);
         StructureWand.renderHud(batcher2D);
+        mchorse.bbs_mod.physics.InWorldPhysicsTool.renderHud(batcher2D);
         VehicleRide.renderHud(batcher2D, tickDelta);
     }
 

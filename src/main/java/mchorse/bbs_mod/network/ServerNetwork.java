@@ -107,6 +107,8 @@ public class ServerNetwork
     public static final Identifier SERVER_REPLAY_EDITING = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s17"));
     /** A replay (index) a player changed - a take recorded into it - or the whole list of replays (-1) after one was added, removed or duplicated */
     public static final Identifier SERVER_REPLAY_SYNC = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s18"));
+    /** The physics and gravity guns in the world: grab, move, let go, freeze, launch */
+    public static final Identifier SERVER_PHYSICS_TOOL = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s19"));
 
     /* Outgoing (server -> client) chunk numbering only ever needs to be unique per logical
      * message, never per player, so one shared instance is fine here - the risk this class used
@@ -181,6 +183,8 @@ public class ServerNetwork
         BBSNetworking.registerServerReceiver(SERVER_CUT_STRUCTURE, (server, player, buf) -> handleCutStructure(server, player, buf));
         BBSNetworking.registerServerReceiver(SERVER_REPLAY_EDITING, (server, player, buf) -> handleReplayEditing(server, player, buf));
         BBSNetworking.registerServerReceiver(SERVER_REPLAY_SYNC, (server, player, buf) -> handleReplaySync(server, player, buf));
+        BBSNetworking.registerServerReceiver(SERVER_PHYSICS_TOOL, (server, player, buf) -> mchorse.bbs_mod.items.PhysicsToolServer.handle(server, player, buf));
+        mchorse.bbs_mod.items.PhysicsToolServer.register();
     }
 
     /* What each player was last told, and when: the same word is not said again within a few

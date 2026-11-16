@@ -741,6 +741,7 @@ public class BBSModClient implements ClientModInitializer
         keyZoom = this.createKeyMouse("zoom", 2);
 
         StructureWand.register();
+        mchorse.bbs_mod.physics.InWorldPhysicsTool.register();
 
         WorldRenderEvents.START.register((context) ->
         {
@@ -753,6 +754,7 @@ public class BBSModClient implements ClientModInitializer
         WorldRenderEvents.AFTER_ENTITIES.register((context) ->
         {
             StructureWand.renderWorld(context);
+            mchorse.bbs_mod.physics.InWorldPhysicsTool.renderWorld(context);
 
             if (!BBSRendering.isIrisShadersEnabled())
             {

@@ -12,7 +12,6 @@
     "item.bbs.structure_wand": "Structure Wand",
     "item.bbs.physics_gun": "Physics Gun",
     "item.bbs.gravity_gun": "Gravity Gun",
-    "item.bbs.physics_tool.where": "Works on the physics studio's bodies in the film editor preview",
     "item.bbs.structure_wand.tooltip.corners": "Left / right click — corners A and B",
     "item.bbs.structure_wand.tooltip.faces": "Wheel on a face — push it, with Alt — move the box",
     "item.bbs.structure_wand.tooltip.save": "Alt + right click — save, Alt + left — clear",

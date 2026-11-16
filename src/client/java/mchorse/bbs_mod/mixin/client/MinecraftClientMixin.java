@@ -29,6 +29,34 @@ public class MinecraftClientMixin
         }
     }
 
+    /* The physics and gravity guns take the clicks before the game breaks, places or hits anything */
+    @Inject(method = "doAttack", at = @At("HEAD"), cancellable = true)
+    public void physicsToolAttack(CallbackInfoReturnable<Boolean> cir)
+    {
+        if (mchorse.bbs_mod.physics.InWorldPhysicsTool.onAttack())
+        {
+            cir.setReturnValue(false);
+        }
+    }
+
+    @Inject(method = "doItemUse", at = @At("HEAD"), cancellable = true)
+    public void physicsToolUse(CallbackInfo ci)
+    {
+        if (mchorse.bbs_mod.physics.InWorldPhysicsTool.onUse())
+        {
+            ci.cancel();
+        }
+    }
+
+    @Inject(method = "handleBlockBreaking", at = @At("HEAD"), cancellable = true)
+    public void physicsToolBreak(boolean breaking, CallbackInfo ci)
+    {
+        if (mchorse.bbs_mod.physics.InWorldPhysicsTool.blocksBreaking())
+        {
+            ci.cancel();
+        }
+    }
+
     @Inject(method = "doAttack", at = @At("HEAD"), cancellable = true)
     public void wandAttack(CallbackInfoReturnable<Boolean> cir)
     {

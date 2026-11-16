@@ -72,6 +72,16 @@ public class MouseMixin
         }
     }
 
+    /** A notch the physics gun spends on the distance of what it holds must not reach the hotbar. */
+    @Inject(method = "onMouseScroll", at = @At("HEAD"), cancellable = true)
+    public void physicsToolScroll(long window, double horizontal, double vertical, CallbackInfo ci)
+    {
+        if (window == Window.getWindow() && mchorse.bbs_mod.physics.InWorldPhysicsTool.onScroll(vertical))
+        {
+            ci.cancel();
+        }
+    }
+
     /** A notch the structure wand spends on its box must not reach the hotbar. */
     @Inject(method = "onMouseScroll", at = @At("HEAD"), cancellable = true)
     public void wandScroll(long window, double horizontal, double vertical, CallbackInfo ci)
