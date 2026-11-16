@@ -86,6 +86,12 @@ public class UIOrbitCamera implements IUIElement
     @Override
     public IUIElement mouseClicked(UIContext context)
     {
+        /* A physics tool over the film preview has the buttons; the camera must not swallow its clicks */
+        if (mchorse.bbs_mod.physics.PhysicsToolController.capturesMouse(context))
+        {
+            return null;
+        }
+
         int i = this.orbit.canStart(context);
 
         if (i >= 0)

@@ -306,9 +306,12 @@ public final class PhysicsStudio
         TURNS.put(entity, q);
     }
 
-    /** What a ray from the camera hits first among the simulated bodies at a tick: the replay and how far along the ray */
-    public record Hit(Replay replay, float distance, float[] pose, float centerY)
+    /** What a ray from the camera hits first among the simulated bodies at a tick: the replay, which of its bodies, and how far along the ray */
+    public record Hit(Replay replay, int body, boolean limb, float distance, float[] pose, float centerY)
     {}
+
+    /** Whether the physics studio draws its collision boxes and joints over the preview */
+    public static boolean showShapes;
 
     public static Hit pick(Film film, Vector3d origin, Vector3f direction, int tick)
     {
@@ -326,54 +329,164 @@ public final class PhysicsStudio
         for (int i = 0; i < scene.rigs.size(); i++)
         {
             PhysicsScene.Rig rig = scene.rigs.get(i);
-            float[] pose = PhysicsToolController.heldPose(rig.replay);
+            float[] held = PhysicsToolController.heldPose(rig.replay);
+            float[] all = held != null ? held : scene.poses(i, tick);
 
-            if (pose == null)
+            for (int b = 0; b < rig.bodyCount() && b * 7 + 6 < all.length; b++)
             {
-                pose = scene.pose(i, tick);
-            }
+                float[] pose = java.util.Arrays.copyOfRange(all, b * 7, b * 7 + 7);
+                float distance = hit(origin, direction, pose, rig.half(b));
 
-            /* The ray in the box's own frame, then the slab test */
-            Quaternionf inverse = new Quaternionf(pose[3], pose[4], pose[5], pose[6]).conjugate();
-            Vector3f from = inverse.transform(new Vector3f((float) (origin.x - pose[0]), (float) (origin.y - pose[1]), (float) (origin.z - pose[2])));
-            Vector3f dir = inverse.transform(new Vector3f(direction));
-            float[] half = {rig.box.halfX(), rig.box.halfY(), rig.box.halfZ()};
-            float[] o = {from.x, from.y, from.z};
-            float[] d = {dir.x, dir.y, dir.z};
-            float near = -Float.MAX_VALUE;
-            float far = Float.MAX_VALUE;
-            boolean miss = false;
-
-            for (int a = 0; a < 3 && !miss; a++)
-            {
-                if (Math.abs(d[a]) < 1e-6F)
+                if (distance >= 0F && (best == null || distance < best.distance()))
                 {
-                    miss = Math.abs(o[a]) > half[a];
-
-                    continue;
+                    best = new Hit(rig.replay, b, rig.bones != null, distance, pose, rig.box.centerY());
                 }
-
-                float t1 = (-half[a] - o[a]) / d[a];
-                float t2 = (half[a] - o[a]) / d[a];
-
-                near = Math.max(near, Math.min(t1, t2));
-                far = Math.min(far, Math.max(t1, t2));
-            }
-
-            if (miss || near > far || far < 0F)
-            {
-                continue;
-            }
-
-            float distance = Math.max(0F, near);
-
-            if (best == null || distance < best.distance())
-            {
-                best = new Hit(rig.replay, distance, pose.clone(), rig.box.centerY());
             }
         }
 
         return best;
+    }
+
+    /** How far along a ray a turned box is met, or -1 when it is missed */
+    private static float hit(Vector3d origin, Vector3f direction, float[] pose, float[] half)
+    {
+        Quaternionf inverse = new Quaternionf(pose[3], pose[4], pose[5], pose[6]).conjugate();
+        Vector3f from = inverse.transform(new Vector3f((float) (origin.x - pose[0]), (float) (origin.y - pose[1]), (float) (origin.z - pose[2])));
+        Vector3f dir = inverse.transform(new Vector3f(direction));
+        float[] o = {from.x, from.y, from.z};
+        float[] d = {dir.x, dir.y, dir.z};
+        float near = -Float.MAX_VALUE;
+        float far = Float.MAX_VALUE;
+
+        for (int a = 0; a < 3; a++)
+        {
+            if (Math.abs(d[a]) < 1e-6F)
+            {
+                if (Math.abs(o[a]) > half[a])
+                {
+                    return -1F;
+                }
+
+                continue;
+            }
+
+            float t1 = (-half[a] - o[a]) / d[a];
+            float t2 = (half[a] - o[a]) / d[a];
+
+            near = Math.max(near, Math.min(t1, t2));
+            far = Math.min(far, Math.max(t1, t2));
+        }
+
+        return near > far || far < 0F ? -1F : Math.max(0F, near);
+    }
+
+    /* The live hold of a ragdoll limb */
+
+    public static boolean beginLive(Film film, Replay replay, int body, int tick)
+    {
+        PhysicsScene scene = film == null ? null : sceneOf(film);
+        int rig = scene == null ? -1 : scene.indexOf(replay);
+
+        return rig >= 0 && scene.beginLive(scene.rigs.get(rig), body, tick);
+    }
+
+    public static void stepLive(float[] target)
+    {
+        if (scene != null)
+        {
+            scene.stepLive(target);
+        }
+    }
+
+    public static void endLive()
+    {
+        if (scene != null)
+        {
+            scene.endLive();
+        }
+    }
+
+    /**
+     * Freezes a ragdoll as the live hold has it: every bone's turn goes into its pose track on the tick, the same way
+     * a bake writes it, and the animation handle holds it there. The hold ends afterwards.
+     */
+    public static boolean freezeLive(Film film, Replay replay, int tick)
+    {
+        PhysicsScene scene = film == null ? null : sceneOf(film);
+        int rig = scene == null ? -1 : scene.indexOf(replay);
+
+        if (rig < 0 || !scene.live() || scene.rigs.get(rig).ragdoll == null)
+        {
+            endLive();
+
+            return false;
+        }
+
+        PhysicsScene.Rig built = scene.rigs.get(rig);
+        float[] poses = scene.livePoses(rig);
+        Map<String, PivotFrame> animated = built.target(Math.min(tick, Math.max(0, built.targets.size() - 1)));
+
+        scene.endLive();
+
+        boolean done = IKBake.bakeSolved(film, replay, built.ragdoll.ids, tick, tick, (at, model, world) ->
+        {
+            if (model.model instanceof Model cubic)
+            {
+                orientBones(cubic, new RagdollPose(built.ragdoll, poses, animated), world);
+            }
+        });
+
+        BaseValue.edit(replay.physics, (physics) ->
+        {
+            if (tick > 0)
+            {
+                physics.animation.insert(tick - 1, (double) physics.animationAt(tick - 1));
+            }
+
+            physics.animation.insert(tick, 1D);
+        });
+
+        return done;
+    }
+
+    /**
+     * The collision boxes of every simulated body at a tick, ten numbers each: centre, turn, half extents; and
+     * the joint points of the ragdolls, three numbers each.
+     */
+    public static List<float[]> shapes(Film film, int tick, List<float[]> joints)
+    {
+        List<float[]> list = new ArrayList<>();
+        PhysicsScene scene = film == null ? null : sceneOf(film);
+
+        if (scene == null)
+        {
+            return list;
+        }
+
+        scene.advanceTo(tick, BUDGET);
+
+        for (int i = 0; i < scene.rigs.size(); i++)
+        {
+            PhysicsScene.Rig rig = scene.rigs.get(i);
+            float[] all = scene.poses(i, tick);
+
+            for (int b = 0; b < rig.bodyCount() && b * 7 + 6 < all.length; b++)
+            {
+                float[] half = rig.half(b);
+
+                list.add(new float[] {all[b * 7], all[b * 7 + 1], all[b * 7 + 2], all[b * 7 + 3], all[b * 7 + 4], all[b * 7 + 5], all[b * 7 + 6], half[0], half[1], half[2]});
+
+                if (rig.ragdoll != null && joints != null && rig.ragdoll.bones.get(b).parent() >= 0)
+                {
+                    Quaternionf q = new Quaternionf(all[b * 7 + 3], all[b * 7 + 4], all[b * 7 + 5], all[b * 7 + 6]);
+                    Vector3f offset = q.transform(new Vector3f(rig.ragdoll.bones.get(b).center()));
+
+                    joints.add(new float[] {all[b * 7] - offset.x, all[b * 7 + 1] - offset.y, all[b * 7 + 2] - offset.z});
+                }
+            }
+        }
+
+        return list;
     }
 
     /** Every body of two poses blended: positions straight, turns along the shorter way */

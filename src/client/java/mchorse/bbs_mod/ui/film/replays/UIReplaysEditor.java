@@ -668,6 +668,12 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
 
         this.physicsPanel.setReplay(this.replay);
         this.physicsPanel.setVisible(physics);
+
+        /* Leaving the Physics tab puts a picked tool away; one held in hand stays */
+        if (!physics)
+        {
+            mchorse.bbs_mod.physics.PhysicsToolController.reset();
+        }
     }
 
     public void updateChannelsList()

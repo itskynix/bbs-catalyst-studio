@@ -179,8 +179,7 @@ public class UIPhysicsStudioPanel extends UIElement
         UISection forcesSection = new UISection(UIKeys.FILM_PHYSICS_SECTIONS_FORCES);
 
         forcesSection.fields.add(UI.label(UIKeys.FILM_PHYSICS_PUSH, 14), UI.row(this.pushX, this.pushY, this.pushZ), push,
-            this.labelled(UIKeys.FILM_PHYSICS_BLAST_STRENGTH, this.blastStrength), this.labelled(UIKeys.FILM_PHYSICS_BLAST_RADIUS, this.blastRadius), blast,
-            bake, this.cache);
+            this.labelled(UIKeys.FILM_PHYSICS_BLAST_STRENGTH, this.blastStrength), this.labelled(UIKeys.FILM_PHYSICS_BLAST_RADIUS, this.blastRadius), blast);
 
         /* The hand tools: picked here for the preview, or given to the player to hold */
         UIButton physicsTool = new UIButton(UIKeys.FILM_PHYSICS_TOOL_PHYSICS, (b) -> mchorse.bbs_mod.physics.PhysicsToolController.pick(mchorse.bbs_mod.physics.PhysicsToolController.Tool.PHYSICS));
@@ -194,9 +193,37 @@ public class UIPhysicsStudioPanel extends UIElement
         UIButton givePhysics = new UIButton(UIKeys.FILM_PHYSICS_GIVE_PHYSICS, (b) -> this.give(mchorse.bbs_mod.items.PhysicsToolItem.Kind.PHYSICS));
         UIButton giveGravity = new UIButton(UIKeys.FILM_PHYSICS_GIVE_GRAVITY, (b) -> this.give(mchorse.bbs_mod.items.PhysicsToolItem.Kind.GRAVITY));
 
-        forcesSection.fields.add(UI.label(UIKeys.FILM_PHYSICS_TOOLS, 14), UI.row(physicsTool, gravityTool), givePhysics, giveGravity);
+        /* The three one-click actions on top; everything else waits folded under the advanced settings */
+        UIButton dropRagdoll = new UIButton(UIKeys.FILM_PHYSICS_ACTION_RAGDOLL, (b) -> this.dropAsRagdoll());
+        UIButton makeRigid = new UIButton(UIKeys.FILM_PHYSICS_ACTION_RIGID, (b) -> this.makeRigid());
+        UIButton backToAnimation = new UIButton(UIKeys.FILM_PHYSICS_ACTION_ANIMATION, (b) -> this.keyAnimation(1F));
 
-        this.content = UI.scrollView(UIConstants.MARGIN, UIConstants.SCROLL_PADDING, this.status, ragdollSection, solidSection, softSection, forcesSection);
+        dropRagdoll.tooltip(UIKeys.FILM_PHYSICS_ACTION_RAGDOLL_TOOLTIP);
+        makeRigid.tooltip(UIKeys.FILM_PHYSICS_ACTION_RIGID_TOOLTIP);
+        backToAnimation.tooltip(UIKeys.FILM_PHYSICS_ACTION_ANIMATION_TOOLTIP);
+        dropRagdoll.color(0x40E0A0);
+        dropRagdoll.h(24);
+        makeRigid.h(24);
+        backToAnimation.h(24);
+
+        UIToggle shapes = new UIToggle(UIKeys.FILM_PHYSICS_SHAPES, (b) -> mchorse.bbs_mod.physics.PhysicsStudio.showShapes = b.getValue());
+
+        shapes.valueBinding(() -> shapes.setValue(mchorse.bbs_mod.physics.PhysicsStudio.showShapes));
+        shapes.tooltip(UIKeys.FILM_PHYSICS_SHAPES_TOOLTIP);
+
+        UIElement main = UI.column(4, 0, 20, dropRagdoll, makeRigid, backToAnimation, shapes,
+            UI.label(UIKeys.FILM_PHYSICS_TOOLS, 14), UI.row(physicsTool, gravityTool), givePhysics, giveGravity, bake, this.cache);
+
+        UISection advanced = new UISection(UIKeys.FILM_PHYSICS_ADVANCED);
+
+        advanced.fields.add(ragdollSection, solidSection, softSection, forcesSection);
+        advanced.setExpanded(false);
+        ragdollSection.setExpanded(false);
+        solidSection.setExpanded(false);
+        softSection.setExpanded(false);
+        forcesSection.setExpanded(false);
+
+        this.content = UI.scrollView(UIConstants.MARGIN, UIConstants.SCROLL_PADDING, this.status, main, advanced);
         this.content.relative(this).x(0).y(0).w(1F).h(1F);
 
         this.add(this.content);
@@ -292,6 +319,37 @@ public class UIPhysicsStudioPanel extends UIElement
         });
 
         this.filmPanel.replayEditor.updateChannelsList();
+    }
+
+    /** One click: physics on, a jointed ragdoll, limp, and let go from the cursor tick on */
+    private void dropAsRagdoll()
+    {
+        this.edit((p) ->
+        {
+            p.enabled.set(true);
+            p.ragdoll.set(true);
+            p.rigid.set(false);
+
+            if (p.musclesTrack.isEmpty())
+            {
+                p.muscles.set(0F);
+            }
+        });
+
+        this.keyAnimation(0F);
+    }
+
+    /** One click: the form is one solid body that falls and tumbles from the cursor tick on */
+    private void makeRigid()
+    {
+        this.edit((p) ->
+        {
+            p.enabled.set(true);
+            p.ragdoll.set(true);
+            p.rigid.set(true);
+        });
+
+        this.keyAnimation(0F);
     }
 
     private void push()

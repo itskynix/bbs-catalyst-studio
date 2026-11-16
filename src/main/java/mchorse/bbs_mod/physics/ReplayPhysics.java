@@ -31,6 +31,8 @@ public class ReplayPhysics extends ValueGroup
 
     /** A character that tumbles when it is let go; off, the body keeps upright and only slides and falls */
     public final ValueBoolean ragdoll = new ValueBoolean("ragdoll", true);
+    /** One rigid body for the whole form, even when the form is a model that could be a jointed ragdoll */
+    public final ValueBoolean rigid = new ValueBoolean("rigid", false);
     /** How hard the body keeps fighting for its keyed pose when it is not fully on its own: 0 is limp, 1 holds it */
     public final ValueFloat muscles = new ValueFloat("muscles", 0.5F);
 
@@ -72,6 +74,7 @@ public class ReplayPhysics extends ValueGroup
 
         this.add(this.enabled);
         this.add(this.ragdoll);
+        this.add(this.rigid);
         this.add(this.muscles);
         this.add(this.material);
         this.add(this.mass);
@@ -115,7 +118,7 @@ public class ReplayPhysics extends ValueGroup
     /** Everything that changes what the simulation of this replay would be, apart from the keyed positions */
     public String settingsKey()
     {
-        return this.enabled.get() + "|" + this.ragdoll.get() + "|" + this.material.get() + "|" + this.mass.get() + "|" + this.friction.get()
+        return this.enabled.get() + "|" + this.ragdoll.get() + "|" + this.rigid.get() + "|" + this.material.get() + "|" + this.mass.get() + "|" + this.friction.get()
             + "|" + this.restitution.get() + "|" + this.balloon.get() + "|" + this.lift.get() + "|" + this.rope.get() + "|" + this.ropeAnchor.get()
             + "|" + this.ropeLength.get() + "|" + this.blastRadius.get() + "|" + (this.muscles.get()) + "|" + this.tearBone.get() + "|" + this.tearTick.get();
     }

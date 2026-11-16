@@ -725,6 +725,15 @@ public class UIKeys
     public static final IKey FILM_PHYSICS_TEAR_TOOLTIP = L10n.lang("bbs.ui.film.physics.tear.tooltip");
     public static final IKey FILM_PHYSICS_TEAR_SET = L10n.lang("bbs.ui.film.physics.tear.set");
     public static final IKey FILM_PHYSICS_TEAR_NONE = L10n.lang("bbs.ui.film.physics.tear.none");
+    public static final IKey FILM_PHYSICS_ACTION_RAGDOLL = L10n.lang("bbs.ui.film.physics.action.ragdoll");
+    public static final IKey FILM_PHYSICS_ACTION_RAGDOLL_TOOLTIP = L10n.lang("bbs.ui.film.physics.action.ragdoll.tooltip");
+    public static final IKey FILM_PHYSICS_ACTION_RIGID = L10n.lang("bbs.ui.film.physics.action.rigid");
+    public static final IKey FILM_PHYSICS_ACTION_RIGID_TOOLTIP = L10n.lang("bbs.ui.film.physics.action.rigid.tooltip");
+    public static final IKey FILM_PHYSICS_ACTION_ANIMATION = L10n.lang("bbs.ui.film.physics.action.animation");
+    public static final IKey FILM_PHYSICS_ACTION_ANIMATION_TOOLTIP = L10n.lang("bbs.ui.film.physics.action.animation.tooltip");
+    public static final IKey FILM_PHYSICS_SHAPES = L10n.lang("bbs.ui.film.physics.shapes");
+    public static final IKey FILM_PHYSICS_SHAPES_TOOLTIP = L10n.lang("bbs.ui.film.physics.shapes.tooltip");
+    public static final IKey FILM_PHYSICS_ADVANCED = L10n.lang("bbs.ui.film.physics.advanced");
     public static final IKey FILM_VIEWPORT_SOURCE_ACTOR = L10n.lang("bbs.ui.film.viewport.source.actor");
 
     public static final IKey FILM_CONTROLLER_CONTROL_MODE_TOOLTIP = L10n.lang("bbs.ui.film.controller.control_mode-tooltip");

@@ -97,7 +97,21 @@ final class PhysicsScene implements AutoCloseable
         TwoBodyConstraint[] joints;
         boolean[] boneKinematic;
         int torn = -1;
+        float[][] halves;
+        int fingerprint;
         final List<Map<String, PivotFrame>> targets = new ArrayList<>();
+
+        /** Half extents of one body of the rig */
+        float[] half(int index)
+        {
+            return this.halves == null ? new float[] {this.box.halfX(), this.box.halfY(), this.box.halfZ()} : this.halves[index];
+        }
+
+        /** What the bone tracks of a ragdoll say, as a number that changes when any of them changes */
+        int poseFingerprint()
+        {
+            return this.replay.properties.toData().toString().hashCode();
+        }
 
         int bodyCount()
         {
@@ -178,7 +192,7 @@ final class PhysicsScene implements AutoCloseable
 
         for (Replay replay : replays)
         {
-            Rig rig = replay.physics.ragdoll.get() ? this.buildRagdoll(replay, world) : null;
+            Rig rig = replay.physics.ragdoll.get() && !replay.physics.rigid.get() ? this.buildRagdoll(replay, world) : null;
 
             this.rigs.add(rig != null ? rig : this.build(replay));
         }
@@ -277,6 +291,7 @@ final class PhysicsScene implements AutoCloseable
         }
 
         Body[] bodies = new Body[count];
+        float[][] halves = new float[count][];
         float total = 0F;
 
         for (int i = 0; i < count; i++)
@@ -287,6 +302,7 @@ final class PhysicsScene implements AutoCloseable
             Vector3f half = new Vector3f(bone.half()).mul(scale.x, scale.y, scale.z);
 
             half.set(Math.max(0.03F, half.x), Math.max(0.03F, half.y), Math.max(0.03F, half.z));
+            halves[i] = new float[] {half.x, half.y, half.z};
 
             float[] pose = RagdollSampler.bodyPose(bone, frame);
             float mass = Math.max(0.05F, material.density * 8F * half.x * half.y * half.z);
@@ -360,6 +376,8 @@ final class PhysicsScene implements AutoCloseable
         rig.bones = bodies;
         rig.joints = joints;
         rig.boneKinematic = new boolean[count];
+        rig.halves = halves;
+        rig.fingerprint = rig.poseFingerprint();
         rig.targets.add(start);
 
         String tear = physics.tearBone.get();
@@ -638,6 +656,11 @@ final class PhysicsScene implements AutoCloseable
     /** Simulates up to a tick, a bounded number of ticks at a time */
     void advanceTo(int tick, int budget)
     {
+        if (this.live())
+        {
+            return;
+        }
+
         int limit = Math.min(tick, MAX_TICKS);
 
         while (this.computed() < limit && budget-- > 0 && !this.closed)
@@ -803,7 +826,7 @@ final class PhysicsScene implements AutoCloseable
 
         for (int i = 0; i < rig.bones.length; i++)
         {
-            boolean free = rig.torn == i && tearTick >= 0 && tick >= tearTick;
+            boolean free = (rig.torn == i && tearTick >= 0 && tick >= tearTick) || (rig == this.liveRig && i == this.liveBody);
             PivotFrame frame = target.get(rig.ragdoll.bones.get(i).id());
 
             if (frame == null || free)
@@ -1089,6 +1112,34 @@ final class PhysicsScene implements AutoCloseable
      */
     void validate()
     {
+        if (this.live())
+        {
+            return;
+        }
+
+        /* A ragdoll pulls towards its bone tracks, which no tick hash sees: a change there samples the pose again */
+        for (Rig rig : this.rigs)
+        {
+            if (rig.ragdoll != null)
+            {
+                int fingerprint = rig.poseFingerprint();
+
+                if (fingerprint != rig.fingerprint)
+                {
+                    rig.fingerprint = fingerprint;
+
+                    while (rig.targets.size() > 0)
+                    {
+                        rig.targets.remove(rig.targets.size() - 1);
+                    }
+
+                    this.rewind(0);
+
+                    return;
+                }
+            }
+        }
+
         int computed = this.computed();
 
         for (int tick = 1; tick <= computed; tick++)
@@ -1169,14 +1220,130 @@ final class PhysicsScene implements AutoCloseable
     /** The pose of a rig at a tick the cache has: centre then quaternion */
     float[] pose(int rig, int tick)
     {
+        if (this.live())
+        {
+            return this.livePoses(rig);
+        }
+
         int at = Math.max(0, Math.min(tick, this.computed()));
 
         return this.poses.get(at)[rig];
     }
 
+    /* A live hold: a body in the physics gun's hands while the rest of the world moves around it */
+
+    private int liveTick = -1;
+    private Rig liveRig;
+    private int liveBody = -1;
+
+    boolean live()
+    {
+        return this.liveTick >= 0;
+    }
+
+    /**
+     * Winds the world to the tick and takes one body out of the simulation's hands: it follows the tool from now
+     * on, and the bodies jointed to it swing after it. Nothing of this goes into the cache; the hold ends by
+     * winding back to the same tick.
+     */
+    boolean beginLive(Rig rig, int body, int tick)
+    {
+        this.endLive();
+        this.advanceTo(tick, Integer.MAX_VALUE);
+
+        if (this.computed() < tick)
+        {
+            return false;
+        }
+
+        this.rewind(tick);
+
+        this.liveTick = tick;
+        this.liveRig = rig;
+        this.liveBody = body;
+
+        int id = rig.bodyAt(body).getId();
+
+        this.bodies.setMotionType(id, EMotionType.Kinematic, EActivation.Activate);
+
+        if (rig.bones == null)
+        {
+            rig.kinematic = true;
+        }
+        else
+        {
+            rig.boneKinematic[body] = true;
+        }
+
+        return true;
+    }
+
+    /** One tick of the live world with the held body moved onto the tool's point and turn */
+    void stepLive(float[] target)
+    {
+        if (!this.live())
+        {
+            return;
+        }
+
+        for (Rig rig : this.rigs)
+        {
+            if (rig.bones != null || rig != this.liveRig)
+            {
+                this.drive(rig, this.liveTick);
+            }
+        }
+
+        this.bodies.moveKinematic(this.liveRig.bodyAt(this.liveBody).getId(), new RVec3(target[0], target[1], target[2]), new Quat(target[3], target[4], target[5], target[6]), DELTA);
+        this.system.update(DELTA, STEPS, this.temp, this.jobs);
+    }
+
+    /** Ends a live hold: the world goes back to the tick it was taken at, as it was */
+    void endLive()
+    {
+        if (!this.live())
+        {
+            return;
+        }
+
+        int tick = this.liveTick;
+
+        this.liveTick = -1;
+        this.liveRig = null;
+        this.liveBody = -1;
+        this.rewind(tick);
+    }
+
+    /** Every body of a rig as it is in the live world right now */
+    float[] livePoses(int rig)
+    {
+        Rig built = this.rigs.get(rig);
+        float[] out = new float[built.bodyCount() * 7];
+
+        for (int b = 0; b < built.bodyCount(); b++)
+        {
+            this.bodies.getPositionAndRotation(built.bodyAt(b).getId(), this.scratchPosition, this.scratchRotation);
+
+            out[b * 7] = (float) this.scratchPosition.xx();
+            out[b * 7 + 1] = (float) this.scratchPosition.yy();
+            out[b * 7 + 2] = (float) this.scratchPosition.zz();
+            out[b * 7 + 3] = this.scratchRotation.getX();
+            out[b * 7 + 4] = this.scratchRotation.getY();
+            out[b * 7 + 5] = this.scratchRotation.getZ();
+            out[b * 7 + 6] = this.scratchRotation.getW();
+        }
+
+        return out;
+    }
+
     /** Every body's pose of a rig at a tick, seven numbers a body, root bone first */
     float[] poses(int rig, int tick)
     {
+        if (this.live())
+        {
+            return this.livePoses(rig);
+        }
+
         int at = Math.max(0, Math.min(tick, this.computed()));
 
         return this.poses.get(at)[rig];

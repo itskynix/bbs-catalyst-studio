@@ -49,8 +49,10 @@ public final class PhysicsToolController
 
     private static Tool picked = Tool.NONE;
 
-    /* The physics gun's grab */
+    /* The physics gun's grab; a limb of a ragdoll is held live, the rest by the pose the tool gives it */
     private static Replay grabbed;
+    private static boolean limb;
+    private static long liveAt;
     private static float distance;
     private static float centerY;
     private static final Vector3f point = new Vector3f();
@@ -94,13 +96,64 @@ public final class PhysicsToolController
     public static void pick(Tool tool)
     {
         picked = picked == tool ? Tool.NONE : tool;
+        drop();
+    }
+
+    /** Puts the picked tool away, e.g. when the Physics tab is left; a tool held in hand stays up */
+    public static void reset()
+    {
+        picked = Tool.NONE;
+        drop();
+    }
+
+    private static void drop()
+    {
+        if (grabbed != null && limb)
+        {
+            PhysicsStudio.endLive();
+        }
+
         grabbed = null;
+        limb = false;
+    }
+
+    /**
+     * Whether a tool wants this click before anything else in the editor does: a tool is up and the mouse is over
+     * the film preview. The orbit camera asks this before it takes the button.
+     */
+    public static boolean capturesMouse(UIContext context)
+    {
+        UIFilmPanel panel = filmPanel();
+
+        return panel != null && tool() != Tool.NONE && panel.preview != null && panel.preview.isVisible() && panel.preview.area.isInside(context);
+    }
+
+    private static UIFilmPanel filmPanel()
+    {
+        if (mchorse.bbs_mod.ui.framework.UIScreen.getCurrentMenu() instanceof mchorse.bbs_mod.ui.dashboard.UIDashboard dashboard
+            && dashboard.getPanels().panel instanceof UIFilmPanel panel)
+        {
+            return panel;
+        }
+
+        return null;
+    }
+
+    /** Where the tool aims: the mouse, or the middle of the picture while the mouse is locked into looking around */
+    private static int[] aim(UIContext context, UIFilmPanel panel, Area viewport)
+    {
+        if (panel.dashboard.orbitUI.isFreeLook())
+        {
+            return new int[] {viewport.mx(), viewport.my()};
+        }
+
+        return new int[] {context.mouseX, context.mouseY};
     }
 
     /** Where a body in hand is drawn: its centre and its turn, or null when it is not in hand */
     public static float[] heldPose(Replay replay)
     {
-        if (replay == null || replay != grabbed)
+        if (replay == null || replay != grabbed || limb)
         {
             return null;
         }
@@ -182,20 +235,32 @@ public final class PhysicsToolController
         Tool tool = tool();
         Film film = panel.getData();
 
-        if (tool == Tool.NONE || film == null || !viewport.isInside(context) || context.mouseButton > 1)
+        int[] aim = aim(context, panel, viewport);
+
+        if (tool == Tool.NONE || film == null || !viewport.isInside(aim[0], aim[1]) || context.mouseButton > 1)
         {
             return false;
         }
 
-        Vector3f[] ray = ray(panel, viewport, context.mouseX, context.mouseY);
+        Vector3f[] ray = ray(panel, viewport, aim[0], aim[1]);
         int tick = panel.getCursor();
 
         if (tool == Tool.PHYSICS)
         {
             if (context.mouseButton == 1 && grabbed != null)
             {
-                freeze(panel, grabbed, tick);
-                grabbed = null;
+                if (limb)
+                {
+                    PhysicsStudio.freezeLive(film, grabbed, tick);
+                    grabbed = null;
+                    limb = false;
+                    panel.replayEditor.updateChannelsList();
+                }
+                else
+                {
+                    freeze(panel, grabbed, tick);
+                    grabbed = null;
+                }
 
                 return true;
             }
@@ -213,9 +278,13 @@ public final class PhysicsToolController
                     turn.set(hit.pose()[3], hit.pose()[4], hit.pose()[5], hit.pose()[6]);
                     velocity.zero();
                     movedAt = System.nanoTime();
-                    lastMouseX = context.mouseX;
-                    lastMouseY = context.mouseY;
+                    lastMouseX = aim[0];
+                    lastMouseY = aim[1];
                     distance = ray[0].distance(point);
+
+                    /* A ragdoll is held by the limb the ray met, and the rest of it swings after the hand */
+                    limb = hit.limb() && PhysicsStudio.beginLive(film, grabbed, hit.body(), tick);
+                    liveAt = System.nanoTime();
                 }
 
                 return true;
@@ -272,6 +341,15 @@ public final class PhysicsToolController
         int tick = panel.getCursor();
 
         grabbed = null;
+
+        if (limb)
+        {
+            /* A limb let go without a freeze only swung for the look of it; the timeline is as it was */
+            limb = false;
+            PhysicsStudio.endLive();
+
+            return true;
+        }
 
         keyPose(replay, tick, point, turn, centerY);
         keyAnimation(replay, tick, 1F);
@@ -347,23 +425,26 @@ public final class PhysicsToolController
 
         if (tool == Tool.NONE)
         {
-            grabbed = null;
+            drop();
 
             return;
         }
+
+        int[] aim = aim(context, panel, viewport);
+        boolean locked = panel.dashboard.orbitUI.isFreeLook();
 
         int color = tool == Tool.PHYSICS ? PHYSICS_COLOR : GRAVITY_COLOR;
         float[] muzzle = {viewport.ex() - viewport.w * 0.18F, viewport.ey() - viewport.h * 0.1F};
 
         if (grabbed != null)
         {
-            Vector3f[] ray = ray(panel, viewport, context.mouseX, context.mouseY);
+            Vector3f[] ray = ray(panel, viewport, aim[0], aim[1]);
 
             if (Window.isShiftPressed())
             {
                 /* Shift turns the body about the camera's up and right instead of moving it */
-                float dx = (context.mouseX - lastMouseX) * 0.02F;
-                float dy = (context.mouseY - lastMouseY) * 0.02F;
+                float dx = (aim[0] - lastMouseX) * 0.02F;
+                float dy = (aim[1] - lastMouseY) * 0.02F;
 
                 turn.premul(new Quaternionf().rotateY(dx)).premul(new Quaternionf().rotateX(dy)).normalize();
             }
@@ -388,8 +469,25 @@ public final class PhysicsToolController
                 point.set(next);
             }
 
-            lastMouseX = context.mouseX;
-            lastMouseY = context.mouseY;
+            lastMouseX = aim[0];
+            lastMouseY = aim[1];
+
+            if (limb)
+            {
+                /* The live world runs at the film's own pace, a tick every twentieth of a second */
+                long now = System.nanoTime();
+                int steps = (int) Math.min(3, (now - liveAt) / 50_000_000L);
+
+                for (int i = 0; i < steps; i++)
+                {
+                    PhysicsStudio.stepLive(new float[] {point.x, point.y, point.z, turn.x, turn.y, turn.z, turn.w});
+                }
+
+                if (steps > 0)
+                {
+                    liveAt = now;
+                }
+            }
 
             float[] end = project(panel, viewport, point);
 
@@ -415,13 +513,80 @@ public final class PhysicsToolController
             }
         }
 
-        /* A small sight under the mouse says which tool is up */
-        int sight = Colors.setA(color, 0.9F);
+        /* With the mouse free the pointer itself aims; locked into looking around, a sight marks the middle */
+        if (locked)
+        {
+            int sight = Colors.setA(color, 0.9F);
+            int cx = aim[0];
+            int cy = aim[1];
 
-        context.batcher.box(context.mouseX - 6, context.mouseY, context.mouseX - 2, context.mouseY + 1, sight);
-        context.batcher.box(context.mouseX + 3, context.mouseY, context.mouseX + 7, context.mouseY + 1, sight);
-        context.batcher.box(context.mouseX, context.mouseY - 6, context.mouseX + 1, context.mouseY - 2, sight);
-        context.batcher.box(context.mouseX, context.mouseY + 3, context.mouseX + 1, context.mouseY + 7, sight);
+            context.batcher.box(cx - 6, cy, cx - 2, cy + 1, sight);
+            context.batcher.box(cx + 3, cy, cx + 7, cy + 1, sight);
+            context.batcher.box(cx, cy - 6, cx + 1, cy - 2, sight);
+            context.batcher.box(cx, cy + 3, cx + 1, cy + 7, sight);
+        }
+    }
+
+    /** The collision boxes and the joints of the simulated bodies, see-through, over the picture */
+    public static void renderShapes(UIContext context, UIFilmPanel panel, Area viewport)
+    {
+        if (!PhysicsStudio.showShapes || panel.getData() == null)
+        {
+            return;
+        }
+
+        java.util.List<float[]> joints = new java.util.ArrayList<>();
+        int edge = Colors.setA(0x40E0A0, 0.7F);
+
+        for (float[] shape : PhysicsStudio.shapes(panel.getData(), panel.getCursor(), joints))
+        {
+            Quaternionf q = new Quaternionf(shape[3], shape[4], shape[5], shape[6]);
+            float[][] corners = new float[8][];
+
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3f local = new Vector3f((i & 1) == 0 ? -shape[7] : shape[7], (i & 2) == 0 ? -shape[8] : shape[8], (i & 4) == 0 ? -shape[9] : shape[9]);
+                Vector3f world = q.transform(local).add(shape[0], shape[1], shape[2]);
+
+                corners[i] = project(panel, viewport, world);
+            }
+
+            int[][] edges = {{0, 1}, {2, 3}, {4, 5}, {6, 7}, {0, 2}, {1, 3}, {4, 6}, {5, 7}, {0, 4}, {1, 5}, {2, 6}, {3, 7}};
+
+            for (int[] e : edges)
+            {
+                if (corners[e[0]] != null && corners[e[1]] != null)
+                {
+                    line(context, corners[e[0]], corners[e[1]], edge);
+                }
+            }
+        }
+
+        for (float[] joint : joints)
+        {
+            float[] at = project(panel, viewport, new Vector3f(joint[0], joint[1], joint[2]));
+
+            if (at != null)
+            {
+                context.batcher.box(at[0] - 2F, at[1] - 2F, at[0] + 2F, at[1] + 2F, Colors.setA(0xFFD040, 0.9F));
+            }
+        }
+    }
+
+    private static void line(UIContext context, float[] a, float[] b, int color)
+    {
+        float dx = b[0] - a[0];
+        float dy = b[1] - a[1];
+        int steps = (int) Math.min(400, Math.max(Math.abs(dx), Math.abs(dy)));
+
+        for (int i = 0; i <= steps; i++)
+        {
+            float t = steps == 0 ? 0F : i / (float) steps;
+            float x = a[0] + dx * t;
+            float y = a[1] + dy * t;
+
+            context.batcher.box(x, y, x + 1F, y + 1F, color);
+        }
     }
 
     /** A curving beam of glowing beads from the muzzle to the target, swaying a little over time */

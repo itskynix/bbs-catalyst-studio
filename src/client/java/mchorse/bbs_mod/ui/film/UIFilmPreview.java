@@ -837,6 +837,12 @@ public class UIFilmPreview extends UIElement
     @Override
     protected boolean subMouseClicked(UIContext context)
     {
+        /* A physics tool takes the buttons first, before panes, picking, gizmos and the orbit */
+        if (mchorse.bbs_mod.physics.PhysicsToolController.mouseClicked(context, this.panel, this.getViewport()))
+        {
+            return true;
+        }
+
         if (ViewportSet.showHeaders())
         {
             ViewportSet.place(this.area);
@@ -851,12 +857,6 @@ public class UIFilmPreview extends UIElement
             {
                 ViewportSet.focusUnder(context, this);
             }
-        }
-
-        /* A physics tool takes the buttons it uses while it is up */
-        if (mchorse.bbs_mod.physics.PhysicsToolController.mouseClicked(context, this.panel, this.getViewport()))
-        {
-            return true;
         }
 
         Area area = this.getViewport();
@@ -1262,6 +1262,7 @@ public class UIFilmPreview extends UIElement
         }
 
         this.placementGizmo.render(context, area);
+        mchorse.bbs_mod.physics.PhysicsToolController.renderShapes(context, this.panel, area);
         mchorse.bbs_mod.physics.PhysicsToolController.render(context, this.panel, area);
 
         context.batcher.unclip(context);
