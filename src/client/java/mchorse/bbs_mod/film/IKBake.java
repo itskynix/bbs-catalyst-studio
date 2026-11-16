@@ -84,6 +84,82 @@ public class IKBake
      * the chains are keyed off on that range. Returns false when there is nothing to sample
      * against — no world, no model, no chain of those names.
      */
+    /**
+     * Something other than IK that turns bones: given the model as the channels left it at a tick and the frame the
+     * film stands the entity in, it writes each bone's solved local rotation (and a root's translation, as the bone's
+     * offset), the way a render stage would.
+     */
+    public interface SolvedPose
+    {
+        void apply(int tick, ModelInstance model, Matrix4f world);
+    }
+
+    /**
+     * Bakes what an outside solver does to the given bones into their pose tracks, every tick from {@code start} to
+     * {@code end}: the same sampling, the same arithmetic and the same undoable edit as the IK bake, with the solver
+     * in place of the IK solve. Returns false when there is nothing to sample.
+     */
+    public static boolean bakeSolved(Film film, Replay replay, Collection<String> bones, int start, int end, SolvedPose solver)
+    {
+        World world = MinecraftClient.getInstance().world;
+
+        if (film == null || replay == null || world == null || bones == null || bones.isEmpty() || solver == null
+            || !(replay.form.get() instanceof ModelForm))
+        {
+            return false;
+        }
+
+        Sampler sampler = Sampler.create(film, replay, world);
+
+        if (sampler == null)
+        {
+            return false;
+        }
+
+        sampler.solver = solver;
+
+        Set<String> wanted = new LinkedHashSet<>(bones);
+        Map<String, List<Keyed>> keys = new LinkedHashMap<>();
+        Set<String> moved = new HashSet<>();
+
+        for (String bone : wanted)
+        {
+            keys.put(bone, new ArrayList<>());
+        }
+
+        for (int tick = 0; tick <= end; tick++)
+        {
+            sampler.step(tick);
+
+            if (tick >= Math.max(0, start))
+            {
+                sampler.sample(tick, wanted, keys, moved);
+            }
+        }
+
+        RenderFrame.invalidate();
+
+        BaseValue.edit(replay.properties, (properties) ->
+        {
+            for (Map.Entry<String, List<Keyed>> entry : keys.entrySet())
+            {
+                if (!moved.contains(entry.getKey()))
+                {
+                    continue;
+                }
+
+                KeyframeChannel<PoseTransform> channel = properties.getOrCreate(TrackId.bone("", entry.getKey()));
+
+                for (Keyed keyed : entry.getValue())
+                {
+                    channel.insertInheriting(keyed.tick(), keyed.value());
+                }
+            }
+        });
+
+        return true;
+    }
+
     public static boolean bake(Film film, Replay replay, Collection<String> tips, int start, int end, int step, boolean disable)
     {
         World world = MinecraftClient.getInstance().world;
@@ -397,6 +473,8 @@ public class IKBake
 
         private IEntity entity;
         private ModelFormRenderer renderer;
+        /** An outside solver that takes the place of the IK solve, or null for IK */
+        private SolvedPose solver;
 
         private Sampler(Film film, Replay replay)
         {
@@ -512,7 +590,14 @@ public class IKBake
                     }
                 }
 
-                this.renderer.solveIK(model, world, 0F);
+                if (this.solver != null)
+                {
+                    this.solver.apply(tick, model, world);
+                }
+                else
+                {
+                    this.renderer.solveIK(model, world, 0F);
+                }
 
                 /* The solved pivot frames, collected once and only when a BOBJ bone stretched —
                  * its share has to be brought into its own frame (see stretchTranslate). */

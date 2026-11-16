@@ -49,6 +49,10 @@ public class ReplayPhysics extends ValueGroup
     public final ValueString ropeAnchor = new ValueString("rope_anchor", "");
     public final ValueFloat ropeLength = new ValueFloat("rope_length", 2F);
 
+    /** A bone torn off the ragdoll at a tick and thrown free; empty or a negative tick for none */
+    public final ValueString tearBone = new ValueString("tear_bone", "");
+    public final mchorse.bbs_mod.settings.values.numeric.ValueInt tearTick = new mchorse.bbs_mod.settings.values.numeric.ValueInt("tear_tick", -1);
+
     /** How far a blast reaches, in blocks */
     public final ValueFloat blastRadius = new ValueFloat("blast_radius", 4F);
 
@@ -79,6 +83,8 @@ public class ReplayPhysics extends ValueGroup
         this.add(this.ropeAnchor);
         this.add(this.ropeLength);
         this.add(this.blastRadius);
+        this.add(this.tearBone);
+        this.add(this.tearTick);
         this.add(this.animation);
         this.add(this.musclesTrack);
         this.add(this.pushX);
@@ -111,6 +117,6 @@ public class ReplayPhysics extends ValueGroup
     {
         return this.enabled.get() + "|" + this.ragdoll.get() + "|" + this.material.get() + "|" + this.mass.get() + "|" + this.friction.get()
             + "|" + this.restitution.get() + "|" + this.balloon.get() + "|" + this.lift.get() + "|" + this.rope.get() + "|" + this.ropeAnchor.get()
-            + "|" + this.ropeLength.get() + "|" + this.blastRadius.get() + "|" + (this.muscles.get());
+            + "|" + this.ropeLength.get() + "|" + this.blastRadius.get() + "|" + (this.muscles.get()) + "|" + this.tearBone.get() + "|" + this.tearTick.get();
     }
 }

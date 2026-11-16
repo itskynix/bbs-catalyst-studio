@@ -228,6 +228,8 @@ public class BBSMod implements ModInitializer
     /* Plain vanilla item on purpose: the region selection it drives lives entirely on the client,
      * so there is nothing for a custom Item subclass to hold (see StructureSelection). */
     public static final Item STRUCTURE_WAND_ITEM = new Item(new Item.Settings().maxCount(1));
+    public static final mchorse.bbs_mod.items.PhysicsToolItem PHYSICS_GUN_ITEM = new mchorse.bbs_mod.items.PhysicsToolItem(mchorse.bbs_mod.items.PhysicsToolItem.Kind.PHYSICS, new Item.Settings().maxCount(1));
+    public static final mchorse.bbs_mod.items.PhysicsToolItem GRAVITY_GUN_ITEM = new mchorse.bbs_mod.items.PhysicsToolItem(mchorse.bbs_mod.items.PhysicsToolItem.Kind.GRAVITY, new Item.Settings().maxCount(1));
     public static final BlockItem CHROMA_RED_BLOCK_ITEM = new BlockItem(CHROMA_RED_BLOCK, new Item.Settings());
     public static final BlockItem CHROMA_GREEN_BLOCK_ITEM = new BlockItem(CHROMA_GREEN_BLOCK, new Item.Settings());
     public static final BlockItem CHROMA_BLUE_BLOCK_ITEM = new BlockItem(CHROMA_BLUE_BLOCK, new Item.Settings());
@@ -261,6 +263,8 @@ public class BBSMod implements ModInitializer
             entries.add(CHROMA_WHITE_BLOCK_ITEM);
             entries.add(new ItemStack(GUN_ITEM));
             entries.add(new ItemStack(STRUCTURE_WAND_ITEM));
+            entries.add(new ItemStack(PHYSICS_GUN_ITEM));
+            entries.add(new ItemStack(GRAVITY_GUN_ITEM));
         })
         .build();
 
@@ -590,6 +594,8 @@ public class BBSMod implements ModInitializer
         Registry.register(Registries.ITEM, Ids.of(MOD_ID, "model"), MODEL_BLOCK_ITEM);
         Registry.register(Registries.ITEM, Ids.of(MOD_ID, "gun"), GUN_ITEM);
         Registry.register(Registries.ITEM, Ids.of(MOD_ID, "structure_wand"), STRUCTURE_WAND_ITEM);
+        Registry.register(Registries.ITEM, Ids.of(MOD_ID, "physics_gun"), PHYSICS_GUN_ITEM);
+        Registry.register(Registries.ITEM, Ids.of(MOD_ID, "gravity_gun"), GRAVITY_GUN_ITEM);
         Registry.register(Registries.ITEM, Ids.of(MOD_ID, "chroma_red"), CHROMA_RED_BLOCK_ITEM);
         Registry.register(Registries.ITEM, Ids.of(MOD_ID, "chroma_green"), CHROMA_GREEN_BLOCK_ITEM);
         Registry.register(Registries.ITEM, Ids.of(MOD_ID, "chroma_blue"), CHROMA_BLUE_BLOCK_ITEM);

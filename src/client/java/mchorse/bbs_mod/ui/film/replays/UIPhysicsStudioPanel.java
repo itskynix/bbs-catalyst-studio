@@ -88,7 +88,13 @@ public class UIPhysicsStudioPanel extends UIElement
 
         UISection ragdollSection = new UISection(UIKeys.FILM_PHYSICS_SECTIONS_RAGDOLL);
 
-        ragdollSection.fields.add(this.enabled, this.ragdoll, this.labelled(UIKeys.FILM_PHYSICS_ANIMATION, this.animation),
+        UIButton tear = new UIButton(UIKeys.FILM_PHYSICS_TEAR, (b) -> this.openTearMenu());
+
+        tear.tooltip(UIKeys.FILM_PHYSICS_TEAR_TOOLTIP);
+        this.bound(tear, (r) -> tear.label = r.physics.tearBone.get().isEmpty() || r.physics.tearTick.get() < 0
+            ? UIKeys.FILM_PHYSICS_TEAR : UIKeys.FILM_PHYSICS_TEAR_SET.format(r.physics.tearBone.get(), r.physics.tearTick.get()));
+
+        ragdollSection.fields.add(this.enabled, this.ragdoll, tear, this.labelled(UIKeys.FILM_PHYSICS_ANIMATION, this.animation),
             this.labelled(UIKeys.FILM_PHYSICS_MUSCLES, this.muscles), UI.row(release, hold), this.note(UIKeys.FILM_PHYSICS_NOTE_JOINTS));
 
         /* 2. Rigid body and structure */
@@ -175,6 +181,20 @@ public class UIPhysicsStudioPanel extends UIElement
         forcesSection.fields.add(UI.label(UIKeys.FILM_PHYSICS_PUSH, 14), UI.row(this.pushX, this.pushY, this.pushZ), push,
             this.labelled(UIKeys.FILM_PHYSICS_BLAST_STRENGTH, this.blastStrength), this.labelled(UIKeys.FILM_PHYSICS_BLAST_RADIUS, this.blastRadius), blast,
             bake, this.cache);
+
+        /* The hand tools: picked here for the preview, or given to the player to hold */
+        UIButton physicsTool = new UIButton(UIKeys.FILM_PHYSICS_TOOL_PHYSICS, (b) -> mchorse.bbs_mod.physics.PhysicsToolController.pick(mchorse.bbs_mod.physics.PhysicsToolController.Tool.PHYSICS));
+        UIButton gravityTool = new UIButton(UIKeys.FILM_PHYSICS_TOOL_GRAVITY, (b) -> mchorse.bbs_mod.physics.PhysicsToolController.pick(mchorse.bbs_mod.physics.PhysicsToolController.Tool.GRAVITY));
+
+        physicsTool.tooltip(UIKeys.FILM_PHYSICS_TOOL_PHYSICS_TOOLTIP);
+        gravityTool.tooltip(UIKeys.FILM_PHYSICS_TOOL_GRAVITY_TOOLTIP);
+        physicsTool.color(0x3AD7FF);
+        gravityTool.color(0xFF8C1C);
+
+        UIButton givePhysics = new UIButton(UIKeys.FILM_PHYSICS_GIVE_PHYSICS, (b) -> this.give(mchorse.bbs_mod.items.PhysicsToolItem.Kind.PHYSICS));
+        UIButton giveGravity = new UIButton(UIKeys.FILM_PHYSICS_GIVE_GRAVITY, (b) -> this.give(mchorse.bbs_mod.items.PhysicsToolItem.Kind.GRAVITY));
+
+        forcesSection.fields.add(UI.label(UIKeys.FILM_PHYSICS_TOOLS, 14), UI.row(physicsTool, gravityTool), givePhysics, giveGravity);
 
         this.content = UI.scrollView(UIConstants.MARGIN, UIConstants.SCROLL_PADDING, this.status, ragdollSection, solidSection, softSection, forcesSection);
         this.content.relative(this).x(0).y(0).w(1F).h(1F);
@@ -313,6 +333,54 @@ public class UIPhysicsStudioPanel extends UIElement
         {
             UIOverlay.addOverlay(context, new UIMessageOverlayPanel(UIKeys.FILM_PHYSICS_TITLE,
                 result == null ? UIKeys.FILM_PHYSICS_BAKE_FAILED : UIKeys.FILM_PHYSICS_BAKE_DONE.format(result.keyframes())));
+        }
+    }
+
+    /** The bones of the replay's model, to tear one off at the cursor tick, or none */
+    private void openTearMenu()
+    {
+        if (this.replay == null)
+        {
+            return;
+        }
+
+        int tick = this.filmPanel.getCursor();
+
+        this.getContext().replaceContextMenu((menu) ->
+        {
+            menu.action(Icons.CLOSE, UIKeys.FILM_PHYSICS_TEAR_NONE, () -> this.edit((p) ->
+            {
+                p.tearBone.set("");
+                p.tearTick.set(-1);
+            }));
+
+            if (this.replay.form.get() instanceof mchorse.bbs_mod.forms.forms.ModelForm form)
+            {
+                mchorse.bbs_mod.cubic.ModelInstance model = mchorse.bbs_mod.forms.renderers.ModelFormRenderer.getModel(form);
+
+                if (model != null && model.model instanceof mchorse.bbs_mod.cubic.data.model.Model cubic)
+                {
+                    for (mchorse.bbs_mod.cubic.data.model.ModelGroup group : cubic.getAllGroups())
+                    {
+                        if (!group.cubes.isEmpty())
+                        {
+                            menu.action(Icons.LIMB, IKey.constant(group.id), () -> this.edit((p) ->
+                            {
+                                p.tearBone.set(group.id);
+                                p.tearTick.set(tick);
+                            }));
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    private void give(mchorse.bbs_mod.items.PhysicsToolItem.Kind kind)
+    {
+        if (!mchorse.bbs_mod.physics.PhysicsToolController.give(kind) && this.getContext() != null)
+        {
+            UIOverlay.addOverlay(this.getContext(), new UIMessageOverlayPanel(UIKeys.FILM_PHYSICS_TITLE, UIKeys.FILM_PHYSICS_GIVE_FAILED));
         }
     }
 

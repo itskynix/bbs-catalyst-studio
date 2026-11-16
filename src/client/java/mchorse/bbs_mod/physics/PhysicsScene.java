@@ -22,6 +22,11 @@ import com.github.stephengold.joltjni.StaticCompoundShapeSettings;
 import com.github.stephengold.joltjni.TempAllocator;
 import com.github.stephengold.joltjni.TempAllocatorImplWithMallocFallback;
 import com.github.stephengold.joltjni.TwoBodyConstraint;
+import com.github.stephengold.joltjni.SwingTwistConstraintSettings;
+import com.github.stephengold.joltjni.GroupFilterTable;
+import com.github.stephengold.joltjni.CollisionGroup;
+import mchorse.bbs_mod.cubic.render.CubicRenderer.PivotFrame;
+import java.util.Map;
 import com.github.stephengold.joltjni.Vec3;
 import com.github.stephengold.joltjni.enumerate.EActivation;
 import com.github.stephengold.joltjni.enumerate.EAllowedDofs;
@@ -86,6 +91,35 @@ final class PhysicsScene implements AutoCloseable
         Body anchor;
         TwoBodyConstraint rope;
 
+        /* A ragdoll: a body per bone, a joint to each one's parent body, and the pose its muscles pull towards */
+        RagdollSampler ragdoll;
+        Body[] bones;
+        TwoBodyConstraint[] joints;
+        boolean[] boneKinematic;
+        int torn = -1;
+        final List<Map<String, PivotFrame>> targets = new ArrayList<>();
+
+        int bodyCount()
+        {
+            return this.bones == null ? 1 : this.bones.length;
+        }
+
+        Body bodyAt(int index)
+        {
+            return this.bones == null ? this.body : this.bones[index];
+        }
+
+        /** The pose the bones' muscles pull towards at a tick, sampled once and kept */
+        Map<String, PivotFrame> target(int tick)
+        {
+            while (this.targets.size() <= tick)
+            {
+                this.targets.add(this.ragdoll.sample(this.targets.size()));
+            }
+
+            return this.targets.get(tick);
+        }
+
         Rig(Replay replay, AutoCollisionBuilder.Box box, Body body, float mass)
         {
             this.replay = replay;
@@ -144,7 +178,9 @@ final class PhysicsScene implements AutoCloseable
 
         for (Replay replay : replays)
         {
-            this.rigs.add(this.build(replay));
+            Rig rig = replay.physics.ragdoll.get() ? this.buildRagdoll(replay, world) : null;
+
+            this.rigs.add(rig != null ? rig : this.build(replay));
         }
 
         this.addGround(world, region);
@@ -200,6 +236,172 @@ final class PhysicsScene implements AutoCloseable
         this.bodies.addBody(body.getId(), EActivation.Activate);
 
         return new Rig(replay, box, body, mass);
+    }
+
+    /**
+     * A ragdoll for a model form: one box per bone that has cubes, standing where the bone stands at the first
+     * tick, joined to its nearest parent body at the child's pivot. The joint's cone and twist are chosen by the
+     * bone's name: wide at the shoulders and hips, nearly a hinge at the elbows and knees, stiff along the spine.
+     * The bones of one ragdoll do not collide with each other, only with the world and with other bodies.
+     */
+    private Rig buildRagdoll(Replay replay, World world)
+    {
+        RagdollSampler sampler = RagdollSampler.create(replay, world);
+
+        if (sampler == null)
+        {
+            return null;
+        }
+
+        Map<String, PivotFrame> start = sampler.sample(0);
+
+        for (RagdollSampler.Bone bone : sampler.bones)
+        {
+            if (!start.containsKey(bone.id()))
+            {
+                return null;
+            }
+        }
+
+        ReplayPhysics physics = replay.physics;
+        PhysicsMaterial material = PhysicsMaterial.byId(physics.material.get());
+        int count = sampler.bones.size();
+        GroupFilterTable filter = new GroupFilterTable(count);
+
+        for (int a = 0; a < count; a++)
+        {
+            for (int b = a + 1; b < count; b++)
+            {
+                filter.disableCollision(a, b);
+            }
+        }
+
+        Body[] bodies = new Body[count];
+        float total = 0F;
+
+        for (int i = 0; i < count; i++)
+        {
+            RagdollSampler.Bone bone = sampler.bones.get(i);
+            PivotFrame frame = start.get(bone.id());
+            Vector3f scale = frame.scale();
+            Vector3f half = new Vector3f(bone.half()).mul(scale.x, scale.y, scale.z);
+
+            half.set(Math.max(0.03F, half.x), Math.max(0.03F, half.y), Math.max(0.03F, half.z));
+
+            float[] pose = RagdollSampler.bodyPose(bone, frame);
+            float mass = Math.max(0.05F, material.density * 8F * half.x * half.y * half.z);
+            BoxShape shape = new BoxShape(new Vec3(half.x, half.y, half.z), Math.min(0.02F, Math.min(half.x, Math.min(half.y, half.z)) * 0.9F));
+            BodyCreationSettings settings = new BodyCreationSettings(shape, new RVec3(pose[0], pose[1], pose[2]), new Quat(pose[3], pose[4], pose[5], pose[6]), EMotionType.Dynamic, LAYER_MOVING);
+
+            settings.setFriction(physics.friction.get());
+            settings.setRestitution(physics.restitution.get());
+            settings.setLinearDamping(0.05F);
+            settings.setAngularDamping(0.3F);
+            settings.setMotionQuality(EMotionQuality.LinearCast);
+            settings.setCollisionGroup(new CollisionGroup(filter, 0, i));
+            settings.setMassPropertiesOverride(new MassProperties().setMass(mass));
+            settings.setOverrideMassProperties(EOverrideMassProperties.CalculateInertia);
+
+            bodies[i] = this.bodies.createBody(settings);
+            this.bodies.addBody(bodies[i].getId(), EActivation.Activate);
+            total += mass;
+
+            settings.close();
+            shape.close();
+        }
+
+        TwoBodyConstraint[] joints = new TwoBodyConstraint[count];
+
+        for (int i = 0; i < count; i++)
+        {
+            RagdollSampler.Bone bone = sampler.bones.get(i);
+
+            if (bone.parent() < 0)
+            {
+                continue;
+            }
+
+            PivotFrame frame = start.get(bone.id());
+            Quaternionf rotation = new Quaternionf(frame.worldRotation()).normalize();
+            Vector3f twist = rotation.transform(new Vector3f(bone.center()));
+
+            if (twist.lengthSquared() < 1e-6F)
+            {
+                twist.set(0F, -1F, 0F);
+            }
+
+            twist.normalize();
+
+            Vector3f plane = twist.cross(Math.abs(twist.y) > 0.9F ? new Vector3f(1F, 0F, 0F) : new Vector3f(0F, 1F, 0F), new Vector3f()).normalize();
+            float[] limits = limits(bone.id());
+            SwingTwistConstraintSettings joint = new SwingTwistConstraintSettings();
+            RVec3 at = new RVec3(frame.position().x, frame.position().y, frame.position().z);
+
+            joint.setSpace(EConstraintSpace.WorldSpace);
+            joint.setPosition1(at);
+            joint.setPosition2(at);
+            joint.setTwistAxis1(new Vec3(twist.x, twist.y, twist.z));
+            joint.setTwistAxis2(new Vec3(twist.x, twist.y, twist.z));
+            joint.setPlaneAxis1(new Vec3(plane.x, plane.y, plane.z));
+            joint.setPlaneAxis2(new Vec3(plane.x, plane.y, plane.z));
+            joint.setNormalHalfConeAngle(limits[0]);
+            joint.setPlaneHalfConeAngle(limits[1]);
+            joint.setTwistMinAngle(-limits[2]);
+            joint.setTwistMaxAngle(limits[2]);
+
+            joints[i] = joint.create(bodies[bone.parent()], bodies[i]);
+            this.system.addConstraint(joints[i]);
+            joint.close();
+        }
+
+        Rig rig = new Rig(replay, AutoCollisionBuilder.build(replay.form.get()), bodies[0], total);
+
+        rig.ragdoll = sampler;
+        rig.bones = bodies;
+        rig.joints = joints;
+        rig.boneKinematic = new boolean[count];
+        rig.targets.add(start);
+
+        String tear = physics.tearBone.get();
+
+        for (int i = 0; i < count; i++)
+        {
+            if (sampler.bones.get(i).id().equals(tear))
+            {
+                rig.torn = i;
+            }
+        }
+
+        return rig;
+    }
+
+    /** Normal cone, plane cone and twist, in radians, by what the bone is called */
+    private static float[] limits(String name)
+    {
+        String id = name.toLowerCase();
+        float d = (float) Math.PI / 180F;
+
+        if (id.contains("fore") || id.contains("lower") || id.contains("shin") || id.contains("calf") || id.contains("knee") || id.contains("elbow"))
+        {
+            return new float[] {3F * d, 75F * d, 5F * d};
+        }
+
+        if (id.contains("head") || id.contains("neck"))
+        {
+            return new float[] {40F * d, 40F * d, 35F * d};
+        }
+
+        if (id.contains("arm") || id.contains("leg") || id.contains("thigh") || id.contains("shoulder") || id.contains("hip"))
+        {
+            return new float[] {70F * d, 70F * d, 30F * d};
+        }
+
+        if (id.contains("body") || id.contains("torso") || id.contains("chest") || id.contains("spine") || id.contains("waist"))
+        {
+            return new float[] {25F * d, 25F * d, 15F * d};
+        }
+
+        return new float[] {35F * d, 35F * d, 20F * d};
     }
 
     /** The blocks around the replays as one static body, and a floor under them when there are none */
@@ -475,6 +677,13 @@ final class PhysicsScene implements AutoCloseable
     /** Puts the body where the keys want it, with the force the animation handle and the muscles give */
     private void drive(Rig rig, int tick)
     {
+        if (rig.bones != null)
+        {
+            this.driveRagdoll(rig, tick);
+
+            return;
+        }
+
         ReplayPhysics physics = rig.replay.physics;
         float animation = physics.animationAt(tick);
         float muscles = physics.musclesAt(tick);
@@ -562,6 +771,133 @@ final class PhysicsScene implements AutoCloseable
         }
     }
 
+    /**
+     * Every bone pulled towards its own animated pose with the same strength: kinematic at full animation, limp at
+     * no animation and no muscles, staggering in between. A bone torn off is let go for good at its tick.
+     */
+    private void driveRagdoll(Rig rig, int tick)
+    {
+        ReplayPhysics physics = rig.replay.physics;
+        float animation = physics.animationAt(tick);
+        float muscles = physics.musclesAt(tick);
+        float strength = 1F - (1F - animation) * (1F - muscles);
+        Map<String, PivotFrame> target = rig.target(tick);
+        int tearTick = physics.tearTick.get();
+
+        if (rig.torn >= 0 && tick == tearTick && rig.joints[rig.torn] != null)
+        {
+            rig.joints[rig.torn].setEnabled(false);
+
+            int id = rig.bones[rig.torn].getId();
+
+            if (rig.boneKinematic[rig.torn])
+            {
+                this.bodies.setMotionType(id, EMotionType.Dynamic, EActivation.Activate);
+                rig.boneKinematic[rig.torn] = false;
+            }
+
+            Vec3 velocity = this.bodies.getLinearVelocity(id);
+
+            this.bodies.setLinearAndAngularVelocity(id, new Vec3(velocity.getX(), velocity.getY() + 5F, velocity.getZ()), new Vec3(6F, 2F, -4F));
+        }
+
+        for (int i = 0; i < rig.bones.length; i++)
+        {
+            boolean free = rig.torn == i && tearTick >= 0 && tick >= tearTick;
+            PivotFrame frame = target.get(rig.ragdoll.bones.get(i).id());
+
+            if (frame == null || free)
+            {
+                continue;
+            }
+
+            float[] pose = RagdollSampler.bodyPose(rig.ragdoll.bones.get(i), frame);
+            int id = rig.bones[i].getId();
+
+            if (animation >= 0.999F)
+            {
+                if (!rig.boneKinematic[i])
+                {
+                    this.bodies.setMotionType(id, EMotionType.Kinematic, EActivation.Activate);
+                    rig.boneKinematic[i] = true;
+                }
+
+                this.bodies.moveKinematic(id, new RVec3(pose[0], pose[1], pose[2]), new Quat(pose[3], pose[4], pose[5], pose[6]), DELTA);
+
+                continue;
+            }
+
+            if (rig.boneKinematic[i])
+            {
+                this.bodies.setMotionType(id, EMotionType.Dynamic, EActivation.Activate);
+                rig.boneKinematic[i] = false;
+            }
+
+            if (strength > 0.001F)
+            {
+                this.pull(id, pose, strength);
+            }
+        }
+
+        rig.kinematic = rig.boneKinematic[0];
+    }
+
+    /** Mixes a body's velocity and spin towards what would carry it onto a pose in one tick */
+    private void pull(int id, float[] target, float strength)
+    {
+        this.bodies.getPositionAndRotation(id, this.scratchPosition, this.scratchRotation);
+
+        Vec3 velocity = this.bodies.getLinearVelocity(id);
+        Vec3 spin = this.bodies.getAngularVelocity(id);
+        float homeX = (target[0] - (float) this.scratchPosition.xx()) / DELTA;
+        float homeY = (target[1] - (float) this.scratchPosition.yy()) / DELTA;
+        float homeZ = (target[2] - (float) this.scratchPosition.zz()) / DELTA;
+        float speed = (float) Math.sqrt(homeX * homeX + homeY * homeY + homeZ * homeZ);
+
+        if (speed > MAX_PULL_SPEED)
+        {
+            float scale = MAX_PULL_SPEED / speed;
+
+            homeX *= scale;
+            homeY *= scale;
+            homeZ *= scale;
+        }
+
+        Quaternionf delta = new Quaternionf(target[3], target[4], target[5], target[6]).normalize()
+            .mul(new Quaternionf(this.scratchRotation.getX(), this.scratchRotation.getY(), this.scratchRotation.getZ(), this.scratchRotation.getW()).conjugate());
+
+        if (delta.w < 0F)
+        {
+            delta.set(-delta.x, -delta.y, -delta.z, -delta.w);
+        }
+
+        float w = Math.min(delta.w, 1F);
+        float sinHalfSquared = 1F - w * w;
+        float turn = 0F;
+        float ax = 0F;
+        float ay = 0F;
+        float az = 0F;
+
+        if (sinHalfSquared > 1e-12F)
+        {
+            float inverse = (float) (1D / Math.sqrt(sinHalfSquared));
+
+            turn = Math.min(2F * (float) Math.acos(w) / DELTA, MAX_PULL_SPIN);
+            ax = delta.x * inverse;
+            ay = delta.y * inverse;
+            az = delta.z * inverse;
+        }
+
+        Vec3 nextVelocity = new Vec3(mix(velocity.getX(), homeX, strength), mix(velocity.getY(), homeY, strength), mix(velocity.getZ(), homeZ, strength));
+        Vec3 nextSpin = new Vec3(mix(spin.getX(), ax * turn, strength), mix(spin.getY(), ay * turn, strength), mix(spin.getZ(), az * turn, strength));
+
+        if (nextVelocity.isFinite() && nextSpin.isFinite())
+        {
+            this.bodies.setLinearAndAngularVelocity(id, nextVelocity, nextSpin);
+            this.bodies.activateBody(id);
+        }
+    }
+
     private static float mix(float a, float b, float t)
     {
         return a + (b - a) * t;
@@ -612,20 +948,26 @@ final class PhysicsScene implements AutoCloseable
     /** A change of velocity, and of spin, for a body that is free to take it */
     private void kick(Rig rig, float vx, float vy, float vz, float sx, float sy, float sz)
     {
-        if (rig.kinematic)
-        {
-            return;
-        }
-
-        int id = rig.body.getId();
-        Vec3 velocity = this.bodies.getLinearVelocity(id);
-        Vec3 spin = this.bodies.getAngularVelocity(id);
         float scale = rig.replay.physics.ragdoll.get() ? 1F : 0F;
 
-        this.bodies.setLinearAndAngularVelocity(id,
-            new Vec3(velocity.getX() + vx, velocity.getY() + vy, velocity.getZ() + vz),
-            new Vec3(spin.getX() + sx * scale, spin.getY() + sy * scale, spin.getZ() + sz * scale));
-        this.bodies.activateBody(id);
+        for (int i = 0; i < rig.bodyCount(); i++)
+        {
+            boolean kinematic = rig.bones == null ? rig.kinematic : rig.boneKinematic[i];
+
+            if (kinematic)
+            {
+                continue;
+            }
+
+            int id = rig.bodyAt(i).getId();
+            Vec3 velocity = this.bodies.getLinearVelocity(id);
+            Vec3 spin = this.bodies.getAngularVelocity(id);
+
+            this.bodies.setLinearAndAngularVelocity(id,
+                new Vec3(velocity.getX() + vx, velocity.getY() + vy, velocity.getZ() + vz),
+                new Vec3(spin.getX() + sx * scale, spin.getY() + sy * scale, spin.getZ() + sz * scale));
+            this.bodies.activateBody(id);
+        }
     }
 
     static boolean hasKey(KeyframeChannel<Double> channel, int tick)
@@ -666,23 +1008,36 @@ final class PhysicsScene implements AutoCloseable
     /** Keeps the state and the poses of the tick that was just simulated */
     private void record(int tick, byte[] state)
     {
-        float[][] pose = new float[this.rigs.size()][7];
-        boolean[] kinematic = new boolean[this.rigs.size()];
+        float[][] pose = new float[this.rigs.size()][];
+        int flags = 0;
+
+        for (Rig rig : this.rigs)
+        {
+            flags += rig.bodyCount();
+        }
+
+        boolean[] kinematic = new boolean[flags];
+        int flag = 0;
 
         for (int i = 0; i < this.rigs.size(); i++)
         {
             Rig rig = this.rigs.get(i);
 
-            this.bodies.getPositionAndRotation(rig.body.getId(), this.scratchPosition, this.scratchRotation);
+            pose[i] = new float[7 * rig.bodyCount()];
 
-            pose[i][0] = (float) this.scratchPosition.xx();
-            pose[i][1] = (float) this.scratchPosition.yy();
-            pose[i][2] = (float) this.scratchPosition.zz();
-            pose[i][3] = this.scratchRotation.getX();
-            pose[i][4] = this.scratchRotation.getY();
-            pose[i][5] = this.scratchRotation.getZ();
-            pose[i][6] = this.scratchRotation.getW();
-            kinematic[i] = rig.kinematic;
+            for (int b = 0; b < rig.bodyCount(); b++)
+            {
+                this.bodies.getPositionAndRotation(rig.bodyAt(b).getId(), this.scratchPosition, this.scratchRotation);
+
+                pose[i][b * 7] = (float) this.scratchPosition.xx();
+                pose[i][b * 7 + 1] = (float) this.scratchPosition.yy();
+                pose[i][b * 7 + 2] = (float) this.scratchPosition.zz();
+                pose[i][b * 7 + 3] = this.scratchRotation.getX();
+                pose[i][b * 7 + 4] = this.scratchRotation.getY();
+                pose[i][b * 7 + 5] = this.scratchRotation.getZ();
+                pose[i][b * 7 + 6] = this.scratchRotation.getW();
+                kinematic[flag++] = rig.bones == null ? rig.kinematic : rig.boneKinematic[b];
+            }
         }
 
         if (tick < this.poses.size())
@@ -761,16 +1116,42 @@ final class PhysicsScene implements AutoCloseable
         }
 
         boolean[] kinematic = this.kinematics.get(tick);
+        int flag = 0;
 
-        for (int i = 0; i < this.rigs.size(); i++)
+        for (Rig rig : this.rigs)
         {
-            Rig rig = this.rigs.get(i);
-
-            /* The saved state holds where bodies are and how fast they move, not whether Jolt moves them or the keys do */
-            if (rig.kinematic != kinematic[i])
+            /* The saved state holds where bodies are and how fast they move, not whether Jolt moves them or the keys
+             * do, nor whether a torn joint still holds */
+            for (int b = 0; b < rig.bodyCount(); b++)
             {
-                this.bodies.setMotionType(rig.body.getId(), kinematic[i] ? EMotionType.Kinematic : EMotionType.Dynamic, EActivation.DontActivate);
-                rig.kinematic = kinematic[i];
+                boolean wanted = kinematic[flag++];
+                boolean now = rig.bones == null ? rig.kinematic : rig.boneKinematic[b];
+
+                if (now != wanted)
+                {
+                    this.bodies.setMotionType(rig.bodyAt(b).getId(), wanted ? EMotionType.Kinematic : EMotionType.Dynamic, EActivation.DontActivate);
+                }
+
+                if (rig.bones == null)
+                {
+                    rig.kinematic = wanted;
+                }
+                else
+                {
+                    rig.boneKinematic[b] = wanted;
+                }
+            }
+
+            if (rig.bones != null)
+            {
+                rig.kinematic = rig.boneKinematic[0];
+
+                int tear = rig.replay.physics.tearTick.get();
+
+                if (rig.torn >= 0 && rig.joints[rig.torn] != null)
+                {
+                    rig.joints[rig.torn].setEnabled(tear < 0 || tick < tear);
+                }
             }
         }
 
@@ -787,6 +1168,14 @@ final class PhysicsScene implements AutoCloseable
 
     /** The pose of a rig at a tick the cache has: centre then quaternion */
     float[] pose(int rig, int tick)
+    {
+        int at = Math.max(0, Math.min(tick, this.computed()));
+
+        return this.poses.get(at)[rig];
+    }
+
+    /** Every body's pose of a rig at a tick, seven numbers a body, root bone first */
+    float[] poses(int rig, int tick)
     {
         int at = Math.max(0, Math.min(tick, this.computed()));
 
@@ -830,6 +1219,17 @@ final class PhysicsScene implements AutoCloseable
             if (rig.rope != null)
             {
                 this.system.removeConstraint(rig.rope);
+            }
+
+            if (rig.joints != null)
+            {
+                for (TwoBodyConstraint joint : rig.joints)
+                {
+                    if (joint != null)
+                    {
+                        this.system.removeConstraint(joint);
+                    }
+                }
             }
         }
 

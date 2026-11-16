@@ -853,6 +853,12 @@ public class UIFilmPreview extends UIElement
             }
         }
 
+        /* A physics tool takes the buttons it uses while it is up */
+        if (mchorse.bbs_mod.physics.PhysicsToolController.mouseClicked(context, this.panel, this.getViewport()))
+        {
+            return true;
+        }
+
         Area area = this.getViewport();
 
         /* Panning the zoomed picture: the middle button, unless the camera has it */
@@ -897,6 +903,11 @@ public class UIFilmPreview extends UIElement
     @Override
     protected boolean subMouseReleased(UIContext context)
     {
+        if (mchorse.bbs_mod.physics.PhysicsToolController.mouseReleased(context, this.panel))
+        {
+            return true;
+        }
+
         if (this.panning && context.mouseButton == 2)
         {
             this.panning = false;
@@ -922,6 +933,11 @@ public class UIFilmPreview extends UIElement
 
         /* The wheel goes to the pane under the mouse, which becomes the live one */
         ViewportSet.focusUnder(context, this);
+
+        if (mchorse.bbs_mod.physics.PhysicsToolController.mouseScrolled(context))
+        {
+            return true;
+        }
 
         /* Alt always zooms the picture; without it the camera keeps the wheel where it uses it */
         if (Window.isAltPressed() || !this.cameraOwnsMouse())
@@ -1246,6 +1262,7 @@ public class UIFilmPreview extends UIElement
         }
 
         this.placementGizmo.render(context, area);
+        mchorse.bbs_mod.physics.PhysicsToolController.render(context, this.panel, area);
 
         context.batcher.unclip(context);
 

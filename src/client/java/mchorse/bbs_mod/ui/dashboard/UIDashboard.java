@@ -116,6 +116,12 @@ public class UIDashboard extends UIBaseMenu
             this.menuBar.setPanel(e.panel);
             mchorse.bbs_mod.audio.StudioMusicManager.get().setCategory(mchorse.bbs_mod.audio.StudioMusicManager.categoryOf(e.panel));
 
+            /* Leaving the film editor lets the physics simulation and its native memory go at once */
+            if (!(e.panel instanceof mchorse.bbs_mod.ui.film.UIFilmPanel))
+            {
+                mchorse.bbs_mod.physics.PhysicsStudio.release();
+            }
+
             this.orbitUI.setControl(this.panels.isFlightSupported());
 
             if (this.panels.panel instanceof IFlightSupported panel)
@@ -384,6 +390,7 @@ public class UIDashboard extends UIBaseMenu
         super.onClose(nextMenu);
 
         mchorse.bbs_mod.audio.StudioMusicManager.get().stop();
+        mchorse.bbs_mod.physics.PhysicsStudio.release();
 
         if (nextMenu != this)
         {

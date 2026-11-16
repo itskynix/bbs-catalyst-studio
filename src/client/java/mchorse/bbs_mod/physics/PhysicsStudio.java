@@ -11,7 +11,18 @@ import org.joml.Quaternionf;
 import org.joml.Vector3d;
 import org.joml.Vector3f;
 
+import mchorse.bbs_mod.api.client.events.FormPoseEvents;
+import mchorse.bbs_mod.cubic.ModelInstance;
+import mchorse.bbs_mod.cubic.data.model.Model;
+import mchorse.bbs_mod.cubic.data.model.ModelGroup;
+import mchorse.bbs_mod.cubic.render.CubicRenderer.PivotFrame;
+import mchorse.bbs_mod.cubic.render.ModelPivotFrames;
+import mchorse.bbs_mod.film.FilmMatrices;
+import mchorse.bbs_mod.film.IKBake;
+import org.joml.Matrix4f;
+
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +46,83 @@ public final class PhysicsStudio
 
     private static PhysicsScene scene;
     private static long checkedAt;
+
+    /** A ragdoll's pose for one frame: every bone body's centre and turn, and the animated frames they were pulled from */
+    private record RagdollPose(RagdollSampler sampler, float[] bodies, Map<String, PivotFrame> animated)
+    {}
+
+    private static final Map<IEntity, RagdollPose> RAGDOLLS = Collections.synchronizedMap(new WeakHashMap<>());
+
+    static
+    {
+        /* The bones take the ragdoll's turns at the model's physics stage, where the render already lets solvers
+         * write a bone's orientation in place of its channels */
+        FormPoseEvents.MODEL_POSE.register((form, entity, model, transition, base, pass) ->
+        {
+            RagdollPose pose = entity == null ? null : RAGDOLLS.get(entity);
+
+            if (pose != null && model != null && model.model instanceof Model cubic)
+            {
+                Matrix4f frame = base != null ? base : FilmMatrices.getMatrixForRenderWithRotation(entity, 0D, 0D, 0D, transition);
+
+                orientBones(cubic, pose, frame);
+            }
+        });
+    }
+
+    /**
+     * Writes the ragdoll onto the bones: each body bone's local orientation is what turns its parent's frame, as
+     * the ragdoll moved it, onto the body's own turn, and the top bones are shifted by how far their bodies
+     * travelled from where the animation stands them.
+     */
+    private static void orientBones(Model model, RagdollPose pose, Matrix4f base)
+    {
+        Map<String, PivotFrame> frames = new HashMap<>();
+
+        ModelPivotFrames.collect(model, pose.sampler().ids, frames, base);
+
+        List<RagdollSampler.Bone> bones = pose.sampler().bones;
+        Quaternionf[] simulated = new Quaternionf[bones.size()];
+        Quaternionf[] animated = new Quaternionf[bones.size()];
+
+        for (int i = 0; i < bones.size(); i++)
+        {
+            RagdollSampler.Bone bone = bones.get(i);
+            PivotFrame frame = frames.get(bone.id());
+            ModelGroup group = model.getGroup(bone.id());
+            float[] b = pose.bodies();
+
+            if (frame == null || group == null || b.length < (i + 1) * 7)
+            {
+                continue;
+            }
+
+            Quaternionf world = new Quaternionf(b[i * 7 + 3], b[i * 7 + 4], b[i * 7 + 5], b[i * 7 + 6]).normalize();
+            Quaternionf worldAnimated = new Quaternionf(frame.worldRotation()).normalize();
+            Quaternionf parentAnimated = new Quaternionf(frame.parentRotation()).normalize();
+            Quaternionf parent = bone.parent() >= 0 && simulated[bone.parent()] != null
+                ? new Quaternionf(simulated[bone.parent()]).mul(new Quaternionf(animated[bone.parent()]).conjugate()).mul(parentAnimated)
+                : parentAnimated;
+
+            simulated[i] = world;
+            animated[i] = worldAnimated;
+            group.orient = new Quaternionf(parent).conjugate().mul(world).normalize();
+
+            PivotFrame start = pose.animated().get(bone.id());
+
+            if (bone.parent() < 0 && start != null)
+            {
+                /* The body's pivot is its centre less the bone's own offset to the centre, turned */
+                Vector3f scale = start.scale();
+                Vector3f center = world.transform(new Vector3f(bone.center()).mul(scale));
+                Vector3f pivot = new Vector3f(b[i * 7] - center.x, b[i * 7 + 1] - center.y, b[i * 7 + 2] - center.z);
+                Vector3f shift = new Quaternionf(parentAnimated).conjugate().transform(pivot.sub(start.position()));
+
+                shift.div(Math.max(1e-4F, scale.x), Math.max(1e-4F, scale.y), Math.max(1e-4F, scale.z));
+                group.offset = shift;
+            }
+        }
+    }
 
     private PhysicsStudio()
     {}
@@ -60,6 +148,8 @@ public final class PhysicsStudio
     /** Lets the simulation go, e.g. when the film editor closes */
     public static void release()
     {
+        RAGDOLLS.clear();
+
         if (scene != null)
         {
             scene.close();
@@ -146,6 +236,7 @@ public final class PhysicsStudio
         if (!replay.physics.enabled.get() || !replay.enabled.get())
         {
             TURNS.remove(entity);
+            RAGDOLLS.remove(entity);
 
             return;
         }
@@ -166,9 +257,22 @@ public final class PhysicsStudio
 
         scene.advanceTo(high, BUDGET);
 
+        float k = clamped - low;
+        PhysicsScene.Rig built = scene.rigs.get(rig);
+
+        if (built.ragdoll != null)
+        {
+            /* A ragdoll stands where its keys stand it; the bones carry the rest */
+            TURNS.remove(entity);
+            RAGDOLLS.put(entity, new RagdollPose(built.ragdoll, blend(scene.poses(rig, low), scene.poses(rig, high), k), built.target(Math.min(low, scene.computed()))));
+
+            return;
+        }
+
+        RAGDOLLS.remove(entity);
+
         float[] a = scene.pose(rig, low);
         float[] b = scene.pose(rig, high);
-        float k = clamped - low;
         float[] pose = new float[7];
 
         for (int i = 0; i < 3; i++)
@@ -183,6 +287,15 @@ public final class PhysicsStudio
         pose[5] = q.z;
         pose[6] = q.w;
 
+        /* A body in the hands of a tool is where the tool holds it, not where the simulation left it */
+        float[] held = PhysicsToolController.heldPose(replay);
+
+        if (held != null)
+        {
+            pose = held;
+            q = new Quaternionf(held[3], held[4], held[5], held[6]);
+        }
+
         Vector3f feet = PhysicsScene.feet(pose, scene.rigs.get(rig).box.centerY());
 
         entity.setPosition(feet.x, feet.y, feet.z);
@@ -191,6 +304,99 @@ public final class PhysicsStudio
         entity.setPrevZ(feet.z);
 
         TURNS.put(entity, q);
+    }
+
+    /** What a ray from the camera hits first among the simulated bodies at a tick: the replay and how far along the ray */
+    public record Hit(Replay replay, float distance, float[] pose, float centerY)
+    {}
+
+    public static Hit pick(Film film, Vector3d origin, Vector3f direction, int tick)
+    {
+        PhysicsScene scene = film == null ? null : sceneOf(film);
+
+        if (scene == null)
+        {
+            return null;
+        }
+
+        scene.advanceTo(tick, BUDGET);
+
+        Hit best = null;
+
+        for (int i = 0; i < scene.rigs.size(); i++)
+        {
+            PhysicsScene.Rig rig = scene.rigs.get(i);
+            float[] pose = PhysicsToolController.heldPose(rig.replay);
+
+            if (pose == null)
+            {
+                pose = scene.pose(i, tick);
+            }
+
+            /* The ray in the box's own frame, then the slab test */
+            Quaternionf inverse = new Quaternionf(pose[3], pose[4], pose[5], pose[6]).conjugate();
+            Vector3f from = inverse.transform(new Vector3f((float) (origin.x - pose[0]), (float) (origin.y - pose[1]), (float) (origin.z - pose[2])));
+            Vector3f dir = inverse.transform(new Vector3f(direction));
+            float[] half = {rig.box.halfX(), rig.box.halfY(), rig.box.halfZ()};
+            float[] o = {from.x, from.y, from.z};
+            float[] d = {dir.x, dir.y, dir.z};
+            float near = -Float.MAX_VALUE;
+            float far = Float.MAX_VALUE;
+            boolean miss = false;
+
+            for (int a = 0; a < 3 && !miss; a++)
+            {
+                if (Math.abs(d[a]) < 1e-6F)
+                {
+                    miss = Math.abs(o[a]) > half[a];
+
+                    continue;
+                }
+
+                float t1 = (-half[a] - o[a]) / d[a];
+                float t2 = (half[a] - o[a]) / d[a];
+
+                near = Math.max(near, Math.min(t1, t2));
+                far = Math.min(far, Math.max(t1, t2));
+            }
+
+            if (miss || near > far || far < 0F)
+            {
+                continue;
+            }
+
+            float distance = Math.max(0F, near);
+
+            if (best == null || distance < best.distance())
+            {
+                best = new Hit(rig.replay, distance, pose.clone(), rig.box.centerY());
+            }
+        }
+
+        return best;
+    }
+
+    /** Every body of two poses blended: positions straight, turns along the shorter way */
+    private static float[] blend(float[] a, float[] b, float k)
+    {
+        float[] out = new float[a.length];
+
+        for (int i = 0; i + 6 < a.length && i + 6 < b.length; i += 7)
+        {
+            for (int j = 0; j < 3; j++)
+            {
+                out[i + j] = a[i + j] + (b[i + j] - a[i + j]) * k;
+            }
+
+            Quaternionf q = new Quaternionf(a[i + 3], a[i + 4], a[i + 5], a[i + 6]).nlerp(new Quaternionf(b[i + 3], b[i + 4], b[i + 5], b[i + 6]), k);
+
+            out[i + 3] = q.x;
+            out[i + 4] = q.y;
+            out[i + 5] = q.z;
+            out[i + 6] = q.w;
+        }
+
+        return out;
     }
 
     /* The jobs */
@@ -247,6 +453,33 @@ public final class PhysicsStudio
         int last = Math.max(1, Math.min(PhysicsScene.MAX_TICKS, Math.max(film.camera.calculateDuration(), (int) Math.ceil(replay.getLastKeyframeTick()))));
 
         scene.advanceTo(last, Integer.MAX_VALUE);
+
+        PhysicsScene.Rig built = scene.rigs.get(rig);
+
+        if (built.ragdoll != null)
+        {
+            /* Every bone's turn, and the top bone's shift, go into the bones' own pose tracks through the same
+             * sampling and arithmetic the IK bake uses */
+            PhysicsScene baked = scene;
+            int computed = baked.computed();
+            boolean done = IKBake.bakeSolved(film, replay, built.ragdoll.ids, 0, computed, (tick, model, world) ->
+            {
+                if (model.model instanceof Model cubic)
+                {
+                    orientBones(cubic, new RagdollPose(built.ragdoll, baked.poses(rig, tick), built.target(Math.min(tick, computed))), world);
+                }
+            });
+
+            if (!done)
+            {
+                return null;
+            }
+
+            BaseValue.edit(replay.physics, (physics) -> physics.enabled.set(false));
+            release();
+
+            return new BakeResult(built.ragdoll.ids.size() * (computed + 1), computed + 1);
+        }
 
         int count = scene.computed() + 1;
         double[][] values = new double[count][5];

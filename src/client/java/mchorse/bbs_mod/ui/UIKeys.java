@@ -713,6 +713,18 @@ public class UIKeys
     public static final IKey FILM_PHYSICS_BAKE_FAILED = L10n.lang("bbs.ui.film.physics.bake.failed");
     public static final IKey FILM_PHYSICS_CACHE = L10n.lang("bbs.ui.film.physics.cache");
     public static final IKey FILM_PHYSICS_CACHE_NONE = L10n.lang("bbs.ui.film.physics.cache.none");
+    public static final IKey FILM_PHYSICS_TOOLS = L10n.lang("bbs.ui.film.physics.tools");
+    public static final IKey FILM_PHYSICS_TOOL_PHYSICS = L10n.lang("bbs.ui.film.physics.tool.physics");
+    public static final IKey FILM_PHYSICS_TOOL_PHYSICS_TOOLTIP = L10n.lang("bbs.ui.film.physics.tool.physics.tooltip");
+    public static final IKey FILM_PHYSICS_TOOL_GRAVITY = L10n.lang("bbs.ui.film.physics.tool.gravity");
+    public static final IKey FILM_PHYSICS_TOOL_GRAVITY_TOOLTIP = L10n.lang("bbs.ui.film.physics.tool.gravity.tooltip");
+    public static final IKey FILM_PHYSICS_GIVE_PHYSICS = L10n.lang("bbs.ui.film.physics.give.physics");
+    public static final IKey FILM_PHYSICS_GIVE_GRAVITY = L10n.lang("bbs.ui.film.physics.give.gravity");
+    public static final IKey FILM_PHYSICS_GIVE_FAILED = L10n.lang("bbs.ui.film.physics.give.failed");
+    public static final IKey FILM_PHYSICS_TEAR = L10n.lang("bbs.ui.film.physics.tear");
+    public static final IKey FILM_PHYSICS_TEAR_TOOLTIP = L10n.lang("bbs.ui.film.physics.tear.tooltip");
+    public static final IKey FILM_PHYSICS_TEAR_SET = L10n.lang("bbs.ui.film.physics.tear.set");
+    public static final IKey FILM_PHYSICS_TEAR_NONE = L10n.lang("bbs.ui.film.physics.tear.none");
     public static final IKey FILM_VIEWPORT_SOURCE_ACTOR = L10n.lang("bbs.ui.film.viewport.source.actor");
 
     public static final IKey FILM_CONTROLLER_CONTROL_MODE_TOOLTIP = L10n.lang("bbs.ui.film.controller.control_mode-tooltip");
