@@ -59,8 +59,8 @@ public class UICinematicCredits extends UIElement
 
     private static final Identifier STEVE = new Identifier("minecraft", "textures/entity/player/wide/steve.png");
     private static final Map<String, Skin> SKINS = new HashMap<>();
-    private static final int HEAD_SIZE = 24;
-    private static final int TESTER_HEAD_SIZE = 20;
+    private static final int HEAD_SIZE = 32;
+    private static final int TESTER_HEAD_SIZE = 26;
 
     /** A name in the credits and the key of its head: the file name, without .png, of the skin that is drawn for it */
     public record Entry(String name, String head)
@@ -128,7 +128,7 @@ public class UICinematicCredits extends UIElement
     private static final java.util.Set<Identifier> SMOOTHED = new java.util.HashSet<>();
 
     /**
-     * The head in a thin frame. A skin gives its face and the hat over it, the 8 by 8 squares at 8,8 and 40,8 counted
+     * The head, straight on the dark stage with no frame. A skin gives its face and the hat over it, the 8 by 8 squares at 8,8 and 40,8 counted
      * in the skin's own size, so a 64 by 32 or a high resolution skin fills the box as well as a 64 by 64 one; any other
      * picture is drawn whole.
      */
@@ -136,8 +136,6 @@ public class UICinematicCredits extends UIElement
     {
         Skin skin = skin(head);
 
-        context.batcher.box(x - 2, y - 2, x + size + 2, y + size + 2, 0x55FFFFFF);
-        context.batcher.box(x - 1, y - 1, x + size + 1, y + size + 1, 0xFF0B0F19);
         context.batcher.flush();
 
         DrawContext draw = context.batcher.getContext();
