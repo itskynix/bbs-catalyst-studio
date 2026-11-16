@@ -45,9 +45,9 @@ public class UICinematicCredits extends UIElement
      * credits; leave the list empty and the section is left out. These three are placeholders to be replaced.
      */
     public static final Entry[] TESTERS = {
-        new Entry("Mho (Mho1)", "mho"),
-        new Entry("Wity (xWity)", "wity"),
-        new Entry("Mobzae (mobzae)", "mobzae")
+        new Entry("Mho \u00b7 Mho1", "mho"),
+        new Entry("Wity \u00b7 xWity", "wity"),
+        new Entry("Mobzae \u00b7 mobzae", "mobzae")
     };
 
     /**
@@ -58,7 +58,7 @@ public class UICinematicCredits extends UIElement
     public static final String HEADS = "textures/credits/";
 
     private static final Identifier STEVE = new Identifier("minecraft", "textures/entity/player/wide/steve.png");
-    private static final Map<String, Identifier> SKINS = new HashMap<>();
+    private static final Map<String, Skin> SKINS = new HashMap<>();
     private static final int HEAD_SIZE = 24;
     private static final int TESTER_HEAD_SIZE = 20;
 
@@ -81,8 +81,16 @@ public class UICinematicCredits extends UIElement
         }
     }
 
-    /** The skin for a head key: the file under textures/credits if there is one, Steve if not */
-    private static Identifier skin(String head)
+    /** What is known of a head's picture: where it is, how big it is and whether it is a Minecraft skin or a plain picture */
+    private record Skin(Identifier id, int width, int height, boolean skin)
+    {}
+
+    /**
+     * The picture for a head key: the file under textures/credits if there is one, Steve if not. Its size is read from the
+     * PNG itself. A skin is 64 wide and 64 or 32 high, or a whole multiple of that; anything else is a picture of the
+     * head and is drawn whole.
+     */
+    private static Skin skin(String head)
     {
         return SKINS.computeIfAbsent(head, (key) ->
         {
@@ -90,19 +98,43 @@ public class UICinematicCredits extends UIElement
 
             try
             {
-                return MinecraftClient.getInstance().getResourceManager().getResource(own).isPresent() ? own : STEVE;
+                var resource = MinecraftClient.getInstance().getResourceManager().getResource(own);
+
+                if (resource.isPresent())
+                {
+                    try (java.io.InputStream stream = resource.get().getInputStream())
+                    {
+                        byte[] header = stream.readNBytes(24);
+
+                        if (header.length == 24)
+                        {
+                            int width = ((header[16] & 0xff) << 24) | ((header[17] & 0xff) << 16) | ((header[18] & 0xff) << 8) | (header[19] & 0xff);
+                            int height = ((header[20] & 0xff) << 24) | ((header[21] & 0xff) << 16) | ((header[22] & 0xff) << 8) | (header[23] & 0xff);
+                            boolean skin = width >= 64 && width % 64 == 0 && (height == width || height * 2 == width);
+
+                            return new Skin(own, width, height, skin);
+                        }
+                    }
+                }
             }
-            catch (Throwable e)
-            {
-                return STEVE;
-            }
+            catch (Throwable ignored)
+            {}
+
+            return new Skin(STEVE, 64, 64, true);
         });
     }
 
-    /** The face and the hat over it, from the skin's 8 by 8 squares, in a thin frame */
+    /** Pictures much bigger than the box are smoothed when they are shrunk, once */
+    private static final java.util.Set<Identifier> SMOOTHED = new java.util.HashSet<>();
+
+    /**
+     * The head in a thin frame. A skin gives its face and the hat over it, the 8 by 8 squares at 8,8 and 40,8 counted
+     * in the skin's own size, so a 64 by 32 or a high resolution skin fills the box as well as a 64 by 64 one; any other
+     * picture is drawn whole.
+     */
     private static void drawHead(UIContext context, String head, int x, int y, int size)
     {
-        Identifier skin = skin(head);
+        Skin skin = skin(head);
 
         context.batcher.box(x - 2, y - 2, x + size + 2, y + size + 2, 0x55FFFFFF);
         context.batcher.box(x - 1, y - 1, x + size + 1, y + size + 1, 0xFF0B0F19);
@@ -111,8 +143,25 @@ public class UICinematicCredits extends UIElement
         DrawContext draw = context.batcher.getContext();
 
         RenderSystem.enableBlend();
-        draw.drawTexture(skin, x, y, size, size, 8F, 8F, 8, 8, 64, 64);
-        draw.drawTexture(skin, x, y, size, size, 40F, 8F, 8, 8, 64, 64);
+
+        if (skin.skin())
+        {
+            int unit = skin.width() / 64;
+
+            draw.drawTexture(skin.id(), x, y, size, size, 8F * unit, 8F * unit, 8 * unit, 8 * unit, skin.width(), skin.height());
+            draw.drawTexture(skin.id(), x, y, size, size, 40F * unit, 8F * unit, 8 * unit, 8 * unit, skin.width(), skin.height());
+        }
+        else
+        {
+            if (SMOOTHED.add(skin.id()))
+            {
+                MinecraftClient.getInstance().getTextureManager().getTexture(skin.id()).bindTexture();
+                org.lwjgl.opengl.GL11.glTexParameteri(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, org.lwjgl.opengl.GL11.GL_TEXTURE_MIN_FILTER, org.lwjgl.opengl.GL11.GL_LINEAR);
+                org.lwjgl.opengl.GL11.glTexParameteri(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, org.lwjgl.opengl.GL11.GL_TEXTURE_MAG_FILTER, org.lwjgl.opengl.GL11.GL_LINEAR);
+            }
+
+            draw.drawTexture(skin.id(), x, y, size, size, 0F, 0F, skin.width(), skin.height(), skin.width(), skin.height());
+        }
     }
 
     private float offset;
