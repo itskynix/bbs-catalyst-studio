@@ -87,6 +87,7 @@ public class FilmEditorController extends BaseFilmController
         {
             replay.keyframes.apply(ticks, entity, entity == this.controller.getControlled() ? groups : null);
             this.applyMtrSync(replay, ticks, entity, false);
+            mchorse.bbs_mod.physics.PhysicsStudio.apply(this.film, replay, ticks, entity);
             ReplayLookAt.apply(replay, this.film, ticks, entity);
             ReplayCrowdGlanceDriver.apply(replay, this.film, ticks, entity);
             replay.applyClientActions(ticks, entity, this.film);
@@ -165,6 +166,7 @@ public class FilmEditorController extends BaseFilmController
 
                     replay.keyframes.apply(tick, entity);
                     this.applyMtrSync(replay, tick, entity, true);
+                    mchorse.bbs_mod.physics.PhysicsStudio.apply(this.film, replay, tick, entity);
                     entity.setPrevX(entity.getX());
                     entity.setPrevY(entity.getY());
                     entity.setPrevZ(entity.getZ());

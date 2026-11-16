@@ -78,6 +78,22 @@ dependencies {
 
 	implementation "javazoom:jlayer:1.0.1"
 	include "javazoom:jlayer:1.0.1"
+
+	/* The physics studio: Jolt through jolt-jni. Every platform artifact carries the same Java classes, so the
+	 * Windows one is the API and the rest bring only their native library, which rides into the jar through
+	 * jar-in-jar. A platform that is not in the list still starts: physics reports itself unavailable. */
+	def joltVersion = "6.0.0"
+	def joltArmVersion = "6.0.2"
+
+	implementation "com.github.stephengold:jolt-jni-Windows64:${joltVersion}"
+	include "com.github.stephengold:jolt-jni-Windows64:${joltVersion}"
+
+	["Windows64", "Linux64", "Linux_ARM64", "MacOSX64", "MacOSX_ARM64"].each { platform ->
+		def nativeVersion = platform == "Linux_ARM64" ? joltArmVersion : joltVersion
+
+		runtimeOnly "com.github.stephengold:jolt-jni-${platform}:${nativeVersion}:ReleaseSp"
+		include "com.github.stephengold:jolt-jni-${platform}:${nativeVersion}:ReleaseSp"
+	}
 }
 
 def fabricModVersion = project.findProperty('mod_semver') ?: project.version

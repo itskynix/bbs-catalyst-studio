@@ -208,7 +208,18 @@ public class FilmMatrices
         float bodyYaw = Lerps.lerp(entity.getPrevBodyYaw(), entity.getBodyYaw(), tickDelta);
 
         matrix.translate((float) x, (float) y, (float) z);
-        matrix.rotateY(MathUtils.toRad(-bodyYaw));
+
+        /* A replay the physics studio simulates turns the way its body does, which is more than a facing */
+        org.joml.Quaternionf turn = mchorse.bbs_mod.physics.PhysicsStudio.turnOf(entity);
+
+        if (turn != null)
+        {
+            matrix.rotate(turn);
+        }
+        else
+        {
+            matrix.rotateY(MathUtils.toRad(-bodyYaw));
+        }
 
         return matrix;
     }

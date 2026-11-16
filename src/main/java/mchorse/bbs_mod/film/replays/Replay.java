@@ -30,6 +30,8 @@ public class Replay extends ValueGroup
 {
     public final ValueForm form = new ValueForm("form");
     public final ReplayKeyframes keyframes = new ReplayKeyframes("keyframes");
+    /** The physics studio settings and tracks of this replay */
+    public final mchorse.bbs_mod.physics.ReplayPhysics physics = new mchorse.bbs_mod.physics.ReplayPhysics("physics");
     public final FormProperties properties = new FormProperties("properties");
     public final Clips actions = new Clips("actions", BBSMod.getFactoryActionClips());
     /** The replay seen from inside its own head; see {@link ReplayPov}. */
@@ -77,6 +79,7 @@ public class Replay extends ValueGroup
 
         this.add(this.form);
         this.add(this.keyframes);
+        this.add(this.physics);
         this.add(this.properties);
         this.add(this.actions);
         this.add(this.pov);

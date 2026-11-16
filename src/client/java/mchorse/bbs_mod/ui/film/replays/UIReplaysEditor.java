@@ -110,6 +110,8 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
     };
 
     public UITimelineCategoryBar iconBar;
+    /** The physics studio's controls, beside the timeline while the Physics tab is up */
+    private UIPhysicsStudioPanel physicsPanel;
     public Map<TrackCategory, UIIcon> tabButtons = new HashMap<>();
     private TrackCategory category = TrackCategory.REPLAY;
 
@@ -243,8 +245,29 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
 
         renderRulerAudio(context, keyframes, camera, clipOffset, area, rulerBottom);
         renderRulerClipGradient(context, keyframes, clipsPanel, clipOffset, area, rulerBottom);
+        renderPhysicsCache(context, keyframes, area, rulerBottom);
 
         context.batcher.unclip(context);
+    }
+
+    /** A thin green strip under the ruler over the ticks the physics studio has simulated and cached */
+    private static void renderPhysicsCache(UIContext context, UIKeyframes keyframes, Area area, int rulerBottom)
+    {
+        int cached = mchorse.bbs_mod.physics.PhysicsStudio.cachedTicks();
+
+        if (cached < 0)
+        {
+            return;
+        }
+
+        Scale scale = keyframes.getXAxis();
+        int x1 = Math.max(area.x, (int) scale.to(0));
+        int x2 = Math.min(area.ex(), (int) scale.to(cached + 1));
+
+        if (x2 > x1)
+        {
+            context.batcher.box(x1, rulerBottom - 2, x2, rulerBottom, Colors.setA(0x40e0a0, 0.85F));
+        }
     }
 
     private static boolean renderRulerAudio(UIContext context, UIKeyframes keyframes, Clips camera, int clipOffset, Area area, int rulerBottom)
@@ -402,6 +425,10 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
         TrackCategories.registerShortcuts(this.keys(), () -> TrackCategories.values().stream()
             .filter(category -> this.tabButtons.get(category).getParent() != null).toList(), this::setCategory);
 
+        this.physicsPanel = new UIPhysicsStudioPanel(this.filmPanel);
+        this.physicsPanel.relative(this).x(1F, -UIPhysicsStudioPanel.width()).y(0).w(UIPhysicsStudioPanel.width()).h(1F);
+        this.physicsPanel.setVisible(false);
+        this.add(this.physicsPanel);
         this.add(this.iconBar, this.povBar, this.sectionsToggle, this.graphToggle, this.actionsToggle, this.povToggle, this.povActionsToggle, this.povBack, this.replayTransform);
         this.partHeader.relative(this).x(CATEGORY_BAR_WIDTH).y(0).w(120).h(TimelineRulerRenderer.RULER_BLOCK_HEIGHT);
         this.partHeader.add(new UIRenderable(context ->
@@ -629,6 +656,20 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
         }
     }
 
+    /** The Physics tab makes room for the studio beside the timeline; every other view gives the whole width back */
+    private void layoutPhysicsPanel()
+    {
+        boolean physics = !this.povMode && !this.actionsMode && !this.allMode && this.category == TrackCategory.PHYSICS && this.keyframeEditor != null;
+
+        if (physics)
+        {
+            this.keyframeEditor.relative(this).x(CATEGORY_BAR_WIDTH).y(0).w(1F, -CATEGORY_BAR_WIDTH - UIPhysicsStudioPanel.width()).h(1F);
+        }
+
+        this.physicsPanel.setReplay(this.replay);
+        this.physicsPanel.setVisible(physics);
+    }
+
     public void updateChannelsList()
     {
         this.poseOverlayCount = BBSSettings.recordingPoseOverlays.get();
@@ -684,6 +725,7 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
         {
             /* Replay channels remain accessible alongside any selected part's own properties. */
             this.collectCuratedSheets(sheets);
+            this.collectPhysicsSheets(sheets);
             UIReplaysEditorUtils.buildSheets(catalog, sheets);
 
             for (TrackCategory category : TrackCategories.values())
@@ -756,6 +798,7 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
             this.keyframeEditor = new UIKeyframeEditor((consumer) -> new UIFilmKeyframes(this.filmPanel.cameraEditor, consumer).absolute())
                 .target(this.filmPanel.editArea);
             this.keyframeEditor.relative(this).x(CATEGORY_BAR_WIDTH).y(0).w(1F, -CATEGORY_BAR_WIDTH).h(1F);
+            this.layoutPhysicsPanel();
             this.keyframeEditor.setUndoId("replay_keyframe_editor");
             this.keyframeEditor.view.getDopeSheet().setEmptyState(UIKeys.KEYFRAMES_EMPTY_FILTERED, UIKeys.KEYFRAMES_EMPTY_FILTERED_HINT);
 
@@ -910,6 +953,39 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
         {
             this.keyframeEditor.view.resetView();
         }
+    }
+
+    /** The physics studio's tracks of the replay, in two sections: the handles of a character, and the forces */
+    private void collectPhysicsSheets(List<UIKeyframeSheet> sheets)
+    {
+        if (this.replay == null)
+        {
+            return;
+        }
+
+        mchorse.bbs_mod.physics.ReplayPhysics p = this.replay.physics;
+        UIKeyframeSheet.Section character = new UIKeyframeSheet.Section("physics_section/ragdoll",
+            L10n.lang("bbs.ui.film.physics.sections.ragdoll"), Icons.POSE, 0x40e0a0);
+        UIKeyframeSheet.Section forces = new UIKeyframeSheet.Section("physics_section/forces",
+            L10n.lang("bbs.ui.film.physics.sections.forces"), Icons.SHARD, Colors.ORANGE);
+
+        this.addPhysicsSheet(sheets, character, p.animation, "animation", Icons.PLAYER, 0x40e0a0);
+        this.addPhysicsSheet(sheets, character, p.musclesTrack, "muscles", Icons.LIMB, 0x40e0a0);
+        this.addPhysicsSheet(sheets, forces, p.pushX, "push_x", Icons.X, Colors.RED);
+        this.addPhysicsSheet(sheets, forces, p.pushY, "push_y", Icons.Y, Colors.GREEN);
+        this.addPhysicsSheet(sheets, forces, p.pushZ, "push_z", Icons.Z, Colors.BLUE);
+        this.addPhysicsSheet(sheets, forces, p.blast, "blast", Icons.SHARD, Colors.ORANGE);
+        this.addPhysicsSheet(sheets, forces, p.blastX, "blast_x", Icons.X, Colors.RED);
+        this.addPhysicsSheet(sheets, forces, p.blastY, "blast_y", Icons.Y, Colors.GREEN);
+        this.addPhysicsSheet(sheets, forces, p.blastZ, "blast_z", Icons.Z, Colors.BLUE);
+    }
+
+    private void addPhysicsSheet(List<UIKeyframeSheet> sheets, UIKeyframeSheet.Section section, KeyframeChannel<Double> channel, String key, Icon icon, int color)
+    {
+        UIKeyframeSheet sheet = new UIKeyframeSheet(channel.getId(), L10n.lang("bbs.ui.film.physics.track." + key), color, channel, null).icon(icon);
+
+        sheet.section = section;
+        sheets.add(sheet);
     }
 
     private void collectCuratedSheets(List<UIKeyframeSheet> sheets)

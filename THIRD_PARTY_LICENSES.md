@@ -71,3 +71,7 @@ The sources of `irl-core` and `bbs-irlights-addon` are integrated directly into 
 
 The interface blur (`InterfaceBlur`) is adapted from it; its MIT notice is in
 `src/main/resources/assets/bbs/licenses/bbs-refreshed-addon.txt`.
+
+## Jolt Physics and jolt-jni
+
+The physics studio runs on Jolt Physics (Jorrit Rouwe, MIT License) through the jolt-jni bindings (Stephen Gold, MIT License), shipped as jar-in-jar libraries with their native builds. The studio itself is written for BBS CS; only the lower layer of the MIT-licensed BBS Physics Engine (Wemppy) was read for how Jolt is loaded and driven.
