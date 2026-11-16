@@ -612,6 +612,8 @@ public class UIKeys
     public static final IKey CREDITS_NAMES_WHERE = L10n.lang("bbs.credits.names_where");
     public static final IKey CREDITS_LICENSES = L10n.lang("bbs.credits.licenses");
     public static final IKey CREDITS_PAUSED = L10n.lang("bbs.credits.paused");
+    public static final IKey CREDITS_TESTERS = L10n.lang("bbs.credits.testers");
+    public static final IKey CREDITS_TESTERS_THANKS = L10n.lang("bbs.credits.testers_thanks");
     public static final IKey SETTINGS_ADDONS_EMPTY = L10n.lang("bbs.ui.settings.addons_empty");
     public static final IKey SETTINGS_ADDONS_EMPTY_DESCRIPTION = L10n.lang("bbs.ui.settings.addons_empty_description");
     public static final IKey CONTEXT_MENU_KEY = L10n.lang("bbs.ui.context.key");

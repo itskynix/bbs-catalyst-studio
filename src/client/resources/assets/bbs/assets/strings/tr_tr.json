@@ -3571,6 +3571,8 @@
     "bbs.credits.names_where": "Çevirmenlerin ve katkıda bulunanların adları mod bilgisinde yer alır",
     "bbs.credits.licenses": "Lisans belgeleri şu dosyada",
     "bbs.credits.paused": "Duraklatıldı",
+    "bbs.credits.testers": "Test Ekibi",
+    "bbs.credits.testers_thanks": "Hataları avlayan ve yön gösteren herkese teşekkürler",
     "mtr.config.title": "MTR Entegrasyonu",
     "mtr.config.general.title": "Genel Ayarlar",
     "mtr.config.general.tooltip": "MTR araçları ile yerel koordinat kaydı ve canlı vagon senkronizasyonu ayarları",

@@ -12,11 +12,17 @@ import mchorse.bbs_mod.utils.colors.Colors;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import net.fabricmc.loader.api.metadata.Person;
+import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.util.Identifier;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The credits as the end of a film: the whole screen goes dark and the names rise from the bottom of
@@ -34,9 +40,80 @@ public class UICinematicCredits extends UIElement
     private static final int FADE = 60;
     private static final long END_WAIT_MS = 3500L;
 
-    /** One line of the credits: its text, its size against the normal text, its colour and the space under it */
-    private record Line(String text, float scale, int color, int gap)
+    /**
+     * The test team, one name to a line, shown under the special thanks. Add a name here and it appears in the
+     * credits; leave the list empty and the section is left out. These three are placeholders to be replaced.
+     */
+    public static final Entry[] TESTERS = {
+        new Entry("Mho (Mho1)", "mho"),
+        new Entry("Wity (xWity)", "wity"),
+        new Entry("Mobzae (mobzae)", "mobzae")
+    };
+
+    /**
+     * Where the heads are looked for: a 64 by 64 Minecraft skin named after the entry's head key, as
+     * assets/bbs/textures/credits/KEY.png. Put a skin there and its head shows up in the credits; with no file
+     * the head of Steve stands in.
+     */
+    public static final String HEADS = "textures/credits/";
+
+    private static final Identifier STEVE = new Identifier("minecraft", "textures/entity/player/wide/steve.png");
+    private static final Map<String, Identifier> SKINS = new HashMap<>();
+    private static final int HEAD_SIZE = 24;
+    private static final int TESTER_HEAD_SIZE = 20;
+
+    /** A name in the credits and the key of its head: the file name, without .png, of the skin that is drawn for it */
+    public record Entry(String name, String head)
     {}
+
+    /** One line of the credits: its text, its size against the normal text, its colour and the space under it */
+    private record Line(String text, float scale, int color, int gap, String head, int headSize)
+    {
+        Line(String text, float scale, int color, int gap)
+        {
+            this(text, scale, color, gap, null, 0);
+        }
+
+        /** A line that is a head and nothing else */
+        static Line head(String head, int size, int gap)
+        {
+            return new Line("", 1F, 0xFFFFFFFF, gap, head, size);
+        }
+    }
+
+    /** The skin for a head key: the file under textures/credits if there is one, Steve if not */
+    private static Identifier skin(String head)
+    {
+        return SKINS.computeIfAbsent(head, (key) ->
+        {
+            Identifier own = new Identifier(BBSMod.MOD_ID, HEADS + key + ".png");
+
+            try
+            {
+                return MinecraftClient.getInstance().getResourceManager().getResource(own).isPresent() ? own : STEVE;
+            }
+            catch (Throwable e)
+            {
+                return STEVE;
+            }
+        });
+    }
+
+    /** The face and the hat over it, from the skin's 8 by 8 squares, in a thin frame */
+    private static void drawHead(UIContext context, String head, int x, int y, int size)
+    {
+        Identifier skin = skin(head);
+
+        context.batcher.box(x - 2, y - 2, x + size + 2, y + size + 2, 0x55FFFFFF);
+        context.batcher.box(x - 1, y - 1, x + size + 1, y + size + 1, 0xFF0B0F19);
+        context.batcher.flush();
+
+        DrawContext draw = context.batcher.getContext();
+
+        RenderSystem.enableBlend();
+        draw.drawTexture(skin, x, y, size, size, 8F, 8F, 8, 8, 64, 64);
+        draw.drawTexture(skin, x, y, size, size, 40F, 8F, 8, 8, 64, 64);
+    }
 
     private float offset;
     private boolean paused;
@@ -139,8 +216,12 @@ public class UICinematicCredits extends UIElement
             {"Glaxium", UIKeys.CREDITS_ROLE_GLAXIUM, null, 0xFFFF7A90}
         };
 
+        String[] heads = {"kynix", "mchorse", "wemppy", "qualett", "glaxium"};
+        int at = 0;
+
         for (Object[] person : people)
         {
+            lines.add(Line.head(heads[at++], HEAD_SIZE, 10));
             lines.add(new Line((String) person[0], 1.8F, (Integer) person[3], 8));
             lines.add(new Line(((IKey) person[1]).get(), 1F, soft, person[2] == null ? 44 : 6));
 
@@ -148,6 +229,20 @@ public class UICinematicCredits extends UIElement
             {
                 lines.add(new Line(((IKey) person[2]).get(), 0.9F, dim, 44));
             }
+        }
+
+        if (TESTERS.length > 0)
+        {
+            lines.add(new Line(UIKeys.CREDITS_TESTERS.get(), 1.5F, accent, 16));
+            lines.add(new Line(UIKeys.CREDITS_TESTERS_THANKS.get(), 1F, soft, 12));
+
+            for (Entry tester : TESTERS)
+            {
+                lines.add(Line.head(tester.head(), TESTER_HEAD_SIZE, 8));
+                lines.add(new Line(tester.name(), 1.2F, white, 18));
+            }
+
+            lines.add(new Line("", 1F, white, 34));
         }
 
         lines.add(new Line(UIKeys.CREDITS_CONTRIBUTIONS.get(), 1.5F, accent, 16));
@@ -172,7 +267,7 @@ public class UICinematicCredits extends UIElement
 
         for (Line line : lines)
         {
-            total += Math.round(fontHeight * line.scale()) + line.gap();
+            total += (line.head() != null ? line.headSize() : Math.round(fontHeight * line.scale())) + line.gap();
         }
 
         return total;
@@ -269,7 +364,12 @@ public class UICinematicCredits extends UIElement
 
         for (Line entry : lines)
         {
-            int size = Math.round(fontHeight * entry.scale());
+            int size = entry.head() != null ? entry.headSize() : Math.round(fontHeight * entry.scale());
+
+            if (entry.head() != null && line + size > y && line < y + h)
+            {
+                drawHead(context, entry.head(), cx - size / 2, Math.round(line), size);
+            }
 
             if (!entry.text().isEmpty() && line + size > y && line < y + h)
             {

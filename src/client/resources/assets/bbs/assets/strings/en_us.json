@@ -4435,6 +4435,8 @@
 	"bbs.credits.names_where": "The names of the translators and contributors are in the mod info",
 	"bbs.credits.licenses": "The license texts are in",
 	"bbs.credits.paused": "Paused",
+	"bbs.credits.testers": "Test Team",
+	"bbs.credits.testers_thanks": "Thanks to everyone who hunted bugs and pointed the way",
 	"mtr.config.title": "MTR Integration",
 	"mtr.config.general.title": "General Settings",
 	"mtr.config.general.tooltip": "Local-space recording and live car synchronization settings for MTR vehicles",
