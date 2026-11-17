@@ -653,6 +653,11 @@ public class UIKeys
     public static final IKey FILM_VIEWPORT_SOURCE_CLIP_DETAIL = L10n.lang("bbs.ui.film.viewport.source.clip_detail");
     public static final IKey FILM_FULLBRIGHT = L10n.lang("bbs.ui.film.fullbright");
     public static final IKey FILM_PHYSICS_TITLE = L10n.lang("bbs.ui.film.physics.title");
+    public static final IKey FILM_PHYSICS_AIM_DIRECTION = L10n.lang("bbs.ui.film.physics.aim_direction");
+    public static final IKey FILM_PHYSICS_AIM_POINT = L10n.lang("bbs.ui.film.physics.aim_point");
+    public static final IKey FILM_PHYSICS_AIM_ORBIT = L10n.lang("bbs.ui.film.physics.aim_orbit");
+    public static final IKey FILM_PHYSICS_BLAST_ORIGIN = L10n.lang("bbs.ui.film.physics.blast_origin");
+    public static final IKey FILM_PHYSICS_BLAST_ORIGIN_ORBIT = L10n.lang("bbs.ui.film.physics.blast_origin_orbit");
     public static final IKey PHYSICS_TOOL_CREATIVE = L10n.lang("bbs.ui.physics_tool.creative");
     public static final IKey PHYSICS_TOOL_HINT_GRAB = L10n.lang("bbs.ui.physics_tool.hint.grab");
     public static final IKey PHYSICS_TOOL_HINT_HOLD = L10n.lang("bbs.ui.physics_tool.hint.hold");

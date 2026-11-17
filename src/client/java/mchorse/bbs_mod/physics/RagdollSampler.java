@@ -241,12 +241,15 @@ final class RagdollSampler
     }
 
     /** Where a body stands for a bone frame: its centre, then its turn as a quaternion */
+    /**
+     * Where a bone's body stands: the bone's own pivot frame. The body's box sits inside it, shifted to the middle
+     * of the bone's cubes, so the body's transform IS the bone's frame and nothing has to be added or taken off
+     * between the simulation and the render (the layout of the BBS Physics Engine, MIT, by Wemppy).
+     */
     static float[] bodyPose(Bone bone, PivotFrame frame)
     {
         Quaternionf rotation = new Quaternionf(frame.worldRotation()).normalize();
-        Vector3f scale = frame.scale();
-        Vector3f offset = rotation.transform(new Vector3f(bone.center()).mul(scale));
-        Vector3f position = new Vector3f(frame.position()).add(offset);
+        Vector3f position = frame.position();
 
         return new float[] {position.x, position.y, position.z, rotation.x, rotation.y, rotation.z, rotation.w};
     }

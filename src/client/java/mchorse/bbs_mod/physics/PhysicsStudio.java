@@ -93,7 +93,9 @@ public final class PhysicsStudio
 
             if (pose != null && model != null && model.model instanceof Model cubic)
             {
-                Matrix4f frame = base != null ? base : FilmMatrices.getMatrixForRenderWithRotation(entity, 0D, 0D, 0D, transition);
+                /* The bodies live in absolute world space, so the bones are read against the same frame the render
+                 * stands them in, taken from the world origin rather than the camera */
+                Matrix4f frame = RagdollSampler.renderBase(FilmMatrices.getMatrixForRenderWithRotation(entity, 0D, 0D, 0D, transition), form);
 
                 orientBones(cubic, pose.at(transition), frame);
             }
@@ -105,54 +107,77 @@ public final class PhysicsStudio
      * the ragdoll moved it, onto the body's own turn, and the top bones are shifted by how far their bodies
      * travelled from where the animation stands them.
      */
+    /**
+     * Writes the ragdoll onto the bones, adapted from the pose applier of the BBS Physics Engine (MIT, Wemppy).
+     *
+     * <p>The model is walked from its root in its own space, composing each bone's matrix in the renderer's own
+     * order: offset, translation, to the pivot, rotation, scale, back. Every simulated bone is given an offset that
+     * lands its pivot exactly on its body and an orientation that turns its parent's frame onto the body's turn,
+     * so whatever the bodies do, the drawn limbs sit on them: there is no drift down a chain to add up.</p>
+     *
+     * @param base the frame the render stands the model's bones in, in absolute world space
+     */
     private static void orientBones(Model model, RagdollPose pose, Matrix4f base)
     {
-        Map<String, PivotFrame> frames = new HashMap<>();
-
-        ModelPivotFrames.collect(model, pose.sampler().ids, frames, base);
-
+        Map<String, Integer> index = new HashMap<>();
         List<RagdollSampler.Bone> bones = pose.sampler().bones;
-        Quaternionf[] simulated = new Quaternionf[bones.size()];
-        Quaternionf[] animated = new Quaternionf[bones.size()];
 
         for (int i = 0; i < bones.size(); i++)
         {
-            RagdollSampler.Bone bone = bones.get(i);
-            PivotFrame frame = frames.get(bone.id());
-            ModelGroup group = model.getGroup(bone.id());
-            float[] b = pose.bodies();
+            index.put(bones.get(i).id(), i);
+        }
 
-            if (frame == null || group == null || b.length < (i + 1) * 7)
-            {
-                continue;
-            }
+        Matrix4f inverse = new Matrix4f(base).invert();
 
-            Quaternionf world = new Quaternionf(b[i * 7 + 3], b[i * 7 + 4], b[i * 7 + 5], b[i * 7 + 6]).normalize();
-            Quaternionf worldAnimated = new Quaternionf(frame.worldRotation()).normalize();
-            Quaternionf parentAnimated = new Quaternionf(frame.parentRotation()).normalize();
-            /* A bone hanging from a body takes the turn that body took on top of its animated frame; a detached bone's
-             * parent in the model stands where the animation put it */
-            Quaternionf parent = !bone.detached() && bone.parent() >= 0 && simulated[bone.parent()] != null
-                ? new Quaternionf(simulated[bone.parent()]).mul(new Quaternionf(animated[bone.parent()]).conjugate()).mul(parentAnimated)
-                : parentAnimated;
+        for (ModelGroup group : model.topGroups)
+        {
+            walk(group, new Matrix4f(), index, pose.bodies(), inverse);
+        }
+    }
 
-            simulated[i] = world;
-            animated[i] = worldAnimated;
-            group.orient = new Quaternionf(parent).conjugate().mul(world).normalize();
+    private static void walk(ModelGroup group, Matrix4f parent, Map<String, Integer> index, float[] bodies, Matrix4f inverse)
+    {
+        Integer i = index.get(group.id);
 
-            PivotFrame start = pose.animated().get(bone.id());
+        if (i != null && bodies.length >= (i + 1) * 7)
+        {
+            int at = i * 7;
+            Matrix4f frame = new Matrix4f(inverse).mul(new Matrix4f().translationRotate(bodies[at], bodies[at + 1], bodies[at + 2],
+                new Quaternionf(bodies[at + 3], bodies[at + 4], bodies[at + 5], bodies[at + 6]).normalize()));
+            Vector3f position = frame.getTranslation(new Vector3f());
+            Quaternionf rotation = frame.getUnnormalizedRotation(new Quaternionf()).normalize();
+            Vector3f pivot = group.initial.translate;
+            Vector3f translate = group.current.translate;
 
-            if (bone.detached() && start != null)
-            {
-                /* The body's pivot is its centre less the bone's own offset to the centre, turned */
-                Vector3f scale = start.scale();
-                Vector3f center = world.transform(new Vector3f(bone.center()).mul(scale));
-                Vector3f pivot = new Vector3f(b[i * 7] - center.x, b[i * 7 + 1] - center.y, b[i * 7 + 2] - center.z);
-                Vector3f shift = new Quaternionf(parentAnimated).conjugate().transform(pivot.sub(start.position()));
+            /* Where the pivot lands with no offset, in the parent's own coordinates */
+            float dx = -(translate.x - pivot.x) / 16F + pivot.x / 16F;
+            float dy = (translate.y - pivot.y) / 16F + pivot.y / 16F;
+            float dz = (translate.z - pivot.z) / 16F + pivot.z / 16F;
+            Vector3f local = new Matrix4f(parent).invert().transformPosition(position, new Vector3f());
 
-                shift.div(Math.max(1e-4F, scale.x), Math.max(1e-4F, scale.y), Math.max(1e-4F, scale.z));
-                group.offset = shift;
-            }
+            group.offset = new Vector3f(local.x - dx, local.y - dy, local.z - dz);
+            group.orient = parent.getUnnormalizedRotation(new Quaternionf()).normalize().conjugate().mul(rotation).normalize();
+        }
+
+        Matrix4f matrix = new Matrix4f(parent);
+        Vector3f pivot = group.initial.translate;
+        Vector3f translate = group.current.translate;
+        Vector3f scale = group.current.scale;
+
+        if (group.offset != null)
+        {
+            matrix.translate(group.offset.x, group.offset.y, group.offset.z);
+        }
+
+        matrix.translate(-(translate.x - pivot.x) / 16F, (translate.y - pivot.y) / 16F, (translate.z - pivot.z) / 16F);
+        matrix.translate(pivot.x / 16F, pivot.y / 16F, pivot.z / 16F);
+        matrix.rotate(group.evaluatedRotation());
+        matrix.scale(scale.x, scale.y, scale.z);
+        matrix.translate(-pivot.x / 16F, -pivot.y / 16F, -pivot.z / 16F);
+
+        for (ModelGroup child : group.children)
+        {
+            walk(child, matrix, index, bodies, inverse);
         }
     }
 
@@ -394,7 +419,7 @@ public final class PhysicsStudio
 
             for (int b = 0; b < rig.bodyCount() && b * 7 + 6 < all.length; b++)
             {
-                float[] pose = java.util.Arrays.copyOfRange(all, b * 7, b * 7 + 7);
+                float[] pose = held != null ? java.util.Arrays.copyOfRange(all, b * 7, b * 7 + 7) : rig.boxPose(b, all);
                 float distance = hit(origin, direction, pose, rig.half(b));
 
                 if (distance >= 0F && (best == null || distance < best.distance()))
@@ -534,15 +559,14 @@ public final class PhysicsStudio
             for (int b = 0; b < rig.bodyCount() && b * 7 + 6 < all.length; b++)
             {
                 float[] half = rig.half(b);
+                float[] box = rig.boxPose(b, all);
 
-                list.add(new float[] {all[b * 7], all[b * 7 + 1], all[b * 7 + 2], all[b * 7 + 3], all[b * 7 + 4], all[b * 7 + 5], all[b * 7 + 6], half[0], half[1], half[2]});
+                list.add(new float[] {box[0], box[1], box[2], box[3], box[4], box[5], box[6], half[0], half[1], half[2]});
 
+                /* A ragdoll body is its bone's pivot frame: the joint to its parent is the body's own origin */
                 if (rig.ragdoll != null && joints != null && rig.ragdoll.bones.get(b).parent() >= 0)
                 {
-                    Quaternionf q = new Quaternionf(all[b * 7 + 3], all[b * 7 + 4], all[b * 7 + 5], all[b * 7 + 6]);
-                    Vector3f offset = q.transform(new Vector3f(rig.ragdoll.bones.get(b).center()));
-
-                    joints.add(new float[] {all[b * 7] - offset.x, all[b * 7 + 1] - offset.y, all[b * 7 + 2] - offset.z});
+                    joints.add(new float[] {all[b * 7], all[b * 7 + 1], all[b * 7 + 2]});
                 }
             }
         }

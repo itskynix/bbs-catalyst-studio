@@ -98,6 +98,25 @@ final class PhysicsScene implements AutoCloseable
         boolean[] boneKinematic;
         int torn = -1;
         float[][] halves;
+        /** Where each ragdoll body's box sits inside the body, from the bone's pivot to the middle of its cubes */
+        float[][] centers;
+
+        /** The pose of a body's box: the body's frame moved to the box's middle */
+        float[] boxPose(int index, float[] all)
+        {
+            float[] pose = java.util.Arrays.copyOfRange(all, index * 7, index * 7 + 7);
+
+            if (this.centers != null)
+            {
+                Vector3f offset = new Quaternionf(pose[3], pose[4], pose[5], pose[6]).transform(new Vector3f(this.centers[index][0], this.centers[index][1], this.centers[index][2]));
+
+                pose[0] += offset.x;
+                pose[1] += offset.y;
+                pose[2] += offset.z;
+            }
+
+            return pose;
+        }
         int fingerprint;
         final List<Map<String, PivotFrame>> targets = new ArrayList<>();
 
@@ -295,6 +314,7 @@ final class PhysicsScene implements AutoCloseable
 
         Body[] bodies = new Body[count];
         float[][] halves = new float[count][];
+        float[][] centers = new float[count][];
         float total = 0F;
 
         for (int i = 0; i < count; i++)
@@ -309,7 +329,13 @@ final class PhysicsScene implements AutoCloseable
 
             float[] pose = RagdollSampler.bodyPose(bone, frame);
             float mass = Math.max(0.05F, material.density * 8F * half.x * half.y * half.z);
-            BoxShape shape = new BoxShape(new Vec3(half.x, half.y, half.z), Math.min(0.02F, Math.min(half.x, Math.min(half.y, half.z)) * 0.9F));
+            Vector3f center = new Vector3f(bone.center()).mul(scale);
+
+            centers[i] = new float[] {center.x, center.y, center.z};
+
+            /* The body is the bone's pivot frame; its box is placed inside it at the middle of the cubes */
+            BoxShape box = new BoxShape(new Vec3(half.x, half.y, half.z), Math.min(0.02F, Math.min(half.x, Math.min(half.y, half.z)) * 0.9F));
+            com.github.stephengold.joltjni.RotatedTranslatedShape shape = new com.github.stephengold.joltjni.RotatedTranslatedShape(new Vec3(center.x, center.y, center.z), Quat.sIdentity(), box);
             BodyCreationSettings settings = new BodyCreationSettings(shape, new RVec3(pose[0], pose[1], pose[2]), new Quat(pose[3], pose[4], pose[5], pose[6]), EMotionType.Dynamic, LAYER_MOVING);
 
             settings.setFriction(physics.friction.get());
@@ -327,6 +353,7 @@ final class PhysicsScene implements AutoCloseable
 
             settings.close();
             shape.close();
+            box.close();
         }
 
         TwoBodyConstraint[] joints = new TwoBodyConstraint[count];
@@ -380,6 +407,7 @@ final class PhysicsScene implements AutoCloseable
         rig.joints = joints;
         rig.boneKinematic = new boolean[count];
         rig.halves = halves;
+        rig.centers = centers;
         rig.fingerprint = rig.poseFingerprint();
         rig.targets.add(start);
 
@@ -1320,7 +1348,22 @@ final class PhysicsScene implements AutoCloseable
             }
         }
 
-        this.bodies.moveKinematic(this.liveRig.bodyAt(this.liveBody).getId(), new RVec3(target[0], target[1], target[2]), new Quat(target[3], target[4], target[5], target[6]), DELTA);
+        float tx = target[0];
+        float ty = target[1];
+        float tz = target[2];
+
+        if (this.liveRig.centers != null)
+        {
+            /* The tool holds the middle of the box; the body itself is the bone's pivot */
+            float[] c = this.liveRig.centers[this.liveBody];
+            Vector3f offset = new Quaternionf(target[3], target[4], target[5], target[6]).transform(new Vector3f(c[0], c[1], c[2]));
+
+            tx -= offset.x;
+            ty -= offset.y;
+            tz -= offset.z;
+        }
+
+        this.bodies.moveKinematic(this.liveRig.bodyAt(this.liveBody).getId(), new RVec3(tx, ty, tz), new Quat(target[3], target[4], target[5], target[6]), DELTA);
         this.system.update(DELTA, STEPS, this.temp, this.jobs);
     }
 

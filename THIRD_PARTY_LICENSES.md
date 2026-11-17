@@ -74,4 +74,8 @@ The interface blur (`InterfaceBlur`) is adapted from it; its MIT notice is in
 
 ## Jolt Physics and jolt-jni
 
-The physics studio runs on Jolt Physics (Jorrit Rouwe, MIT License) through the jolt-jni bindings (Stephen Gold, MIT License), shipped as jar-in-jar libraries with their native builds. The studio itself is written for BBS CS; only the lower layer of the MIT-licensed BBS Physics Engine (Wemppy) was read for how Jolt is loaded and driven.
+The physics studio runs on Jolt Physics (Jorrit Rouwe, MIT License) through the jolt-jni bindings (Stephen Gold, MIT License), shipped as jar-in-jar libraries with their native builds.
+
+## BBS Physics Engine — Wemppy
+
+Parts of the physics studio are adapted from the BBS Physics Engine add-on by Wemppy, under the MIT License: the way the Jolt native library is unpacked and loaded, the velocity drive that pulls a body towards its animated pose, the ragdoll layout where every body is its bone's own pivot frame with its box placed inside it, and the pose applier that walks the model in its own space and gives every simulated bone an offset and an orientation in the renderer's order. The rest of the studio, its tabs, tracks, tools and items, is written for BBS CS.

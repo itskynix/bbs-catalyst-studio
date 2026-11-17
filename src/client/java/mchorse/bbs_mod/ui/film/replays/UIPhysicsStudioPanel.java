@@ -62,6 +62,10 @@ public class UIPhysicsStudioPanel extends UIElement
     private UITrackpad blastStrength;
     private UITrackpad blastRadius;
     private UILabel cache;
+    private UILabel blastOriginLabel;
+
+    /** Where the next blast goes off; null for the middle of the orbit camera's view */
+    private Vector3d blastOrigin;
 
     /** Asked every frame: whether the Details area is the studio's right now */
     private final java.util.function.BooleanSupplier shown;
@@ -155,6 +159,7 @@ public class UIPhysicsStudioPanel extends UIElement
         for (UITrackpad pad : new UITrackpad[] {this.pushX, this.pushY, this.pushZ})
         {
             pad.limit(-100, 100).values(0.5, 0.1, 2).tooltip(UIKeys.FILM_PHYSICS_PUSH_TOOLTIP);
+            pad.context((menu) -> menu.action(Icons.ARROW_RIGHT, UIKeys.FILM_PHYSICS_AIM_DIRECTION, this::aimDirection));
         }
 
         this.pushY.setValue(4);
@@ -173,6 +178,19 @@ public class UIPhysicsStudioPanel extends UIElement
 
         blast.tooltip(UIKeys.FILM_PHYSICS_BLAST_TOOLTIP);
 
+        /* Right click on the blast fields: the point the view's crosshair looks at becomes the blast's middle */
+        for (UIElement field : new UIElement[] {blast, this.blastStrength, this.blastRadius})
+        {
+            field.context((menu) ->
+            {
+                menu.action(Icons.MOVE_TO, UIKeys.FILM_PHYSICS_AIM_POINT, this::aimPoint);
+                menu.action(Icons.ORBIT, UIKeys.FILM_PHYSICS_AIM_ORBIT, () -> this.blastOrigin = null);
+            });
+        }
+
+        this.blastOriginLabel = new UILabel(UIKeys.FILM_PHYSICS_BLAST_ORIGIN_ORBIT).color(Colors.setA(Colors.WHITE, 0.6F));
+        this.blastOriginLabel.h(14);
+
         UIButton bake = new UIButton(UIKeys.FILM_PHYSICS_BAKE, (b) -> this.bake());
 
         bake.tooltip(UIKeys.FILM_PHYSICS_BAKE_TOOLTIP);
@@ -183,7 +201,7 @@ public class UIPhysicsStudioPanel extends UIElement
         UISection forcesSection = new UISection(UIKeys.FILM_PHYSICS_SECTIONS_FORCES);
 
         forcesSection.fields.add(UI.label(UIKeys.FILM_PHYSICS_PUSH, 14), UI.row(this.pushX, this.pushY, this.pushZ), push,
-            this.labelled(UIKeys.FILM_PHYSICS_BLAST_STRENGTH, this.blastStrength), this.labelled(UIKeys.FILM_PHYSICS_BLAST_RADIUS, this.blastRadius), blast);
+            this.labelled(UIKeys.FILM_PHYSICS_BLAST_STRENGTH, this.blastStrength), this.labelled(UIKeys.FILM_PHYSICS_BLAST_RADIUS, this.blastRadius), this.blastOriginLabel, blast);
 
         /* The hand tools: picked here for the preview, or given to the player to hold */
         UIButton physicsTool = new UIButton(UIKeys.FILM_PHYSICS_TOOL_PHYSICS, (b) -> mchorse.bbs_mod.physics.PhysicsToolController.pick(mchorse.bbs_mod.physics.PhysicsToolController.Tool.PHYSICS));
@@ -373,10 +391,56 @@ public class UIPhysicsStudioPanel extends UIElement
             return;
         }
 
-        Vector3d origin = this.filmPanel.getController().orbit.getOrbitCenter(0F);
+        Vector3d origin = this.blastOrigin != null ? new Vector3d(this.blastOrigin) : this.filmPanel.getController().orbit.getOrbitCenter(0F);
 
         PhysicsStudio.blast(this.replay, this.filmPanel.getCursor(), origin, (float) this.blastStrength.getValue());
         this.filmPanel.replayEditor.updateChannelsList();
+    }
+
+    /** The way the preview's camera looks, in world space */
+    private org.joml.Vector3f viewForward()
+    {
+        return new org.joml.Matrix4f(this.filmPanel.lastView).invert().transformDirection(new org.joml.Vector3f(0F, 0F, -1F)).normalize();
+    }
+
+    /** The push turned the way the camera looks, keeping its strength (or 8 blocks a second when it has none) */
+    private void aimDirection()
+    {
+        org.joml.Vector3f forward = this.viewForward();
+        double strength = Math.sqrt(this.pushX.getValue() * this.pushX.getValue() + this.pushY.getValue() * this.pushY.getValue() + this.pushZ.getValue() * this.pushZ.getValue());
+
+        if (strength < 0.01D)
+        {
+            strength = 8D;
+        }
+
+        this.pushX.setValue(forward.x * strength);
+        this.pushY.setValue(forward.y * strength);
+        this.pushZ.setValue(forward.z * strength);
+    }
+
+    /** The block the camera's crosshair looks at, up to 128 blocks off, or a point 16 blocks ahead in open air */
+    private void aimPoint()
+    {
+        mchorse.bbs_mod.camera.Camera camera = this.filmPanel.getCamera();
+        org.joml.Vector3f forward = this.viewForward();
+        net.minecraft.client.MinecraftClient mc = net.minecraft.client.MinecraftClient.getInstance();
+        net.minecraft.util.math.Vec3d start = new net.minecraft.util.math.Vec3d(camera.position.x, camera.position.y, camera.position.z);
+        net.minecraft.util.math.Vec3d end = start.add(forward.x * 128D, forward.y * 128D, forward.z * 128D);
+        Vector3d point = new Vector3d(start.x + forward.x * 16D, start.y + forward.y * 16D, start.z + forward.z * 16D);
+
+        if (mc.world != null && mc.player != null)
+        {
+            net.minecraft.util.hit.BlockHitResult hit = mc.world.raycast(new net.minecraft.world.RaycastContext(start, end,
+                net.minecraft.world.RaycastContext.ShapeType.COLLIDER, net.minecraft.world.RaycastContext.FluidHandling.NONE, mc.player));
+
+            if (hit.getType() == net.minecraft.util.hit.HitResult.Type.BLOCK)
+            {
+                point.set(hit.getPos().x, hit.getPos().y, hit.getPos().z);
+            }
+        }
+
+        this.blastOrigin = point;
     }
 
     private void bake()
@@ -506,6 +570,8 @@ public class UIPhysicsStudioPanel extends UIElement
         int ticks = PhysicsStudio.cachedTicks();
 
         this.cache.label = ticks < 0 ? UIKeys.FILM_PHYSICS_CACHE_NONE : UIKeys.FILM_PHYSICS_CACHE.format(ticks + 1);
+        this.blastOriginLabel.label = this.blastOrigin == null ? UIKeys.FILM_PHYSICS_BLAST_ORIGIN_ORBIT
+            : UIKeys.FILM_PHYSICS_BLAST_ORIGIN.format(String.format(java.util.Locale.ROOT, "%.1f, %.1f, %.1f", this.blastOrigin.x, this.blastOrigin.y, this.blastOrigin.z));
 
         super.render(context);
     }
