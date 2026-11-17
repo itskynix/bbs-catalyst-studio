@@ -1,0 +1,278 @@
+package mchorse.bbs_mod.physics.client.scene;
+
+import mchorse.bbs_mod.actions.types.ActionClip;
+import mchorse.bbs_mod.camera.data.Point;
+import mchorse.bbs_mod.utils.clips.Clip;
+import mchorse.bbs_mod.physics.BBSPhysics;
+import mchorse.bbs_mod.physics.actions.ImpulseActionClip;
+import mchorse.bbs_mod.physics.actions.TearActionClip;
+import org.joml.Vector3f;
+
+import java.util.HashSet;
+import java.util.Set;
+
+/**
+ * The physics action clips of a film — the Э5 pushes and tears — fired into the simulation.
+ *
+ * <p>They go off <em>inside the recording</em>, once per simulated tick, and that is what keeps them
+ * deterministic: a re-recording replays the same clip on the same tick and the film comes out the
+ * same. They are also applied <em>after</em> the tick's drives, deliberately — a drive writes a
+ * body's velocity outright, so a push applied before it would be erased in the same tick it was
+ * given. Landing on top, the push survives, and the next tick's drive mixes it away by the handle's
+ * proportion, which is the muscles resisting the blast and exactly what partial authority means.</p>
+ */
+public final class SceneClips
+{
+    /** Release before the drives; impacts follow them, so no drive can overwrite the kick. */
+    public void prepareDeaths(SceneCast cast, int tick)
+    {
+        for (SceneCast.Member member : cast)
+        {
+            for (SceneActor actor : this.scene.getActors())
+            {
+                if (actor.getEntity() != member.entity) continue;
+                prepareDeath(actor, member, tick);
+            }
+        }
+    }
+
+    static void prepareDeath(SceneActor actor, SceneCast.Member member, int tick)
+    {
+        if (member.replay == null) return;
+        var death = mchorse.bbs_mod.physics.ragdoll.DeathReplay.at(member.replay, member.replay.getTick(tick));
+        boolean dead = death != null && !death.baked.get();
+        boolean armed = member.replay instanceof mchorse.bbs_mod.physics.ragdoll.DeathReplay settings
+            && settings.bbs_physics$deathEnabled().get();
+        for (SceneRig rig : actor.getRigs())
+            if (rig instanceof RagdollRig ragdoll) ragdoll.setDeathControl(armed, dead);
+    }
+
+    private final FilmScene scene;
+
+    private final java.util.Map<mchorse.bbs_mod.physics.actions.DeathActionClip, java.util.NavigableMap<Integer, RagdollRig.Impact>> deathImpacts = new java.util.IdentityHashMap<>();
+
+    public void clearDeathImpacts() { this.deathImpacts.clear(); }
+
+    /** Forgets the hits recorded after {@code tick}: that part of the recording is being made again. */
+    public void dropDeathImpactsAfter(int tick)
+    {
+        for (var hits : this.deathImpacts.values()) hits.tailMap(tick, false).clear();
+    }
+
+    /** The hits recorded so far, for the scene that takes this one's recording over. */
+    java.util.Map<mchorse.bbs_mod.physics.actions.DeathActionClip, java.util.NavigableMap<Integer, RagdollRig.Impact>> deathImpacts()
+    {
+        return this.deathImpacts;
+    }
+
+    /** Takes over the hits of the recording this scene took over — see {@link SceneHandover}. */
+    void adoptDeathImpacts(java.util.Map<mchorse.bbs_mod.physics.actions.DeathActionClip, java.util.NavigableMap<Integer, RagdollRig.Impact>> hits)
+    {
+        this.deathImpacts.clear();
+        this.deathImpacts.putAll(hits);
+    }
+
+    /** Only show an actual hit near its occurrence, including when the film loops. */
+    public RagdollRig.Impact deathImpact(mchorse.bbs_mod.physics.actions.DeathActionClip clip, int tick)
+    {
+        var hits = this.deathImpacts.get(clip);
+        if (hits == null) return null;
+        var hit = hits.floorEntry(tick);
+        return hit != null && tick - hit.getKey() <= 20 ? hit.getValue() : null;
+    }
+
+    /**
+     * Bone names a tear clip asked for that no ragdoll of the actor has, so the fact is reported
+     * once per name rather than on every tick of every re-recording.
+     */
+    private final Set<String> warnedTears = new HashSet<>(0);
+
+    public SceneClips(FilmScene scene)
+    {
+        this.scene = scene;
+    }
+
+    /** Fires whatever sits on {@code tick}. The cast is already standing on it. */
+    public void apply(SceneCast cast, int tick)
+    {
+        for (SceneCast.Member member : cast)
+        {
+            if (member.replay == null)
+            {
+                continue;
+            }
+
+            int local = member.replay.getTick(tick);
+
+            var death = mchorse.bbs_mod.physics.ragdoll.DeathReplay.at(member.replay, local);
+            if (death != null && !death.baked.get() && death.tick.get() == local) this.death(member, death, tick);
+
+            for (Clip clip : member.replay.actions.getClips(local))
+            {
+                if (!fires(clip, local))
+                {
+                    continue;
+                }
+
+                if (clip instanceof ImpulseActionClip impulse)
+                {
+                    this.impulse(member, impulse);
+                }
+                else if (clip instanceof TearActionClip tear)
+                {
+                    this.tear(member, tear);
+                }
+            }
+        }
+    }
+
+    /**
+     * Whether an action clip goes off on this tick — the same rule {@code ActionClip} applies for
+     * the server and client passes, repeated here because physics reads the clip directly: at its
+     * first tick once, or every {@code frequency} ticks of its length when one is set.
+     */
+    private static boolean fires(Clip clip, int tick)
+    {
+        if (!(clip instanceof ActionClip action) || !clip.enabled.get())
+        {
+            return false;
+        }
+
+        int relative = tick - clip.tick.get();
+
+        if (relative < 0)
+        {
+            /* The clip has not started. BBS's own passes cannot reach this — they only ever ask a
+             * clip that covers the tick — but the list this reads also hands back "global" clips
+             * whatever the tick, and a repeating clip's modulo says yes to a negative multiple just
+             * as readily as to a positive one. A push before its own frame is not a thing. */
+            return false;
+        }
+
+        int frequency = action.frequency.get();
+
+        return frequency == 0 ? relative == 0 : relative % frequency == 0;
+    }
+
+    /**
+     * One firing of an impulse clip: the push is worked out once and offered to everything simulated
+     * in the scene, or only to the clip's own actor when restricted to its recording.
+     */
+    private void impulse(SceneCast.Member member, ImpulseActionClip clip)
+    {
+        Point point = clip.point.get();
+        Point direction = clip.direction.get();
+
+        SceneImpulse push = SceneImpulse.of(
+            (float) (point.x - this.scene.getOriginX()),
+            (float) (point.y - this.scene.getOriginY()),
+            (float) (point.z - this.scene.getOriginZ()),
+            clip.radius.get(),
+            clip.strength.get(),
+            clip.radial.get() ? null : new Vector3f((float) direction.x, (float) direction.y, (float) direction.z));
+
+        if (push == null)
+        {
+            return;
+        }
+
+        for (SceneActor actor : this.scene.getActors())
+        {
+            if (clip.onlyThisReplay.get() && actor.getEntity() != member.entity)
+            {
+                continue;
+            }
+
+            for (SceneRig rig : actor.getRigs())
+            {
+                rig.impulse(this.scene.getWorld(), push);
+            }
+        }
+    }
+
+    private void death(SceneCast.Member member, mchorse.bbs_mod.physics.actions.DeathActionClip clip, int tick)
+    {
+        Point p = clip.point.get();
+        Point d = clip.direction.get();
+        float x = (float) (p.x - this.scene.getOriginX());
+        float y = (float) (p.y - this.scene.getOriginY());
+        float z = (float) (p.z - this.scene.getOriginZ());
+        Vector3f direction = new Vector3f((float) d.x, (float) d.y, (float) d.z);
+        if (!Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(z)
+            || !direction.isFinite() || direction.lengthSquared() < 1e-12F
+            || !Float.isFinite(clip.strength.get())) return;
+        float multiplier = member.replay instanceof mchorse.bbs_mod.physics.ragdoll.DeathReplay settings
+            ? settings.bbs_physics$deathStrength().get() : 1F;
+        direction.normalize().mul(clip.strength.get() * multiplier);
+        RagdollRig nearest = null;
+        double distance = Double.POSITIVE_INFINITY;
+        for (SceneActor actor : this.scene.getActors())
+        {
+            if (actor.getEntity() != member.entity) continue;
+            for (SceneRig rig : actor.getRigs())
+            {
+                if (!(rig instanceof RagdollRig ragdoll)) continue;
+                double candidate = ragdoll.impactDistance(this.scene.getWorld(), x, y, z);
+                if (candidate < distance) { distance = candidate; nearest = ragdoll; }
+            }
+        }
+        if (nearest != null)
+        {
+            var impact = nearest.impact(this.scene.getWorld(), x, y, z, direction);
+            if (impact != null) this.deathImpacts.computeIfAbsent(clip, key -> new java.util.TreeMap<>()).put(tick, impact);
+        }
+    }
+
+    /**
+     * One firing of a tear clip: the named bone of this clip's own actor comes off, with the kick
+     * the author gave it. The actor's ragdolls are asked in order; the first that owns the bone
+     * answers.
+     */
+    private void tear(SceneCast.Member member, TearActionClip clip)
+    {
+        String bone = clip.bone.get().trim();
+
+        if (bone.isEmpty())
+        {
+            return;
+        }
+
+        Point direction = clip.direction.get();
+        Vector3f kick = new Vector3f((float) direction.x, (float) direction.y, (float) direction.z);
+
+        if (kick.lengthSquared() > 1.0e-12F && kick.isFinite())
+        {
+            kick.normalize().mul(clip.strength.get());
+        }
+        else
+        {
+            kick.zero();
+        }
+
+        for (SceneActor actor : this.scene.getActors())
+        {
+            if (actor.getEntity() != member.entity)
+            {
+                continue;
+            }
+
+            for (SceneRig rig : actor.getRigs())
+            {
+                if (rig instanceof RagdollRig ragdoll && ragdoll.tear(this.scene.getWorld(), bone, kick.x, kick.y, kick.z))
+                {
+                    return;
+                }
+            }
+        }
+
+        /* Nobody owns that bone. Said out loud once per name, because the alternative is the clip
+         * doing nothing at all with no explanation — and the name is typed by hand, so the usual
+         * cause is a bone that is spelled differently, unmarked in the collision tab, or ticked out
+         * of the ragdoll. Exactly the kind of silence the impulse clip's point already cost a live
+         * run over. */
+        if (this.warnedTears.add(bone))
+        {
+            BBSPhysics.LOGGER.warn("A tear clip names the bone '{}', which is not a ragdoll part of that actor; nothing comes off. Check the spelling, that the bone is marked up in the Collision tab, and that it is ticked on in the ragdoll modifier.", bone);
+        }
+    }
+}

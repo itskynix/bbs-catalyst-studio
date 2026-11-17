@@ -1,0 +1,150 @@
+package mchorse.bbs_mod.physics.client.scene;
+
+import mchorse.bbs_mod.forms.forms.Form;
+import mchorse.bbs_mod.physics.engine.PhysicsCache;
+import mchorse.bbs_mod.physics.engine.PhysicsWorld;
+import mchorse.bbs_mod.physics.engine.RigMemory;
+import org.joml.Vector3f;
+
+/**
+ * One simulated thing hanging off an actor: a prop, a ragdoll, a sheet of cloth, an inflated ball,
+ * a rope, a strand of hair — anything the scene drives on the way in and reads back on the way out.
+ *
+ * <p><b>Why this exists.</b> The scene used to keep a list per kind and walk all of them side by
+ * side in seven places: driving them, recording them, handing frames out, pushing them, releasing
+ * them, counting them for the readout, and tying ropes to them. Adding the sixth kind meant finding
+ * and editing all seven loops, and forgetting one of them is a silent bug of exactly the sort that
+ * is hardest to see — a strand that is never told about an explosion, a sheet whose form is never
+ * handed back at shutdown. Now the scene holds one list and each of these loops is one loop.</p>
+ *
+ * <p>Rigs are recorded in form-tree order so each child can express its result against its
+ * parent's physical frame. Sampling excludes the rig's own output to preserve its drive target.</p>
+ */
+public interface SceneRig
+{
+    /** The form whose animation this rig drives; null for the actor's remaining colliders. */
+    default Form getForm()
+    {
+        return null;
+    }
+
+    default PoseEvaluation.Kind poseKind()
+    {
+        return PoseEvaluation.Kind.FORM;
+    }
+
+    /** Refreshes only the coordinate frame, without moving bodies or applying forces. */
+    default void captureFrame(RigUpdate update)
+    {}
+
+    /**
+     * Runs before the world steps: drives whatever this rig owns towards the pose the animation has
+     * for it, by however much of it the authority handle says the animation owns.
+     */
+    void update(RigUpdate update);
+
+    /**
+     * Writes down what this rig carries from one tick to the next, for a checkpoint: everything a
+     * step from here on depends on that is neither in the recording nor in Jolt's own snapshot —
+     * whether the animation holds it, what has torn off, what the swing has been.
+     *
+     * <p>No default, on purpose. A rig that forgot something here would pick a recording up
+     * differently from the run that made it, and the editor and the exported video would quietly
+     * disagree; every rig has to say what its memory is, even when the answer is nothing.</p>
+     */
+    void remember(RigMemory memory);
+
+    /**
+     * Puts back what {@link #remember} wrote, before Jolt's own snapshot is restored: the Java side,
+     * and whatever of the world that snapshot does not carry — motion types, object layers, shapes,
+     * which constraints are on — set without waking anything, since the snapshot says who is awake.
+     * Settings applied only when they change are forgotten instead, so the next tick applies them
+     * again whatever they were left at.
+     */
+    void recall(RigMemory memory, PhysicsWorld physics);
+
+    default boolean needsRenderFrame()
+    {
+        return false;
+    }
+
+    /** Refresh the reference used to draw between simulation ticks. */
+    default void renderFrame(RigUpdate update)
+    {}
+
+    /**
+     * Reads the live world pose, in the frame the renderer
+     * will substitute it into, and writes it under {@code tick}. Called before the step for private
+     * parent-pose staging, and after the step for the completed recording.
+     *
+     * <p>The conversion belongs here rather than at draw time (§6): the frame an answer is expressed
+     * in is a function of the tick, and the tick has just been posed to be simulated, so both are at
+     * hand for free. Playing a recorded film back therefore evaluates no poses at all.</p>
+     *
+     * <p>Optional, because one rig has nothing of its own to record: an actor's kinematic bones are
+     * the animation, exactly, and what a drawn frame needs of them it already has.</p>
+     */
+    default void record(PhysicsWorld physics, FilmScene scene, PhysicsCache cache, int tick)
+    {}
+
+    /**
+     * Hands the form the recorded frame being drawn, or the news that there is not one — in which
+     * case it is drawn from its keyframes alone (Р8.1). Optional for the same reason
+     * {@link #record} is.
+     */
+    default void readCache(PhysicsCache cache, int tick, boolean teleport)
+    {}
+
+    /**
+     * Hands the bake the recorded answer for {@code tick}, in the terms the renderer would have
+     * substituted it — the same numbers {@link #readCache} hands the form, reported to the bake
+     * instead so they can become keyframes (§9.3). Optional: a rig with nothing recorded, or with
+     * an answer that has no keyframe to become (a sheet of cloth), bakes to nothing.
+     */
+    default void bake(PhysicsCache cache, int tick, PhysicsBake bake)
+    {}
+
+    /**
+     * Lets go of the form, so it goes back to being drawn from its keyframes. Called when the scene
+     * closes: the bodies behind this rig are about to stop existing. Optional — a rig that never
+     * took a form's runtime slot has nothing to hand back.
+     */
+    default void release()
+    {}
+
+    /** An impulse clip's push (Э5). Whatever the animation owns outright takes nothing. */
+    default void impulse(PhysicsWorld physics, SceneImpulse push)
+    {}
+
+    /**
+     * Whether the simulation lost this rig on the tick it last recorded — a place that is not a
+     * place. Nothing is drawn for it, which from the viewport is identical to it never having
+     * existed, so the readout says the number out loud.
+     */
+    default boolean isLost()
+    {
+        return false;
+    }
+
+    /**
+     * Whether nothing inside this rig was marked up as collidable, so it collides with nothing and
+     * falls through the world. Deliberate (§5.1) and reported rather than hidden — it is one of the
+     * few states that looks exactly like the engine being broken.
+     */
+    default boolean isGhost()
+    {
+        return false;
+    }
+
+    /**
+     * Where this rig last was in the scene's own coordinates, for the "it left the collected world"
+     * check the readout makes.
+     *
+     * @return false when it has no meaningful single place — a ragdoll is a dozen of them — in which
+     *         case {@code out} is untouched
+     */
+    default boolean getScenePosition(Vector3f out)
+    {
+        return false;
+    }
+}

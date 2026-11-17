@@ -123,8 +123,6 @@ public class ModelForm extends Form implements IPosedForm, ILatticeForm
     public final ValueShapeKeys shapeKeys = new ValueShapeKeys("shape_keys", new ShapeKeys());
     public final ValueBoolean boneTracks = new ValueBoolean("bone_tracks", true);
     public final ValueBones bones = new ValueBones("bones");
-    /** What the physics studio makes of this model: 0 leaves it to the replay, 1 a jointed ragdoll, 2 one rigid body */
-    public final mchorse.bbs_mod.settings.values.numeric.ValueInt physicsMode = new mchorse.bbs_mod.settings.values.numeric.ValueInt("physics_mode", 0);
 
     /** The global wind of the form's physics — one compound animatable property, not bound to a bone. */
     public final ValueWindControl wind = new ValueWindControl("wind", new WindControl());
@@ -240,8 +238,6 @@ public class ModelForm extends Form implements IPosedForm, ILatticeForm
         this.add(this.bones);
         this.wind.invisible();
         this.add(this.wind);
-        this.physicsMode.invisible();
-        this.add(this.physicsMode);
         this.add(this.jitter);
 
         /* Visible, so each is a track of its own: a cat that sits down mid-take is a keyframe like

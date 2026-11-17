@@ -9,7 +9,7 @@
     ],
     "contributors": [
         "McHorse (Original BBS Creator)",
-        "Wemppy (BBS FS Port)",
+        "Wemppy (BBS FS Port & BBS Physics Addon)",
         "qualett (IRLights)",
         "Glaxium (BBS POV System Concept & Inspiration)",
         "Chryfi (Tracker clip)",
@@ -49,6 +49,11 @@
         "bbs.mixins.json",
         {
             "config": "bbs.client.mixins.json",
+            "environment": "client"
+        },
+        "bbs.physics.mixins.json",
+        {
+            "config": "bbs.physics.client.mixins.json",
             "environment": "client"
         }
     ],

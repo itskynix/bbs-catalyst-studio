@@ -1,0 +1,124 @@
+package mchorse.bbs_mod.physics;
+
+import mchorse.bbs_mod.api.FormPropertyAliases;
+
+import mchorse.bbs_mod.api.BBSAddonMod;
+import mchorse.bbs_mod.api.BBSApi;
+import mchorse.bbs_mod.api.Subscribe;
+import mchorse.bbs_mod.api.events.RegisterActionClipsEvent;
+import mchorse.bbs_mod.api.events.RegisterFormsEvent;
+import mchorse.bbs_mod.api.events.RegisterSourcePacksEvent;
+import mchorse.bbs_mod.camera.clips.ClipFactoryData;
+import mchorse.bbs_mod.resources.Link;
+import mchorse.bbs_mod.ui.utils.icons.Icons;
+import mchorse.bbs_mod.physics.actions.ImpulseActionClip;
+import mchorse.bbs_mod.physics.actions.TearActionClip;
+import mchorse.bbs_mod.physics.balloon.BalloonForm;
+import mchorse.bbs_mod.physics.chain.ChainForm;
+import mchorse.bbs_mod.physics.cloth.ClothForm;
+import net.fabricmc.loader.api.FabricLoader;
+
+/**
+ * The addon's hook into BBS, declared under the {@code bbs-addon} entry point. Its client
+ * counterpart is {@link mchorse.bbs_mod.physics.client.BBSPhysicsClientAddon}, under
+ * {@code bbs-client-addon}.
+ *
+ * <p>BBS instantiates this class and scans it for {@link Subscribe} methods at the very top of
+ * its own initialization, so every registration event it posts afterwards reaches this addon.</p>
+ */
+public class BBSPhysicsAddon implements BBSAddonMod
+{
+    /**
+     * The addon API this addon is written against. Checked here rather than discovered halfway
+     * through a film: BBS tells the user which of the two to update, instead of the mismatch
+     * surfacing as a missing method somewhere in the middle of a scene.
+     */
+    public static final int API_VERSION = 2;
+
+    public BBSPhysicsAddon()
+    {
+        BBSApi.requireVersion(BBSPhysics.MOD_ID, API_VERSION);
+        FormPropertyAliases.register("bbs_physics_authority", "bbs_physics:authority");
+        FormPropertyAliases.register("bbs_physics_body", "bbs_physics:body");
+        FormPropertyAliases.register("bbs_physics_body_angular_damping", "bbs_physics:body_angular_damping");
+        FormPropertyAliases.register("bbs_physics_body_friction", "bbs_physics:body_friction");
+        FormPropertyAliases.register("bbs_physics_body_gravity", "bbs_physics:body_gravity");
+        FormPropertyAliases.register("bbs_physics_body_linear_damping", "bbs_physics:body_linear_damping");
+        FormPropertyAliases.register("bbs_physics_body_mass", "bbs_physics:body_mass");
+        FormPropertyAliases.register("bbs_physics_body_restitution", "bbs_physics:body_restitution");
+        FormPropertyAliases.register("bbs_physics_chain", "bbs_physics:chain");
+        FormPropertyAliases.register("bbs_physics_chain_bend", "bbs_physics:chain_bend");
+        FormPropertyAliases.register("bbs_physics_chain_damping", "bbs_physics:chain_damping");
+        FormPropertyAliases.register("bbs_physics_chain_falloff", "bbs_physics:chain_falloff");
+        FormPropertyAliases.register("bbs_physics_chain_gravity", "bbs_physics:chain_gravity");
+        FormPropertyAliases.register("bbs_physics_chain_mass", "bbs_physics:chain_mass");
+        FormPropertyAliases.register("bbs_physics_chain_stiffness", "bbs_physics:chain_stiffness");
+        FormPropertyAliases.register("bbs_physics_collision", "bbs_physics:collision");
+        FormPropertyAliases.register("bbs_physics_destruction", "bbs_physics:destruction");
+        FormPropertyAliases.register("bbs_physics_ragdoll", "bbs_physics:ragdoll");
+        FormPropertyAliases.register("bbs_physics_ragdoll_damping", "bbs_physics:ragdoll_damping");
+        FormPropertyAliases.register("bbs_physics_ragdoll_friction", "bbs_physics:ragdoll_friction");
+        FormPropertyAliases.register("bbs_physics_ragdoll_gravity", "bbs_physics:ragdoll_gravity");
+        FormPropertyAliases.register("bbs_physics_ragdoll_mass", "bbs_physics:ragdoll_mass");
+        FormPropertyAliases.register("bbs_physics_ragdoll_muscle_damping", "bbs_physics:ragdoll_muscle_damping");
+        FormPropertyAliases.register("bbs_physics_ragdoll_muscles", "bbs_physics:ragdoll_muscles");
+
+
+        BBSPhysics.LOGGER.info("Attached to BBS {}.", version("bbs"));
+    }
+
+    /**
+     * Gives the addon's own assets a source of their own, so they can be addressed as
+     * {@code bbs_physics:...} links anywhere BBS accepts one.
+     */
+    @Subscribe
+    public void onRegisterSourcePacks(RegisterSourcePacksEvent event)
+    {
+        event.registerAddon(BBSPhysics.ASSETS, BBSPhysicsAddon.class);
+    }
+
+    /**
+     * Registers the addon's form types — cloth (Р12), balloon and chain.
+     *
+     * <p>The rigid-body wrapper this addon once registered is gone (Р7): a body is a modifier on
+     * an existing form. These three are forms again, and deliberately: they are not behaviours
+     * bolted onto something that already had a look — the sheet <em>is</em> the object, its
+     * rectangle belongs to the simulation, and no existing form loses anything by not being
+     * wrapped in it.</p>
+     *
+     * <p>Registered on both sides, not just the client: a film carries its forms across the
+     * network, and a server handed one has to be able to read it.</p>
+     */
+    @Subscribe
+    public void onRegisterForms(RegisterFormsEvent event)
+    {
+        event.forms.register(new Link(BBSPhysics.MOD_ID, "cloth"), ClothForm.class, null);
+        event.forms.register(new Link(BBSPhysics.MOD_ID, "balloon"), BalloonForm.class, null);
+        event.forms.register(new Link(BBSPhysics.MOD_ID, "chain"), ChainForm.class, null);
+    }
+
+    /**
+     * The Э5 action clips — "a push at a point" and "this bone comes off" — live on the same
+     * action timeline as BBS's own clips and are registered the same way.
+     *
+     * <p>Both sides again: a film carries its clips across the network, and a server handed one
+     * has to be able to read it (it just never acts on these — the physics scene is the one
+     * consumer).</p>
+     */
+    @Subscribe
+    public void onRegisterActionClips(RegisterActionClipsEvent event)
+    {
+        event.factory
+            .register(new Link(BBSPhysics.MOD_ID, "death"), mchorse.bbs_mod.physics.actions.DeathActionClip.class, new ClipFactoryData(Icons.PHYSICS, 0xb28be0))
+            .register(new Link(BBSPhysics.MOD_ID, "impulse"), ImpulseActionClip.class, new ClipFactoryData(Icons.SHARD, 0xff9500))
+            .register(new Link(BBSPhysics.MOD_ID, "tear"), TearActionClip.class, new ClipFactoryData(Icons.CUT, 0xff4444));
+    }
+
+    private static String version(String modId)
+    {
+        return FabricLoader.getInstance()
+            .getModContainer(modId)
+            .map((container) -> container.getMetadata().getVersion().getFriendlyString())
+            .orElse("(unknown)");
+    }
+}

@@ -2,11 +2,25 @@ package mchorse.bbs_mod.physics;
 
 import mchorse.bbs_mod.BBSMod;
 import mchorse.bbs_mod.camera.Camera;
+import mchorse.bbs_mod.camera.data.Point;
 import mchorse.bbs_mod.film.Film;
 import mchorse.bbs_mod.film.replays.Replay;
+import mchorse.bbs_mod.forms.FormUtils;
+import mchorse.bbs_mod.forms.entities.IEntity;
+import mchorse.bbs_mod.forms.forms.Form;
 import mchorse.bbs_mod.graphics.window.Window;
 import mchorse.bbs_mod.items.PhysicsToolItem;
+import mchorse.bbs_mod.l10n.keys.IKey;
+import mchorse.bbs_mod.physics.actions.ImpulseActionClip;
+import mchorse.bbs_mod.physics.actions.TearActionClip;
+import mchorse.bbs_mod.physics.client.scene.FilmScene;
+import mchorse.bbs_mod.physics.client.scene.FilmScenes;
+import mchorse.bbs_mod.physics.client.scene.PhysicsBake;
+import mchorse.bbs_mod.physics.client.scene.SceneBody;
+import mchorse.bbs_mod.physics.forms.IPhysicsForm;
 import mchorse.bbs_mod.settings.values.base.BaseValue;
+import mchorse.bbs_mod.settings.values.numeric.ValueFloat;
+import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.film.UIFilmPanel;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.utils.Area;
@@ -16,22 +30,38 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.item.ItemStack;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
-import org.joml.Vector3d;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 
+import java.util.Map;
+
 /**
- * The physics studio's two hand tools in the film editor's preview.
+ * The physics gun and the gravity gun in the film editor's preview, on top of the integrated
+ * physics engine (BBS CS).
  *
- * <p>The physics gun grabs a body under the mouse with the left button and carries it at the same distance
- * along the mouse ray; the wheel brings it nearer or pushes it away, Shift with the mouse turns it, and the
- * right button freezes it where it is. The gravity gun pulls a body to a spot in front of the camera with the
- * right button and launches it with the left.</p>
+ * <p>The engine records a film ahead of the cursor and plays the recording back, so a tool cannot
+ * reach into a live world and drag a body about: whatever it does has to become part of the film,
+ * or the next recording would not have it. Every action is therefore one ordinary, undoable edit
+ * of the film, written with the engine's own vocabulary:</p>
  *
- * <p>Everything a tool does ends up as keyframes on the cursor tick, so the simulation stays one honest
- * timeline: letting go keys the pose where it was dropped and releases it on the next tick with the speed it
- * was moving at, a freeze keys it and keeps holding it, a launch keys a push. While a body is in hand, it is
- * drawn where the tool holds it.</p>
+ * <ul>
+ * <li><b>Grab</b> (physics gun, left button held): the beam locks onto the middle of the body or
+ * ragdoll limb under the mouse, and a target follows the mouse at the same distance (the wheel
+ * brings it nearer or pushes it away). Letting go yanks the body towards the target: an impulse
+ * clip on the cursor tick, aimed from the middle of the body at the target, as hard as the target
+ * was dragged away.</li>
+ * <li><b>Freeze</b> (physics gun, right button): the body's simulated motion is baked to keys up to
+ * the cursor tick and the animation handle goes to 1, so it stays exactly where it was on that
+ * tick, in mid-air if that is where it was.</li>
+ * <li><b>Tear</b> (physics gun, Alt with the left button on a ragdoll limb): a tear clip on the
+ * cursor tick, kicking the limb the way the camera looks.</li>
+ * <li><b>Launch</b> and <b>pull</b> (gravity gun, left and right button): an impulse clip that
+ * throws the body the way the camera looks, or pulls it towards the camera.</li>
+ * </ul>
+ *
+ * <p>A push only moves what physics owns, so an object still held by its animation (the handle at
+ * 1) is let go on the same tick: the handle is keyed from 1 on the tick before to 0 on the tick of
+ * the push.</p>
  */
 public final class PhysicsToolController
 {
@@ -42,39 +72,43 @@ public final class PhysicsToolController
 
     private static final int PHYSICS_COLOR = 0x3AD7FF;
     private static final int GRAVITY_COLOR = 0xFF8C1C;
-    private static final float HOLD_DISTANCE = 2.5F;
     private static final float LAUNCH_SPEED = 24F;
-    private static final float MIN_DISTANCE = 1F;
+    private static final float PULL_SPEED = 12F;
+    private static final float TEAR_SPEED = 6F;
+    private static final float YANK_PER_BLOCK = 8F;
+    private static final float MIN_YANK = 0.15F;
+    private static final float MAX_SPEED = 40F;
+    private static final float MIN_DISTANCE = 0.5F;
     private static final float MAX_DISTANCE = 64F;
 
     private static Tool picked = Tool.NONE;
 
-    /* The physics gun's grab; a limb of a ragdoll is held live, the rest by the pose the tool gives it */
-    private static Replay grabbed;
-    private static boolean limb;
-    private static long liveAt;
+    /* The physics gun's grab */
+    private static Hit grabbed;
     private static float distance;
-    private static float centerY;
-    /* What is drawn chases where the mouse puts it on every frame, eased like a spring, so carrying and turning
-     * are smooth at any frame rate and never jump with the mouse's steps */
-    private static final Vector3f point = new Vector3f();
-    private static final Quaternionf turn = new Quaternionf();
-    private static final Vector3f targetPoint = new Vector3f();
-    private static final Quaternionf targetTurn = new Quaternionf();
-    private static long smoothedAt;
-    private static final Vector3f velocity = new Vector3f();
-    private static long movedAt;
-    private static int lastMouseX;
-    private static int lastMouseY;
+    private static final Vector3f target = new Vector3f();
 
-    /** When the last launch went off, for the flash */
+    /* The last thing a tool did, flashed over the preview */
     private static long flashAt;
     private static final Vector3f flash = new Vector3f();
+    private static String message;
+    private static long messageAt;
+
+    /**
+     * What a ray met: one shape of one movable body, in world space.
+     *
+     * @param body   the engine's body
+     * @param replay the replay of the actor the body belongs to
+     * @param center the middle of the shape the ray met, in world coordinates
+     * @param size   the shape's largest half extent, for how far a push on it should reach
+     */
+    private record Hit(SceneBody body, Replay replay, Vector3f center, float size, float distance)
+    {}
 
     private PhysicsToolController()
     {}
 
-    /** The tool picked in the studio, or the one the player holds when none is */
+    /** The tool picked in the editor, or the one the player holds when none is */
     public static Tool tool()
     {
         if (picked != Tool.NONE)
@@ -101,69 +135,25 @@ public final class PhysicsToolController
     public static void pick(Tool tool)
     {
         picked = picked == tool ? Tool.NONE : tool;
-        drop();
+        grabbed = null;
     }
 
-    /** Puts the picked tool away, e.g. when the Physics tab is left; a tool held in hand stays up */
+    /** Puts the picked tool away; a tool held in hand stays up */
     public static void reset()
     {
         picked = Tool.NONE;
-        drop();
-    }
-
-    private static void drop()
-    {
-        if (grabbed != null && limb)
-        {
-            PhysicsStudio.endLive();
-        }
-
         grabbed = null;
-        limb = false;
     }
 
     /**
-     * Whether a tool wants this click before anything else in the editor does: a tool is up and the mouse is over
-     * the film preview. The orbit camera asks this before it takes the button.
+     * Whether a tool wants this click before anything else in the editor does: a tool is up and the
+     * mouse is over the film preview. The orbit camera asks this before it takes the button.
      */
     public static boolean capturesMouse(UIContext context)
     {
-        UIFilmPanel panel = filmPanel();
+        UIFilmPanel panel = PhysicsAim.filmPanel();
 
         return panel != null && tool() != Tool.NONE && panel.preview != null && panel.preview.isVisible() && panel.preview.area.isInside(context);
-    }
-
-    private static UIFilmPanel filmPanel()
-    {
-        if (mchorse.bbs_mod.ui.framework.UIScreen.getCurrentMenu() instanceof mchorse.bbs_mod.ui.dashboard.UIDashboard dashboard
-            && dashboard.getPanels().panel instanceof UIFilmPanel panel)
-        {
-            return panel;
-        }
-
-        return null;
-    }
-
-    /** Where the tool aims: the mouse, or the middle of the picture while the mouse is locked into looking around */
-    private static int[] aim(UIContext context, UIFilmPanel panel, Area viewport)
-    {
-        if (panel.dashboard.orbitUI.isFreeLook())
-        {
-            return new int[] {viewport.mx(), viewport.my()};
-        }
-
-        return new int[] {context.mouseX, context.mouseY};
-    }
-
-    /** Where a body in hand is drawn: its centre and its turn, or null when it is not in hand */
-    public static float[] heldPose(Replay replay)
-    {
-        if (replay == null || replay != grabbed || limb)
-        {
-            return null;
-        }
-
-        return new float[] {point.x, point.y, point.z, turn.x, turn.y, turn.z, turn.w};
     }
 
     /** Gives the player one of the tools: straight into a free slot in creative, through the give command otherwise */
@@ -198,8 +188,20 @@ public final class PhysicsToolController
         return true;
     }
 
-    /* The mouse ray */
+    /* Aiming */
 
+    /** Where the tool aims: the mouse, or the middle of the picture while the mouse is locked into looking around */
+    private static int[] aim(UIContext context, UIFilmPanel panel, Area viewport)
+    {
+        if (panel.dashboard.orbitUI.isFreeLook())
+        {
+            return new int[] {viewport.mx(), viewport.my()};
+        }
+
+        return new int[] {context.mouseX, context.mouseY};
+    }
+
+    /** The mouse ray: where it starts in the world, and the way it goes */
     private static Vector3f[] ray(UIFilmPanel panel, Area viewport, int mouseX, int mouseY)
     {
         Camera camera = panel.getCamera();
@@ -227,10 +229,130 @@ public final class PhysicsToolController
             return null;
         }
 
-        float x = clip.x / clip.w;
-        float y = clip.y / clip.w;
+        return new float[] {viewport.x + (clip.x / clip.w + 1F) / 2F * viewport.w, viewport.y + (1F - clip.y / clip.w) / 2F * viewport.h};
+    }
 
-        return new float[] {viewport.x + (x + 1F) / 2F * viewport.w, viewport.y + (1F - y) / 2F * viewport.h};
+    /** The physics scene the preview draws, or null when there is none (physics off, no Jolt, nothing simulated) */
+    private static FilmScene scene(UIFilmPanel panel)
+    {
+        return panel.getController() == null || panel.getController().editorController == null ? null : FilmScenes.get(panel.getController().editorController);
+    }
+
+    /**
+     * The movable body nearest along the ray: every shape of every body the engine is simulating is
+     * tested as the box it is drawn as in the debug overlay, where the body stands on the frame being drawn.
+     */
+    private static Hit pick(UIFilmPanel panel, Vector3f origin, Vector3f direction)
+    {
+        FilmScene scene = scene(panel);
+        Film film = panel.getData();
+
+        if (scene == null || film == null)
+        {
+            return null;
+        }
+
+        Map<String, IEntity> entities = panel.getController().editorController.getEntities();
+        float transition = MinecraftClient.getInstance().getTickDelta();
+        Vector3f local = new Vector3f(
+            (float) (origin.x - scene.getOriginX()),
+            (float) (origin.y - scene.getOriginY()),
+            (float) (origin.z - scene.getOriginZ()));
+        Hit best = null;
+
+        for (SceneBody body : scene.getBodies())
+        {
+            if (!body.movable || body.owner == null || !body.isKnown())
+            {
+                continue;
+            }
+
+            Vector3f position = body.getPosition(transition, new Vector3f());
+            Quaternionf rotation = body.getRotation(transition, new Quaternionf());
+
+            for (SceneBody.Shape shape : body.getShapes())
+            {
+                Vector3f center = rotation.transform(new Vector3f(shape.offset())).add(position);
+                Quaternionf turn = new Quaternionf(rotation).mul(shape.rotation());
+                float t = rayBox(local, direction, center, turn, shape.half());
+
+                if (t < 0F || (best != null && t >= best.distance()))
+                {
+                    continue;
+                }
+
+                Replay replay = replayOf(film, entities, body.owner);
+
+                if (replay != null)
+                {
+                    Vector3f world = new Vector3f(center).add((float) scene.getOriginX(), (float) scene.getOriginY(), (float) scene.getOriginZ());
+                    float size = Math.max(shape.half().x, Math.max(shape.half().y, shape.half().z));
+
+                    best = new Hit(body, replay, world, size, t);
+                }
+            }
+        }
+
+        return best;
+    }
+
+    /** The distance along the ray to a turned box, or -1 when the ray misses it */
+    private static float rayBox(Vector3f origin, Vector3f direction, Vector3f center, Quaternionf rotation, Vector3f half)
+    {
+        Quaternionf inverse = new Quaternionf(rotation).conjugate();
+        Vector3f o = inverse.transform(new Vector3f(origin).sub(center));
+        Vector3f d = inverse.transform(new Vector3f(direction));
+        float near = Float.NEGATIVE_INFINITY;
+        float far = Float.POSITIVE_INFINITY;
+
+        for (int axis = 0; axis < 3; axis++)
+        {
+            float oa = o.get(axis);
+            float da = d.get(axis);
+            float ha = Math.max(half.get(axis), 0.05F);
+
+            if (Math.abs(da) < 1.0e-6F)
+            {
+                if (oa < -ha || oa > ha)
+                {
+                    return -1F;
+                }
+
+                continue;
+            }
+
+            float t1 = (-ha - oa) / da;
+            float t2 = (ha - oa) / da;
+
+            near = Math.max(near, Math.min(t1, t2));
+            far = Math.min(far, Math.max(t1, t2));
+        }
+
+        if (near > far || far < 0F)
+        {
+            return -1F;
+        }
+
+        return Math.max(near, 0F);
+    }
+
+    private static Replay replayOf(Film film, Map<String, IEntity> entities, IEntity entity)
+    {
+        for (Map.Entry<String, IEntity> entry : entities.entrySet())
+        {
+            if (entry.getValue() == entity)
+            {
+                for (Replay replay : film.replays.getList())
+                {
+                    if (replay.getId().equals(entry.getKey()))
+                    {
+                        return replay;
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     /* Input */
@@ -239,7 +361,6 @@ public final class PhysicsToolController
     {
         Tool tool = tool();
         Film film = panel.getData();
-
         int[] aim = aim(context, panel, viewport);
 
         if (tool == Tool.NONE || film == null || !viewport.isInside(aim[0], aim[1]) || context.mouseButton > 1)
@@ -250,94 +371,55 @@ public final class PhysicsToolController
         Vector3f[] ray = ray(panel, viewport, aim[0], aim[1]);
         int tick = panel.getCursor();
 
+        if (tool == Tool.PHYSICS && context.mouseButton == 1 && grabbed != null)
+        {
+            /* The right button while holding: the held body stays where it is */
+            freeze(panel, grabbed, tick);
+            grabbed = null;
+
+            return true;
+        }
+
+        Hit hit = pick(panel, ray[0], ray[1]);
+
+        if (hit == null)
+        {
+            say(scene(panel) == null ? UIKeys.FILM_PHYSICS_TOOL_NO_SCENE : UIKeys.FILM_PHYSICS_TOOL_MISSED);
+
+            return true;
+        }
+
         if (tool == Tool.PHYSICS)
         {
-            if (context.mouseButton == 1 && grabbed != null)
+            if (context.mouseButton == 1)
             {
-                if (limb)
-                {
-                    PhysicsStudio.freezeLive(film, grabbed, tick);
-                    grabbed = null;
-                    limb = false;
-                    panel.replayEditor.updateChannelsList();
-                }
-                else
-                {
-                    freeze(panel, grabbed, tick);
-                    grabbed = null;
-                }
-
-                return true;
+                freeze(panel, hit, tick);
             }
-
-            if (context.mouseButton == 0)
+            else if (Window.isAltPressed() && hit.body().bone != null)
             {
-                PhysicsStudio.Hit hit = PhysicsStudio.pick(film, new Vector3d(ray[0].x, ray[0].y, ray[0].z), ray[1], tick);
-
-                if (hit != null)
-                {
-                    grabbed = hit.replay();
-                    distance = Math.max(MIN_DISTANCE, hit.distance() + 0.01F);
-                    centerY = hit.centerY();
-                    point.set(hit.pose()[0], hit.pose()[1], hit.pose()[2]);
-                    turn.set(hit.pose()[3], hit.pose()[4], hit.pose()[5], hit.pose()[6]);
-                    targetPoint.set(point);
-                    targetTurn.set(turn);
-                    smoothedAt = System.nanoTime();
-                    velocity.zero();
-                    movedAt = System.nanoTime();
-                    lastMouseX = aim[0];
-                    lastMouseY = aim[1];
-                    distance = ray[0].distance(point);
-
-                    /* A ragdoll is held by the limb the ray met, and the rest of it swings after the hand */
-                    limb = hit.limb() && PhysicsStudio.beginLive(film, grabbed, hit.body(), tick);
-                    liveAt = System.nanoTime();
-                }
-
-                return true;
+                tear(panel, hit, tick, ray[1]);
+            }
+            else
+            {
+                grabbed = hit;
+                distance = Math.max(MIN_DISTANCE, ray[0].distance(hit.center()));
+                target.set(hit.center());
             }
 
             return true;
         }
 
-        /* The gravity gun: the right button pulls, the left one launches */
-        Vector3f forward = new Vector3f(ray[1]);
+        /* The gravity gun: the left button launches the way the camera looks, the right one pulls towards it */
+        Vector3f way = context.mouseButton == 0
+            ? new Vector3f(ray[1])
+            : new Vector3f(ray[0]).sub(hit.center()).normalize();
 
-        if (context.mouseButton == 1)
-        {
-            PhysicsStudio.Hit hit = PhysicsStudio.pick(film, new Vector3d(ray[0].x, ray[0].y, ray[0].z), ray[1], tick);
-
-            if (hit != null)
-            {
-                Vector3f front = new Vector3f(ray[0]).add(new Vector3f(forward).mul(HOLD_DISTANCE));
-
-                keyPose(hit.replay(), tick, front, new Quaternionf(hit.pose()[3], hit.pose()[4], hit.pose()[5], hit.pose()[6]), hit.centerY());
-                keyAnimation(hit.replay(), tick, 1F);
-                panel.replayEditor.updateChannelsList();
-            }
-
-            return true;
-        }
-
-        PhysicsStudio.Hit hit = PhysicsStudio.pick(film, new Vector3d(ray[0].x, ray[0].y, ray[0].z), ray[1], tick);
-
-        if (hit != null)
-        {
-            Replay replay = hit.replay();
-            Vector3f push = new Vector3f(forward).mul(LAUNCH_SPEED);
-
-            keyAnimation(replay, tick + 1, 0F);
-            PhysicsStudio.push(replay, tick + 1, push.x, push.y, push.z);
-            flash.set(hit.pose()[0], hit.pose()[1], hit.pose()[2]);
-            flashAt = System.nanoTime();
-            panel.replayEditor.updateChannelsList();
-        }
+        push(panel, hit, tick, way, context.mouseButton == 0 ? LAUNCH_SPEED : PULL_SPEED);
 
         return true;
     }
 
-    /** Letting go of the left button drops what the physics gun holds, with the speed it was being moved at */
+    /** Letting go of the left button yanks what the physics gun holds towards where it was dragged */
     public static boolean mouseReleased(UIContext context, UIFilmPanel panel)
     {
         if (grabbed == null || context.mouseButton != 0)
@@ -345,30 +427,16 @@ public final class PhysicsToolController
             return false;
         }
 
-        Replay replay = grabbed;
-        int tick = panel.getCursor();
+        Hit hit = grabbed;
+        Vector3f way = new Vector3f(target).sub(hit.center());
+        float length = way.length();
 
         grabbed = null;
 
-        if (limb)
+        if (length >= MIN_YANK)
         {
-            /* A limb let go without a freeze only swung for the look of it; the timeline is as it was */
-            limb = false;
-            PhysicsStudio.endLive();
-
-            return true;
+            push(panel, hit, panel.getCursor(), way.div(length), Math.min(MAX_SPEED, length * YANK_PER_BLOCK));
         }
-
-        keyPose(replay, tick, point, turn, centerY);
-        keyAnimation(replay, tick, 1F);
-        keyAnimation(replay, tick + 1, 0F);
-
-        if (velocity.lengthSquared() > 0.25F)
-        {
-            PhysicsStudio.push(replay, tick + 1, velocity.x, velocity.y, velocity.z);
-        }
-
-        panel.replayEditor.updateChannelsList();
 
         return true;
     }
@@ -385,62 +453,147 @@ public final class PhysicsToolController
         return true;
     }
 
-    /** Right button while holding: the body stays where it is, keyed and held there */
-    private static void freeze(UIFilmPanel panel, Replay replay, int tick)
+    /* What the tools write */
+
+    /**
+     * An impulse clip on the cursor tick, aimed at the hit body alone: shoving along {@code way} at
+     * {@code speed} blocks a second, reaching just past the shape that was hit (a whole crate, or the
+     * one limb a ragdoll was taken by, which is what makes it spin).
+     */
+    private static void push(UIFilmPanel panel, Hit hit, int tick, Vector3f way, float speed)
     {
-        keyPose(replay, tick, point, turn, centerY);
-        keyAnimation(replay, tick, 1F);
-        panel.replayEditor.updateChannelsList();
+        Replay replay = hit.replay();
+        int local = replay.getTick(tick);
+        ImpulseActionClip clip = new ImpulseActionClip();
+
+        clip.tick.set(local);
+        clip.duration.set(1);
+        clip.point.set(new Point(hit.center().x, hit.center().y, hit.center().z));
+        clip.radial.set(false);
+        clip.direction.set(new Point(way.x, way.y, way.z));
+        clip.strength.set(speed);
+        clip.radius.set(hit.size() + 0.75F);
+        clip.onlyThisReplay.set(true);
+
+        BaseValue.edit(replay, (r) ->
+        {
+            release(r, hit.body().path, local);
+            clip.layer.set(r.actions.findFreeLayer(clip));
+            r.actions.addClip(clip);
+        });
+
+        done(panel, hit.center(), UIKeys.FILM_PHYSICS_TOOL_LAUNCHED);
     }
 
-    private static void keyPose(Replay replay, int tick, Vector3f center, Quaternionf rotation, float centerY)
+    /** A tear clip on the cursor tick for the ragdoll limb that was hit, kicked the way the camera looks */
+    private static void tear(UIFilmPanel panel, Hit hit, int tick, Vector3f way)
     {
-        Vector3f offset = new Quaternionf(rotation).transform(new Vector3f(0F, centerY, 0F));
-        Vector3f angles = new Quaternionf(rotation).getEulerAnglesYXZ(new Vector3f());
-        double yaw = -Math.toDegrees(angles.y);
+        Replay replay = hit.replay();
+        int local = replay.getTick(tick);
+        TearActionClip clip = new TearActionClip();
 
-        BaseValue.edit(replay.keyframes, (keyframes) ->
+        clip.tick.set(local);
+        clip.duration.set(1);
+        clip.bone.set(hit.body().bone);
+        clip.strength.set(TEAR_SPEED);
+        clip.direction.set(new Point(way.x, way.y, way.z));
+
+        BaseValue.edit(replay, (r) ->
         {
-            keyframes.x.insert(tick, (double) (center.x - offset.x));
-            keyframes.y.insert(tick, (double) (center.y - offset.y));
-            keyframes.z.insert(tick, (double) (center.z - offset.z));
-            keyframes.yaw.insert(tick, yaw);
-            keyframes.bodyYaw.insert(tick, yaw);
+            clip.layer.set(r.actions.findFreeLayer(clip));
+            r.actions.addClip(clip);
         });
+
+        done(panel, hit.center(), UIKeys.FILM_PHYSICS_TOOL_TORN.format(hit.body().bone));
     }
 
-    private static void keyAnimation(Replay replay, int tick, float value)
+    /** The body's simulated motion baked to keys through the cursor tick, so it holds the pose of that tick */
+    private static void freeze(UIFilmPanel panel, Hit hit, int tick)
     {
-        BaseValue.edit(replay.physics, (physics) ->
+        FilmScene scene = scene(panel);
+        PhysicsBake.Result result = scene == null ? null : scene.bake(hit.replay(), hit.body().path, tick);
+
+        if (result == null)
         {
-            KeyframeChannel<Double> channel = physics.animation;
+            say(UIKeys.FILM_PHYSICS_TOOL_NO_SCENE);
 
-            if (tick > 0 && channel.isEmpty())
-            {
-                channel.insert(0, 1D);
-            }
+            return;
+        }
 
-            channel.insert(tick, (double) value);
-        });
+        done(panel, hit.center(), UIKeys.FILM_PHYSICS_TOOL_FROZEN.format(result.keys()));
+    }
+
+    /**
+     * Lets the form at {@code path} go to physics on {@code local}, when its animation still holds it:
+     * the handle is keyed at its current value on the tick before and at 0 on the tick itself.
+     */
+    private static void release(Replay replay, String path, int local)
+    {
+        Form root = replay.form.get();
+        Form form = root == null ? null : FormUtils.getForm(root, path);
+
+        if (!(form instanceof IPhysicsForm physics))
+        {
+            return;
+        }
+
+        ValueFloat authority = physics.bbs_physics$getAuthority();
+        KeyframeChannel channel = replay.properties.getOrCreate(root, FormUtils.getPropertyPath(authority));
+        float now = channel == null || channel.isEmpty() ? authority.get() : ((Number) channel.interpolate(local)).floatValue();
+
+        if (now <= 0F)
+        {
+            return;
+        }
+
+        if (channel == null)
+        {
+            authority.set(0F);
+
+            return;
+        }
+
+        if (local > 0)
+        {
+            channel.insert(local - 1, now);
+        }
+
+        channel.insert(local, 0F);
+    }
+
+    private static void done(UIFilmPanel panel, Vector3f at, IKey text)
+    {
+        flash.set(at);
+        flashAt = System.nanoTime();
+        say(text);
+
+        if (panel.replayEditor != null)
+        {
+            panel.replayEditor.updateChannelsList();
+        }
+    }
+
+    private static void say(IKey text)
+    {
+        message = text.get();
+        messageAt = System.nanoTime();
     }
 
     /* Every frame */
 
-    /** Moves what is in hand after the mouse and draws the beam and the flash */
+    /** Moves the grab's target after the mouse and draws the beam, the flash, the sight and the hint */
     public static void render(UIContext context, UIFilmPanel panel, Area viewport)
     {
         Tool tool = tool();
 
         if (tool == Tool.NONE)
         {
-            drop();
+            grabbed = null;
 
             return;
         }
 
         int[] aim = aim(context, panel, viewport);
-        boolean locked = panel.dashboard.orbitUI.isFreeLook();
-
         int color = tool == Tool.PHYSICS ? PHYSICS_COLOR : GRAVITY_COLOR;
         float[] muzzle = {viewport.ex() - viewport.w * 0.18F, viewport.ey() - viewport.h * 0.1F};
 
@@ -448,72 +601,22 @@ public final class PhysicsToolController
         {
             Vector3f[] ray = ray(panel, viewport, aim[0], aim[1]);
 
-            if (Window.isShiftPressed())
+            target.set(new Vector3f(ray[0]).add(new Vector3f(ray[1]).mul(distance)));
+
+            float[] start = project(panel, viewport, grabbed.center());
+            float[] end = project(panel, viewport, target);
+
+            if (start != null)
             {
-                /* Shift turns the body about the camera's up and right instead of moving it */
-                float dx = (aim[0] - lastMouseX) * 0.02F;
-                float dy = (aim[1] - lastMouseY) * 0.02F;
+                beam(context, muzzle, start, color);
+                ring(context, start[0], start[1], 5F, Colors.setA(color, 0.9F));
 
-                targetTurn.premul(new Quaternionf().rotateY(dx)).premul(new Quaternionf().rotateX(dy)).normalize();
-            }
-            else
-            {
-                targetPoint.set(new Vector3f(ray[0]).add(new Vector3f(ray[1]).mul(distance)));
-            }
-
-            {
-                /* The spring: the share of the gap closed this frame depends on the frame's length, not its count */
-                long clock = System.nanoTime();
-                float frame = Math.min(0.1F, Math.max(0F, (clock - smoothedAt) / 1.0E9F));
-                float ease = 1F - (float) Math.exp(-frame * 22F);
-
-                smoothedAt = clock;
-                turn.slerp(targetTurn, ease).normalize();
-
-                Vector3f next = new Vector3f(point).lerp(targetPoint, ease);
-                long now = System.nanoTime();
-                float seconds = Math.max(1e-3F, (now - movedAt) / 1.0E9F);
-
-                if (seconds > 0.004F)
+                if (end != null)
                 {
-                    velocity.set(next).sub(point).div(seconds).mul(0.5F).add(new Vector3f(velocity).mul(0.5F));
-
-                    if (velocity.length() > 40F)
-                    {
-                        velocity.normalize(40F);
-                    }
-
-                    movedAt = now;
+                    /* The pull: a dotted line from the middle of the body to where it will be yanked */
+                    line(context, start, end, Colors.setA(0xFFFFFF, 0.6F));
+                    ring(context, end[0], end[1], 3F, Colors.setA(0xFFFFFF, 0.9F));
                 }
-
-                point.set(next);
-            }
-
-            lastMouseX = aim[0];
-            lastMouseY = aim[1];
-
-            if (limb)
-            {
-                /* The live world runs at the film's own pace, a tick every twentieth of a second */
-                long now = System.nanoTime();
-                int steps = (int) Math.min(3, (now - liveAt) / 50_000_000L);
-
-                for (int i = 0; i < steps; i++)
-                {
-                    PhysicsStudio.stepLive(new float[] {point.x, point.y, point.z, turn.x, turn.y, turn.z, turn.w});
-                }
-
-                if (steps > 0)
-                {
-                    liveAt = now;
-                }
-            }
-
-            float[] end = project(panel, viewport, point);
-
-            if (end != null)
-            {
-                beam(context, muzzle, end, color);
             }
         }
 
@@ -525,16 +628,13 @@ public final class PhysicsToolController
 
             if (at != null)
             {
-                float radius = 6F + age * 80F;
-                int alpha = Colors.setA(color, 1F - age / 0.35F);
-
                 beam(context, muzzle, at, color);
-                ring(context, at[0], at[1], radius, alpha);
+                ring(context, at[0], at[1], 6F + age * 80F, Colors.setA(color, 1F - age / 0.35F));
             }
         }
 
         /* With the mouse free the pointer itself aims; locked into looking around, a sight marks the middle */
-        if (locked)
+        if (panel.dashboard.orbitUI.isFreeLook())
         {
             int sight = Colors.setA(color, 0.9F);
             int cx = aim[0];
@@ -545,51 +645,17 @@ public final class PhysicsToolController
             context.batcher.box(cx, cy - 6, cx + 1, cy - 2, sight);
             context.batcher.box(cx, cy + 3, cx + 1, cy + 7, sight);
         }
-    }
 
-    /** The collision boxes and the joints of the simulated bodies, see-through, over the picture */
-    public static void renderShapes(UIContext context, UIFilmPanel panel, Area viewport)
-    {
-        if (!PhysicsStudio.showShapes || panel.getData() == null)
+        String hint = (tool == Tool.PHYSICS ? UIKeys.FILM_PHYSICS_TOOL_HINT_PHYSICS : UIKeys.FILM_PHYSICS_TOOL_HINT_GRAVITY).get();
+        int width = context.batcher.getFont().getWidth(hint);
+
+        context.batcher.textCard(hint, viewport.mx() - width / 2F, viewport.ey() - 20, Colors.WHITE, Colors.A50);
+
+        if (message != null && (System.nanoTime() - messageAt) / 1.0E9F < 2.5F)
         {
-            return;
-        }
+            int messageWidth = context.batcher.getFont().getWidth(message);
 
-        java.util.List<float[]> joints = new java.util.ArrayList<>();
-        int edge = Colors.setA(0x40E0A0, 0.7F);
-
-        for (float[] shape : PhysicsStudio.shapes(panel.getData(), panel.getCursor(), joints))
-        {
-            Quaternionf q = new Quaternionf(shape[3], shape[4], shape[5], shape[6]);
-            float[][] corners = new float[8][];
-
-            for (int i = 0; i < 8; i++)
-            {
-                Vector3f local = new Vector3f((i & 1) == 0 ? -shape[7] : shape[7], (i & 2) == 0 ? -shape[8] : shape[8], (i & 4) == 0 ? -shape[9] : shape[9]);
-                Vector3f world = q.transform(local).add(shape[0], shape[1], shape[2]);
-
-                corners[i] = project(panel, viewport, world);
-            }
-
-            int[][] edges = {{0, 1}, {2, 3}, {4, 5}, {6, 7}, {0, 2}, {1, 3}, {4, 6}, {5, 7}, {0, 4}, {1, 5}, {2, 6}, {3, 7}};
-
-            for (int[] e : edges)
-            {
-                if (corners[e[0]] != null && corners[e[1]] != null)
-                {
-                    line(context, corners[e[0]], corners[e[1]], edge);
-                }
-            }
-        }
-
-        for (float[] joint : joints)
-        {
-            float[] at = project(panel, viewport, new Vector3f(joint[0], joint[1], joint[2]));
-
-            if (at != null)
-            {
-                context.batcher.box(at[0] - 2F, at[1] - 2F, at[0] + 2F, at[1] + 2F, Colors.setA(0xFFD040, 0.9F));
-            }
+            context.batcher.textCard(message, viewport.mx() - messageWidth / 2F, viewport.ey() - 38, Colors.setA(color, 1F), Colors.A50);
         }
     }
 
@@ -597,7 +663,7 @@ public final class PhysicsToolController
     {
         float dx = b[0] - a[0];
         float dy = b[1] - a[1];
-        int steps = (int) Math.min(400, Math.max(Math.abs(dx), Math.abs(dy)));
+        int steps = (int) Math.min(200, Math.max(Math.abs(dx), Math.abs(dy)) / 4F);
 
         for (int i = 0; i <= steps; i++)
         {
@@ -605,7 +671,7 @@ public final class PhysicsToolController
             float x = a[0] + dx * t;
             float y = a[1] + dy * t;
 
-            context.batcher.box(x, y, x + 1F, y + 1F, color);
+            context.batcher.box(x, y, x + 2F, y + 2F, color);
         }
     }
 

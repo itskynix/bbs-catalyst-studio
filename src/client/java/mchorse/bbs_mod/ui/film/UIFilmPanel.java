@@ -1923,6 +1923,27 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
             UIOverlay.addOverlay(this.getContext(), new UIUndoHistoryOverlay(UIKeys.FILM_HISTORY_TITLE, this.getUndoHandler().getUndoManager(), this::getData, null), 200, 0.6F);
         });
 
+        /* The film's own physics settings: gravity, speed, precision and how much of the world takes part */
+        if (mchorse.bbs_mod.physics.BBSPhysics.integrated())
+        {
+            Film film = this.data;
+
+            menu.action(Icons.PHYSICS, mchorse.bbs_mod.physics.client.forms.PhysicsKeys.FILM_PHYSICS, () ->
+                UIOverlay.addOverlay(this.getContext(), new mchorse.bbs_mod.physics.client.scene.UIFilmPhysicsOverlayPanel(film)));
+
+            /* The hand tools in the preview, and the same two as items for the world */
+            mchorse.bbs_mod.physics.PhysicsToolController.Tool picked = mchorse.bbs_mod.physics.PhysicsToolController.picked();
+
+            menu.action(picked == mchorse.bbs_mod.physics.PhysicsToolController.Tool.PHYSICS ? Icons.CHECKMARK : Icons.MAGNET, UIKeys.FILM_PHYSICS_TOOL_PHYSICS,
+                () -> mchorse.bbs_mod.physics.PhysicsToolController.pick(mchorse.bbs_mod.physics.PhysicsToolController.Tool.PHYSICS));
+            menu.action(picked == mchorse.bbs_mod.physics.PhysicsToolController.Tool.GRAVITY ? Icons.CHECKMARK : Icons.SHARD, UIKeys.FILM_PHYSICS_TOOL_GRAVITY,
+                () -> mchorse.bbs_mod.physics.PhysicsToolController.pick(mchorse.bbs_mod.physics.PhysicsToolController.Tool.GRAVITY));
+            menu.action(Icons.DOWNLOAD, UIKeys.FILM_PHYSICS_GIVE_PHYSICS,
+                () -> mchorse.bbs_mod.physics.PhysicsToolController.give(mchorse.bbs_mod.items.PhysicsToolItem.Kind.PHYSICS));
+            menu.action(Icons.DOWNLOAD, UIKeys.FILM_PHYSICS_GIVE_GRAVITY,
+                () -> mchorse.bbs_mod.physics.PhysicsToolController.give(mchorse.bbs_mod.items.PhysicsToolItem.Kind.GRAVITY));
+        }
+
         menu.action(Icons.ARROW_RIGHT, UIKeys.FILM_MOVE_TITLE, () ->
         {
             UIFilmMoveOverlayPanel panel = new UIFilmMoveOverlayPanel((vector) ->

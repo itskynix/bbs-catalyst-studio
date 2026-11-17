@@ -437,6 +437,11 @@ public class BBSMod implements ModInitializer
             });
         events.register(new qualet.irlite.IrlightsAddon());
 
+        if (mchorse.bbs_mod.physics.BBSPhysics.integrated())
+        {
+            events.register(new mchorse.bbs_mod.physics.BBSPhysicsAddon());
+        }
+
         actions = new ActionManager();
 
         originalSourcePack = new ExternalAssetsSourcePack(Link.ASSETS, assetsFolder).providesFiles();

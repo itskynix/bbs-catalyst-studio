@@ -596,7 +596,6 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
         if (stencilMap == null && !this.renderingArm && this.form != null)
         {
             ModelPhysicsDebug.render(newStack, model.model, this.form, target.getAge(), "");
-            mchorse.bbs_mod.physics.RagdollShapesDebug.render(newStack, model.model, this.form);
         }
 
         gameRenderer.getLightmapTextureManager().disable();

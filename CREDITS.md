@@ -5,7 +5,7 @@ BBS CS (Catalyst Studio) stands on the work of the people below.
 | Who | What they made | Licence |
 | --- | --- | --- |
 | **McHorse** | **BBS (Blockbuster Studio)**, the original creator. Everything this studio is built on. | MIT |
-| **Wemppy** | **BBS FS (Fabric Studio)**, the port and the foundation of the Fabric version this project continues from. | See `LICENSE.md` |
+| **Wemppy** | **BBS FS & BBS Physics Addon**: BBS FS, the port and the foundation of the Fabric version this project continues from, and the BBS Physics Engine add-on, integrated into BBS CS as its physics engine. | See `LICENSE.md`; physics engine MIT |
 | **qualett** | **IRLight / irl-core**, the dynamic shader lighting architecture, shadow engine, and GPU cluster buffer pipeline. | MIT |
 | **Kynix** | **BBS CS (Catalyst Studio)**, the fork and its developer. | MIT (see `LICENSE.md`) |
 

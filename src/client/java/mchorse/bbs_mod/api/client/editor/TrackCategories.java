@@ -67,12 +67,6 @@ public final class TrackCategories
             }
         }
 
-        /* The physics studio's own tracks, which belong to the replay and not to a form, live on the Physics tab */
-        if (!owned && id.startsWith("physics_"))
-        {
-            return TrackCategory.PHYSICS;
-        }
-
         /* What is left is a plain property track — a curated replay channel (which belongs to no form)
          * or one of the form's own properties. */
         if (!owned)

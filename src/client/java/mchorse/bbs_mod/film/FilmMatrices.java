@@ -39,6 +39,17 @@ import org.joml.Vector3f;
  */
 public class FilmMatrices
 {
+    /**
+     * The anchor an actor rides on. In BBS CS it is the value on the actor's form (keyframed through the
+     * form's own anchor track), so this reads it from there, as it stands on the current frame.
+     */
+    public static Anchor getAnchor(IEntity entity)
+    {
+        mchorse.bbs_mod.forms.forms.Form form = entity == null ? null : entity.getForm();
+
+        return form == null ? null : form.anchor.get();
+    }
+
     public static Pair<Matrix4f, Float> getTotalMatrix(Map<String, IEntity> entities, Anchor value, Matrix4f defaultMatrix, double cx, double cy, double cz, float transition, int i)
     {
         return getTotalMatrix(entities, value, defaultMatrix, cx, cy, cz, transition, i, false);
@@ -208,18 +219,7 @@ public class FilmMatrices
         float bodyYaw = Lerps.lerp(entity.getPrevBodyYaw(), entity.getBodyYaw(), tickDelta);
 
         matrix.translate((float) x, (float) y, (float) z);
-
-        /* A replay the physics studio simulates turns the way its body does, which is more than a facing */
-        org.joml.Quaternionf turn = mchorse.bbs_mod.physics.PhysicsStudio.turnOf(entity, tickDelta);
-
-        if (turn != null)
-        {
-            matrix.rotate(turn);
-        }
-        else
-        {
-            matrix.rotateY(MathUtils.toRad(-bodyYaw));
-        }
+        matrix.rotateY(MathUtils.toRad(-bodyYaw));
 
         return matrix;
     }

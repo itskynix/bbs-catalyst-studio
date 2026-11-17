@@ -76,6 +76,39 @@ The interface blur (`InterfaceBlur`) is adapted from it; its MIT notice is in
 
 The physics studio runs on Jolt Physics (Jorrit Rouwe, MIT License) through the jolt-jni bindings (Stephen Gold, MIT License), shipped as jar-in-jar libraries with their native builds.
 
-## BBS Physics Engine — Wemppy
+## BBS Physics Engine (BBS FS Port & BBS Physics Addon) — Wemppy
 
-Parts of the physics studio are adapted from the BBS Physics Engine add-on by Wemppy, under the MIT License: the way the Jolt native library is unpacked and loaded, the velocity drive that pulls a body towards its animated pose, the ragdoll layout where every body is its bone's own pivot frame with its box placed inside it, and the pose applier that walks the model in its own space and gives every simulated bone an offset and an orientation in the renderer's order. The rest of the studio, its tabs, tracks, tools and items, is written for BBS CS.
+The physics engine of BBS CS is the BBS Physics Engine add-on by Wemppy, integrated whole into
+BBS CS under `mchorse.bbs_mod.physics` (common half in `src/main`, client half in `src/client`) and
+adapted to BBS CS's own API: the Jolt world and its native library loading, the recorded and cached
+film scene, rigid bodies, ragdolls with their joints and muscles, bone splitting and tearing, death
+impacts, chains, cloth, balloons, structure destruction, the Collision and Physics tabs of the form
+editor, the impulse, tear and death clips, the physics tracks of the dope sheet, baking to keyframes
+and the film physics settings. Its textures are kept under `assets/bbs_physics`. BBS CS adds on top
+of it: the physics and gravity gun tools and items, the crosshair menus of the clips' fields, and
+the fallback that gives an unmarked rigid body its own size (a block its own 1×1×1 outline).
+Licence: **MIT**.
+
+```
+MIT License
+
+Copyright (c) 2026 Wemppy
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```

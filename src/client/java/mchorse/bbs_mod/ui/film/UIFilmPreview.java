@@ -1281,7 +1281,6 @@ public class UIFilmPreview extends UIElement
         }
 
         this.placementGizmo.render(context, area);
-        mchorse.bbs_mod.physics.PhysicsToolController.renderShapes(context, this.panel, area);
         mchorse.bbs_mod.physics.PhysicsToolController.render(context, this.panel, area);
 
         context.batcher.unclip(context);

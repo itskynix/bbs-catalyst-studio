@@ -524,6 +524,11 @@ public class BBSModClient implements ClientModInitializer
         BBSMod.events.register(new qualet.irlite.client.IrlightsClientAddon());
         new qualet.irlite.client.IrliteClient().onInitializeClient();
 
+        if (mchorse.bbs_mod.physics.BBSPhysics.integrated())
+        {
+            BBSMod.events.register(new mchorse.bbs_mod.physics.client.BBSPhysicsClientAddon());
+        }
+
         AssetProvider provider = BBSMod.getProvider();
 
         textures = new TextureManager(provider);
@@ -742,6 +747,11 @@ public class BBSModClient implements ClientModInitializer
 
         StructureWand.register();
         mchorse.bbs_mod.physics.InWorldPhysicsTool.register();
+
+        if (mchorse.bbs_mod.physics.BBSPhysics.integrated())
+        {
+            new mchorse.bbs_mod.physics.client.BBSPhysicsClient().onInitializeClient();
+        }
 
         WorldRenderEvents.START.register((context) ->
         {
