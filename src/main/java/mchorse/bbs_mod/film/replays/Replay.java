@@ -68,6 +68,19 @@ public class Replay extends ValueGroup
     /** Turning the head to a passing character and back, worked out while playing; see {@link ReplayCrowdGlance} */
     public final ReplayCrowdGlance crowdGlance = new ReplayCrowdGlance("crowd_glance");
 
+    /* Interactive openables: while this replay is being recorded, a door, trapdoor, fence gate or chest is
+     * opened by holding use and moving the mouse, a share of the way at a time, instead of at once */
+    public final ValueBoolean interactiveOpenables = new ValueBoolean("interactive_openables", false);
+    /** How far an openable swings when fully open, in degrees while it is being moved */
+    public final ValueFloat openableAngle = new ValueFloat("openable_angle", 90F, 15F, 135F);
+    /** How far it must be opened (0.1 to 0.9 of the way) for letting go to finish the opening; below it closes again */
+    public final ValueFloat openableThreshold = new ValueFloat("openable_threshold", 0.5F, 0.1F, 0.9F);
+
+    /* Locomotion smoothing: the actor speeds up, turns and stops with some inertia on the screen, and lands exactly on its keyed place */
+    public final ValueBoolean locomotionSmoothing = new ValueBoolean("locomotion_smoothing", false);
+    /** The time the smoothing takes to settle, in seconds */
+    public final ValueFloat locomotionTime = new ValueFloat("locomotion_time", 0.3F, 0.05F, 2F);
+
     public final ValueBoolean axesPreview = new ValueBoolean("axes_preview", false);
     public final ValueString axesPreviewBone = new ValueString("axes_preview_bone", "");
 
@@ -101,6 +114,12 @@ public class Replay extends ValueGroup
         this.add(this.lookAtTarget);
         this.add(this.lookAtPoint);
         this.add(this.crowdGlance);
+
+        this.add(this.interactiveOpenables);
+        this.add(this.openableAngle);
+        this.add(this.openableThreshold);
+        this.add(this.locomotionSmoothing);
+        this.add(this.locomotionTime);
 
         this.add(this.axesPreview);
         this.add(this.axesPreviewBone);

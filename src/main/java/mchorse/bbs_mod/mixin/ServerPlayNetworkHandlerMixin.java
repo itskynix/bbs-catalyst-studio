@@ -2,6 +2,7 @@ package mchorse.bbs_mod.mixin;
 
 import com.mojang.brigadier.ParseResults;
 import mchorse.bbs_mod.BBSMod;
+import mchorse.bbs_mod.actions.OpenableSwings;
 import mchorse.bbs_mod.actions.types.blocks.InteractBlockActionClip;
 import mchorse.bbs_mod.actions.types.chat.CommandActionClip;
 import net.minecraft.item.ItemStack;
@@ -42,9 +43,19 @@ public class ServerPlayNetworkHandlerMixin
     @Redirect(method = "onPlayerInteractBlock", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/network/ServerPlayerInteractionManager;interactBlock(Lnet/minecraft/server/network/ServerPlayerEntity;Lnet/minecraft/world/World;Lnet/minecraft/item/ItemStack;Lnet/minecraft/util/Hand;Lnet/minecraft/util/hit/BlockHitResult;)Lnet/minecraft/util/ActionResult;"))
     private ActionResult redirectOnBlockInteract(ServerPlayerInteractionManager manager, ServerPlayerEntity player, World world, ItemStack stack, Hand hand, BlockHitResult hitResult)
     {
+        OpenableSwings.Swing swing = OpenableSwings.take(this.player, hitResult.getBlockPos());
+
         BBSMod.getActions().addAction(this.player, () ->
         {
             InteractBlockActionClip clip = new InteractBlockActionClip();
+
+            if (swing != null)
+            {
+                clip.swingFrom.set(swing.from());
+                clip.swingTo.set(swing.to());
+                clip.swingTicks.set(swing.ticks());
+                clip.swingAngle.set(swing.angle());
+            }
 
             clip.hit.setHitResult(hitResult);
             clip.hand.set(hand == Hand.MAIN_HAND);

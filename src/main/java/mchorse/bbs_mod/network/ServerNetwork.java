@@ -110,6 +110,9 @@ public class ServerNetwork
     /** The physics and gravity guns in the world: grab, move, let go, freeze, launch */
     public static final Identifier SERVER_PHYSICS_TOOL = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s19"));
 
+    /** How a hand-opened door, trapdoor, gate or chest was swung, sent just before the click that finishes it */
+    public static final Identifier SERVER_OPENABLE_SWING = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s20"));
+
     /* Outgoing (server -> client) chunk numbering only ever needs to be unique per logical
      * message, never per player, so one shared instance is fine here - the risk this class used
      * to have was entirely on the RECEIVING side (see below). */
@@ -185,6 +188,7 @@ public class ServerNetwork
         BBSNetworking.registerServerReceiver(SERVER_REPLAY_SYNC, (server, player, buf) -> handleReplaySync(server, player, buf));
         BBSNetworking.registerServerReceiver(SERVER_PHYSICS_TOOL, (server, player, buf) -> mchorse.bbs_mod.items.PhysicsToolServer.handle(server, player, buf));
         mchorse.bbs_mod.items.PhysicsToolServer.register();
+        BBSNetworking.registerServerReceiver(SERVER_OPENABLE_SWING, (server, player, buf) -> mchorse.bbs_mod.actions.OpenableSwings.receive(player, buf));
     }
 
     /* What each player was last told, and when: the same word is not said again within a few

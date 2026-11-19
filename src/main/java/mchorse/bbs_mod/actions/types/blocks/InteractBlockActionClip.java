@@ -6,6 +6,8 @@ import mchorse.bbs_mod.actions.values.ValueBlockHitResult;
 import mchorse.bbs_mod.film.Film;
 import mchorse.bbs_mod.film.replays.Replay;
 import mchorse.bbs_mod.settings.values.numeric.ValueBoolean;
+import mchorse.bbs_mod.settings.values.numeric.ValueFloat;
+import mchorse.bbs_mod.settings.values.numeric.ValueInt;
 import mchorse.bbs_mod.utils.clips.Clip;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.util.Hand;
@@ -16,12 +18,24 @@ public class InteractBlockActionClip extends ActionClip
     public final ValueBlockHitResult hit = new ValueBlockHitResult("hit");
     public final ValueBoolean hand = new ValueBoolean("hand", true);
 
+    /* A door, trapdoor, gate or chest opened by hand a share of the way at a time (see the replay's interactive openables):
+     * how open it was when the hold began and how open it ends (0 to 1), how many ticks before this one the hold began, and
+     * the angle it swung to. A negative start means an ordinary, instant interaction. */
+    public final ValueFloat swingFrom = new ValueFloat("swing_from", -1F, -1F, 1F);
+    public final ValueFloat swingTo = new ValueFloat("swing_to", 0F, 0F, 1F);
+    public final ValueInt swingTicks = new ValueInt("swing_ticks", 0, 0, 2400);
+    public final ValueFloat swingAngle = new ValueFloat("swing_angle", 90F, 15F, 135F);
+
     public InteractBlockActionClip()
     {
         super();
 
         this.add(this.hit);
         this.add(this.hand);
+        this.add(this.swingFrom);
+        this.add(this.swingTo);
+        this.add(this.swingTicks);
+        this.add(this.swingAngle);
     }
 
     @Override

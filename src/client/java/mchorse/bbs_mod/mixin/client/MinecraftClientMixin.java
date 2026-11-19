@@ -42,7 +42,7 @@ public class MinecraftClientMixin
     @Inject(method = "doItemUse", at = @At("HEAD"), cancellable = true)
     public void physicsToolUse(CallbackInfo ci)
     {
-        if (mchorse.bbs_mod.physics.InWorldPhysicsTool.onUse())
+        if (mchorse.bbs_mod.physics.InWorldPhysicsTool.onUse() || mchorse.bbs_mod.film.OpenableAnimator.onUse())
         {
             ci.cancel();
         }

@@ -747,6 +747,7 @@ public class BBSModClient implements ClientModInitializer
 
         StructureWand.register();
         mchorse.bbs_mod.physics.InWorldPhysicsTool.register();
+        mchorse.bbs_mod.film.OpenableAnimator.register();
 
         if (mchorse.bbs_mod.physics.BBSPhysics.integrated())
         {
@@ -765,6 +766,7 @@ public class BBSModClient implements ClientModInitializer
         {
             StructureWand.renderWorld(context);
             mchorse.bbs_mod.physics.InWorldPhysicsTool.renderWorld(context);
+            mchorse.bbs_mod.film.OpenableAnimator.render(context);
 
             if (!BBSRendering.isIrisShadersEnabled())
             {

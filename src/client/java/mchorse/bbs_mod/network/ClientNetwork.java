@@ -681,6 +681,19 @@ public class ClientNetwork
         BBSClientNetworking.send(ServerNetwork.SERVER_ZOOM, buf);
     }
 
+    public static void sendOpenableSwing(net.minecraft.util.math.BlockPos pos, float from, float to, int ticks, float angle)
+    {
+        PacketByteBuf buf = PacketByteBufs.create();
+
+        buf.writeBlockPos(pos);
+        buf.writeFloat(from);
+        buf.writeFloat(to);
+        buf.writeInt(ticks);
+        buf.writeFloat(angle);
+
+        BBSClientNetworking.send(ServerNetwork.SERVER_OPENABLE_SWING, buf);
+    }
+
     public static void sendPauseFilm(String filmId)
     {
         PacketByteBuf buf = PacketByteBufs.create();

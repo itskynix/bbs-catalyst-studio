@@ -859,6 +859,16 @@ public class UIKeys
     public static final IKey FILM_REPLAY_ACTOR_TOOLTIP = L10n.lang("bbs.ui.film.replay.actor-tooltip");
     public static final IKey FILM_REPLAY_ACTOR_PICKUP = L10n.lang("bbs.ui.film.replay.actor-pickup");
     public static final IKey FILM_REPLAY_ACTOR_PICKUP_TOOLTIP = L10n.lang("bbs.ui.film.replay.actor-pickup-tooltip");
+    public static final IKey FILM_REPLAY_INTERACTIVE_OPENABLES = L10n.lang("bbs.ui.film.replay.interactive_openables");
+    public static final IKey FILM_REPLAY_INTERACTIVE_OPENABLES_TOOLTIP = L10n.lang("bbs.ui.film.replay.interactive_openables-tooltip");
+    public static final IKey FILM_REPLAY_OPENABLE_ANGLE = L10n.lang("bbs.ui.film.replay.openable_angle");
+    public static final IKey FILM_REPLAY_OPENABLE_ANGLE_TOOLTIP = L10n.lang("bbs.ui.film.replay.openable_angle-tooltip");
+    public static final IKey FILM_REPLAY_OPENABLE_THRESHOLD = L10n.lang("bbs.ui.film.replay.openable_threshold");
+    public static final IKey FILM_REPLAY_OPENABLE_THRESHOLD_TOOLTIP = L10n.lang("bbs.ui.film.replay.openable_threshold-tooltip");
+    public static final IKey FILM_REPLAY_LOCOMOTION_SMOOTHING = L10n.lang("bbs.ui.film.replay.locomotion_smoothing");
+    public static final IKey FILM_REPLAY_LOCOMOTION_SMOOTHING_TOOLTIP = L10n.lang("bbs.ui.film.replay.locomotion_smoothing-tooltip");
+    public static final IKey FILM_REPLAY_LOCOMOTION_TIME = L10n.lang("bbs.ui.film.replay.locomotion_time");
+    public static final IKey FILM_REPLAY_LOCOMOTION_TIME_TOOLTIP = L10n.lang("bbs.ui.film.replay.locomotion_time-tooltip");
     public static final IKey FILM_REPLAY_ANIMATION_TO_POSE_GENERATE = L10n.lang("bbs.ui.film.replay.animation_to_pose.generate");
     public static final IKey FILM_REPLAY_ANIMATION_TO_POSE_LENGTH = L10n.lang("bbs.ui.film.replay.animation_to_pose.length");
     public static final IKey FILM_REPLAY_ANIMATION_TO_POSE_ONLY_KEYFRAMES = L10n.lang("bbs.ui.film.replay.animation_to_pose.only_keyframes");

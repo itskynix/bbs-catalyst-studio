@@ -9,6 +9,8 @@
         "GameRendererMixin",
         "MouseMixin",
         "EntityLookMixin",
+        "ChestBlockEntityAccessor",
+        "ChestLidAnimatorAccessor",
         "MinecraftClientMixin",
         "VehicleRideEyeMixin",
         "VehicleRidePushMixin",

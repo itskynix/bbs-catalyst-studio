@@ -18,7 +18,7 @@ public class EntityLookMixin
     @Inject(method = "changeLookDirection", at = @At("HEAD"), cancellable = true)
     private void bbs$physicsToolLook(double cursorDeltaX, double cursorDeltaY, CallbackInfo info)
     {
-        if ((Object) this == MinecraftClient.getInstance().player && InWorldPhysicsTool.consumeLook(cursorDeltaX, cursorDeltaY))
+        if ((Object) this == MinecraftClient.getInstance().player && (InWorldPhysicsTool.consumeLook(cursorDeltaX, cursorDeltaY) || mchorse.bbs_mod.film.OpenableAnimator.consumeLook(cursorDeltaX, cursorDeltaY)))
         {
             info.cancel();
         }

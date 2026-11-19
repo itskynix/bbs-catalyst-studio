@@ -78,6 +78,11 @@ public class UIReplayPropertiesPanel extends UIElement
     public UITrackpad relativeOffsetY;
     public UITrackpad relativeOffsetZ;
     public UIToggle axesPreview;
+    public UIToggle interactiveOpenables;
+    public UITrackpad openableAngle;
+    public UITrackpad openableThreshold;
+    public UIToggle locomotionSmoothing;
+    public UITrackpad locomotionTime;
     public UIButton pickAxesPreviewBone;
     public UICirculate lookAtMode;
     public UIButton lookAtTarget;
@@ -182,6 +187,16 @@ public class UIReplayPropertiesPanel extends UIElement
         this.actor.tooltip(UIKeys.FILM_REPLAY_ACTOR_TOOLTIP);
         this.actorPickup = this.bound(new UIToggle(UIKeys.FILM_REPLAY_ACTOR_PICKUP, (b) -> this.edit((replay) -> replay.actorPickup.set(b.getValue()))), (r) -> this.actorPickup.setValue(r.actorPickup.get()));
         this.actorPickup.tooltip(UIKeys.FILM_REPLAY_ACTOR_PICKUP_TOOLTIP);
+        this.interactiveOpenables = this.bound(new UIToggle(UIKeys.FILM_REPLAY_INTERACTIVE_OPENABLES, (b) -> this.edit((replay) -> replay.interactiveOpenables.set(b.getValue()))), (r) -> this.interactiveOpenables.setValue(r.interactiveOpenables.get()));
+        this.interactiveOpenables.tooltip(UIKeys.FILM_REPLAY_INTERACTIVE_OPENABLES_TOOLTIP);
+        this.openableAngle = this.bound(new UITrackpad((v) -> this.edit((replay) -> replay.openableAngle.set(v.floatValue()))), (r) -> this.openableAngle.setValue(r.openableAngle.get()));
+        this.openableAngle.limit(15, 135, false).tooltip(UIKeys.FILM_REPLAY_OPENABLE_ANGLE_TOOLTIP);
+        this.openableThreshold = this.bound(new UITrackpad((v) -> this.edit((replay) -> replay.openableThreshold.set(v.floatValue() / 100F))), (r) -> this.openableThreshold.setValue(r.openableThreshold.get() * 100F));
+        this.openableThreshold.limit(10, 90, false).tooltip(UIKeys.FILM_REPLAY_OPENABLE_THRESHOLD_TOOLTIP);
+        this.locomotionSmoothing = this.bound(new UIToggle(UIKeys.FILM_REPLAY_LOCOMOTION_SMOOTHING, (b) -> this.edit((replay) -> replay.locomotionSmoothing.set(b.getValue()))), (r) -> this.locomotionSmoothing.setValue(r.locomotionSmoothing.get()));
+        this.locomotionSmoothing.tooltip(UIKeys.FILM_REPLAY_LOCOMOTION_SMOOTHING_TOOLTIP);
+        this.locomotionTime = this.bound(new UITrackpad((v) -> this.edit((replay) -> replay.locomotionTime.set(v.floatValue()))), (r) -> this.locomotionTime.setValue(r.locomotionTime.get()));
+        this.locomotionTime.limit(0.05, 2, false).tooltip(UIKeys.FILM_REPLAY_LOCOMOTION_TIME_TOOLTIP);
         this.fp = new UIToggle(UIKeys.FILM_REPLAY_FP, (b) ->
         {
             if (filmPanel.getData() != null)
@@ -279,7 +294,12 @@ public class UIReplayPropertiesPanel extends UIElement
         other.fields.add(
             this.looping, this.actor, this.actorPickup, this.fp,
             this.relative, UI.row(this.relativeOffsetX, this.relativeOffsetY, this.relativeOffsetZ),
-            this.axesPreview, this.pickAxesPreviewBone
+            this.axesPreview, this.pickAxesPreviewBone,
+            this.interactiveOpenables,
+            this.labelled(UIKeys.FILM_REPLAY_OPENABLE_ANGLE, this.openableAngle),
+            this.labelled(UIKeys.FILM_REPLAY_OPENABLE_THRESHOLD, this.openableThreshold),
+            this.locomotionSmoothing,
+            this.labelled(UIKeys.FILM_REPLAY_LOCOMOTION_TIME, this.locomotionTime)
         );
 
         lookAtSection.setExpanded(false);
