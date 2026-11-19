@@ -377,6 +377,7 @@ public abstract class BaseFilmController
         this.applyMtrSync(replay, ticks, entity, false);
         ReplayLookAt.apply(replay, this.film, ticks, entity);
         ReplayCrowdGlanceDriver.apply(replay, this.film, ticks, entity);
+        mchorse.bbs_mod.nav.AiDriver.apply(replay, this.film, ticks, entity);
         LocomotionSmoother.apply(replay, ticks, entity);
         OpenableAnimator.playback(replay, ticks);
         replay.applyClientActions(ticks, entity, this.film);

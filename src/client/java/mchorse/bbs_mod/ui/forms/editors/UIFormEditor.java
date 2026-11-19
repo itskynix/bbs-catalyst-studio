@@ -192,6 +192,7 @@ public class UIFormEditor extends UIElement implements IUIFormList, ICursor, IBo
         register(mchorse.bbs_mod.forms.forms.PostProcessForm.class, mchorse.bbs_mod.ui.forms.editors.forms.UIPostProcessForm::new);
         register(mchorse.bbs_mod.forms.forms.PhysicsFieldForm.class, mchorse.bbs_mod.ui.forms.editors.forms.UIPhysicsFieldForm::new);
         register(mchorse.bbs_mod.forms.forms.FakeSpaceForm.class, mchorse.bbs_mod.ui.forms.editors.forms.UIFakeSpaceForm::new);
+        register(mchorse.bbs_mod.forms.forms.NavigationVolumeForm.class, mchorse.bbs_mod.ui.forms.editors.forms.UINavigationVolumeForm::new);
     }
 
     public static void register(Class clazz, Supplier<UIForm> supplier)

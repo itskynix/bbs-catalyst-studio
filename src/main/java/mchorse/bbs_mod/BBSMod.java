@@ -483,7 +483,8 @@ public class BBSMod implements ModInitializer
             .register(Link.bbs("height_fog"), HeightFogForm.class, null)
             .register(Link.bbs("post_process_volume"), mchorse.bbs_mod.forms.forms.PostProcessForm.class, null)
             .register(Link.bbs("physics_field"), mchorse.bbs_mod.forms.forms.PhysicsFieldForm.class, null)
-            .register(Link.bbs("fake_space"), mchorse.bbs_mod.forms.forms.FakeSpaceForm.class, null);
+            .register(Link.bbs("fake_space"), mchorse.bbs_mod.forms.forms.FakeSpaceForm.class, null)
+            .register(Link.bbs("navigation_volume"), mchorse.bbs_mod.forms.forms.NavigationVolumeForm.class, null);
 
         events.post(new RegisterFormsEvent(forms));
         events.post(new RegisterFormModifiersEvent());

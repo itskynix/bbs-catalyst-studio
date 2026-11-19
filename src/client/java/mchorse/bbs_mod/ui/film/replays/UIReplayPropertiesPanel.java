@@ -82,6 +82,16 @@ public class UIReplayPropertiesPanel extends UIElement
     public UITrackpad openableAngle;
     public UITrackpad openableThreshold;
     public UIToggle locomotionSmoothing;
+    public UIToggle hasAi;
+    public UITrackpad aiIdleMin;
+    public UITrackpad aiIdleMax;
+    public UITrackpad aiSpeed;
+    public UITrackpad aiSeed;
+    public UIToggle aiAvoidance;
+    public UIToggle orientToMovement;
+    public UIToggle useControllerRotation;
+    public UITrackpad rotationRate;
+    public UIButton bakeAi;
     public UITrackpad locomotionTime;
     public UIButton pickAxesPreviewBone;
     public UICirculate lookAtMode;
@@ -197,6 +207,26 @@ public class UIReplayPropertiesPanel extends UIElement
         this.locomotionSmoothing.tooltip(UIKeys.FILM_REPLAY_LOCOMOTION_SMOOTHING_TOOLTIP);
         this.locomotionTime = this.bound(new UITrackpad((v) -> this.edit((replay) -> replay.locomotionTime.set(v.floatValue()))), (r) -> this.locomotionTime.setValue(r.locomotionTime.get()));
         this.locomotionTime.limit(0.05, 2, false).tooltip(UIKeys.FILM_REPLAY_LOCOMOTION_TIME_TOOLTIP);
+        this.hasAi = this.bound(new UIToggle(UIKeys.FILM_REPLAY_HAS_AI, (b) -> this.edit((replay) -> replay.hasAi.set(b.getValue()))), (r) -> this.hasAi.setValue(r.hasAi.get()));
+        this.hasAi.tooltip(UIKeys.FILM_REPLAY_HAS_AI_TOOLTIP);
+        this.aiIdleMin = this.bound(new UITrackpad((v) -> this.edit((replay) -> replay.aiIdleMin.set(v.floatValue()))), (r) -> this.aiIdleMin.setValue(r.aiIdleMin.get()));
+        this.aiIdleMin.limit(0, 120, false).tooltip(UIKeys.FILM_REPLAY_AI_IDLE_MIN_TOOLTIP);
+        this.aiIdleMax = this.bound(new UITrackpad((v) -> this.edit((replay) -> replay.aiIdleMax.set(v.floatValue()))), (r) -> this.aiIdleMax.setValue(r.aiIdleMax.get()));
+        this.aiIdleMax.limit(0, 120, false).tooltip(UIKeys.FILM_REPLAY_AI_IDLE_MAX_TOOLTIP);
+        this.aiSpeed = this.bound(new UITrackpad((v) -> this.edit((replay) -> replay.aiSpeed.set(v.floatValue()))), (r) -> this.aiSpeed.setValue(r.aiSpeed.get()));
+        this.aiSpeed.limit(0.3, 8, false).tooltip(UIKeys.FILM_REPLAY_AI_SPEED_TOOLTIP);
+        this.aiSeed = this.bound(new UITrackpad((v) -> this.edit((replay) -> replay.aiSeed.set(v.intValue()))), (r) -> this.aiSeed.setValue(r.aiSeed.get()));
+        this.aiSeed.limit(0, 9999, true).tooltip(UIKeys.FILM_REPLAY_AI_SEED_TOOLTIP);
+        this.aiAvoidance = this.bound(new UIToggle(UIKeys.FILM_REPLAY_AI_AVOIDANCE, (b) -> this.edit((replay) -> replay.aiAvoidance.set(b.getValue()))), (r) -> this.aiAvoidance.setValue(r.aiAvoidance.get()));
+        this.aiAvoidance.tooltip(UIKeys.FILM_REPLAY_AI_AVOIDANCE_TOOLTIP);
+        this.orientToMovement = this.bound(new UIToggle(UIKeys.FILM_REPLAY_ORIENT_TO_MOVEMENT, (b) -> this.edit((replay) -> replay.orientToMovement.set(b.getValue()))), (r) -> this.orientToMovement.setValue(r.orientToMovement.get()));
+        this.orientToMovement.tooltip(UIKeys.FILM_REPLAY_ORIENT_TO_MOVEMENT_TOOLTIP);
+        this.useControllerRotation = this.bound(new UIToggle(UIKeys.FILM_REPLAY_CONTROLLER_ROTATION, (b) -> this.edit((replay) -> replay.useControllerDesiredRotation.set(b.getValue()))), (r) -> this.useControllerRotation.setValue(r.useControllerDesiredRotation.get()));
+        this.useControllerRotation.tooltip(UIKeys.FILM_REPLAY_CONTROLLER_ROTATION_TOOLTIP);
+        this.rotationRate = this.bound(new UITrackpad((v) -> this.edit((replay) -> replay.rotationRate.set(v.floatValue()))), (r) -> this.rotationRate.setValue(r.rotationRate.get()));
+        this.rotationRate.limit(30, 1080, false).tooltip(UIKeys.FILM_REPLAY_ROTATION_RATE_TOOLTIP);
+        this.bakeAi = new UIButton(UIKeys.FILM_REPLAY_BAKE_AI, (b) -> this.bakeAi());
+        this.bakeAi.tooltip(UIKeys.FILM_REPLAY_BAKE_AI_TOOLTIP);
         this.fp = new UIToggle(UIKeys.FILM_REPLAY_FP, (b) ->
         {
             if (filmPanel.getData() != null)
@@ -299,7 +329,17 @@ public class UIReplayPropertiesPanel extends UIElement
             this.labelled(UIKeys.FILM_REPLAY_OPENABLE_ANGLE, this.openableAngle),
             this.labelled(UIKeys.FILM_REPLAY_OPENABLE_THRESHOLD, this.openableThreshold),
             this.locomotionSmoothing,
-            this.labelled(UIKeys.FILM_REPLAY_LOCOMOTION_TIME, this.locomotionTime)
+            this.labelled(UIKeys.FILM_REPLAY_LOCOMOTION_TIME, this.locomotionTime),
+            this.hasAi,
+            this.labelled(UIKeys.FILM_REPLAY_AI_IDLE_MIN, this.aiIdleMin),
+            this.labelled(UIKeys.FILM_REPLAY_AI_IDLE_MAX, this.aiIdleMax),
+            this.labelled(UIKeys.FILM_REPLAY_AI_SPEED, this.aiSpeed),
+            this.labelled(UIKeys.FILM_REPLAY_AI_SEED, this.aiSeed),
+            this.aiAvoidance,
+            this.orientToMovement,
+            this.useControllerRotation,
+            this.labelled(UIKeys.FILM_REPLAY_ROTATION_RATE, this.rotationRate),
+            this.bakeAi
         );
 
         lookAtSection.setExpanded(false);
@@ -359,6 +399,28 @@ public class UIReplayPropertiesPanel extends UIElement
     }
 
     /** A field with its name on the left, so the numbers of the section can be told apart without hovering */
+    /** Writes the picked replay's AI walk into its keyframes and switches the AI off */
+    private void bakeAi()
+    {
+        if (this.replay == null || this.filmPanel.getData() == null)
+        {
+            return;
+        }
+
+        int[] baked = {0};
+
+        this.edit((replay) -> baked[0] = Math.max(baked[0], mchorse.bbs_mod.nav.AiDriver.bake(replay, this.filmPanel.getData())));
+
+        if (baked[0] > 0)
+        {
+            this.getContext().notifyInfo(UIKeys.FILM_REPLAY_BAKE_AI_DONE);
+        }
+        else
+        {
+            this.getContext().notifyError(UIKeys.FILM_REPLAY_BAKE_AI_NONE);
+        }
+    }
+
     private UIElement labelled(IKey label, UIElement field)
     {
         return UI.row(UI.label(label, 20).labelAnchor(0F, 0.5F), field);

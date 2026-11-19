@@ -81,6 +81,22 @@ public class Replay extends ValueGroup
     /** The time the smoothing takes to settle, in seconds */
     public final ValueFloat locomotionTime = new ValueFloat("locomotion_time", 0.3F, 0.05F, 2F);
 
+    /* AI: the actor walks about by itself inside the film's navigation volume, waiting a little at each place it gets to */
+    public final ValueBoolean hasAi = new ValueBoolean("has_ai", false);
+    public final ValueFloat aiIdleMin = new ValueFloat("ai_idle_min", 1F, 0F, 120F);
+    public final ValueFloat aiIdleMax = new ValueFloat("ai_idle_max", 4F, 0F, 120F);
+    /** Walking speed, in blocks per second */
+    public final ValueFloat aiSpeed = new ValueFloat("ai_speed", 1.6F, 0.3F, 8F);
+    /** Another number is another walk */
+    public final ValueInt aiSeed = new ValueInt("ai_seed", 0, 0, 9999);
+    public final ValueBoolean aiAvoidance = new ValueBoolean("ai_avoidance", true);
+    /** Turn to face the way it moves */
+    public final ValueBoolean orientToMovement = new ValueBoolean("orient_to_movement", true);
+    /** Turn to face where it is heading for, the controller's wish, which wins over the way it moves */
+    public final ValueBoolean useControllerDesiredRotation = new ValueBoolean("use_controller_desired_rotation", false);
+    /** How fast it turns, in degrees per second */
+    public final ValueFloat rotationRate = new ValueFloat("rotation_rate", 360F, 30F, 1080F);
+
     public final ValueBoolean axesPreview = new ValueBoolean("axes_preview", false);
     public final ValueString axesPreviewBone = new ValueString("axes_preview_bone", "");
 
@@ -120,6 +136,16 @@ public class Replay extends ValueGroup
         this.add(this.openableThreshold);
         this.add(this.locomotionSmoothing);
         this.add(this.locomotionTime);
+
+        this.add(this.hasAi);
+        this.add(this.aiIdleMin);
+        this.add(this.aiIdleMax);
+        this.add(this.aiSpeed);
+        this.add(this.aiSeed);
+        this.add(this.aiAvoidance);
+        this.add(this.orientToMovement);
+        this.add(this.useControllerDesiredRotation);
+        this.add(this.rotationRate);
 
         this.add(this.axesPreview);
         this.add(this.axesPreviewBone);

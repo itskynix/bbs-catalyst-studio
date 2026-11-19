@@ -87,6 +87,7 @@ public class ExtraFormSection extends FormSection
         extra.addForm(new mchorse.bbs_mod.forms.forms.PostProcessForm());
         extra.addForm(new mchorse.bbs_mod.forms.forms.PhysicsFieldForm());
         extra.addForm(new mchorse.bbs_mod.forms.forms.FakeSpaceForm());
+        extra.addForm(new mchorse.bbs_mod.forms.forms.NavigationVolumeForm());
 
         this.mobsAnimals = new FormCategory(UIKeys.FORMS_CATEGORIES_MOBS_ANIMALS, this.parent.preferences.visible("mobs_animals")).icon(Icons.CHICKEN);
         this.mobsNeutral = new FormCategory(UIKeys.FORMS_CATEGORIES_MOBS_NEUTRAL, this.parent.preferences.visible("mobs_neutral")).icon(Icons.PLAYER);

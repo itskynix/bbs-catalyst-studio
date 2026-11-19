@@ -187,6 +187,7 @@ public class BBSModClient implements ClientModInitializer
     private static KeyBinding keyPlayFilmAndRecord;
     private static KeyBinding keyOpenReplays;
     private static KeyBinding keyOpenMorphing;
+    private static KeyBinding keyNavPreview;
     private static KeyBinding keyDemorph;
     private static KeyBinding keyTeleport;
     private static KeyBinding keyZoom;
@@ -739,6 +740,7 @@ public class BBSModClient implements ClientModInitializer
         keyPlayFilmAndRecord = this.createKey("play_film_and_record", GLFW.GLFW_KEY_F6);
         keyOpenReplays = this.createKey("open_replays", GLFW.GLFW_KEY_RIGHT_SHIFT);
         keyOpenMorphing = this.createKey("open_morphing", GLFW.GLFW_KEY_B);
+        keyNavPreview = this.createKey("navmesh_preview", GLFW.GLFW_KEY_P);
         keyDemorph = this.createKey("demorph", GLFW.GLFW_KEY_PERIOD);
         keyTeleport = this.createKey("teleport", GLFW.GLFW_KEY_Y);
         VehicleRide.doorKey = this.createKey("vehicle_door", GLFW.GLFW_KEY_G);
@@ -967,6 +969,7 @@ public class BBSModClient implements ClientModInitializer
                 }
             }
             while (keyReplayRadial.wasPressed()) this.keyReplayRadial(mc);
+            while (keyNavPreview.wasPressed()) mchorse.bbs_mod.nav.NavPreview.toggle();
             while (keyPlayFilmAndRecord.wasPressed()) this.keyPlayFilmAndRecord();
             while (keyOpenReplays.wasPressed()) this.keyOpenReplays();
             while (keyOpenMorphing.wasPressed())
