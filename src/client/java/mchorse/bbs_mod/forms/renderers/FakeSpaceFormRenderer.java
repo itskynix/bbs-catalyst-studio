@@ -1,9 +1,12 @@
 package mchorse.bbs_mod.forms.renderers;
 
+import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
+import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.client.BBSRendering;
 import mchorse.bbs_mod.forms.FormPortals;
 import mchorse.bbs_mod.forms.forms.FakeSpaceForm;
+import mchorse.bbs_mod.resources.Link;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.utils.Bufs;
 import mchorse.bbs_mod.utils.colors.Color;
@@ -14,22 +17,28 @@ import net.minecraft.client.render.VertexFormat;
 import net.minecraft.client.render.VertexFormats;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.util.math.Vec3d;
+import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
+import org.lwjgl.opengl.GL11;
 import org.qualet.irl.light.shadow.ShadowBakeState;
 import qualet.irlite.client.light.IRLightPositionResolver;
 
 /**
- * The artificial space scene. Nothing here is in the world: the sky is a dome, a star field, a planet
- * and a galaxy drawn as plain coloured triangles around the camera, at a distance no block could
- * reach, with the depth write off - so it sits behind everything the world draws, costs no blocks and
- * has no collision.
+ * The artificial space scene. Nothing here is in the world: no blocks, no collision.
  *
- * <p>The dome is centred on the camera, not on the form: moving the camera moves nothing on it, which
- * is what makes it read as infinitely far. Turning the form turns the sky. The stars, the nebula and
- * the layers keep their places on it; sizes are angles across the sky, so they hold at any view
- * distance. The streak factor draws each star as a streak of light along the line away from the form's
- * front, the Big Rip stretch.</p>
+ * <p><b>The sky</b> - deep space, the nebula, the stars - is a dome around the camera, at a distance
+ * just inside the far plane, drawn without writing depth so it is behind everything. Moving the camera
+ * moves nothing on it. The stars streak away from the form's front by the streak factor.</p>
+ *
+ * <p><b>The scene</b> - planets, rings, the asteroid belt, the galaxy - is real space round the form,
+ * in blocks. The opaque parts (globes, rocks) write depth and test it, so they hide one another and
+ * the camera can fly round them; the see-through parts (atmospheres, rings, the galaxy) test depth
+ * without writing it and come after, so a ring passes behind its planet and in front of it as it
+ * should. Faces are not culled: a closed mesh written to depth needs no winding to come out right,
+ * which is also what keeps a globe from showing its far side through its near one in stripes.</p>
+ *
+ * <p>In the form editor and on the podium the whole scene is shown shrunk, so it fits the preview.</p>
  */
 public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
 {
@@ -37,6 +46,34 @@ public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
 
     /** The form's front, which the stars streak away from */
     private static final Vector3f FRONT = new Vector3f(0F, 0F, 1F);
+
+    /** How much the scene is shrunk in an editor preview */
+    private static final float PREVIEW_SCALE = 0.03F;
+
+    /* A low icosahedron, the base of every rock */
+    private static final float[][] ICO_VERTICES;
+    private static final int[][] ICO_FACES = {
+        {0, 11, 5}, {0, 5, 1}, {0, 1, 7}, {0, 7, 10}, {0, 10, 11}, {1, 5, 9}, {5, 11, 4}, {11, 10, 2}, {10, 7, 6}, {7, 1, 8},
+        {3, 9, 4}, {3, 4, 2}, {3, 2, 6}, {3, 6, 8}, {3, 8, 9}, {4, 9, 5}, {2, 4, 11}, {6, 2, 10}, {8, 6, 7}, {9, 8, 1}
+    };
+
+    static
+    {
+        float t = (1F + (float) Math.sqrt(5D)) / 2F;
+        float[][] raw = {
+            {-1, t, 0}, {1, t, 0}, {-1, -t, 0}, {1, -t, 0}, {0, -1, t}, {0, 1, t},
+            {0, -1, -t}, {0, 1, -t}, {t, 0, -1}, {t, 0, 1}, {-t, 0, -1}, {-t, 0, 1}
+        };
+
+        ICO_VERTICES = new float[raw.length][];
+
+        for (int i = 0; i < raw.length; i++)
+        {
+            float l = (float) Math.sqrt(raw[i][0] * raw[i][0] + raw[i][1] * raw[i][1] + raw[i][2] * raw[i][2]);
+
+            ICO_VERTICES[i] = new float[] {raw[i][0] / l, raw[i][1] / l, raw[i][2] / l};
+        }
+    }
 
     private final Vector3f a = new Vector3f();
     private final Vector3f b = new Vector3f();
@@ -92,15 +129,30 @@ public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
         }
 
         MinecraftClient mc = MinecraftClient.getInstance();
-        Vector3f eye = new Vector3f();
-        float radius;
+        float seconds = mc.world == null ? 0F : (mc.world.getTime() % 72000L + context.getTransition()) / 20F;
+        MatrixStack stack = context.stack;
 
-        if (editor)
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.disableCull();
+        RenderSystem.enableDepthTest();
+
+        try
         {
-            radius = 40F;
-        }
-        else
-        {
+            if (editor)
+            {
+                stack.push();
+                stack.scale(PREVIEW_SCALE, PREVIEW_SCALE, PREVIEW_SCALE);
+
+                /* No camera to measure against in a preview: the sky is a small dome round the form, the scene in front of it */
+                this.sky(stack.peek().getPositionMatrix(), new Vector3f(), 600F);
+                this.scene(stack, null, seconds);
+
+                stack.pop();
+
+                return;
+            }
+
             Matrix4f world;
 
             if (context.world != null && context.entity != null)
@@ -121,57 +173,34 @@ public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
 
             Vec3d camera = mc.gameRenderer.getCamera().getPos();
             float scale = Math.max(world.getColumn(0, new Vector3f()).length(), 1.0E-4F);
+            Vector3f eye = new Matrix4f(world).invert().transformPosition(new Vector3f((float) camera.x, (float) camera.y, (float) camera.z));
+            float radius = Math.max(32F, Math.min(mc.gameRenderer.getViewDistance() * 0.9F, 1500F)) / scale;
 
-            world.invert().transformPosition(eye.set((float) camera.x, (float) camera.y, (float) camera.z));
-
-            /* Just inside the far plane, in the form's own units */
-            radius = Math.max(32F, Math.min(mc.gameRenderer.getViewDistance() * 0.9F, 1500F)) / scale;
-        }
-
-        float seconds = mc.world == null ? 0F : (mc.world.getTime() % 72000L + context.getTransition()) / 20F;
-
-        this.draw(context.stack, eye, radius, seconds);
-    }
-
-    /* The sky itself */
-
-    private void draw(MatrixStack stack, Vector3f eye, float radius, float seconds)
-    {
-        Matrix4f matrix = stack.peek().getPositionMatrix();
-        FakeSpaceForm form = this.form;
-
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
-        RenderSystem.disableCull();
-        RenderSystem.enableDepthTest();
-        RenderSystem.depthMask(false);
-        RenderSystem.setShader(GameRenderer::getPositionColorProgram);
-
-        try
-        {
-            if (form.skyDome.get())
-            {
-                this.dome(matrix, eye, radius);
-            }
-
-            this.stars(matrix, eye, radius);
-
-            if (form.galaxyEnabled.get())
-            {
-                this.galaxy(matrix, eye, radius, seconds);
-            }
-
-            if (form.planetEnabled.get())
-            {
-                this.planet(matrix, eye, radius, seconds);
-            }
+            this.sky(stack.peek().getPositionMatrix(), eye, radius);
+            this.scene(stack, eye, seconds);
         }
         finally
         {
             RenderSystem.depthMask(true);
+            RenderSystem.defaultBlendFunc();
             RenderSystem.enableCull();
             RenderSystem.disableBlend();
         }
+    }
+
+    /* The sky: around the camera, behind everything */
+
+    private void sky(Matrix4f matrix, Vector3f eye, float radius)
+    {
+        RenderSystem.depthMask(false);
+        RenderSystem.setShader(GameRenderer::getPositionColorProgram);
+
+        if (this.form.skyDome.get())
+        {
+            this.dome(matrix, eye, radius);
+        }
+
+        this.stars(matrix, eye, radius);
     }
 
     /** The deep space colour with the nebula across it, as a sphere whose vertices carry the colour */
@@ -185,7 +214,6 @@ public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
         int rings = 20;
         int sectors = 40;
         BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
-
         float[][] colors = new float[(rings + 1) * (sectors + 1)][];
         float[][] points = new float[(rings + 1) * (sectors + 1)][];
 
@@ -214,6 +242,13 @@ public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
             }
         }
 
+        grid(builder, m, points, colors, rings, sectors, 1F);
+        Bufs.draw(builder);
+    }
+
+    /** Two triangles for each cell of a rings x sectors grid of points, every index once - no gaps, no seams */
+    private static void grid(BufferBuilder builder, Matrix4f m, float[][] points, float[][] colors, int rings, int sectors, float alpha)
+    {
         for (int i = 0; i < rings; i++)
         {
             for (int j = 0; j < sectors; j++)
@@ -223,16 +258,14 @@ public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
                 int k10 = k00 + sectors + 1;
                 int k11 = k10 + 1;
 
-                vertex(builder, m, points[k00], colors[k00], 1F);
-                vertex(builder, m, points[k10], colors[k10], 1F);
-                vertex(builder, m, points[k11], colors[k11], 1F);
-                vertex(builder, m, points[k00], colors[k00], 1F);
-                vertex(builder, m, points[k11], colors[k11], 1F);
-                vertex(builder, m, points[k01], colors[k01], 1F);
+                vertex(builder, m, points[k00], colors[k00], alpha);
+                vertex(builder, m, points[k10], colors[k10], alpha);
+                vertex(builder, m, points[k11], colors[k11], alpha);
+                vertex(builder, m, points[k00], colors[k00], alpha);
+                vertex(builder, m, points[k11], colors[k11], alpha);
+                vertex(builder, m, points[k01], colors[k01], alpha);
             }
         }
-
-        Bufs.draw(builder);
     }
 
     /** The stars: dots, or with a streak factor streaks of light away from the form's front */
@@ -271,7 +304,6 @@ public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
         Bufs.draw(builder);
     }
 
-    /** One star at the direction in {@link #a}: a dot, or a streak with its tail fading away */
     private void star(BufferBuilder builder, Matrix4f m, Vector3f eye, float radius, float width, float streak, float variety, float level, float r, float g, float bl)
     {
         float along = this.a.dot(FRONT);
@@ -282,8 +314,7 @@ public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
 
         if (length < 0.002F || this.b.lengthSquared() < 1.0E-8F)
         {
-            /* A dot: a small square across the sky at the star's place */
-            this.tangents(this.a, this.b, this.c);
+            tangents(this.a, this.b, this.c);
 
             float x = eye.x + this.a.x * radius;
             float y = eye.y + this.a.y * radius;
@@ -299,7 +330,6 @@ public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
             return;
         }
 
-        /* A streak: the head where the star is, the tail turned back towards the front by the length */
         this.b.normalize();
         length = Math.min(length, 1.2F);
 
@@ -325,208 +355,124 @@ public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
             r, g, bl, 0F, Math.min(1F, level * (1F + streak * 0.4F)));
     }
 
-    /** The spiral galaxy: a faint disc, a glowing core and two arms of points, turning slowly */
-    private void galaxy(Matrix4f m, Vector3f eye, float radius, float seconds)
+    /* The scene: real space round the form */
+
+    /** @param eye the camera in the form's frame, or null in a preview, where there is none */
+    private void scene(MatrixStack stack, Vector3f eye, float seconds)
     {
         FakeSpaceForm form = this.form;
-        Color core = form.galaxyCoreColor.get();
-        Color arm = form.galaxyArmColor.get();
-        float brightness = clamp(form.galaxyBrightness.get(), 0F, 2F);
-        float rho = (float) Math.toRadians(Math.max(form.galaxySize.get(), 1F) / 2F);
-        float tilt = (float) Math.toRadians(clamp(form.galaxyTilt.get(), -90F, 90F));
-        float squash = Math.max(0.08F, (float) Math.abs(Math.cos(tilt)));
-        float rotation = (float) Math.toRadians(form.galaxyRotationSpeed.get() * seconds);
-        Vector3f center = direction(form.galaxyYaw.get(), form.galaxyPitch.get(), new Vector3f());
-        Vector3f right = new Vector3f();
-        Vector3f up = new Vector3f();
+        Vector3f light = direction(form.lightYaw.get(), form.lightPitch.get(), new Vector3f());
 
-        this.tangents(center, right, up);
+        /* Opaque first, writing depth: the globes and the rocks */
+        RenderSystem.depthMask(true);
 
-        BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
-
-        /* The dust of the disc and the glow of the core, as soft fans */
-        this.fan(builder, m, eye, radius, center, right, up, rho, rho * squash, arm, 0.12F * brightness, 0F);
-        this.fan(builder, m, eye, radius, center, right, up, rho * 0.28F, rho * 0.28F * Math.max(squash, 0.5F), core, 0.55F * brightness, 0F);
-
-        int points = 1500;
-
-        for (int i = 0; i < points; i++)
+        for (FakeSpaceForm.Planet planet : form.planets.getAllTyped())
         {
-            float t = hash(i, 5, 0, 23);
-            float n = hash(i, 5, 1, 23);
-            float s = hash(i, 5, 2, 23);
-            boolean inCore = i % 5 == 0;
-            float rr = inCore ? rho * 0.3F * t * t : rho * (float) Math.pow(t, 0.75F);
-            float theta = inCore ? n * 2F * PI : (rr / rho) * 3.6F + (i % 2) * PI + (n - 0.5F) * (0.5F + 0.5F * (rr / rho)) + rotation;
-            float px = rr * (float) Math.cos(theta);
-            float py = rr * (float) Math.sin(theta) * squash;
-            float k = clamp(rr / rho, 0F, 1F);
-            float level = Math.min(1F, (0.18F + 0.55F * (1F - k)) * brightness);
-            float half = rho * (0.008F + 0.012F * s);
-            float r = core.r + (arm.r - core.r) * k;
-            float g = core.g + (arm.g - core.g) * k;
-            float bl = core.b + (arm.b - core.b) * k;
-
-            this.skyPoint(center, right, up, px, py, eye, radius, this.a);
-            this.skyPoint(center, right, up, px + half, py, eye, radius, this.b);
-            this.skyPoint(center, right, up, px, py + half, eye, radius, this.c);
-            this.skyPoint(center, right, up, px - half, py - half, eye, radius, this.d);
-
-            vertex(builder, m, this.b, r, g, bl, level);
-            vertex(builder, m, this.c, r, g, bl, level);
-            vertex(builder, m, this.d, r, g, bl, level);
+            drawGlobe(stack, planet, planet.x.get(), planet.y.get(), planet.z.get(), planet.radius.get(), light, seconds, eye);
         }
 
-        Bufs.draw(builder);
-    }
+        this.asteroids(stack.peek().getPositionMatrix(), light, seconds);
 
-    /** A point on the sky at an offset (in radians) from a direction along its two tangents, put on the dome */
-    private void skyPoint(Vector3f center, Vector3f right, Vector3f up, float x, float y, Vector3f eye, float radius, Vector3f out)
-    {
-        out.set(center).fma(x, right).fma(y, up).normalize().mul(radius).add(eye);
-    }
+        /* Then what can be seen through, testing depth but not writing it */
+        RenderSystem.depthMask(false);
 
-    /** A soft disc across the sky: full at the middle, nothing at the edge; the sizes are offsets in radians */
-    private void fan(BufferBuilder builder, Matrix4f m, Vector3f eye, float radius, Vector3f center, Vector3f right, Vector3f up, float rx, float ry, Color color, float centerAlpha, float edgeAlpha)
-    {
-        int segments = 28;
-        Vector3f mid = new Vector3f();
-        Vector3f p = new Vector3f();
-        Vector3f q = new Vector3f();
-
-        this.skyPoint(center, right, up, 0F, 0F, eye, radius, mid);
-
-        for (int i = 0; i < segments; i++)
+        for (FakeSpaceForm.Planet planet : form.planets.getAllTyped())
         {
-            float a0 = 2F * PI * i / segments;
-            float a1 = 2F * PI * (i + 1) / segments;
+            drawHaloAndRing(stack, planet, planet.x.get(), planet.y.get(), planet.z.get(), planet.radius.get(), light);
+        }
 
-            this.skyPoint(center, right, up, rx * (float) Math.cos(a0), ry * (float) Math.sin(a0), eye, radius, p);
-            this.skyPoint(center, right, up, rx * (float) Math.cos(a1), ry * (float) Math.sin(a1), eye, radius, q);
-
-            vertex(builder, m, mid, color.r, color.g, color.b, centerAlpha);
-            vertex(builder, m, p, color.r, color.g, color.b, edgeAlpha);
-            vertex(builder, m, q, color.r, color.g, color.b, edgeAlpha);
+        if (form.galaxyEnabled.get())
+        {
+            this.galaxy(stack.peek().getPositionMatrix(), eye, seconds);
         }
     }
 
-    /** The planet: its halo, the back of the ring, the lit and turning globe, then the front of the ring */
-    private void planet(Matrix4f m, Vector3f eye, float radius, float seconds)
+    /**
+     * A planet's globe, closed and lit: bands and weather in its two colours or its texture with the
+     * UV offset and scale, turning about its leaning axis. Shared with the planet editor's preview.
+     */
+    public static void drawGlobe(MatrixStack stack, FakeSpaceForm.Planet planet, float cx, float cy, float cz, float radius, Vector3f light, float seconds, Vector3f eye)
     {
-        FakeSpaceForm form = this.form;
-        Color ca = form.planetColorA.get();
-        Color cb = form.planetColorB.get();
-        Color atmosphere = form.planetAtmosphereColor.get();
-        float halo = clamp(form.planetAtmosphere.get(), 0F, 1F);
-        float rho = (float) Math.toRadians(clamp(form.planetSize.get(), 1F, 90F) / 2F);
-        float spin = (float) Math.toRadians(form.planetRotationSpeed.get() * seconds);
-        Vector3f direction = direction(form.planetYaw.get(), form.planetPitch.get(), new Vector3f());
-        Vector3f light = direction(form.planetLightYaw.get(), 12F, new Vector3f());
-        float body = radius * (float) Math.sin(rho);
-        Vector3f center = new Vector3f(direction).mul(radius * (float) Math.cos(rho)).add(eye);
-        Vector3f right = new Vector3f();
-        Vector3f up = new Vector3f();
-
-        this.tangents(direction, right, up);
-
-        float centerDepth = new Vector3f(center).sub(eye).dot(direction);
-
-        /* The halo, behind the globe */
-        if (halo > 0.001F)
-        {
-            BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
-            int segments = 48;
-
-            for (int i = 0; i < segments; i++)
-            {
-                float a0 = 2F * PI * i / segments;
-                float a1 = 2F * PI * (i + 1) / segments;
-                float c0 = (float) Math.cos(a0);
-                float s0 = (float) Math.sin(a0);
-                float c1 = (float) Math.cos(a1);
-                float s1 = (float) Math.sin(a1);
-                float inner = body * 0.97F;
-                float outer = body * (1.1F + 0.35F * halo);
-
-                float level = 0.55F * halo;
-
-                quad(builder, m,
-                    center.x + (right.x * c0 + up.x * s0) * inner, center.y + (right.y * c0 + up.y * s0) * inner, center.z + (right.z * c0 + up.z * s0) * inner,
-                    center.x + (right.x * c1 + up.x * s1) * inner, center.y + (right.y * c1 + up.y * s1) * inner, center.z + (right.z * c1 + up.z * s1) * inner,
-                    center.x + (right.x * c1 + up.x * s1) * outer, center.y + (right.y * c1 + up.y * s1) * outer, center.z + (right.z * c1 + up.z * s1) * outer,
-                    center.x + (right.x * c0 + up.x * s0) * outer, center.y + (right.y * c0 + up.y * s0) * outer, center.z + (right.z * c0 + up.z * s0) * outer,
-                    atmosphere.r, atmosphere.g, atmosphere.b, level, 0F);
-            }
-
-            Bufs.draw(builder);
-        }
-
-        boolean ring = form.planetRing.get();
-        Vector3f axis = new Vector3f();
-
-        if (ring)
-        {
-            /* The ring's plane is the planet's equator turned about the sky's right by the tilt */
-            float tilt = (float) Math.toRadians(clamp(form.planetRingTilt.get(), -90F, 90F));
-
-            axis.set(up).mul((float) Math.cos(tilt)).fma((float) Math.sin(tilt), direction);
-
-            this.ring(m, center, centerDepth, direction, right, axis, body, form.planetRingColor.get(), eye, true);
-        }
-
-        this.globe(m, center, body, eye, ca, cb, atmosphere, halo, light, spin);
-
-        if (ring)
-        {
-            this.ring(m, center, centerDepth, direction, right, axis, body, form.planetRingColor.get(), eye, false);
-        }
-    }
-
-    /** The globe: bands and weather turning with the spin, lambert light from the light direction, a rim of atmosphere */
-    private void globe(Matrix4f m, Vector3f center, float body, Vector3f eye, Color ca, Color cb, Color atmosphere, float halo, Vector3f light, float spin)
-    {
-        int rings = 22;
-        int sectors = 44;
-        BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
-        float[][] colors = new float[(rings + 1) * (sectors + 1)][];
-        float[][] points = new float[(rings + 1) * (sectors + 1)][];
-        float cosSpin = (float) Math.cos(spin);
-        float sinSpin = (float) Math.sin(spin);
+        Matrix4f m = stack.peek().getPositionMatrix();
+        Link texture = planet.texture.get();
+        boolean textured = texture != null;
+        Color ca = planet.colorA.get();
+        Color cb = planet.colorB.get();
+        Color atmosphere = planet.atmosphereColor.get();
+        float halo = clamp(planet.atmosphere.get(), 0F, 1F);
+        Matrix3f turn = orientation(planet, seconds, true);
+        int rings = 28;
+        int sectors = 56;
+        float su = planet.uvScaleX.get();
+        float sv = planet.uvScaleY.get();
+        float ou = planet.uvOffsetX.get();
+        float ov = planet.uvOffsetY.get();
+        Vector3f n = new Vector3f();
         Vector3f toEye = new Vector3f();
+        BufferBuilder builder;
+
+        if (textured)
+        {
+            BBSModClient.getTextures().bindTexture(texture);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL11.GL_REPEAT);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL11.GL_REPEAT);
+            RenderSystem.setShader(GameRenderer::getPositionTexColorProgram);
+            builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_TEXTURE_COLOR);
+        }
+        else
+        {
+            RenderSystem.setShader(GameRenderer::getPositionColorProgram);
+            builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+        }
+
+        int size = (rings + 1) * (sectors + 1);
+        float[][] points = new float[size][];
+        float[][] colors = new float[size][];
+        float[][] uvs = new float[size][];
 
         for (int i = 0; i <= rings; i++)
         {
-            float lat = PI * i / rings - PI / 2F;
+            float lat = PI / 2F - PI * i / rings;
 
             for (int j = 0; j <= sectors; j++)
             {
                 float lon = 2F * PI * j / sectors;
-                float nx = (float) (Math.cos(lat) * Math.cos(lon));
-                float ny = (float) Math.sin(lat);
-                float nz = (float) (Math.cos(lat) * Math.sin(lon));
-
-                /* The surface turns under the light: the pattern is read from the normal spun about the planet's axis */
-                float sx = nx * cosSpin - nz * sinSpin;
-                float sz = nx * sinSpin + nz * cosSpin;
-                float bands = 0.5F + 0.5F * (float) Math.sin(ny * 8F + 3F * fbm(sx * 2.2F + 4F, ny * 2.2F, sz * 2.2F));
-                float t = clamp(bands + (fbm(sx * 5F, ny * 5F + 9F, sz * 5F) - 0.5F) * 0.5F, 0F, 1F);
-                float lit = smooth(-0.1F, 0.65F, nx * light.x + ny * light.y + nz * light.z);
-                float shade = 0.035F + 0.965F * lit;
+                float lx = (float) (Math.cos(lat) * Math.cos(lon));
+                float ly = (float) Math.sin(lat);
+                float lz = (float) (Math.cos(lat) * Math.sin(lon));
                 int k = i * (sectors + 1) + j;
-                float x = center.x + nx * body;
-                float y = center.y + ny * body;
-                float z = center.z + nz * body;
 
-                toEye.set(eye.x - x, eye.y - y, eye.z - z).normalize();
+                /* The surface is in the planet's own frame; the world sees it turned and leaning */
+                turn.transform(n.set(lx, ly, lz));
 
-                float rim = (float) Math.pow(1F - Math.max(0F, nx * toEye.x + ny * toEye.y + nz * toEye.z), 2.6F) * halo * (0.25F + 0.75F * lit);
+                float lit = smooth(-0.12F, 0.6F, n.dot(light));
+                float shade = 0.04F + 0.96F * lit;
+                float rim = 0F;
 
-                colors[k] = new float[] {
-                    Math.min(1F, (ca.r + (cb.r - ca.r) * t) * shade + atmosphere.r * rim),
-                    Math.min(1F, (ca.g + (cb.g - ca.g) * t) * shade + atmosphere.g * rim),
-                    Math.min(1F, (ca.b + (cb.b - ca.b) * t) * shade + atmosphere.b * rim)
-                };
-                points[k] = new float[] {x, y, z};
+                points[k] = new float[] {cx + n.x * radius, cy + n.y * radius, cz + n.z * radius};
+
+                if (eye != null)
+                {
+                    toEye.set(eye.x - points[k][0], eye.y - points[k][1], eye.z - points[k][2]).normalize();
+                    rim = (float) Math.pow(1F - Math.max(0F, n.dot(toEye)), 2.6F) * halo * (0.25F + 0.75F * lit);
+                }
+
+                if (textured)
+                {
+                    colors[k] = new float[] {Math.min(1F, shade + atmosphere.r * rim), Math.min(1F, shade + atmosphere.g * rim), Math.min(1F, shade + atmosphere.b * rim)};
+                    uvs[k] = new float[] {j / (float) sectors * su + ou, i / (float) rings * sv + ov};
+                }
+                else
+                {
+                    float bands = 0.5F + 0.5F * (float) Math.sin(ly * 8F + 3F * fbm(lx * 2.2F + 4F, ly * 2.2F, lz * 2.2F));
+                    float t = clamp(bands + (fbm(lx * 5F, ly * 5F + 9F, lz * 5F) - 0.5F) * 0.5F, 0F, 1F);
+
+                    colors[k] = new float[] {
+                        Math.min(1F, (ca.r + (cb.r - ca.r) * t) * shade + atmosphere.r * rim),
+                        Math.min(1F, (ca.g + (cb.g - ca.g) * t) * shade + atmosphere.g * rim),
+                        Math.min(1F, (ca.b + (cb.b - ca.b) * t) * shade + atmosphere.b * rim)
+                    };
+                }
             }
         }
 
@@ -538,40 +484,97 @@ public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
                 int k01 = k00 + 1;
                 int k10 = k00 + sectors + 1;
                 int k11 = k10 + 1;
+                int[] order = {k00, k10, k11, k00, k11, k01};
 
-                vertex(builder, m, points[k00], colors[k00], 1F);
-                vertex(builder, m, points[k10], colors[k10], 1F);
-                vertex(builder, m, points[k11], colors[k11], 1F);
-                vertex(builder, m, points[k00], colors[k00], 1F);
-                vertex(builder, m, points[k11], colors[k11], 1F);
-                vertex(builder, m, points[k01], colors[k01], 1F);
+                for (int k : order)
+                {
+                    if (textured)
+                    {
+                        builder.vertex(m, points[k][0], points[k][1], points[k][2]).texture(uvs[k][0], uvs[k][1]).color(colors[k][0], colors[k][1], colors[k][2], 1F)/*$ nx*/.next()/**/;
+                    }
+                    else
+                    {
+                        vertex(builder, m, points[k], colors[k], 1F);
+                    }
+                }
             }
         }
 
         Bufs.draw(builder);
     }
 
-    /**
-     * Half of the ring: the part behind the globe (farther from the camera than its centre) or the
-     * part in front of it, so the globe hides the one and not the other. Bands of different strength
-     * across its width, a gap between the inner and outer parts.
-     */
-    private void ring(Matrix4f m, Vector3f center, float centerDepth, Vector3f direction, Vector3f right, Vector3f axis, float body, Color color, Vector3f eye, boolean back)
+    /** A planet's atmosphere, a thin glowing shell, and its ring in the plane of its equator. Shared with the preview */
+    public static void drawHaloAndRing(MatrixStack stack, FakeSpaceForm.Planet planet, float cx, float cy, float cz, float radius, Vector3f light)
     {
-        BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
-        Vector3f u = new Vector3f(right);
-        Vector3f v = new Vector3f(axis).cross(u);
-        int segments = 72;
-        float[] edges = {1.3F, 1.55F, 1.62F, 1.95F, 2.05F, 2.3F};
-        float[] levels = {0.55F, 0.8F, 0.0F, 0.65F, 0.0F, 0.4F};
-        Vector3f mid = new Vector3f();
+        Matrix4f m = stack.peek().getPositionMatrix();
+        float halo = clamp(planet.atmosphere.get(), 0F, 1F);
+        Matrix3f lean = orientation(planet, 0F, false);
+        Vector3f n = new Vector3f();
 
-        if (v.lengthSquared() < 1.0E-8F)
+        if (halo > 0.001F)
+        {
+            Color atmosphere = planet.atmosphereColor.get();
+            int rings = 20;
+            int sectors = 40;
+            float[][] points = new float[(rings + 1) * (sectors + 1)][];
+            float[][] colors = new float[(rings + 1) * (sectors + 1)][];
+            float shell = radius * (1.04F + 0.08F * halo);
+
+            RenderSystem.setShader(GameRenderer::getPositionColorProgram);
+
+            BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+
+            for (int i = 0; i <= rings; i++)
+            {
+                float lat = PI / 2F - PI * i / rings;
+
+                for (int j = 0; j <= sectors; j++)
+                {
+                    float lon = 2F * PI * j / sectors;
+
+                    n.set((float) (Math.cos(lat) * Math.cos(lon)), (float) Math.sin(lat), (float) (Math.cos(lat) * Math.sin(lon)));
+
+                    float lit = 0.35F + 0.65F * smooth(-0.3F, 0.6F, n.dot(light));
+                    int k = i * (sectors + 1) + j;
+
+                    points[k] = new float[] {cx + n.x * shell, cy + n.y * shell, cz + n.z * shell};
+                    colors[k] = new float[] {atmosphere.r * lit, atmosphere.g * lit, atmosphere.b * lit};
+                }
+            }
+
+            grid(builder, m, points, colors, rings, sectors, 0.28F * halo);
+            Bufs.draw(builder);
+        }
+
+        if (!planet.ring.get())
         {
             return;
         }
 
-        v.normalize();
+        Color color = planet.ringColor.get();
+        Link texture = planet.ringTexture.get();
+        float inner = radius * Math.max(1.01F, planet.ringInner.get());
+        float outer = radius * Math.max(planet.ringInner.get() + 0.02F, planet.ringOuter.get());
+        int segments = 128;
+        int bands = 6;
+        Vector3f u = lean.transform(new Vector3f(1F, 0F, 0F));
+        Vector3f v = lean.transform(new Vector3f(0F, 0F, 1F));
+        Vector3f up = lean.transform(new Vector3f(0F, 1F, 0F));
+        /* The lit side of the ring is the one facing the sun */
+        float lit = 0.45F + 0.55F * Math.abs(up.dot(light));
+        BufferBuilder builder;
+
+        if (texture != null)
+        {
+            BBSModClient.getTextures().bindTexture(texture);
+            RenderSystem.setShader(GameRenderer::getPositionTexColorProgram);
+            builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_TEXTURE_COLOR);
+        }
+        else
+        {
+            RenderSystem.setShader(GameRenderer::getPositionColorProgram);
+            builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+        }
 
         for (int i = 0; i < segments; i++)
         {
@@ -581,40 +584,256 @@ public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
             float s0 = (float) Math.sin(a0);
             float c1 = (float) Math.cos(a1);
             float s1 = (float) Math.sin(a1);
-            float cm = (float) Math.cos((a0 + a1) / 2F);
-            float sm = (float) Math.sin((a0 + a1) / 2F);
 
-            mid.set(center).fma(cm * body * 1.8F, u).fma(sm * body * 1.8F, v);
-
-            float depth = new Vector3f(mid).sub(eye).dot(direction);
-
-            if ((depth > centerDepth) != back)
+            for (int band = 0; band < bands; band++)
             {
-                continue;
-            }
+                float t0 = band / (float) bands;
+                float t1 = (band + 1) / (float) bands;
+                float r0 = inner + (outer - inner) * t0;
+                float r1 = inner + (outer - inner) * t1;
+                /* Bands of different density, a gap two thirds of the way out */
+                float alpha0 = texture != null ? 0.95F : ringDensity(t0);
+                float alpha1 = texture != null ? 0.95F : ringDensity(t1);
+                float[][] corners = {
+                    {cx + (u.x * c0 + v.x * s0) * r0, cy + (u.y * c0 + v.y * s0) * r0, cz + (u.z * c0 + v.z * s0) * r0, t0, alpha0},
+                    {cx + (u.x * c1 + v.x * s1) * r0, cy + (u.y * c1 + v.y * s1) * r0, cz + (u.z * c1 + v.z * s1) * r0, t0, alpha0},
+                    {cx + (u.x * c1 + v.x * s1) * r1, cy + (u.y * c1 + v.y * s1) * r1, cz + (u.z * c1 + v.z * s1) * r1, t1, alpha1},
+                    {cx + (u.x * c0 + v.x * s0) * r1, cy + (u.y * c0 + v.y * s0) * r1, cz + (u.z * c0 + v.z * s0) * r1, t1, alpha1}
+                };
+                int[] order = {0, 1, 2, 0, 2, 3};
 
-            for (int e = 0; e + 1 < edges.length; e += 2)
-            {
-                float in = body * edges[e];
-                float out = body * edges[e + 1];
-                float level = levels[e] * 0.85F;
+                for (int k : order)
+                {
+                    float[] p = corners[k];
 
-                quad(builder, m,
-                    center.x + (u.x * c0 + v.x * s0) * in, center.y + (u.y * c0 + v.y * s0) * in, center.z + (u.z * c0 + v.z * s0) * in,
-                    center.x + (u.x * c1 + v.x * s1) * in, center.y + (u.y * c1 + v.y * s1) * in, center.z + (u.z * c1 + v.z * s1) * in,
-                    center.x + (u.x * c1 + v.x * s1) * out, center.y + (u.y * c1 + v.y * s1) * out, center.z + (u.z * c1 + v.z * s1) * out,
-                    center.x + (u.x * c0 + v.x * s0) * out, center.y + (u.y * c0 + v.y * s0) * out, center.z + (u.z * c0 + v.z * s0) * out,
-                    color.r, color.g, color.b, level, levels[e + 1] > 0F ? levels[e + 1] * 0.85F : level * 0.6F);
+                    if (texture != null)
+                    {
+                        builder.vertex(m, p[0], p[1], p[2]).texture(p[3], 0.5F).color(color.r * lit, color.g * lit, color.b * lit, p[4])/*$ nx*/.next()/**/;
+                    }
+                    else
+                    {
+                        builder.vertex(m, p[0], p[1], p[2]).color(color.r * lit, color.g * lit, color.b * lit, p[4])/*$ nx*/.next()/**/;
+                    }
+                }
             }
         }
 
         Bufs.draw(builder);
     }
 
+    private static float ringDensity(float t)
+    {
+        float density = 0.45F + 0.35F * (float) Math.sin(t * 19F) * (float) Math.sin(t * 7F + 1F);
+
+        if (t > 0.62F && t < 0.7F)
+        {
+            density *= 0.15F;
+        }
+
+        return clamp(density, 0.05F, 0.9F);
+    }
+
+    /** How the planet's own frame sits in the scene: its spin about its axis (when asked) and the lean of that axis */
+    private static Matrix3f orientation(FakeSpaceForm.Planet planet, float seconds, boolean spin)
+    {
+        Matrix3f matrix = new Matrix3f().rotateZ((float) Math.toRadians(planet.tilt.get()));
+
+        if (spin)
+        {
+            matrix.rotateY((float) Math.toRadians(planet.rotationSpeed.get() * seconds));
+        }
+
+        return matrix;
+    }
+
+    /** The belt: low tumbling rocks in a flat ring round the form, each with its own shape, size and pace */
+    private void asteroids(Matrix4f m, Vector3f light, float seconds)
+    {
+        FakeSpaceForm form = this.form;
+        int count = Math.max(0, Math.min(300, form.asteroidCount.get()));
+
+        if (count == 0)
+        {
+            return;
+        }
+
+        float belt = form.asteroidRadius.get();
+        float speed = form.asteroidSpeed.get();
+        float size = form.asteroidSize.get();
+        Color base = form.asteroidColor.get();
+        float[][] shape = new float[ICO_VERTICES.length][3];
+        Matrix3f tumble = new Matrix3f();
+        Vector3f p = new Vector3f();
+        Vector3f e1 = new Vector3f();
+        Vector3f e2 = new Vector3f();
+        Vector3f normal = new Vector3f();
+
+        RenderSystem.setShader(GameRenderer::getPositionColorProgram);
+
+        BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+
+        for (int i = 0; i < count; i++)
+        {
+            float h0 = hash(i, 41, 0, 5);
+            float h1 = hash(i, 41, 1, 5);
+            float h2 = hash(i, 41, 2, 5);
+            float h3 = hash(i, 41, 3, 5);
+            float h4 = hash(i, 41, 4, 5);
+            float orbit = belt * (0.75F + 0.5F * h1);
+            float angle = h0 * 2F * PI + (float) Math.toRadians(speed * (0.4F + 0.6F * h3) * seconds) * (30F / Math.max(orbit, 1F));
+            float cx = (float) Math.cos(angle) * orbit;
+            float cz = (float) Math.sin(angle) * orbit;
+            float cy = (h2 - 0.5F) * belt * 0.12F;
+            float scale = size * (0.4F + 1.2F * h4 * h4);
+            float spin = seconds * (0.3F + h3 * 1.5F) * (h0 > 0.5F ? 1F : -1F);
+            float shade = 0.8F + 0.4F * h1;
+
+            tumble.identity().rotateXYZ(h1 * 6F + spin, h2 * 6F + spin * 0.7F, h3 * 6F);
+
+            for (int v = 0; v < ICO_VERTICES.length; v++)
+            {
+                float bump = 0.7F + 0.5F * hash(i, v, 7, 13);
+
+                tumble.transform(p.set(ICO_VERTICES[v][0] * bump, ICO_VERTICES[v][1] * bump * (0.7F + 0.3F * h2), ICO_VERTICES[v][2] * bump));
+                shape[v][0] = cx + p.x * scale;
+                shape[v][1] = cy + p.y * scale;
+                shape[v][2] = cz + p.z * scale;
+            }
+
+            for (int[] face : ICO_FACES)
+            {
+                float[] v0 = shape[face[0]];
+                float[] v1 = shape[face[1]];
+                float[] v2 = shape[face[2]];
+
+                e1.set(v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2]);
+                e2.set(v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2]);
+                e1.cross(e2, normal);
+
+                if (normal.lengthSquared() < 1.0E-12F)
+                {
+                    continue;
+                }
+
+                normal.normalize();
+
+                /* Faces are flat shaded: a rock reads as a rock by its facets */
+                float l = 0.18F + 0.82F * Math.max(0F, Math.abs(normal.dot(light)) * (normal.dot(light) >= 0F ? 1F : 0.25F));
+                float r = Math.min(1F, base.r * shade * l);
+                float g = Math.min(1F, base.g * shade * l);
+                float bl = Math.min(1F, base.b * shade * l);
+
+                vertex(builder, m, v0[0], v0[1], v0[2], r, g, bl, 1F);
+                vertex(builder, m, v1[0], v1[1], v1[2], r, g, bl, 1F);
+                vertex(builder, m, v2[0], v2[1], v2[2], r, g, bl, 1F);
+            }
+        }
+
+        Bufs.draw(builder);
+    }
+
+    /** The spiral galaxy: a disc of glowing points in space, turning slowly, added onto what is behind it */
+    private void galaxy(Matrix4f m, Vector3f eye, float seconds)
+    {
+        FakeSpaceForm form = this.form;
+        Color core = form.galaxyCoreColor.get();
+        Color arm = form.galaxyArmColor.get();
+        float brightness = clamp(form.galaxyBrightness.get(), 0F, 2F);
+        float size = Math.max(form.galaxySize.get(), 1F);
+        float rotation = (float) Math.toRadians(form.galaxyRotationSpeed.get() * seconds);
+        Vector3f center = new Vector3f(form.galaxyX.get(), form.galaxyY.get(), form.galaxyZ.get());
+        Matrix3f disc = new Matrix3f().rotateY((float) Math.toRadians(form.galaxyYaw.get())).rotateX((float) Math.toRadians(form.galaxyTilt.get()));
+        Vector3f du = disc.transform(new Vector3f(1F, 0F, 0F));
+        Vector3f dv = disc.transform(new Vector3f(0F, 0F, 1F));
+        Vector3f p = new Vector3f();
+        Vector3f right = new Vector3f();
+        Vector3f up = new Vector3f();
+        Vector3f view = new Vector3f();
+
+        RenderSystem.blendFunc(GlStateManager.SrcFactor.SRC_ALPHA, GlStateManager.DstFactor.ONE);
+        RenderSystem.setShader(GameRenderer::getPositionColorProgram);
+
+        BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+
+        /* The faint dust of the disc and the glow of the core */
+        discFan(builder, m, center, du, dv, size, size, arm, 0.08F * brightness);
+        discFan(builder, m, center, du, dv, size * 0.25F, size * 0.25F, core, 0.45F * brightness);
+
+        int points = 1600;
+
+        for (int i = 0; i < points; i++)
+        {
+            float t = hash(i, 5, 0, 23);
+            float n = hash(i, 5, 1, 23);
+            float s = hash(i, 5, 2, 23);
+            float lift = hash(i, 5, 3, 23) - 0.5F;
+            boolean inCore = i % 5 == 0;
+            float rr = inCore ? size * 0.3F * t * t : size * (float) Math.pow(t, 0.75F);
+            float theta = inCore ? n * 2F * PI : (rr / size) * 3.6F + (i % 2) * PI + (n - 0.5F) * (0.5F + 0.5F * (rr / size)) + rotation;
+            float k = clamp(rr / size, 0F, 1F);
+            float level = Math.min(1F, (0.18F + 0.55F * (1F - k)) * brightness);
+            float half = size * (0.008F + 0.012F * s);
+            float r = core.r + (arm.r - core.r) * k;
+            float g = core.g + (arm.g - core.g) * k;
+            float bl = core.b + (arm.b - core.b) * k;
+
+            p.set(center).fma(rr * (float) Math.cos(theta), du).fma(rr * (float) Math.sin(theta), dv);
+            /* A little thickness, more at the core */
+            p.fma(lift * size * 0.04F * (1.5F - k), disc.transform(view.set(0F, 1F, 0F)));
+
+            if (eye != null)
+            {
+                view.set(eye).sub(p);
+
+                if (view.lengthSquared() < 1.0E-6F)
+                {
+                    continue;
+                }
+
+                view.normalize();
+                tangents(view, right, up);
+            }
+            else
+            {
+                right.set(du);
+                up.set(dv);
+            }
+
+            quad(builder, m,
+                p.x - right.x * half - up.x * half, p.y - right.y * half - up.y * half, p.z - right.z * half - up.z * half,
+                p.x + right.x * half - up.x * half, p.y + right.y * half - up.y * half, p.z + right.z * half - up.z * half,
+                p.x + right.x * half + up.x * half, p.y + right.y * half + up.y * half, p.z + right.z * half + up.z * half,
+                p.x - right.x * half + up.x * half, p.y - right.y * half + up.y * half, p.z - right.z * half + up.z * half,
+                r, g, bl, level, level);
+        }
+
+        Bufs.draw(builder);
+        RenderSystem.defaultBlendFunc();
+    }
+
+    private static void discFan(BufferBuilder builder, Matrix4f m, Vector3f center, Vector3f u, Vector3f v, float ru, float rv, Color color, float alpha)
+    {
+        int segments = 40;
+
+        for (int i = 0; i < segments; i++)
+        {
+            float a0 = 2F * PI * i / segments;
+            float a1 = 2F * PI * (i + 1) / segments;
+            float c0 = (float) Math.cos(a0) * ru;
+            float s0 = (float) Math.sin(a0) * rv;
+            float c1 = (float) Math.cos(a1) * ru;
+            float s1 = (float) Math.sin(a1) * rv;
+
+            vertex(builder, m, center.x, center.y, center.z, color.r, color.g, color.b, alpha);
+            vertex(builder, m, center.x + u.x * c0 + v.x * s0, center.y + u.y * c0 + v.y * s0, center.z + u.z * c0 + v.z * s0, color.r, color.g, color.b, 0F);
+            vertex(builder, m, center.x + u.x * c1 + v.x * s1, center.y + u.y * c1 + v.y * s1, center.z + u.z * c1 + v.z * s1, color.r, color.g, color.b, 0F);
+        }
+    }
+
     /* Helpers */
 
     /** A direction from a yaw about the up axis (0 is the form's front, +Z) and a pitch above the horizon */
-    private static Vector3f direction(float yaw, float pitch, Vector3f out)
+    public static Vector3f direction(float yaw, float pitch, Vector3f out)
     {
         float y = (float) Math.toRadians(yaw);
         float p = (float) Math.toRadians(clamp(pitch, -89.9F, 89.9F));
@@ -622,8 +841,8 @@ public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
         return out.set((float) (Math.sin(y) * Math.cos(p)), (float) Math.sin(p), (float) (Math.cos(y) * Math.cos(p)));
     }
 
-    /** Two unit vectors across the sky at a direction, right and up as seen from the camera at the middle */
-    private void tangents(Vector3f direction, Vector3f right, Vector3f up)
+    /** Two unit vectors across a direction */
+    private static void tangents(Vector3f direction, Vector3f right, Vector3f up)
     {
         if (Math.abs(direction.y) > 0.99F)
         {
@@ -642,17 +861,11 @@ public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
         builder.vertex(m, point[0], point[1], point[2]).color(color[0], color[1], color[2], alpha)/*$ nx*/.next()/**/;
     }
 
-    private static void vertex(BufferBuilder builder, Matrix4f m, Vector3f point, float r, float g, float b, float alpha)
-    {
-        builder.vertex(m, point.x, point.y, point.z).color(r, g, b, alpha)/*$ nx*/.next()/**/;
-    }
-
     private static void vertex(BufferBuilder builder, Matrix4f m, float x, float y, float z, float r, float g, float b, float alpha)
     {
         builder.vertex(m, x, y, z).color(r, g, b, alpha)/*$ nx*/.next()/**/;
     }
 
-    /** A quad of corners 1 to 4 in order, the first two (the "from" side) at one alpha and the last two at the other */
     private static void quad(BufferBuilder builder, Matrix4f m, float x1, float y1, float z1, float x2, float y2, float z2, float x3, float y3, float z3, float x4, float y4, float z4, float r, float g, float b, float fromAlpha, float toAlpha)
     {
         vertex(builder, m, x1, y1, z1, r, g, b, fromAlpha);
@@ -675,7 +888,6 @@ public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
         return t * t * (3F - 2F * t);
     }
 
-    /** A hash of four integers into 0 to 1, the same everywhere */
     private static float hash(int x, int y, int z, int w)
     {
         int h = x * 374761393 + y * 668265263 + z * 1274126177 + w * 2147483647;

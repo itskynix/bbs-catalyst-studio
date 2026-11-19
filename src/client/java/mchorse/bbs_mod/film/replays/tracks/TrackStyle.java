@@ -74,10 +74,9 @@ public class TrackStyle
         }
 
         for (String id : new String[] {"sky_dome", "background_color", "star_density", "star_brightness", "star_size", "star_seed", "streak_factor",
-            "nebula_amount", "nebula_color_a", "nebula_color_b", "nebula_scale",
-            "planet_enabled", "planet_yaw", "planet_pitch", "planet_size", "planet_color_a", "planet_color_b", "planet_rotation_speed", "planet_light_yaw",
-            "planet_atmosphere", "planet_atmosphere_color", "planet_ring", "planet_ring_color", "planet_ring_tilt",
-            "galaxy_enabled", "galaxy_yaw", "galaxy_pitch", "galaxy_size", "galaxy_tilt", "galaxy_rotation_speed", "galaxy_brightness", "galaxy_core_color", "galaxy_arm_color"})
+            "nebula_amount", "nebula_color_a", "nebula_color_b", "nebula_scale", "planet_light_yaw", "light_pitch",
+            "galaxy_enabled", "galaxy_x", "galaxy_y", "galaxy_z", "galaxy_yaw", "galaxy_size", "galaxy_tilt", "galaxy_rotation_speed", "galaxy_brightness", "galaxy_core_color", "galaxy_arm_color",
+            "asteroid_count", "asteroid_radius", "asteroid_speed", "asteroid_size", "asteroid_color"})
         {
             LABELS.put(id, mchorse.bbs_mod.l10n.L10n.lang("bbs.ui.forms.editors.fake_space." + id));
         }
