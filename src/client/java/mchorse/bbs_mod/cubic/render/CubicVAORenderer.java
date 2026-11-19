@@ -12,6 +12,7 @@ import mchorse.bbs_mod.forms.FormTranslucentQueue;
 import mchorse.bbs_mod.forms.forms.ModelForm;
 import mchorse.bbs_mod.forms.forms.utils.FormMaterial;
 import mchorse.bbs_mod.forms.renderers.utils.FormMaterialLevels;
+import mchorse.bbs_mod.forms.renderers.utils.FormMaterialValue;
 import mchorse.bbs_mod.forms.renderers.utils.FormOverlay;
 import mchorse.bbs_mod.forms.renderers.utils.FormPbr;
 import mchorse.bbs_mod.graphics.texture.Texture;
@@ -223,6 +224,27 @@ public class CubicVAORenderer extends CubicCubeRenderer
                 }
             }
 
+            /* Set Material Value: a glow or a colour blend changes this draw's colour and light, a fill goes to the shader */
+            int fill = 0;
+            float fillValue = 0F;
+            FormMaterialValue.Result materialValue = plain ? FormMaterialValue.resolve(modelForm, group.id, r, g, b) : null;
+
+            if (materialValue != null)
+            {
+                r = materialValue.r;
+                g = materialValue.g;
+                b = materialValue.b;
+                fill = materialValue.fill;
+                fillValue = materialValue.value;
+
+                if (materialValue.glow > 0F)
+                {
+                    int u = (int) Lerps.lerp(light & '￿', LightmapTextureManager.MAX_BLOCK_LIGHT_COORDINATE, materialValue.glow);
+
+                    light = u | (light >> 16 & '￿') << 16;
+                }
+            }
+
             int overlay = overlayColor != null ? 0 : this.overlay;
             int previousOverlayTexture = overlayColor != null ? FormOverlay.bind(overlayColor) : 0;
             boolean modelCulling = this.model.isCulling();
@@ -259,7 +281,18 @@ public class CubicVAORenderer extends CubicCubeRenderer
             }
             else
             {
+                /* Only this immediate draw carries the fill; a deferred one draws later, with it off */
+                if (fill != 0)
+                {
+                    FormMaterialValue.setMask(this.program, fill, fillValue, entry.getValue().getBounds());
+                }
+
                 ModelVAORenderer.render(this.program, entry.getValue(), stack, r, g, b, a, light, overlay);
+
+                if (fill != 0)
+                {
+                    FormMaterialValue.setMask(this.program, 0, 0F, null);
+                }
             }
 
             if (cullOverride)

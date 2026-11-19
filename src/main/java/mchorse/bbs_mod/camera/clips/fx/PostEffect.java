@@ -170,5 +170,12 @@ public final class PostEffect
         def(PSYCHOLOGICAL, "pulse", false, 0x700000, p("rate", 1.1F, 0F, 5F), p("strength", 0.03F, 0F, 0.2F));
         def(PSYCHOLOGICAL, "night_vision", false, NO_COLOR, p("noise", 0.3F, 0F, 1F), p("gain", 2F, 0F, 8F));
         def(PSYCHOLOGICAL, "thermal_vision", false, NO_COLOR, p("contrast", 1F, 0.1F, 4F));
+
+        /* Diegetic helmet and cosmic effects, appended so the modes above keep their numbers (61 to 65) */
+        def(PSYCHOLOGICAL, "visor_fog", false, 0xcfe6ff, p("breath", 0.25F, 0F, 2F), p("density", 0.6F, 0F, 1F), p("frost", 0.3F, 0F, 1F));
+        def(PSYCHOLOGICAL, "visor_crack", false, 0xffffff, p("amount", 0.5F, 0F, 1F), p("scale", 1F, 0.2F, 5F), p("chroma", 0.3F, 0F, 1F));
+        def(PSYCHOLOGICAL, "hypoxia_vignette", false, 0x2a0000, p("rate", 1.2F, 0.1F, 5F), p("strength", 0.6F, 0F, 1F), p("desaturate", 0.5F, 0F, 1F));
+        def(ATMOSPHERE, "big_rip", false, NO_COLOR, p("stretch", 0.4F, 0F, 1F), p("streaks", 0.6F, 0F, 1F), p("spectrum", 0.3F, 0F, 1F), p("speed", 1F, 0F, 5F));
+        def(ATMOSPHERE, "vacuum_collapse", false, 0x9fd0ff, p("progress", 0.5F, 0F, 1F), p("width", 0.05F, 0.005F, 0.5F), p("shift", 0.4F, 0F, 1F), p("angle", 0F, -360F, 360F));
     }
 }

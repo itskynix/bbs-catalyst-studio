@@ -99,6 +99,12 @@
 			"values": [0.0, 0.0, 0.0, 1.0]
 		},
 		{
+			"name": "MaterialMask",
+			"type": "float",
+			"count": 4,
+			"values": [0.0, 1.0, 0.0, 1.0]
+		},
+		{
 			"name": "NormalMat",
 			"type": "matrix3x3",
 			"count": 9,

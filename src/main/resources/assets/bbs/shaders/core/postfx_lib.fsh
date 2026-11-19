@@ -932,6 +932,114 @@ vec3 thermalVision(vec3 base)
     return mix(vec3(1.0, 0.7, 0.0), vec3(1.0, 1.0, 0.9), (l - 0.75) / 0.25);
 }
 
+/* ---- Diegetic helmet and cosmic effects ---- */
+
+/* Breath-synced mist (and frost crystals) creeping in from the visor's edge */
+vec3 visorFog(vec2 uv, vec3 base)
+{
+    float breath = 0.5 - 0.5 * cos(Time * P.x * TAU);
+    float edge = vignetteMask(uv, 0.2, 1.0);
+    float cloud = 0.6 + 0.4 * fbm(uv * vec2(aspect(), 1.0) * 3.0 + Time * 0.03);
+    float mist = clamp(edge * (0.35 + 0.65 * breath) * cloud * P.y * 1.6, 0.0, 1.0);
+    vec2 r = px() * 18.0 * mist;
+    vec3 blur = (scene(uv + r) + scene(uv - r) + scene(uv + vec2(r.x, -r.y)) + scene(uv + vec2(-r.x, r.y))) * 0.25;
+    vec2 v = voronoi(uv * vec2(aspect(), 1.0) * 14.0);
+    float crystal = (1.0 - smoothstep(0.0, 0.08, v.y - v.x)) * smoothstep(0.5, 1.0, edge) * clamp(P.z, 0.0, 1.0);
+    vec3 c = mix(base, blur, mist);
+
+    c = mix(c, Tint * 0.9 + 0.1, mist * 0.5);
+
+    return mix(c, vec3(1.0), crystal * 0.6);
+}
+
+/* A radial crack web from an impact point, refracting the frame and splitting its colours */
+vec3 visorCrack(vec2 uv, vec3 base)
+{
+    vec2 hit = vec2(0.58, 0.44);
+    vec2 d = (uv - hit) * vec2(aspect(), 1.0);
+    float dist = length(d);
+    float reach = max(P.x, 0.001) * 1.4;
+    float fall = 1.0 - smoothstep(0.0, reach, dist);
+    float ang = atan(d.y, d.x + 0.00001);
+    vec2 v = voronoi(uv * vec2(aspect(), 1.0) * 4.0 * max(P.y, 0.2));
+    float web = 1.0 - smoothstep(0.0, 0.035, v.y - v.x);
+    float spokes = pow(abs(sin(ang * 7.0 + noise(vec2(dist * 12.0, ang)) * 2.0)), 24.0);
+    float crack = clamp(max(web, spokes * 0.8), 0.0, 1.0) * fall * step(0.001, P.x);
+    vec2 off = (vec2(noise(uv * 40.0), noise(uv * 40.0 + 7.0)) - 0.5) * 0.02 * crack;
+    vec2 ca = vec2(0.006, 0.0) * P.z * (0.3 + crack * 2.0) * fall;
+    vec3 c = vec3(scene(uv + off + ca).r, scene(uv + off).g, scene(uv + off - ca).b);
+
+    return mix(c, Tint, crack * 0.55) + vec3(crack * 0.15);
+}
+
+/* Pulsing, closing vignette with a drained palette: low oxygen and panic */
+vec3 hypoxiaVignette(vec2 uv, vec3 base)
+{
+    float phase = fract(Time * P.x);
+    float beat = exp(-phase * 9.0) + 0.5 * exp(-max(phase - 0.22, 0.0) * 10.0) * step(0.22, phase);
+    float s = clamp(P.y, 0.0, 1.0);
+    float close = max(0.62 - 0.4 * s * (0.55 + 0.45 * clamp(beat, 0.0, 1.0)), 0.05);
+    float v = vignetteMask(uv, close, close + 0.45);
+    vec2 r = px() * 5.0 * v;
+    vec3 blur = (scene(uv + r) + scene(uv - r) + scene(uv + vec2(r.x, -r.y)) + scene(uv + vec2(-r.x, r.y))) * 0.25;
+    vec3 c = mix(base, blur, v);
+
+    c = mix(c, vec3(luma(c)), clamp(P.z, 0.0, 1.0) * v);
+
+    return mix(c, Tint, v * v * s);
+}
+
+/* Big Rip: space stretching away from the centre, stars dragged into streaks, the spectrum splitting */
+vec3 bigRip(vec2 uv, vec3 base)
+{
+    vec2 d = uv - 0.5;
+    float r = length(d * vec2(aspect(), 1.0));
+    float wob = 1.0 + 0.04 * sin(Time * P.w * 2.0 + r * 8.0) * P.x;
+    vec2 warped = 0.5 + d / (1.0 + clamp(P.x, 0.0, 1.0) * r * 3.0 * wob);
+    float drag = clamp(P.y, 0.0, 1.0) * 0.35 * (0.3 + r);
+    vec3 acc = vec3(0.0);
+    float weight = 0.0;
+
+    for (int i = 0; i < 12; i++)
+    {
+        float t = float(i) / 12.0;
+        vec3 s = scene(0.5 + (warped - 0.5) * (1.0 - t * drag));
+        float w = (1.0 - t * 0.7) * (0.35 + smoothstep(0.55, 1.0, luma(s)) * 1.5);
+
+        acc += s * w;
+        weight += w;
+    }
+
+    vec3 c = acc / max(weight, 0.001);
+    float sp = clamp(P.z, 0.0, 1.0) * 0.04 * (0.2 + r);
+
+    c.r = mix(c.r, scene(0.5 + (warped - 0.5) * (1.0 + sp)).r, 0.8);
+    c.b = mix(c.b, scene(0.5 + (warped - 0.5) * (1.0 - sp)).b, 0.8);
+
+    return c;
+}
+
+/* A wave boundary sweeping across the frame: calm ahead of it, drained and stretched behind it */
+vec3 vacuumCollapse(vec2 uv, vec3 base)
+{
+    float a = radians(P.w);
+    vec2 dir = vec2(cos(a), sin(a));
+    float front = mix(-0.6, 1.6, clamp(P.x, 0.0, 1.0));
+    float dist = dot(uv - 0.5, dir) + 0.5 - front;
+    float w = max(P.y, 0.005);
+    float band = exp(-(dist * dist) / (w * w));
+    float behind = 1.0 - smoothstep(-w * 0.5, w * 0.5, dist);
+    float shift = clamp(P.z, 0.0, 1.0);
+    vec2 ripple = dir * sin(dist / w * 3.0) * w * 0.35 * band;
+    vec2 pull = dir * shift * 0.12 * behind * (1.0 - exp(-max(-dist, 0.0) * 3.0));
+    vec3 c = scene(uv + ripple + pull);
+    vec3 dead = vec3(luma(c)) * vec3(0.33, 0.37, 0.45);
+
+    c = mix(c, dead, behind * shift);
+
+    return c + Tint * band * 0.9;
+}
+
 vec3 effect(int mode, vec2 uv, vec3 base)
 {
     /* Cinematic and optics */
@@ -1006,6 +1114,13 @@ vec3 effect(int mode, vec2 uv, vec3 base)
     if (mode == 58) return pulse(uv);
     if (mode == 59) return nightVision(uv, base);
     if (mode == 60) return thermalVision(base);
+
+    /* Diegetic helmet and cosmic */
+    if (mode == 61) return visorFog(uv, base);
+    if (mode == 62) return visorCrack(uv, base);
+    if (mode == 63) return hypoxiaVignette(uv, base);
+    if (mode == 64) return bigRip(uv, base);
+    if (mode == 65) return vacuumCollapse(uv, base);
 
     return base;
 }

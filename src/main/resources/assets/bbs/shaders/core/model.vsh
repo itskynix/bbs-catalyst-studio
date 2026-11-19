@@ -33,6 +33,8 @@ out vec4 normal;
 out vec3 dissolvePos;
 /* The vertex in eye space, where the slice plane is given */
 out vec3 slicePos;
+/* The vertex in the bone's own frame, where a Set Material Value fill is measured */
+out vec3 localPos;
 
 /* Same distance the vanilla include used to give up to 1.20.4; 1.21 dropped the model-view form. */
 float bbs_fog_distance(mat4 modelViewMat, vec3 pos, int shape)
@@ -61,4 +63,5 @@ void main()
     normal = ProjMat * ModelViewMat * vec4(Normal, 0.0);
     dissolvePos = (DissolveMat * vec4(Position, 1.0)).xyz;
     slicePos = (ModelViewMat * vec4(Position, 1.0)).xyz;
+    localPos = Position;
 }

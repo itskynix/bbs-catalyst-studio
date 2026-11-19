@@ -18,6 +18,9 @@ uniform vec2 DissolveRange;
 /* A form sliced in 3D keeps what lies on the positive side of this plane, in eye space. (0, 0, 0, 1)
  * keeps everything. */
 uniform vec4 SlicePlane;
+/* Set Material Value fill: x = axis (0 off, 1 vertical, 2 horizontal), y = value, z and w = the bone's
+ * extent along that axis. What lies past the value is left dark, as the empty part of a gauge. */
+uniform vec4 MaterialMask;
 
 in float vertexDistance;
 in vec4 vertexColor;
@@ -27,6 +30,7 @@ in vec2 texCoord0;
 in vec4 normal;
 in vec3 dissolvePos;
 in vec3 slicePos;
+in vec3 localPos;
 
 out vec4 fragColor;
 
@@ -119,6 +123,17 @@ void main()
     if (PassMode == 2 && color.a >= 0.999)
     {
         discard;
+    }
+
+    if (MaterialMask.x > 0.5)
+    {
+        float coord = MaterialMask.x > 1.5 ? localPos.x : localPos.y;
+        float t = (coord - MaterialMask.z) / max(MaterialMask.w - MaterialMask.z, 0.0001);
+
+        if (t > MaterialMask.y)
+        {
+            color.rgb *= 0.12;
+        }
     }
 
     if (burning)

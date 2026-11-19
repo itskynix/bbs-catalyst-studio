@@ -19,6 +19,7 @@ import mchorse.bbs_mod.ui.framework.elements.buttons.UIToggle;
 import mchorse.bbs_mod.ui.framework.elements.input.UISliderTrackpad;
 import mchorse.bbs_mod.ui.framework.elements.input.UITexturePicker;
 import mchorse.bbs_mod.ui.framework.elements.input.UITrackpad;
+import mchorse.bbs_mod.ui.framework.elements.input.text.UITextbox;
 import mchorse.bbs_mod.ui.utils.UI;
 import mchorse.bbs_mod.ui.utils.shapes.UIShapeKeys;
 import mchorse.bbs_mod.ui.utils.values.UIValues;
@@ -38,6 +39,8 @@ public class UIModelFormPanel extends UIFormPanel<ModelForm>
     public UISection cemSection;
     public UISection capeSection;
     public UISection jitterSection;
+    public UISection materialValueSection;
+    public UICirculate materialMode;
 
     public UIToggle jitterEnable;
     public UISliderTrackpad jitterIntensity;
@@ -115,8 +118,9 @@ public class UIModelFormPanel extends UIFormPanel<ModelForm>
         this.buildCemSection();
         this.buildCapeSection();
         this.buildJitterSection();
+        this.buildMaterialValueSection();
 
-        this.options.add(this.pickModel, this.pickDamagedModel, this.damaged, this.pick, this.poseEditor, this.jitterSection, this.capeSection);
+        this.options.add(this.pickModel, this.pickDamagedModel, this.damaged, this.pick, this.poseEditor, this.jitterSection, this.materialValueSection, this.capeSection);
     }
 
     @Override
@@ -163,6 +167,38 @@ public class UIModelFormPanel extends UIFormPanel<ModelForm>
             UIValues.toggle(UIKeys.FORMS_EDITOR_MODEL_CAPE_ENABLE, () -> this.form.hasCape),
             this.pickCape
         );
+    }
+
+    /**
+     * Set Material Value: the 0 to 1 value is a track of its own (key it in the dope sheet to run a
+     * gauge, a glow or a fade); the mode, the bone it drives and the colour are set here.
+     */
+    private void buildMaterialValueSection()
+    {
+        this.materialMode = new UICirculate((c) -> this.form.materialMode.set(c.getValue()));
+        this.materialMode.addLabel(UIKeys.FORMS_EDITOR_MODEL_MATERIAL_VALUE_MODE_OFF);
+        this.materialMode.addLabel(UIKeys.FORMS_EDITOR_MODEL_MATERIAL_VALUE_MODE_EMISSIVE);
+        this.materialMode.addLabel(UIKeys.FORMS_EDITOR_MODEL_MATERIAL_VALUE_MODE_VERTICAL);
+        this.materialMode.addLabel(UIKeys.FORMS_EDITOR_MODEL_MATERIAL_VALUE_MODE_HORIZONTAL);
+        this.materialMode.addLabel(UIKeys.FORMS_EDITOR_MODEL_MATERIAL_VALUE_MODE_COLOR);
+        this.materialMode.tooltip(UIKeys.FORMS_EDITOR_MODEL_MATERIAL_VALUE_MODE_TOOLTIP);
+
+        UITrackpad value = UIValues.trackpad(() -> this.form.materialValue);
+
+        value.limit(0D, 1D).tooltip(UIKeys.FORMS_EDITOR_MODEL_MATERIAL_VALUE_VALUE_TOOLTIP);
+
+        UITextbox bone = UIValues.textbox(() -> this.form.materialTargetBone);
+
+        bone.tooltip(UIKeys.FORMS_EDITOR_MODEL_MATERIAL_VALUE_BONE_TOOLTIP);
+
+        this.materialValueSection = this.section(UIKeys.FORMS_EDITOR_MODEL_MATERIAL_VALUE, "model.material_value", false);
+        this.materialValueSection.fields.add(
+            UI.labelRow(UIKeys.FORMS_EDITOR_MODEL_MATERIAL_VALUE_MODE, this.materialMode),
+            UI.labelRow(UIKeys.FORMS_EDITOR_MODEL_MATERIAL_VALUE_VALUE, value),
+            UI.labelRow(UIKeys.FORMS_EDITOR_MODEL_MATERIAL_VALUE_BONE, bone),
+            UI.labelRow(UIKeys.FORMS_EDITOR_MODEL_MATERIAL_VALUE_COLOR, UIValues.color(() -> this.form.materialColor))
+        );
+        this.materialValueSection.title.tooltip(UIKeys.FORMS_EDITOR_MODEL_MATERIAL_VALUE_TOOLTIP);
     }
 
     private void buildJitterSection()
@@ -290,6 +326,7 @@ public class UIModelFormPanel extends UIFormPanel<ModelForm>
         this.jitterIntensity.setValue(jc.intensity);
         this.jitterFrequency.setValue(jc.frequency);
         this.jitterTarget.setValue(Math.max(0, Math.min(3, jc.target)));
+        this.materialMode.setValue(Math.max(0, Math.min(4, form.materialMode.get())));
 
         this.options.resize();
     }

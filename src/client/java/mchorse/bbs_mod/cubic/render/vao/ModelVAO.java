@@ -10,6 +10,8 @@ public class ModelVAO implements IModelVAO
     private int vao;
     private int vao2;
     private int count;
+    /** The extent of the vertices in the bone's own frame: minX, maxX, minY, maxY; what a fill mask measures against */
+    private final float[] bounds = {0F, 1F, 0F, 1F};
 
     public ModelVAO(ModelVAOData data)
     {
@@ -26,8 +28,42 @@ public class ModelVAO implements IModelVAO
         GL30.glDeleteVertexArrays(this.vao2);
     }
 
+    /** minX, maxX, minY, maxY of the vertices in the bone's frame */
+    public float[] getBounds()
+    {
+        return this.bounds;
+    }
+
+    private void measure(float[] vertices)
+    {
+        if (vertices == null || vertices.length < 3)
+        {
+            return;
+        }
+
+        float minX = Float.MAX_VALUE;
+        float maxX = -Float.MAX_VALUE;
+        float minY = Float.MAX_VALUE;
+        float maxY = -Float.MAX_VALUE;
+
+        for (int i = 0; i + 2 < vertices.length; i += 3)
+        {
+            minX = Math.min(minX, vertices[i]);
+            maxX = Math.max(maxX, vertices[i]);
+            minY = Math.min(minY, vertices[i + 1]);
+            maxY = Math.max(maxY, vertices[i + 1]);
+        }
+
+        this.bounds[0] = minX;
+        this.bounds[1] = maxX;
+        this.bounds[2] = minY;
+        this.bounds[3] = maxY;
+    }
+
     public void upload(ModelVAOData data)
     {
+        this.measure(data.vertices());
+
         this.vao = GL30.glGenVertexArrays();
         this.vao2 = GL30.glGenVertexArrays();
 

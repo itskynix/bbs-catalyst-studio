@@ -28,6 +28,7 @@ import mchorse.bbs_mod.settings.values.core.ValueString;
 import mchorse.bbs_mod.settings.values.core.ValueWindControl;
 import mchorse.bbs_mod.settings.values.numeric.ValueBoolean;
 import mchorse.bbs_mod.settings.values.numeric.ValueFloat;
+import mchorse.bbs_mod.settings.values.numeric.ValueInt;
 import mchorse.bbs_mod.utils.colors.Color;
 import mchorse.bbs_mod.utils.pose.Pose;
 import org.joml.Vector3f;
@@ -149,6 +150,20 @@ public class ModelForm extends Form implements IPosedForm, ILatticeForm
     public final ValueBoolean hasCape = new ValueBoolean("has_cape", false);
     public final ValueLink capeTexture = new ValueLink("cape_texture", Link.bbs("textures/default_cape.png"));
 
+    /* Set Material Value: one 0 to 1 value, keyed in the dope sheet, that drives how bright a part is,
+     * how full a bar-like part is or how far it has blended to a colour. The mode says which, the
+     * target bone (empty: every bone) which part, and the colour is the glow or the blend target. */
+    public static final int MATERIAL_OFF = 0;
+    public static final int MATERIAL_EMISSIVE = 1;
+    public static final int MATERIAL_FILL_VERTICAL = 2;
+    public static final int MATERIAL_FILL_HORIZONTAL = 3;
+    public static final int MATERIAL_COLOR = 4;
+
+    public final ValueFloat materialValue = new ValueFloat("material_value", 0F, 0F, 1F);
+    public final ValueInt materialMode = new ValueInt("material_mode", MATERIAL_OFF, MATERIAL_OFF, MATERIAL_COLOR);
+    public final ValueString materialTargetBone = new ValueString("material_target_bone", "");
+    public final ValueColor materialColor = new ValueColor("material_color", Color.white());
+
     /** Dissolve and shatter: the model burning away or breaking apart bone by bone. */
     public final FormFxValues fx = new FormFxValues(this);
 
@@ -254,6 +269,14 @@ public class ModelForm extends Form implements IPosedForm, ILatticeForm
 
         this.add(this.hasCape);
         this.add(this.capeTexture);
+
+        /* The value and the colour are tracks; the mode and the bone are a setup */
+        this.materialMode.invisible();
+        this.materialTargetBone.invisible();
+        this.add(this.materialValue);
+        this.add(this.materialMode);
+        this.add(this.materialTargetBone);
+        this.add(this.materialColor);
     }
 
     @Override
