@@ -91,7 +91,6 @@ public class FilmEditorController extends BaseFilmController
             ReplayCrowdGlanceDriver.apply(replay, this.film, ticks, entity);
             mchorse.bbs_mod.nav.AiDriver.apply(replay, this.film, ticks, entity);
             mchorse.bbs_mod.film.LocomotionSmoother.apply(replay, ticks, entity);
-            mchorse.bbs_mod.film.OpenableAnimator.playback(replay, ticks);
             replay.applyClientActions(ticks, entity, this.film);
         }
 

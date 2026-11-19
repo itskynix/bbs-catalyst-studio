@@ -681,17 +681,19 @@ public class ClientNetwork
         BBSClientNetworking.send(ServerNetwork.SERVER_ZOOM, buf);
     }
 
-    public static void sendOpenableSwing(net.minecraft.util.math.BlockPos pos, float from, float to, int ticks, float angle)
+    /** The blocks a door, trapdoor, gate or chest made into a film actor stood in, for the server to take out of the world */
+    public static void sendOpenableTakeover(java.util.List<net.minecraft.util.math.BlockPos> positions)
     {
         PacketByteBuf buf = PacketByteBufs.create();
 
-        buf.writeBlockPos(pos);
-        buf.writeFloat(from);
-        buf.writeFloat(to);
-        buf.writeInt(ticks);
-        buf.writeFloat(angle);
+        buf.writeVarInt(positions.size());
 
-        BBSClientNetworking.send(ServerNetwork.SERVER_OPENABLE_SWING, buf);
+        for (net.minecraft.util.math.BlockPos pos : positions)
+        {
+            buf.writeBlockPos(pos);
+        }
+
+        BBSClientNetworking.send(ServerNetwork.SERVER_OPENABLE_TAKEOVER, buf);
     }
 
     public static void sendPauseFilm(String filmId)

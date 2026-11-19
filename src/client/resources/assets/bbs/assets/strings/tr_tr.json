@@ -1052,6 +1052,8 @@
     "bbs.ui.film.replay.filter_sheets": "Hatları Filtrele...",
     "bbs.ui.film.replay.filter_sheets-title": "Keyframe Hatları",
     "bbs.ui.film.replay.fp": "Bakış Açısını Önizle",
+    "bbs.ui.film.replay.openable_needs_film": "Önce bir film aç ya da kaydet: blok o filmin aktörüne dönüşür",
+    "bbs.ui.replays.tracks.properties.openness": "Açıklık",
     "bbs.ui.forms.editors.general.section_openables": "Kademeli Açılabilir Bloklar",
     "bbs.ui.forms.editors.general.section_smoothing": "Hareket Yumuşatma",
     "bbs.ui.forms.editors.general.section_ai": "Yapay Zekâ",

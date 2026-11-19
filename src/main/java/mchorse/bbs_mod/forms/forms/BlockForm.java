@@ -6,6 +6,8 @@ import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.ui.utils.icons.Icon;
 import mchorse.bbs_mod.settings.values.mc.ValueBlockState;
 import mchorse.bbs_mod.settings.values.core.ValueColor;
+import mchorse.bbs_mod.settings.values.numeric.ValueBoolean;
+import mchorse.bbs_mod.settings.values.numeric.ValueFloat;
 import mchorse.bbs_mod.utils.colors.Color;
 import net.minecraft.registry.Registries;
 
@@ -21,6 +23,13 @@ public class BlockForm extends Form implements ILatticeForm
     /** Free-form deformation: the block bent, crushed or stretched by a lattice of control points */
     public final FormLatticeValues latticeValues = new FormLatticeValues(this);
 
+    /* An openable - a door, trapdoor, fence gate or chest - swung open a share of the way: 0 shut, 1 open by the
+     * angle. A track, so a film keys the opening; an actor made from a block by the interactive openables keys it
+     * while it is moved by hand. With the pair on, the door's other half or the double chest's other side comes too. */
+    public final ValueFloat openness = new ValueFloat("openness", 0F, 0F, 1F);
+    public final ValueFloat openAngle = new ValueFloat("open_angle", 90F, 15F, 135F);
+    public final ValueBoolean openablePair = new ValueBoolean("openable_pair", false);
+
     @Override
     public ValueLattice getLattice()
     {
@@ -31,6 +40,11 @@ public class BlockForm extends Form implements ILatticeForm
     {
         this.add(this.blockState);
         this.add(this.color);
+        this.add(this.openness);
+        this.openAngle.invisible();
+        this.add(this.openAngle);
+        this.openablePair.invisible();
+        this.add(this.openablePair);
     }
 
     @Override

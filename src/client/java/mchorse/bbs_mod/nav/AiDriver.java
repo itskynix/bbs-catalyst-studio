@@ -34,10 +34,35 @@ public final class AiDriver
 
         int i = Math.max(0, Math.min(track.length() - 1, ticks));
 
+        int p = Math.max(0, i - 1);
+
+        /* The tick before as well, so a frame drawn in between blends two places of the walk, not a keyframe and the walk */
         entity.setPosition(track.x[i], track.y[i], track.z[i]);
+        entity.setPrevX(track.x[p]);
+        entity.setPrevY(track.y[p]);
+        entity.setPrevZ(track.z[p]);
         entity.setYaw(track.yaw[i]);
         entity.setHeadYaw(track.yaw[i]);
         entity.setBodyYaw(track.yaw[i]);
+        entity.setPrevYaw(near(track.yaw[p], track.yaw[i]));
+        entity.setPrevHeadYaw(near(track.yaw[p], track.yaw[i]));
+        entity.setPrevBodyYaw(near(track.yaw[p], track.yaw[i]));
+    }
+
+    /** The previous yaw moved by whole turns next to the current, so the blend between them is the short way round */
+    private static float near(float previous, float current)
+    {
+        while (previous - current > 180F)
+        {
+            previous -= 360F;
+        }
+
+        while (previous - current < -180F)
+        {
+            previous += 360F;
+        }
+
+        return previous;
     }
 
     /**

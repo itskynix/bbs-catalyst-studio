@@ -113,8 +113,56 @@ public final class AiSimulation
             }
         }
 
+        /* Or a volume placed as a model block in the world */
+        for (mchorse.bbs_mod.blocks.entities.ModelBlockEntity block : new ArrayList<>(mchorse.bbs_mod.client.BBSRendering.capturedModelBlocks))
+        {
+            Form root = block.getProperties().getForm();
+            NavigationVolumeForm[] found = new NavigationVolumeForm[1];
+
+            FormTreeWalk.walk(root, (form, path, anchor) ->
+            {
+                if (found[0] == null && form instanceof NavigationVolumeForm volume)
+                {
+                    found[0] = volume;
+                }
+
+                return found[0] == null;
+            });
+
+            if (found[0] != null)
+            {
+                Vector3f t = block.getProperties().getTransform().translate;
+                double x = block.getPos().getX() + 0.5D + t.x;
+                double y = block.getPos().getY() + t.y;
+                double z = block.getPos().getZ() + 0.5D + t.z;
+
+                for (Form form = found[0]; form != null; form = form.getParentForm())
+                {
+                    Vector3f own = form.transform.get().translate;
+
+                    x += own.x;
+                    y += own.y;
+                    z += own.z;
+                }
+
+                lastBlockVolume = new Volume(found[0], x, y, z);
+                lastBlockVolumeTime = System.currentTimeMillis();
+
+                return lastBlockVolume;
+            }
+        }
+
+        /* The model blocks are gathered over each tick as they update, so one asked about early in a tick may not be in yet */
+        if (lastBlockVolume != null && System.currentTimeMillis() - lastBlockVolumeTime < 3000L)
+        {
+            return lastBlockVolume;
+        }
+
         return null;
     }
+
+    private static Volume lastBlockVolume;
+    private static long lastBlockVolumeTime;
 
     /** Where an actor starts: its first keyframe, or the middle of the volume when it has none */
     private static double[] start(Replay replay, Volume volume)

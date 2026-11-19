@@ -66,6 +66,7 @@ public class TrackStyle
 
         /* Set Material Value, the physics field and the artificial space scene: named in the player's language */
         LABELS.put("material_value", UIKeys.FORMS_EDITOR_MODEL_MATERIAL_VALUE);
+        LABELS.put("openness", mchorse.bbs_mod.l10n.L10n.lang("bbs.ui.replays.tracks.properties.openness"));
         LABELS.put("material_color", UIKeys.FORMS_EDITOR_MODEL_MATERIAL_VALUE_COLOR);
 
         for (String id : new String[] {"gravity_scale", "damping", "pull_strength", "turbulence"})

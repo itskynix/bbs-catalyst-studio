@@ -306,6 +306,13 @@ public class BlockFormRenderer extends FormRenderer<BlockForm>
             mc.getBlockRenderManager().renderFluid(BlockPos.ORIGIN, this.fluidView.set(state, light), consumer, state, fluidState);
         }
 
+        /* A door, trapdoor, gate or chest swung open a share of the way, or drawn with its other half */
+        if (!picking && (this.form.openness.get() > 1.0E-4F || this.form.openablePair.get())
+            && mchorse.bbs_mod.film.OpenableModel.render(state, this.form.openness.get(), this.form.openAngle.get(), this.form.openablePair.get(), matrices, consumers, light, overlay))
+        {
+            return;
+        }
+
         if (type != BlockRenderType.INVISIBLE)
         {
             mc.getBlockRenderManager().renderBlockAsEntity(state, matrices, consumers, light, overlay);

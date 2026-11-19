@@ -354,6 +354,26 @@ public final class NavGrid
             }
         }
 
+        if (best != null)
+        {
+            return best;
+        }
+
+        /* Nothing close by: the nearest floor of the whole mesh, so an actor that starts outside the volume walks in */
+        for (Node node : this.nodes)
+        {
+            double ex = node.centerX() - x;
+            double ez = node.centerZ() - z;
+            double ey = node.y - y;
+            double d = ex * ex + ez * ez + ey * ey;
+
+            if (d < distance)
+            {
+                best = node;
+                distance = d;
+            }
+        }
+
         return best;
     }
 

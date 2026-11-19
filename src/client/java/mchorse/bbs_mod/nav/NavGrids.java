@@ -45,10 +45,11 @@ public final class NavGrids
 
         int sizeX = (int) Math.ceil(Math.min(form.width.get(), 128F));
         int sizeZ = (int) Math.ceil(Math.min(form.length.get(), 128F));
-        int sizeY = (int) Math.ceil(Math.min(form.height.get(), 64F));
+        /* One block under the bottom of the box too: a volume set on the ground has its floor in the block below it */
+        int sizeY = (int) Math.ceil(Math.min(form.height.get(), 64F)) + 1;
         int minX = (int) Math.floor(cx - sizeX / 2D);
         int minZ = (int) Math.floor(cz - sizeZ / 2D);
-        int minY = (int) Math.floor(cy);
+        int minY = (int) Math.floor(cy) - 1;
         float radius = form.agentRadius.get();
         float height = form.agentHeight.get();
         float step = form.maxStepHeight.get();

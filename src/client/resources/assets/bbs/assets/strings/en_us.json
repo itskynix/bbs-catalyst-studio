@@ -1545,6 +1545,8 @@
 	"bbs.ui.film.replay.actor": "Actor",
 	"bbs.ui.film.replay.actor-tooltip": "When enabled, this replay also gets a real body in the world: you can hit it, it triggers pressure plates, it can pick up items. It is still drawn by the film, from its keyframes.",
 	"bbs.ui.film.replay.actor-pickup": "Picks Up Items",
+	"bbs.ui.film.replay.openable_needs_film": "Open or record a film first: the block becomes an actor of it",
+	"bbs.ui.replays.tracks.properties.openness": "Openness",
 	"bbs.ui.forms.navigation_volume": "Navigation Volume",
 	"bbs.ui.forms.editors.navigation_volume.title": "Navigation Volume",
 	"bbs.ui.forms.editors.navigation_volume.box": "Volume",

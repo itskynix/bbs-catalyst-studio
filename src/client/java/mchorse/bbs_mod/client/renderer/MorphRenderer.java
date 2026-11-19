@@ -49,6 +49,15 @@ public class MorphRenderer
                 int overlay = LivingEntityRenderer.getOverlay(player, 0F);
 
                 matrixStack.push();
+
+                /* Locomotion smoothing of the worn form: drawn where the smoothed walk has it, not where the player is */
+                double[] smoothed = mchorse.bbs_mod.film.LocomotionSmoother.morphOffset(player, g);
+
+                if (smoothed != null)
+                {
+                    matrixStack.translate(smoothed[0], 0D, smoothed[1]);
+                }
+
                 matrixStack.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-bodyYaw));
 
                 /* This render replaces LivingEntityRenderer's own transforms,
