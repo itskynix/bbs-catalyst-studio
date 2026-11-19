@@ -56,7 +56,7 @@ public class UILandingScreen extends UIElement
     private static final int MUTED = Colors.setA(Colors.WHITE, 0.5F);
 
     private static final String BANNER_BRAND = "\u00a7lBlockbuster Catalyst Studio";
-    private static final String BANNER_VERSION = "C1.4-1.20.4";
+    private static final String BANNER_VERSION = "1.0-1.20.4";
 
     /* Where the documentation lives; the same in every language, so not in the language files */
     public static final String WIKI_LINK = "https://github.com/itskynix/bbs-catalyst-studio/wiki";

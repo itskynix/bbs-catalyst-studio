@@ -75,3 +75,6 @@ dev_telemetry*
 # Yerel Derleme Kılavuzları
 bbs_cs_derleme_kilavuzu.md
 BUILD_GUIDE.md
+
+DEV_STATE_CANDIDATE_VERSION.md
+DEV_STATE_RELEASE_VERSION.md

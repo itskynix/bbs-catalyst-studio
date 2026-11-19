@@ -399,8 +399,8 @@ if (!excludedMixins.isEmpty()) {
 }
 
 
-/* The remapped jar lands in versions/<mc version>/build/libs under the name of its stage: bbs-cs-C1.4-1.20.4.jar for
- * PUBLIC, the stage appended for every other one (bbs-cs-C1.4-1.20.4-TESTER.jar). */
+/* The remapped jar lands in versions/<mc version>/build/libs under the name of its stage: bbs-cs-1.0-1.20.4.jar for
+ * PUBLIC, the stage appended for every other one (bbs-cs-1.0-1.20.4-TESTER.jar). */
 if (buildStage != "PUBLIC") {
 	tasks.named("remapJar") { archiveClassifier = buildStage }
 }

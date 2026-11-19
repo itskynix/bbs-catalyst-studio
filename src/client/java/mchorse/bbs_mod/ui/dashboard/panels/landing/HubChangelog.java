@@ -27,7 +27,7 @@ import java.util.List;
  */
 public class HubChangelog
 {
-    public static final String VERSION = "C1.4";
+    public static final String VERSION = "1.0";
     /** How many features each category holds: the editing suite, image and camera, interface and forms, the studio experience */
     public static final int[] CATEGORIES = {2, 4, 3, 1};
 

@@ -54,7 +54,7 @@ public final class BuildInfo
                 if (json != null)
                 {
                     return new BuildInfo(
-                        string(json, "mod_version", "C1.4"),
+                        string(json, "mod_version", "1.0"),
                         string(json, "mc_version", "1.20.4"),
                         string(json, "stage", "DEV").toUpperCase(),
                         string(json, "build_number", "dev"),
@@ -66,7 +66,7 @@ public final class BuildInfo
         catch (Throwable ignored)
         {}
 
-        return new BuildInfo("C1.4", "1.20.4", "DEV", "dev", "nogit");
+        return new BuildInfo("1.0", "1.20.4", "DEV", "dev", "nogit");
     }
 
     private static String string(JsonObject json, String key, String fallback)
@@ -74,7 +74,7 @@ public final class BuildInfo
         return json.has(key) && !json.get(key).isJsonNull() && !json.get(key).getAsString().isBlank() ? json.get(key).getAsString() : fallback;
     }
 
-    /** {@code C1.4 (Minecraft 1.20.4)} */
+    /** {@code 1.0 (Minecraft 1.20.4)} */
     public String versionLine(String minecraftWord)
     {
         return this.modVersion + " (" + minecraftWord + " " + this.mcVersion + ")";
