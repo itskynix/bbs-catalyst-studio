@@ -54,7 +54,7 @@ import java.util.Map;
  * Interactive openables: a door, trapdoor, fence gate or chest that is opened a share of the way at a
  * time instead of at once.
  *
- * <p><b>While recording</b>, with the replay's setting on, holding use on one takes the mouse: moving
+ * <p><b>With the setting on the form</b> - the form the player wears, or the one of the replay being recorded - holding use on one takes the mouse: moving
  * it forward opens it, back closes it, in proportion. Letting go finishes the job - open past the
  * threshold and it swings the rest of the way open, short of it and it swings shut - and only then is
  * the ordinary click sent, so the world, the server and the recording see one plain interaction. The
@@ -184,6 +184,26 @@ public final class OpenableAnimator
         return recorder.exception >= 0 && recorder.exception < replays.size() ? replays.get(recorder.exception) : null;
     }
 
+    /**
+     * The form whose interactive openables setting is on for the player's hand: the form the player
+     * wears (from the podium), or the form of the replay being recorded. Null when neither has it on.
+     */
+    private static mchorse.bbs_mod.forms.forms.Form settingsForm(MinecraftClient mc)
+    {
+        mchorse.bbs_mod.morphing.Morph morph = mc.player == null ? null : mchorse.bbs_mod.morphing.Morph.getMorph(mc.player);
+        mchorse.bbs_mod.forms.forms.Form worn = morph == null ? null : morph.getForm();
+
+        if (worn != null && worn.interactiveOpenables.get())
+        {
+            return worn;
+        }
+
+        Replay replay = recordingReplay();
+        mchorse.bbs_mod.forms.forms.Form form = replay == null ? null : replay.form.get();
+
+        return form != null && form.interactiveOpenables.get() ? form : null;
+    }
+
     /* Live: the hand */
 
     /** Called before the game handles a use click; true when it was taken */
@@ -201,9 +221,9 @@ public final class OpenableAnimator
             return false;
         }
 
-        Replay replay = recordingReplay();
+        mchorse.bbs_mod.forms.forms.Form settings = settingsForm(mc);
 
-        if (replay == null || !replay.interactiveOpenables.get())
+        if (settings == null)
         {
             return false;
         }
@@ -240,8 +260,8 @@ public final class OpenableAnimator
         next.startOpen = isOpen(state);
         next.start = next.startOpen ? 1F : 0F;
         next.openness = next.start;
-        next.threshold = replay.openableThreshold.get();
-        next.angle = replay.openableAngle.get();
+        next.threshold = settings.openableThreshold.get();
+        next.angle = settings.openableAngle.get();
 
         for (Anim anim : anims)
         {

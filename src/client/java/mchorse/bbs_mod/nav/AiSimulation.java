@@ -130,7 +130,7 @@ public final class AiSimulation
     /** The walk of an actor with AI, or null when it has none to make: no volume, no mesh, no AI */
     public static Track track(Film film, Replay replay)
     {
-        if (film == null || replay == null || !replay.hasAi.get())
+        if (film == null || replay == null || replay.form.get() == null || !replay.form.get().hasAi.get())
         {
             return null;
         }
@@ -157,20 +157,22 @@ public final class AiSimulation
 
         for (Replay other : film.replays.getList())
         {
-            if (other.hasAi.get() && other.enabled.get())
+            Form settings = other.form.get();
+
+            if (settings != null && settings.hasAi.get() && other.enabled.get())
             {
                 double[] at = start(other, volume);
 
                 actors.add(other);
                 key = key * 31L + other.getId().hashCode();
-                key = key * 31L + Float.hashCode(other.aiIdleMin.get());
-                key = key * 31L + Float.hashCode(other.aiIdleMax.get());
-                key = key * 31L + Float.hashCode(other.aiSpeed.get());
-                key = key * 31L + other.aiSeed.get();
-                key = key * 31L + (other.aiAvoidance.get() ? 1 : 0);
-                key = key * 31L + (other.orientToMovement.get() ? 1 : 0);
-                key = key * 31L + (other.useControllerDesiredRotation.get() ? 1 : 0);
-                key = key * 31L + Float.hashCode(other.rotationRate.get());
+                key = key * 31L + Float.hashCode(settings.aiIdleMin.get());
+                key = key * 31L + Float.hashCode(settings.aiIdleMax.get());
+                key = key * 31L + Float.hashCode(settings.aiSpeed.get());
+                key = key * 31L + settings.aiSeed.get();
+                key = key * 31L + (settings.aiAvoidance.get() ? 1 : 0);
+                key = key * 31L + (settings.orientToMovement.get() ? 1 : 0);
+                key = key * 31L + (settings.useControllerDesiredRotation.get() ? 1 : 0);
+                key = key * 31L + Float.hashCode(settings.rotationRate.get());
                 key = key * 31L + Math.round(at[0] * 100D);
                 key = key * 31L + Math.round(at[1] * 100D);
                 key = key * 31L + Math.round(at[2] * 100D);
@@ -191,6 +193,7 @@ public final class AiSimulation
     private static final class Agent
     {
         Replay replay;
+        Form settings;
         Track track;
         Random random;
         double x;
@@ -223,8 +226,9 @@ public final class AiSimulation
             }
 
             agent.replay = replay;
+            agent.settings = replay.form.get();
             agent.track = new Track(ticks);
-            agent.random = new Random(replay.getId().hashCode() * 31L + replay.aiSeed.get() * 7919L + 12345L);
+            agent.random = new Random(replay.getId().hashCode() * 31L + agent.settings.aiSeed.get() * 7919L + 12345L);
             agent.x = node.centerX();
             agent.y = node.y;
             agent.z = node.centerZ();
@@ -252,7 +256,7 @@ public final class AiSimulation
 
     private static void step(Agent agent, List<Agent> agents, NavGrid grid)
     {
-        Replay replay = agent.replay;
+        Form replay = agent.settings;
         float wanted = 0F;
         double dirX = 0D;
         double dirZ = 0D;

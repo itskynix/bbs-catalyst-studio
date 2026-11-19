@@ -133,6 +133,22 @@ public class RagdollRig implements SceneRig
 
     public void setDeathControl(boolean armed, boolean dead) { this.armed = armed; this.dead = dead; }
 
+    /** Whether any part is inside a field that releases it */
+    private boolean inField(BodyInterface bodies, FilmScene scene)
+    {
+        for (Part part : this.parts)
+        {
+            RVec3 p = bodies.getCenterOfMassPosition(part.id);
+
+            if (scene.fieldReleases(p.xx(), p.yy(), p.zz()))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private float authority() { return this.dead ? 0F : this.armed ? 1F : PhysicsForms.getAuthority(this.form); }
 
     /** Apply a directed impact to the nearest simulated part, at the actual contact point. */
@@ -822,7 +838,10 @@ public class RagdollRig implements SceneRig
 
         FormRagdoll config = FormRagdolls.get(this.form);
 
-        if (this.dead) config = config.withMuscles(0F);
+        /* Inside a physics field that takes bodies from the animation: limp and free, so it floats and is pulled */
+        boolean floated = !reset && !this.dead && scene != null && this.inField(physics.getBodies(), scene);
+
+        if (this.dead || floated) config = config.withMuscles(0F);
         this.applySettings(physics, config);
 
         BodyInterface bodies = physics.getBodies();
@@ -834,7 +853,7 @@ public class RagdollRig implements SceneRig
             this.untear(bodies);
         }
 
-        float authority = this.authority();
+        float authority = floated ? 0F : this.authority();
         boolean wanted = authority >= 1F;
         boolean put = reset;
 

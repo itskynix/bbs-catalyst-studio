@@ -377,6 +377,18 @@ public class BodyRig implements SceneRig
          * map, and the author can be editing them while the film is open. */
         FormBody body = PhysicsForms.getBody(this.form);
         float authority = PhysicsForms.getAuthority(this.form);
+
+        /* Inside a physics field that takes bodies from the animation: free, so it floats and is pulled */
+        if (!reset && authority > 0F && scene != null)
+        {
+            RVec3 at = bodies.getCenterOfMassPosition(this.bodyId);
+
+            if (scene.fieldReleases(at.xx(), at.yy(), at.zz()))
+            {
+                authority = 0F;
+            }
+        }
+
         boolean wanted = authority >= 1F;
 
         /* Whether the body is to be stood at its pose and stopped rather than moved towards it over

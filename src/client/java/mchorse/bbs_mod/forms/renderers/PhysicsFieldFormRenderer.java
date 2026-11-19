@@ -6,6 +6,7 @@ import mchorse.bbs_mod.client.BBSRendering;
 import mchorse.bbs_mod.forms.FormPortals;
 import mchorse.bbs_mod.forms.forms.PhysicsFieldForm;
 import mchorse.bbs_mod.graphics.Draw;
+import mchorse.bbs_mod.utils.Axis;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.UIScreen;
 import mchorse.bbs_mod.utils.Bufs;
@@ -28,7 +29,6 @@ public class PhysicsFieldFormRenderer extends FormRenderer<PhysicsFieldForm>
     private static final float R = 1F;
     private static final float G = 0.62F;
     private static final float B = 0.2F;
-    private static final int SEGMENTS = 48;
 
     public PhysicsFieldFormRenderer(PhysicsFieldForm form)
     {
@@ -106,31 +106,12 @@ public class PhysicsFieldFormRenderer extends FormRenderer<PhysicsFieldForm>
         {
             float radius = Math.max(0.5F, form.radius.get());
 
-            for (int axis = 0; axis < 3; axis++)
-            {
-                for (int i = 0; i < SEGMENTS; i++)
-                {
-                    float a0 = (float) (2D * Math.PI * i / SEGMENTS);
-                    float a1 = (float) (2D * Math.PI * (i + 1) / SEGMENTS);
-                    float c0 = (float) Math.cos(a0) * radius;
-                    float s0 = (float) Math.sin(a0) * radius;
-                    float c1 = (float) Math.cos(a1) * radius;
-                    float s1 = (float) Math.sin(a1) * radius;
+            /* Three closed rings, one in each plane through the centre: a tube round the axis, so nothing sticks out of it */
+            float thickness = Math.max(0.04F, radius * 0.006F);
 
-                    if (axis == 0)
-                    {
-                        Draw.fillBoxTo(builder, stack, c0, s0, 0F, c1, s1, 0F, 0.03F, R, G, B, 0.8F);
-                    }
-                    else if (axis == 1)
-                    {
-                        Draw.fillBoxTo(builder, stack, c0, 0F, s0, c1, 0F, s1, 0.03F, R, G, B, 0.8F);
-                    }
-                    else
-                    {
-                        Draw.fillBoxTo(builder, stack, 0F, c0, s0, 0F, c1, s1, 0.03F, R, G, B, 0.8F);
-                    }
-                }
-            }
+            Draw.arc3D(builder, stack, Axis.X, radius, thickness, R, G, B, 0F, 360F, 96, 6);
+            Draw.arc3D(builder, stack, Axis.Y, radius, thickness, R, G, B, 0F, 360F, 96, 6);
+            Draw.arc3D(builder, stack, Axis.Z, radius, thickness, R, G, B, 0F, 360F, 96, 6);
         }
         else if (shape == PhysicsFieldForm.SHAPE_BOX)
         {

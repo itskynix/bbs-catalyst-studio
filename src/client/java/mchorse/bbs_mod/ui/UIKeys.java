@@ -1143,6 +1143,9 @@ public class UIKeys
     public static final IKey FORMS_EDITORS_GENERAL_SECTION_TRACKS = L10n.lang("bbs.ui.forms.editors.general.section_tracks");
     public static final IKey FORMS_EDITORS_GENERAL_SECTION_TRANSFORM = L10n.lang("bbs.ui.forms.editors.general.section_transform");
     public static final IKey FORMS_EDITORS_GENERAL_SECTION_MOVEMENT = L10n.lang("bbs.ui.forms.editors.general.section_movement");
+    public static final IKey FORMS_EDITORS_GENERAL_SECTION_OPENABLES = L10n.lang("bbs.ui.forms.editors.general.section_openables");
+    public static final IKey FORMS_EDITORS_GENERAL_SECTION_SMOOTHING = L10n.lang("bbs.ui.forms.editors.general.section_smoothing");
+    public static final IKey FORMS_EDITORS_GENERAL_SECTION_AI = L10n.lang("bbs.ui.forms.editors.general.section_ai");
     public static final IKey FORMS_EDITORS_GENERAL_SECTION_MASK = L10n.lang("bbs.ui.forms.editors.general.section_mask");
     public static final IKey FORMS_EDITORS_GENERAL_MASK_NONE = L10n.lang("bbs.ui.forms.editors.general.mask_none");
     public static final IKey FORMS_EDITORS_GENERAL_MASK_CIRCLE = L10n.lang("bbs.ui.forms.editors.general.mask_circle");

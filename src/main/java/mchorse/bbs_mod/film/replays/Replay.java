@@ -68,35 +68,6 @@ public class Replay extends ValueGroup
     /** Turning the head to a passing character and back, worked out while playing; see {@link ReplayCrowdGlance} */
     public final ReplayCrowdGlance crowdGlance = new ReplayCrowdGlance("crowd_glance");
 
-    /* Interactive openables: while this replay is being recorded, a door, trapdoor, fence gate or chest is
-     * opened by holding use and moving the mouse, a share of the way at a time, instead of at once */
-    public final ValueBoolean interactiveOpenables = new ValueBoolean("interactive_openables", false);
-    /** How far an openable swings when fully open, in degrees while it is being moved */
-    public final ValueFloat openableAngle = new ValueFloat("openable_angle", 90F, 15F, 135F);
-    /** How far it must be opened (0.1 to 0.9 of the way) for letting go to finish the opening; below it closes again */
-    public final ValueFloat openableThreshold = new ValueFloat("openable_threshold", 0.5F, 0.1F, 0.9F);
-
-    /* Locomotion smoothing: the actor speeds up, turns and stops with some inertia on the screen, and lands exactly on its keyed place */
-    public final ValueBoolean locomotionSmoothing = new ValueBoolean("locomotion_smoothing", false);
-    /** The time the smoothing takes to settle, in seconds */
-    public final ValueFloat locomotionTime = new ValueFloat("locomotion_time", 0.3F, 0.05F, 2F);
-
-    /* AI: the actor walks about by itself inside the film's navigation volume, waiting a little at each place it gets to */
-    public final ValueBoolean hasAi = new ValueBoolean("has_ai", false);
-    public final ValueFloat aiIdleMin = new ValueFloat("ai_idle_min", 1F, 0F, 120F);
-    public final ValueFloat aiIdleMax = new ValueFloat("ai_idle_max", 4F, 0F, 120F);
-    /** Walking speed, in blocks per second */
-    public final ValueFloat aiSpeed = new ValueFloat("ai_speed", 1.6F, 0.3F, 8F);
-    /** Another number is another walk */
-    public final ValueInt aiSeed = new ValueInt("ai_seed", 0, 0, 9999);
-    public final ValueBoolean aiAvoidance = new ValueBoolean("ai_avoidance", true);
-    /** Turn to face the way it moves */
-    public final ValueBoolean orientToMovement = new ValueBoolean("orient_to_movement", true);
-    /** Turn to face where it is heading for, the controller's wish, which wins over the way it moves */
-    public final ValueBoolean useControllerDesiredRotation = new ValueBoolean("use_controller_desired_rotation", false);
-    /** How fast it turns, in degrees per second */
-    public final ValueFloat rotationRate = new ValueFloat("rotation_rate", 360F, 30F, 1080F);
-
     public final ValueBoolean axesPreview = new ValueBoolean("axes_preview", false);
     public final ValueString axesPreviewBone = new ValueString("axes_preview_bone", "");
 
@@ -130,22 +101,6 @@ public class Replay extends ValueGroup
         this.add(this.lookAtTarget);
         this.add(this.lookAtPoint);
         this.add(this.crowdGlance);
-
-        this.add(this.interactiveOpenables);
-        this.add(this.openableAngle);
-        this.add(this.openableThreshold);
-        this.add(this.locomotionSmoothing);
-        this.add(this.locomotionTime);
-
-        this.add(this.hasAi);
-        this.add(this.aiIdleMin);
-        this.add(this.aiIdleMax);
-        this.add(this.aiSpeed);
-        this.add(this.aiSeed);
-        this.add(this.aiAvoidance);
-        this.add(this.orientToMovement);
-        this.add(this.useControllerDesiredRotation);
-        this.add(this.rotationRate);
 
         this.add(this.axesPreview);
         this.add(this.axesPreviewBone);
@@ -186,6 +141,24 @@ public class Replay extends ValueGroup
         }
 
         super.fromData(data);
+
+        /* Takes saved before 1.0 kept the openable, smoothing and AI settings on the replay; they live on the form now */
+        Form root = this.form.get();
+
+        if (root != null && data.isMap())
+        {
+            mchorse.bbs_mod.data.types.MapType map = data.asMap();
+
+            for (String id : Form.BEHAVIOUR_IDS)
+            {
+                mchorse.bbs_mod.settings.values.base.BaseValue value = root.get(id);
+
+                if (map.has(id) && value != null)
+                {
+                    value.fromData(map.get(id));
+                }
+            }
+        }
     }
 
     public String getName()

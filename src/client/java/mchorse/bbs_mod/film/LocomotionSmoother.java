@@ -96,7 +96,9 @@ public final class LocomotionSmoother
         state.lastX = tx;
         state.lastZ = tz;
 
-        if (!replay.locomotionSmoothing.get())
+        mchorse.bbs_mod.forms.forms.Form form = entity.getForm();
+
+        if (form == null || !form.locomotionSmoothing.get())
         {
             state.x = tx;
             state.z = tz;
@@ -107,7 +109,7 @@ public final class LocomotionSmoother
             return;
         }
 
-        double time = Math.max(0.02D, replay.locomotionTime.get());
+        double time = Math.max(0.02D, form.locomotionTime.get());
 
         /* The place one time constant ahead, which cancels the spring's lag on a steady walk */
         double gx = tx + kx * time;

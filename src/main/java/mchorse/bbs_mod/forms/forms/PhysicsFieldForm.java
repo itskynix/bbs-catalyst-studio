@@ -59,6 +59,9 @@ public class PhysicsFieldForm extends Form
     /** Big Rip: the random buffeting, in blocks per second squared */
     public final ValueFloat turbulence = new ValueFloat("turbulence", 4F, 0F, 50F);
 
+    /** Whether ragdolls and physics bodies inside are taken from the animation while the field is on, so they float and are pulled; off, only what the physics already owns feels it */
+    public final ValueBoolean releaseBodies = new ValueBoolean("release_bodies", true);
+
     public final ValueBoolean showGuides = new ValueBoolean("show_guides", true);
 
     public PhysicsFieldForm()
@@ -78,6 +81,8 @@ public class PhysicsFieldForm extends Form
         this.add(this.pullStrength);
         this.add(this.falloff);
         this.add(this.turbulence);
+        this.releaseBodies.invisible();
+        this.add(this.releaseBodies);
         this.add(this.showGuides);
     }
 

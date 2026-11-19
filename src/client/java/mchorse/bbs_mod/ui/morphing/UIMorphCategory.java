@@ -99,12 +99,13 @@ public enum UIMorphCategory
             return BLOCKS;
         }
 
-        if (form instanceof VideoForm || form instanceof AudioForm || form instanceof BillboardForm || form instanceof ExtrudedForm || form instanceof LabelForm || form instanceof DecalForm)
+        if (form instanceof VideoForm || form instanceof AudioForm || form instanceof BillboardForm || form instanceof ExtrudedForm || form instanceof LabelForm || form instanceof DecalForm
+            || form instanceof mchorse.bbs_mod.forms.forms.PhysicsFieldForm || form instanceof mchorse.bbs_mod.forms.forms.FakeSpaceForm || form instanceof mchorse.bbs_mod.forms.forms.NavigationVolumeForm)
         {
             return PRODUCTION;
         }
 
-        if (form instanceof mchorse.bbs_mod.forms.forms.LightForm || form instanceof qualet.irlite.forms.LightForm || form instanceof HeightFogForm || form instanceof mchorse.bbs_mod.forms.forms.PostProcessForm || form instanceof mchorse.bbs_mod.forms.forms.PhysicsFieldForm || form instanceof mchorse.bbs_mod.forms.forms.FakeSpaceForm || form instanceof mchorse.bbs_mod.forms.forms.NavigationVolumeForm)
+        if (form instanceof mchorse.bbs_mod.forms.forms.LightForm || form instanceof qualet.irlite.forms.LightForm || form instanceof HeightFogForm || form instanceof mchorse.bbs_mod.forms.forms.PostProcessForm)
         {
             return LIGHTING;
         }

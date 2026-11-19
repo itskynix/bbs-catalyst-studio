@@ -694,6 +694,12 @@ public class FilmScene implements AutoCloseable
         return this.gravity;
     }
 
+    /** Whether a point, in scene coordinates, is inside a physics field that takes what is there away from the animation this tick */
+    public boolean fieldReleases(double x, double y, double z)
+    {
+        return this.clips.releases(x, y, z);
+    }
+
     public double getOriginX()
     {
         return this.originX;
@@ -1298,6 +1304,9 @@ public class FilmScene implements AutoCloseable
          * actor/anchor. This is a private staging pass; the tick is still unreadable to playback. */
         this.staging = this.cache.beginFrame(tick);
         this.recordPoses(tick, this.staging, true);
+
+        /* Before the drives: a field that takes its bodies from the animation must be known when each rig decides who is in charge */
+        this.clips.collectFields(this.cast, tick);
 
         for (SceneActor actor : this.actors)
         {

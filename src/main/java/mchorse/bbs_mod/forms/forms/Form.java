@@ -99,6 +99,42 @@ public abstract class Form extends ValueGroup
 
     public final ValueInt hotkey = new ValueInt("keybind", 0);
 
+    /* Behaviour carried by the form itself, so it goes wherever the form goes - worn from the podium,
+     * placed on a model block or given to a replay. Set in the form editor's General panel. */
+
+    /* Interactive openables: while the form is worn, a door, trapdoor, fence gate or chest is
+     * opened by holding use and moving the mouse, a share of the way at a time, instead of at once */
+    public final ValueBoolean interactiveOpenables = new ValueBoolean("interactive_openables", false);
+    /** How far an openable swings when fully open, in degrees while it is being moved */
+    public final ValueFloat openableAngle = new ValueFloat("openable_angle", 90F, 15F, 135F);
+    /** How far it must be opened (0.1 to 0.9 of the way) for letting go to finish the opening; below it closes again */
+    public final ValueFloat openableThreshold = new ValueFloat("openable_threshold", 0.5F, 0.1F, 0.9F);
+
+    /* Locomotion smoothing: an actor with this form speeds up, turns and stops with some inertia on the screen, and lands exactly on its keyed place */
+    public final ValueBoolean locomotionSmoothing = new ValueBoolean("locomotion_smoothing", false);
+    /** The time the smoothing takes to settle, in seconds */
+    public final ValueFloat locomotionTime = new ValueFloat("locomotion_time", 0.3F, 0.05F, 2F);
+
+    /* AI: an actor with this form walks about by itself inside the film's navigation volume, waiting a little at each place it gets to */
+    public final ValueBoolean hasAi = new ValueBoolean("has_ai", false);
+    public final ValueFloat aiIdleMin = new ValueFloat("ai_idle_min", 1F, 0F, 120F);
+    public final ValueFloat aiIdleMax = new ValueFloat("ai_idle_max", 4F, 0F, 120F);
+    /** Walking speed, in blocks per second */
+    public final ValueFloat aiSpeed = new ValueFloat("ai_speed", 1.6F, 0.3F, 8F);
+    /** Another number is another walk */
+    public final ValueInt aiSeed = new ValueInt("ai_seed", 0, 0, 9999);
+    public final ValueBoolean aiAvoidance = new ValueBoolean("ai_avoidance", true);
+    /** Turn to face the way it moves */
+    public final ValueBoolean orientToMovement = new ValueBoolean("orient_to_movement", true);
+    /** Turn to face where it is heading for, the controller's wish, which wins over the way it moves */
+    public final ValueBoolean useControllerDesiredRotation = new ValueBoolean("use_controller_desired_rotation", false);
+    /** How fast it turns, in degrees per second */
+    public final ValueFloat rotationRate = new ValueFloat("rotation_rate", 360F, 30F, 1080F);
+
+    /** The ids of the settings above, which takes saved before they moved here kept on the replay */
+    public static final String[] BEHAVIOUR_IDS = {"interactive_openables", "openable_angle", "openable_threshold", "locomotion_smoothing", "locomotion_time",
+        "has_ai", "ai_idle_min", "ai_idle_max", "ai_speed", "ai_seed", "ai_avoidance", "orient_to_movement", "use_controller_desired_rotation", "rotation_rate"};
+
     /**
      * The turn of the mask's plane, in degrees. They sit on the form itself, not in the mask:
      * only a property of the form is a track of the timeline, so the mask can be turned over time.
@@ -231,6 +267,13 @@ public abstract class Form extends ValueGroup
         this.hotkey.invisible();
 
         this.add(this.hotkey);
+
+        for (BaseValue value : new BaseValue[] {this.interactiveOpenables, this.openableAngle, this.openableThreshold, this.locomotionSmoothing, this.locomotionTime,
+            this.hasAi, this.aiIdleMin, this.aiIdleMax, this.aiSpeed, this.aiSeed, this.aiAvoidance, this.orientToMovement, this.useControllerDesiredRotation, this.rotationRate})
+        {
+            value.invisible();
+            this.add(value);
+        }
         this.add(this.slicePosX);
         this.add(this.slicePosY);
         this.add(this.slicePosZ);

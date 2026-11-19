@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.physics.client.scene;
 
+import com.github.stephengold.joltjni.BodyInterface;
 import mchorse.bbs_mod.actions.types.ActionClip;
 import mchorse.bbs_mod.camera.data.Point;
 import mchorse.bbs_mod.forms.forms.Form;
@@ -11,7 +12,9 @@ import mchorse.bbs_mod.physics.actions.ImpulseActionClip;
 import mchorse.bbs_mod.physics.actions.TearActionClip;
 import org.joml.Vector3f;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -132,31 +135,55 @@ public final class SceneClips
     }
 
 
+    /** The fields of the tick last collected, and which tick that was */
+    private final List<SceneField> fields = new ArrayList<>();
+    private int fieldsTick = Integer.MIN_VALUE;
+
+    /** The bodies whose gravity factor a field changed, put back to 1 before the next tick's fields */
+    private final Set<Integer> gravityTouched = new HashSet<>();
+
     /**
-     * The gravity and cosmic anomaly fields of the film (see {@link PhysicsFieldForm}), as one push
-     * each for this tick. Their forms are read where the cast stands - on this tick, with the
-     * replay's keyframes in - so a gravity scale keyed to fall from 1 to 0 does it on the tick it is
-     * keyed on, every recording. Like a clip's push, after the drives.
+     * Works out the gravity and cosmic anomaly fields of the film (see {@link PhysicsFieldForm}) for
+     * a tick. Called before the drives, because a field that takes its bodies away from the animation
+     * has to be known when the rigs decide who is in charge - otherwise a ragdoll held by its
+     * animation, or a body at a full handle, never feels it at all. The forms are read where the cast
+     * stands, on this tick with the replay's keyframes in, so a gravity scale keyed to fall from 1 to
+     * 0 does it on the tick it is keyed on, every recording.
      */
-    private void fields(SceneCast cast, int tick)
+    public void collectFields(SceneCast cast, int tick)
     {
+        BodyInterface bodies = this.scene.getWorld().getBodies();
+
+        /* Last tick's gravity goes back first: a body that drifted out of a field falls again */
+        for (int id : this.gravityTouched)
+        {
+            bodies.setGravityFactor(id, 1F);
+        }
+
+        this.gravityTouched.clear();
+        this.fields.clear();
+        this.fieldsTick = tick;
+
         float gravity = this.scene.getGravity();
         float dt = this.scene.getWorld().getDeltaTime();
 
         for (SceneCast.Member member : cast)
         {
-            if (member.replay == null || member.entity == null)
+            if (member.replay == null || member.entity == null || !member.replay.enabled.get())
             {
                 continue;
             }
 
-            Form root = member.entity.getForm();
-
-            FormTreeWalk.walk(root, (form, path, anchor) ->
+            FormTreeWalk.walk(member.entity.getForm(), (form, path, anchor) ->
             {
                 if (form instanceof PhysicsFieldForm field)
                 {
-                    this.field(member, field, gravity, dt, tick);
+                    SceneField push = this.field(member, field, gravity, dt, tick);
+
+                    if (push != null)
+                    {
+                        this.fields.add(push);
+                    }
                 }
 
                 return true;
@@ -164,7 +191,41 @@ public final class SceneClips
         }
     }
 
-    private void field(SceneCast.Member member, PhysicsFieldForm field, float gravity, float dt, int tick)
+    /** Whether a point is inside a field that takes what is there away from the animation */
+    public boolean releases(double x, double y, double z)
+    {
+        for (SceneField field : this.fields)
+        {
+            if (field.releases(x, y, z))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Offers this tick's fields to everything simulated, after the drives, like a clip's push */
+    private void fields(SceneCast cast, int tick)
+    {
+        if (this.fieldsTick != tick)
+        {
+            this.collectFields(cast, tick);
+        }
+
+        for (SceneField push : this.fields)
+        {
+            for (SceneActor actor : this.scene.getActors())
+            {
+                for (SceneRig rig : actor.getRigs())
+                {
+                    rig.impulse(this.scene.getWorld(), push);
+                }
+            }
+        }
+    }
+
+    private SceneField field(SceneCast.Member member, PhysicsFieldForm field, float gravity, float dt, int tick)
     {
         /* Where it sits: the actor, and the form's own translation and its parents' (turning is not applied) */
         double x = member.entity.getX() - this.scene.getOriginX();
@@ -180,21 +241,9 @@ public final class SceneClips
             z += translate.z;
         }
 
-        SceneField push = SceneField.of(field, (float) x, (float) y, (float) z, gravity, dt, tick);
-
-        if (push == null)
-        {
-            return;
-        }
-
-        for (SceneActor actor : this.scene.getActors())
-        {
-            for (SceneRig rig : actor.getRigs())
-            {
-                rig.impulse(this.scene.getWorld(), push);
-            }
-        }
+        return SceneField.of(field, (float) x, (float) y, (float) z, gravity, dt, tick, this.gravityTouched);
     }
+
     /**
      * Whether an action clip goes off on this tick — the same rule {@code ActionClip} applies for
      * the server and client passes, repeated here because physics reads the clip directly: at its

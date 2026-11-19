@@ -20,7 +20,7 @@ public final class AiDriver
 
     public static void apply(Replay replay, Film film, int ticks, IEntity entity)
     {
-        if (replay == null || entity == null || !replay.hasAi.get())
+        if (replay == null || entity == null || replay.form.get() == null || !replay.form.get().hasAi.get())
         {
             return;
         }
@@ -98,7 +98,10 @@ public final class AiDriver
             }
         }
 
-        replay.hasAi.set(false);
+        if (replay.form.get() != null)
+        {
+            replay.form.get().hasAi.set(false);
+        }
 
         return last / 2 + 1;
     }

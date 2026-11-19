@@ -45,6 +45,10 @@ public final class SceneField extends SceneImpulse
     private final float hz;
     private final boolean bigRip;
     private final float gravityDelta;
+    private final float gravityScale;
+    private final boolean releases;
+    /** The bodies whose gravity factor this tick's fields changed, so the next tick can put it back */
+    private final java.util.Set<Integer> touched;
     private final float damping;
     private final float pull;
     private final float falloff;
@@ -55,7 +59,7 @@ public final class SceneField extends SceneImpulse
     private final Vector3f scratch = new Vector3f();
     private final Vec3 vec = new Vec3();
 
-    private SceneField(PhysicsFieldForm form, float cx, float cy, float cz, float gravity, float dt, int tick)
+    private SceneField(PhysicsFieldForm form, float cx, float cy, float cz, float gravity, float dt, int tick, java.util.Set<Integer> touched)
     {
         super(cx, cy, cz, 1F, 1F, null);
 
@@ -68,7 +72,10 @@ public final class SceneField extends SceneImpulse
         this.hy = Math.max(form.height.get(), 0.5F) / 2F;
         this.hz = Math.max(form.length.get(), 0.5F) / 2F;
         this.bigRip = form.mode.get() == PhysicsFieldForm.MODE_BIG_RIP;
-        this.gravityDelta = (form.gravityScale.get() - 1F) * gravity;
+        this.gravityScale = form.gravityScale.get();
+        this.gravityDelta = (this.gravityScale - 1F) * gravity;
+        this.releases = form.releaseBodies.get();
+        this.touched = touched;
         this.damping = Math.max(form.damping.get(), 0F);
         this.pull = this.bigRip ? form.pullStrength.get() : 0F;
         this.falloff = Math.max(form.falloff.get(), 0F);
@@ -85,14 +92,14 @@ public final class SceneField extends SceneImpulse
      * @param gravity the scene's gravity, in blocks per second squared (positive, downwards)
      * @param dt the length of the tick in seconds, speed included
      */
-    public static SceneField of(PhysicsFieldForm form, float cx, float cy, float cz, float gravity, float dt, int tick)
+    public static SceneField of(PhysicsFieldForm form, float cx, float cy, float cz, float gravity, float dt, int tick, java.util.Set<Integer> touched)
     {
         if (!Float.isFinite(cx) || !Float.isFinite(cy) || !Float.isFinite(cz) || !(dt > 0F))
         {
             return null;
         }
 
-        SceneField field = new SceneField(form, cx, cy, cz, gravity, dt, tick);
+        SceneField field = new SceneField(form, cx, cy, cz, gravity, dt, tick, touched);
 
         boolean gravityChanges = field.gravityDelta != 0F && Float.isFinite(field.gravityDelta);
         boolean pulls = field.pull != 0F || field.turbulence > 0F;
@@ -133,8 +140,24 @@ public final class SceneField extends SceneImpulse
         return t * t * (3F - 2F * t);
     }
 
+    /** Whether the point is inside and the field takes what is there away from the animation */
+    public boolean releases(double px, double py, double pz)
+    {
+        return this.releases && this.weight((float) px, (float) py, (float) pz) > 0F;
+    }
+
     @Override
     public boolean velocityAt(float px, float py, float pz, Vector3f out)
+    {
+        return this.push(px, py, pz, out, true);
+    }
+
+    /**
+     * The velocity change at a point for this tick. With {@code gravity} the changed gravity is in it
+     * as a velocity change - for cloth and strands, whose points have no gravity of their own to
+     * change; a rigid body has its gravity factor set instead, which Jolt applies on every sub-step.
+     */
+    private boolean push(float px, float py, float pz, Vector3f out, boolean gravity)
     {
         float w = this.weight(px, py, pz);
 
@@ -144,7 +167,7 @@ public final class SceneField extends SceneImpulse
         }
 
         float vx = 0F;
-        float vy = -this.gravityDelta * this.dt;
+        float vy = gravity ? -this.gravityDelta * this.dt : 0F;
         float vz = 0F;
 
         if (this.pull != 0F)
@@ -203,9 +226,20 @@ public final class SceneField extends SceneImpulse
         float pz = (float) position.zz();
         float w = this.weight(px, py, pz);
 
-        if (!(w > 0F) || !this.velocityAt(px, py, pz, this.scratch))
+        if (!(w > 0F) || !this.push(px, py, pz, this.scratch, false))
         {
             return;
+        }
+
+        /* The gravity, on every sub-step of the tick: 1 outside, the field's scale well inside, faded across the edge */
+        if (this.gravityScale != 1F)
+        {
+            bodies.setGravityFactor(id, 1F + (this.gravityScale - 1F) * w);
+
+            if (this.touched != null)
+            {
+                this.touched.add(id);
+            }
         }
 
         float keep = Math.max(0F, 1F - this.damping * this.dt * w);

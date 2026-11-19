@@ -139,8 +139,79 @@ public class UIGeneralFormPanel extends UIFormPanel
             tracks,
             transform,
             hitbox,
-            movement
+            movement,
+            this.openablesSection(),
+            this.smoothingSection(),
+            this.aiSection()
         );
+    }
+
+    /* Behaviour the form carries wherever it goes: worn from the podium, on a model block, in a replay */
+
+    private UITrackpad trackpad(java.util.function.Supplier<? extends mchorse.bbs_mod.settings.values.base.BaseValueNumber<?>> value, double min, double max, boolean integer, IKey tooltip)
+    {
+        UITrackpad trackpad = UIValues.trackpad(value);
+
+        trackpad.limit(min, max, integer);
+        trackpad.tooltip(tooltip);
+
+        return trackpad;
+    }
+
+    private UIToggle toggle(IKey label, java.util.function.Supplier<mchorse.bbs_mod.settings.values.numeric.ValueBoolean> value, IKey tooltip)
+    {
+        UIToggle toggle = UIValues.toggle(label, value);
+
+        toggle.tooltip(tooltip);
+
+        return toggle;
+    }
+
+    private UISection openablesSection()
+    {
+        UISection section = new UISection(UIKeys.FORMS_EDITORS_GENERAL_SECTION_OPENABLES);
+
+        section.fields.add(
+            this.toggle(UIKeys.FILM_REPLAY_INTERACTIVE_OPENABLES, () -> this.form.interactiveOpenables, UIKeys.FILM_REPLAY_INTERACTIVE_OPENABLES_TOOLTIP),
+            UI.labelRow(UIKeys.FILM_REPLAY_OPENABLE_ANGLE, this.trackpad(() -> this.form.openableAngle, 15D, 135D, false, UIKeys.FILM_REPLAY_OPENABLE_ANGLE_TOOLTIP)),
+            UI.labelRow(UIKeys.FILM_REPLAY_OPENABLE_THRESHOLD, this.trackpad(() -> this.form.openableThreshold, 0.1D, 0.9D, false, UIKeys.FILM_REPLAY_OPENABLE_THRESHOLD_TOOLTIP))
+        );
+        section.setExpanded(false);
+
+        return section;
+    }
+
+    private UISection smoothingSection()
+    {
+        UISection section = new UISection(UIKeys.FORMS_EDITORS_GENERAL_SECTION_SMOOTHING);
+
+        section.fields.add(
+            this.toggle(UIKeys.FILM_REPLAY_LOCOMOTION_SMOOTHING, () -> this.form.locomotionSmoothing, UIKeys.FILM_REPLAY_LOCOMOTION_SMOOTHING_TOOLTIP),
+            UI.labelRow(UIKeys.FILM_REPLAY_LOCOMOTION_TIME, this.trackpad(() -> this.form.locomotionTime, 0.05D, 2D, false, UIKeys.FILM_REPLAY_LOCOMOTION_TIME_TOOLTIP))
+        );
+        section.setExpanded(false);
+
+        return section;
+    }
+
+    private UISection aiSection()
+    {
+        UISection section = new UISection(UIKeys.FORMS_EDITORS_GENERAL_SECTION_AI);
+
+        section.fields.add(
+            this.toggle(UIKeys.FILM_REPLAY_HAS_AI, () -> this.form.hasAi, UIKeys.FILM_REPLAY_HAS_AI_TOOLTIP),
+            UI.labelRow(UIKeys.FILM_REPLAY_AI_IDLE_MIN, this.trackpad(() -> this.form.aiIdleMin, 0D, 120D, false, UIKeys.FILM_REPLAY_AI_IDLE_MIN_TOOLTIP)),
+            UI.labelRow(UIKeys.FILM_REPLAY_AI_IDLE_MAX, this.trackpad(() -> this.form.aiIdleMax, 0D, 120D, false, UIKeys.FILM_REPLAY_AI_IDLE_MAX_TOOLTIP)),
+            UI.labelRow(UIKeys.FILM_REPLAY_AI_SPEED, this.trackpad(() -> this.form.aiSpeed, 0.3D, 8D, false, UIKeys.FILM_REPLAY_AI_SPEED_TOOLTIP)),
+            UI.labelRow(UIKeys.FILM_REPLAY_AI_SEED, this.trackpad(() -> this.form.aiSeed, 0D, 9999D, true, UIKeys.FILM_REPLAY_AI_SEED_TOOLTIP)),
+            this.toggle(UIKeys.FILM_REPLAY_AI_AVOIDANCE, () -> this.form.aiAvoidance, UIKeys.FILM_REPLAY_AI_AVOIDANCE_TOOLTIP),
+            this.toggle(UIKeys.FILM_REPLAY_ORIENT_TO_MOVEMENT, () -> this.form.orientToMovement, UIKeys.FILM_REPLAY_ORIENT_TO_MOVEMENT_TOOLTIP),
+            this.toggle(UIKeys.FILM_REPLAY_CONTROLLER_ROTATION, () -> this.form.useControllerDesiredRotation, UIKeys.FILM_REPLAY_CONTROLLER_ROTATION_TOOLTIP),
+            UI.labelRow(UIKeys.FILM_REPLAY_ROTATION_RATE, this.trackpad(() -> this.form.rotationRate, 30D, 1080D, false, UIKeys.FILM_REPLAY_ROTATION_RATE_TOOLTIP))
+        );
+        section.setExpanded(false);
+
+        return section;
     }
 
     @Override
