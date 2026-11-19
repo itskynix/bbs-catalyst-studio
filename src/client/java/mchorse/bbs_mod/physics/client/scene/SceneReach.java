@@ -76,6 +76,15 @@ final class SceneReach
             });
         }
 
+        /* A replay with a gravity field in it is read every tick, simulated or not */
+        for (SceneCast.Member member : cast)
+        {
+            if (member.replay != null && mchorse.bbs_mod.physics.forms.FormTreeWalk.any(member.entity.getForm(), (form) -> form instanceof mchorse.bbs_mod.forms.forms.PhysicsFieldForm))
+            {
+                reached.add(member.replay.getId());
+            }
+        }
+
         return reached;
     }
 

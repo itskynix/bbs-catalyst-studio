@@ -43,7 +43,7 @@ public class SceneImpulse
     private final Vector3f velocity = new Vector3f();
     private final Vec3 scratch = new Vec3();
 
-    private SceneImpulse(float x, float y, float z, float radius, float strength, Vector3f direction)
+    protected SceneImpulse(float x, float y, float z, float radius, float strength, Vector3f direction)
     {
         this.x = x;
         this.y = y;

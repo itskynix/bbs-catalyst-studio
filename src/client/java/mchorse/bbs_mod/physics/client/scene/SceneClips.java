@@ -2,6 +2,9 @@ package mchorse.bbs_mod.physics.client.scene;
 
 import mchorse.bbs_mod.actions.types.ActionClip;
 import mchorse.bbs_mod.camera.data.Point;
+import mchorse.bbs_mod.forms.forms.Form;
+import mchorse.bbs_mod.forms.forms.PhysicsFieldForm;
+import mchorse.bbs_mod.physics.forms.FormTreeWalk;
 import mchorse.bbs_mod.utils.clips.Clip;
 import mchorse.bbs_mod.physics.BBSPhysics;
 import mchorse.bbs_mod.physics.actions.ImpulseActionClip;
@@ -124,8 +127,74 @@ public final class SceneClips
                 }
             }
         }
+
+        this.fields(cast, tick);
     }
 
+
+    /**
+     * The gravity and cosmic anomaly fields of the film (see {@link PhysicsFieldForm}), as one push
+     * each for this tick. Their forms are read where the cast stands - on this tick, with the
+     * replay's keyframes in - so a gravity scale keyed to fall from 1 to 0 does it on the tick it is
+     * keyed on, every recording. Like a clip's push, after the drives.
+     */
+    private void fields(SceneCast cast, int tick)
+    {
+        float gravity = this.scene.getGravity();
+        float dt = this.scene.getWorld().getDeltaTime();
+
+        for (SceneCast.Member member : cast)
+        {
+            if (member.replay == null || member.entity == null)
+            {
+                continue;
+            }
+
+            Form root = member.entity.getForm();
+
+            FormTreeWalk.walk(root, (form, path, anchor) ->
+            {
+                if (form instanceof PhysicsFieldForm field)
+                {
+                    this.field(member, field, gravity, dt, tick);
+                }
+
+                return true;
+            });
+        }
+    }
+
+    private void field(SceneCast.Member member, PhysicsFieldForm field, float gravity, float dt, int tick)
+    {
+        /* Where it sits: the actor, and the form's own translation and its parents' (turning is not applied) */
+        double x = member.entity.getX() - this.scene.getOriginX();
+        double y = member.entity.getY() - this.scene.getOriginY();
+        double z = member.entity.getZ() - this.scene.getOriginZ();
+
+        for (Form form = field; form != null; form = form.getParentForm())
+        {
+            Vector3f translate = form.transform.get().translate;
+
+            x += translate.x;
+            y += translate.y;
+            z += translate.z;
+        }
+
+        SceneField push = SceneField.of(field, (float) x, (float) y, (float) z, gravity, dt, tick);
+
+        if (push == null)
+        {
+            return;
+        }
+
+        for (SceneActor actor : this.scene.getActors())
+        {
+            for (SceneRig rig : actor.getRigs())
+            {
+                rig.impulse(this.scene.getWorld(), push);
+            }
+        }
+    }
     /**
      * Whether an action clip goes off on this tick — the same rule {@code ActionClip} applies for
      * the server and client passes, repeated here because physics reads the clip directly: at its

@@ -481,7 +481,9 @@ public class BBSMod implements ModInitializer
             .register(qualet.irlite.forms.SpotlightForm.FORM_ID, qualet.irlite.forms.SpotlightForm.class, null)
             .register(Link.bbs("decal"), DecalForm.class, null)
             .register(Link.bbs("height_fog"), HeightFogForm.class, null)
-            .register(Link.bbs("post_process_volume"), mchorse.bbs_mod.forms.forms.PostProcessForm.class, null);
+            .register(Link.bbs("post_process_volume"), mchorse.bbs_mod.forms.forms.PostProcessForm.class, null)
+            .register(Link.bbs("physics_field"), mchorse.bbs_mod.forms.forms.PhysicsFieldForm.class, null)
+            .register(Link.bbs("fake_space"), mchorse.bbs_mod.forms.forms.FakeSpaceForm.class, null);
 
         events.post(new RegisterFormsEvent(forms));
         events.post(new RegisterFormModifiersEvent());

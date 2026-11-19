@@ -104,7 +104,7 @@ public enum UIMorphCategory
             return PRODUCTION;
         }
 
-        if (form instanceof mchorse.bbs_mod.forms.forms.LightForm || form instanceof qualet.irlite.forms.LightForm || form instanceof HeightFogForm || form instanceof mchorse.bbs_mod.forms.forms.PostProcessForm)
+        if (form instanceof mchorse.bbs_mod.forms.forms.LightForm || form instanceof qualet.irlite.forms.LightForm || form instanceof HeightFogForm || form instanceof mchorse.bbs_mod.forms.forms.PostProcessForm || form instanceof mchorse.bbs_mod.forms.forms.PhysicsFieldForm || form instanceof mchorse.bbs_mod.forms.forms.FakeSpaceForm)
         {
             return LIGHTING;
         }

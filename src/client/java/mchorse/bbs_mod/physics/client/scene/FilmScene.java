@@ -688,6 +688,12 @@ public class FilmScene implements AutoCloseable
         }
     }
 
+    /** The scene's gravity in blocks per second squared, as the film sets it */
+    public float getGravity()
+    {
+        return this.gravity;
+    }
+
     public double getOriginX()
     {
         return this.originX;

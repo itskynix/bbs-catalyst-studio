@@ -63,6 +63,24 @@ public class TrackStyle
     {
         setupColors();
         setupIcons();
+
+        /* Set Material Value, the physics field and the artificial space scene: named in the player's language */
+        LABELS.put("material_value", UIKeys.FORMS_EDITOR_MODEL_MATERIAL_VALUE);
+        LABELS.put("material_color", UIKeys.FORMS_EDITOR_MODEL_MATERIAL_VALUE_COLOR);
+
+        for (String id : new String[] {"gravity_scale", "damping", "pull_strength", "turbulence"})
+        {
+            LABELS.put(id, mchorse.bbs_mod.l10n.L10n.lang("bbs.ui.forms.editors.physics_field." + id));
+        }
+
+        for (String id : new String[] {"sky_dome", "background_color", "star_density", "star_brightness", "star_size", "star_seed", "streak_factor",
+            "nebula_amount", "nebula_color_a", "nebula_color_b", "nebula_scale",
+            "planet_enabled", "planet_yaw", "planet_pitch", "planet_size", "planet_color_a", "planet_color_b", "planet_rotation_speed", "planet_light_yaw",
+            "planet_atmosphere", "planet_atmosphere_color", "planet_ring", "planet_ring_color", "planet_ring_tilt",
+            "galaxy_enabled", "galaxy_yaw", "galaxy_pitch", "galaxy_size", "galaxy_tilt", "galaxy_rotation_speed", "galaxy_brightness", "galaxy_core_color", "galaxy_arm_color"})
+        {
+            LABELS.put(id, mchorse.bbs_mod.l10n.L10n.lang("bbs.ui.forms.editors.fake_space." + id));
+        }
         LABELS.put("occlusionFactor", IKey.constant("occlusion"));
         LABELS.put("aperture", UIKeys.CAMERA_PANELS_DOF_APERTURE);
         LABELS.put("bokeh_intensity", UIKeys.CAMERA_PANELS_DOF_BOKEH_INTENSITY);

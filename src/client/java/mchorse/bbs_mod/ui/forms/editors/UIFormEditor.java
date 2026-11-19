@@ -190,6 +190,8 @@ public class UIFormEditor extends UIElement implements IUIFormList, ICursor, IBo
         register(DecalForm.class, UIDecalForm::new);
         register(HeightFogForm.class, UIHeightFogForm::new);
         register(mchorse.bbs_mod.forms.forms.PostProcessForm.class, mchorse.bbs_mod.ui.forms.editors.forms.UIPostProcessForm::new);
+        register(mchorse.bbs_mod.forms.forms.PhysicsFieldForm.class, mchorse.bbs_mod.ui.forms.editors.forms.UIPhysicsFieldForm::new);
+        register(mchorse.bbs_mod.forms.forms.FakeSpaceForm.class, mchorse.bbs_mod.ui.forms.editors.forms.UIFakeSpaceForm::new);
     }
 
     public static void register(Class clazz, Supplier<UIForm> supplier)

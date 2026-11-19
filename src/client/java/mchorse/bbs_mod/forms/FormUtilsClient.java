@@ -172,10 +172,14 @@ public class FormUtilsClient
         register(DecalForm.class, DecalFormRenderer::new);
         register(HeightFogForm.class, HeightFogFormRenderer::new);
         register(mchorse.bbs_mod.forms.forms.PostProcessForm.class, mchorse.bbs_mod.forms.renderers.PostProcessFormRenderer::new);
+        register(mchorse.bbs_mod.forms.forms.PhysicsFieldForm.class, mchorse.bbs_mod.forms.renderers.PhysicsFieldFormRenderer::new);
+        register(mchorse.bbs_mod.forms.forms.FakeSpaceForm.class, mchorse.bbs_mod.forms.renderers.FakeSpaceFormRenderer::new);
 
         /* Its name in the form list, the scene and the dope sheet, in the player's language */
         HeightFogForm.displayNameSupplier = () -> mchorse.bbs_mod.l10n.L10n.lang("bbs.ui.forms.height_fog", "Volumetric Fog").get();
         mchorse.bbs_mod.forms.forms.PostProcessForm.displayNameSupplier = () -> mchorse.bbs_mod.l10n.L10n.lang("bbs.ui.forms.post_process_volume", "Post-Process Volume").get();
+        mchorse.bbs_mod.forms.forms.PhysicsFieldForm.displayNameSupplier = () -> mchorse.bbs_mod.l10n.L10n.lang("bbs.ui.forms.physics_field", "Physics Field").get();
+        mchorse.bbs_mod.forms.forms.FakeSpaceForm.displayNameSupplier = () -> mchorse.bbs_mod.l10n.L10n.lang("bbs.ui.forms.fake_space", "Artificial Space Scene").get();
 
         /* A volume's slot track: the effect in the slot, then which of its values */
         mchorse.bbs_mod.forms.forms.PostProcessForm.trackNameSupplier = (id, param) ->
