@@ -764,13 +764,15 @@ public class BBSModClient implements ClientModInitializer
             mchorse.bbs_mod.graphics.lights.LightManager.beginFrame();
         });
 
+        /* The artificial space scenes go in before the terrain: behind everything, on a far plane of their own */
+        WorldRenderEvents.AFTER_SETUP.register(mchorse.bbs_mod.forms.renderers.FakeSpaceFormRenderer::renderWorld);
+
         WorldRenderEvents.BEFORE_ENTITIES.register((context) -> BBSRendering.beginEntityPass());
 
         WorldRenderEvents.AFTER_ENTITIES.register((context) ->
         {
             StructureWand.renderWorld(context);
             mchorse.bbs_mod.physics.InWorldPhysicsTool.renderWorld(context);
-            mchorse.bbs_mod.forms.renderers.FakeSpaceFormRenderer.renderWorld(context);
 
             if (!BBSRendering.isIrisShadersEnabled())
             {

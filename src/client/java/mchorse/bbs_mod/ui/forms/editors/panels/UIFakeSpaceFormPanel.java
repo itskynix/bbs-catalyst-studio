@@ -104,9 +104,9 @@ public class UIFakeSpaceFormPanel extends UIFormPanel<FakeSpaceForm>
 
         asteroids.fields.add(
             this.row("asteroid_count", () -> this.form.asteroidCount, 0D, 300D),
-            this.row("asteroid_radius", () -> this.form.asteroidRadius, 2D, 1024D),
+            this.row("asteroid_radius", () -> this.form.asteroidRadius, 2D, 100000D),
             this.row("asteroid_speed", () -> this.form.asteroidSpeed, -60D, 60D),
-            this.row("asteroid_size", () -> this.form.asteroidSize, 0.1D, 32D),
+            this.row("asteroid_size", () -> this.form.asteroidSize, 0.1D, 2000D),
             this.color("asteroid_color", () -> this.form.asteroidColor)
         );
 
@@ -114,10 +114,10 @@ public class UIFakeSpaceFormPanel extends UIFormPanel<FakeSpaceForm>
 
         galaxy.fields.add(
             this.toggle("galaxy_enabled", () -> this.form.galaxyEnabled),
-            this.row("galaxy_x", () -> this.form.galaxyX, -4096D, 4096D),
-            this.row("galaxy_y", () -> this.form.galaxyY, -4096D, 4096D),
-            this.row("galaxy_z", () -> this.form.galaxyZ, -4096D, 4096D),
-            this.row("galaxy_size", () -> this.form.galaxySize, 2D, 2048D),
+            this.row("galaxy_x", () -> this.form.galaxyX, -100000D, 100000D),
+            this.row("galaxy_y", () -> this.form.galaxyY, -100000D, 100000D),
+            this.row("galaxy_z", () -> this.form.galaxyZ, -100000D, 100000D),
+            this.row("galaxy_size", () -> this.form.galaxySize, 2D, 50000D),
             this.row("galaxy_yaw", () -> this.form.galaxyYaw, -180D, 180D),
             this.row("galaxy_tilt", () -> this.form.galaxyTilt, -90D, 90D),
             this.row("galaxy_rotation_speed", () -> this.form.galaxyRotationSpeed, -360D, 360D),

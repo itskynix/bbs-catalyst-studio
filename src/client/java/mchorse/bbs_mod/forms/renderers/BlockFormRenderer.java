@@ -347,7 +347,8 @@ public class BlockFormRenderer extends FormRenderer<BlockForm>
         /* A door, trapdoor, gate or chest swung open a share of the way, or drawn with its other half */
         float openness = this.shownOpenness();
 
-        if (!picking && (openness > 1.0E-4F || this.form.openablePair.get())
+        /* Always this way for an openable, shut or open: the vanilla path draws a chest as its item, facing north whatever the block faced */
+        if (!picking && mchorse.bbs_mod.film.OpenableModel.kindOf(state) != null
             && mchorse.bbs_mod.film.OpenableModel.render(state, openness, this.form.openAngle.get(), this.form.openablePair.get(), matrices, consumers, light, overlay))
         {
             return;

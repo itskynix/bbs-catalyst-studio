@@ -80,8 +80,8 @@ public class UIPlanetEditorOverlayPanel extends UIOverlayPanel
             this.color("color_b", () -> planet.colorB),
 
             UI.label(UIKeys.FAKE_SPACE_PLANET_PLACE).background().marginTop(UIConstants.SECTION_GAP),
-            UI.labelRow(key("position"), UI.row(this.trackpad(() -> planet.x, -4096D, 4096D, "position"), this.trackpad(() -> planet.y, -4096D, 4096D, "position"), this.trackpad(() -> planet.z, -4096D, 4096D, "position"))),
-            UI.labelRow(key("radius"), this.trackpad(() -> planet.radius, 0.5D, 1024D, "radius")),
+            UI.labelRow(key("position"), UI.row(this.trackpad(() -> planet.x, -100000D, 100000D, "position"), this.trackpad(() -> planet.y, -100000D, 100000D, "position"), this.trackpad(() -> planet.z, -100000D, 100000D, "position"))),
+            UI.labelRow(key("radius"), this.trackpad(() -> planet.radius, 0.5D, 10000D, "radius")),
             UI.labelRow(key("tilt"), this.trackpad(() -> planet.tilt, -90D, 90D, "tilt")),
             UI.labelRow(key("rotation_speed"), this.trackpad(() -> planet.rotationSpeed, -360D, 360D, "rotation_speed")),
 

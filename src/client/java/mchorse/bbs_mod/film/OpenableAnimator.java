@@ -121,6 +121,7 @@ public final class OpenableAnimator
             return new Target(recorder.film, () -> Math.max(0, recorder.tick), () ->
             {
                 recorder.createEntities();
+                rebuildOthers(recorder.film, recorder);
                 refreshList(panel);
             }, (id) -> recorder.getEntities().get(id));
         }
@@ -130,11 +131,35 @@ public final class OpenableAnimator
             return new Target(panel.getData(), () -> Math.max(0, panel.getCursor()), () ->
             {
                 panel.getController().createEntities();
+                rebuildOthers(panel.getData(), null);
                 refreshList(panel);
             }, (id) -> panel.getController().getEntities().get(id));
         }
 
         return null;
+    }
+
+    /**
+     * Every other controller playing the same film makes its actors again, so the new one is there
+     * too: the film editor's while a take is recorded in the world, the world's while the editor records.
+     */
+    private static void rebuildOthers(mchorse.bbs_mod.film.Film film, BaseFilmController done)
+    {
+        for (BaseFilmController controller : new ArrayList<>(BBSModClient.getFilms().getControllers()))
+        {
+            if (controller != done && controller.film == film)
+            {
+                controller.createEntities();
+            }
+        }
+
+        UIDashboard dashboard = BBSModClient.getDashboardIfCreated();
+        UIFilmPanel panel = dashboard == null ? null : dashboard.getPanel(UIFilmPanel.class);
+
+        if (done != null && panel != null && panel.getData() == film)
+        {
+            panel.getController().createEntities();
+        }
     }
 
     /** The film editor's replay list shows the new actor at once */
@@ -257,6 +282,7 @@ public final class OpenableAnimator
         replay.label.set(form.getDisplayName());
         replay.form.set(form);
         replay.shadow.set(false);
+        replay.enabled.set(true);
         replay.keyframes.x.insert(0, base.getX() + 0.5D);
         replay.keyframes.y.insert(0, (double) base.getY());
         replay.keyframes.z.insert(0, base.getZ() + 0.5D);

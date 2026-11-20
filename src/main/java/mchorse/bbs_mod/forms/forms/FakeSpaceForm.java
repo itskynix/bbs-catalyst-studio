@@ -62,10 +62,10 @@ public class FakeSpaceForm extends Form
 
     /* The spiral galaxy: where it is in blocks from the form, how big, which way its disc faces */
     public final ValueBoolean galaxyEnabled = new ValueBoolean("galaxy_enabled", true);
-    public final ValueFloat galaxyX = new ValueFloat("galaxy_x", 120F, -4096F, 4096F);
-    public final ValueFloat galaxyY = new ValueFloat("galaxy_y", 140F, -4096F, 4096F);
-    public final ValueFloat galaxyZ = new ValueFloat("galaxy_z", -260F, -4096F, 4096F);
-    public final ValueFloat galaxySize = new ValueFloat("galaxy_size", 90F, 2F, 2048F);
+    public final ValueFloat galaxyX = new ValueFloat("galaxy_x", 120F, -100000F, 100000F);
+    public final ValueFloat galaxyY = new ValueFloat("galaxy_y", 140F, -100000F, 100000F);
+    public final ValueFloat galaxyZ = new ValueFloat("galaxy_z", -260F, -100000F, 100000F);
+    public final ValueFloat galaxySize = new ValueFloat("galaxy_size", 90F, 2F, 50000F);
     public final ValueFloat galaxyYaw = new ValueFloat("galaxy_yaw", 30F, -180F, 180F);
     public final ValueFloat galaxyTilt = new ValueFloat("galaxy_tilt", 55F, -90F, 90F);
     public final ValueFloat galaxyRotationSpeed = new ValueFloat("galaxy_rotation_speed", 2F, -360F, 360F);
@@ -75,9 +75,9 @@ public class FakeSpaceForm extends Form
 
     /* The asteroid belt: a ring of tumbling rocks round the form */
     public final ValueInt asteroidCount = new ValueInt("asteroid_count", 80, 0, 300);
-    public final ValueFloat asteroidRadius = new ValueFloat("asteroid_radius", 45F, 2F, 1024F);
+    public final ValueFloat asteroidRadius = new ValueFloat("asteroid_radius", 45F, 2F, 100000F);
     public final ValueFloat asteroidSpeed = new ValueFloat("asteroid_speed", 2F, -60F, 60F);
-    public final ValueFloat asteroidSize = new ValueFloat("asteroid_size", 1.4F, 0.1F, 32F);
+    public final ValueFloat asteroidSize = new ValueFloat("asteroid_size", 1.4F, 0.1F, 2000F);
     public final ValueColor asteroidColor = new ValueColor("asteroid_color", new Color(0.42F, 0.39F, 0.36F, 1F));
 
     public FakeSpaceForm()
@@ -270,10 +270,10 @@ public class FakeSpaceForm extends Form
     public static class Planet extends ValueGroup
     {
         public final ValueString name = new ValueString("name", "");
-        public final ValueFloat x = new ValueFloat("x", 0F, -4096F, 4096F);
-        public final ValueFloat y = new ValueFloat("y", 0F, -4096F, 4096F);
-        public final ValueFloat z = new ValueFloat("z", 60F, -4096F, 4096F);
-        public final ValueFloat radius = new ValueFloat("radius", 16F, 0.5F, 1024F);
+        public final ValueFloat x = new ValueFloat("x", 0F, -100000F, 100000F);
+        public final ValueFloat y = new ValueFloat("y", 0F, -100000F, 100000F);
+        public final ValueFloat z = new ValueFloat("z", 60F, -100000F, 100000F);
+        public final ValueFloat radius = new ValueFloat("radius", 16F, 0.5F, 10000F);
         public final ValueFloat tilt = new ValueFloat("tilt", 10F, -90F, 90F);
         public final ValueFloat rotationSpeed = new ValueFloat("rotation_speed", 6F, -360F, 360F);
 

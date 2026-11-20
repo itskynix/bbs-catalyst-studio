@@ -237,6 +237,20 @@ public final class OpenableModel
         double[] omax = {o.maxX, o.maxY, o.maxZ};
         float[] pivot = new float[3];
 
+        /* The leaf's thickness - its thinnest side across the turn - so the hinge sits half of it in from
+         * the corner: turned about the corner itself, the leaf would end up outside the block, in the next one */
+        double thickness = Double.MAX_VALUE;
+
+        for (int i = 0; i < 3; i++)
+        {
+            if (i != axis)
+            {
+                thickness = Math.min(thickness, cmax[i] - cmin[i]);
+            }
+        }
+
+        double inset = thickness / 2D;
+
         for (int i = 0; i < 3; i++)
         {
             if (i == axis)
@@ -249,7 +263,7 @@ public final class OpenableModel
             boolean low = Math.abs(cmin[i] - omin[i]) < 1.0E-4D || Math.abs(cmin[i] - omax[i]) < 1.0E-4D;
             boolean high = Math.abs(cmax[i] - omin[i]) < 1.0E-4D || Math.abs(cmax[i] - omax[i]) < 1.0E-4D;
 
-            pivot[i] = (float) (high && !low ? cmax[i] : (low && !high ? cmin[i] : (cmax[i] + cmin[i]) / 2D));
+            pivot[i] = (float) (high && !low ? cmax[i] - inset : (low && !high ? cmin[i] + inset : (cmax[i] + cmin[i]) / 2D));
         }
 
         Vector3f middle = new Vector3f((float) (cmin[0] + cmax[0]) / 2F, (float) (cmin[1] + cmax[1]) / 2F, (float) (cmin[2] + cmax[2]) / 2F);

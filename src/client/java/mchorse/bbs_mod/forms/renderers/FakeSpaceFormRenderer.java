@@ -195,10 +195,19 @@ public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
     /** How long a scene whose form stopped being drawn (culled, out of view) is still kept, in nanoseconds */
     private static final long KEEP_NANOS = 60_000_000_000L;
 
+    /** The far plane the space scenes are drawn with: a planet fifty thousand blocks off is still well inside it */
+    private static final float SPACE_FAR = 200000F;
+    private static final float SPACE_NEAR = 0.5F;
+    private static final float SKY_RADIUS = 150000F;
+
     /**
-     * Draws the space scenes of the world: the sky of the newest one around the camera, a whole sphere
-     * just inside the far plane with nothing culled and no depth written, so it covers every direction;
-     * and every scene's planets, belt and galaxy where its form is.
+     * Draws the space scenes of the world, before its terrain. With a projection of their own whose far
+     * plane is two hundred thousand blocks out: first the sky of the newest scene around the camera, a
+     * whole sphere with nothing culled and no depth written, then every scene's planets, belt and galaxy
+     * where its form is, hiding one another by depth. Then the depth is cleared and the game's own
+     * projection put back, so the world is drawn over space as if space were infinitely far: nothing is
+     * cut by the game's far plane, nothing sinks into the dome, and flying round a planet has its true
+     * parallax.
      */
     public static void renderWorld(net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext context)
     {
@@ -233,6 +242,18 @@ public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
             }
         }
 
+        Matrix4f projection = new Matrix4f(RenderSystem.getProjectionMatrix());
+        com.mojang.blaze3d.systems.VertexSorter sorting = RenderSystem.getVertexSorting();
+        Matrix4f far = new Matrix4f(projection);
+
+        /* Only the depth range of a perspective changes: the field of view and the aspect stay the game's */
+        if (Math.abs(far.m23() + 1F) < 1.0E-3F)
+        {
+            far.m22((SPACE_FAR + SPACE_NEAR) / (SPACE_NEAR - SPACE_FAR));
+            far.m32(2F * SPACE_FAR * SPACE_NEAR / (SPACE_NEAR - SPACE_FAR));
+        }
+
+        RenderSystem.setProjectionMatrix(far, sorting);
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.disableCull();
@@ -245,7 +266,7 @@ public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
             {
                 Scene scene = SCENES.get(newest);
                 Color background = newest.form.backgroundColor.get();
-                float radius = Math.max(32F, mc.gameRenderer.getFarPlaneDistance() * 0.85F);
+                float radius = SKY_RADIUS;
 
                 newest.front.set(0F, 0F, 1F);
                 scene.world().transformDirection(newest.front);
@@ -279,6 +300,10 @@ public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
             RenderSystem.defaultBlendFunc();
             RenderSystem.enableCull();
             RenderSystem.disableBlend();
+
+            /* Space is behind everything: the world draws over it from a clean depth, with its own projection */
+            RenderSystem.clear(org.lwjgl.opengl.GL11.GL_DEPTH_BUFFER_BIT, MinecraftClient.IS_SYSTEM_MAC);
+            RenderSystem.setProjectionMatrix(projection, sorting);
         }
     }
 

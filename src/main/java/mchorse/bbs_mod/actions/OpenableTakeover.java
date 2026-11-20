@@ -40,8 +40,16 @@ public final class OpenableTakeover
 
         server.execute(() ->
         {
-            if (!PermissionUtils.arePanelsAllowed(server, player))
+            ServerWorld denied = player.getServerWorld();
+
+            if (!PermissionUtils.arePanelsAllowed(server, player) && !player.isCreative())
             {
+                /* Not allowed: the client took the block out ahead of the answer, so it is told the block is still there */
+                for (BlockPos pos : positions)
+                {
+                    player.networkHandler.sendPacket(new BlockUpdateS2CPacket(denied, pos));
+                }
+
                 return;
             }
 
