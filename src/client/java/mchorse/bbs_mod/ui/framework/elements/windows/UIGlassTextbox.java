@@ -1,10 +1,8 @@
 package mchorse.bbs_mod.ui.framework.elements.windows;
 
-import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.input.text.UITextbox;
 import mchorse.bbs_mod.ui.utils.Area;
-import mchorse.bbs_mod.utils.colors.Colors;
 
 import java.util.function.Consumer;
 
@@ -29,27 +27,9 @@ public class UIGlassTextbox extends UITextbox
         super.render(context);
     }
 
-    /** The box under the text: dark glass, a thin frame, and while focused an accent frame with a line below. */
+    /** The box under the text, in the look of the interface theme (see {@link UITheme}). */
     public static void paintGround(UIContext context, Area a, boolean focused)
     {
-        if (FrutigerAero.on())
-        {
-            FrutigerAero.textbox(context.batcher, a, RADIUS, focused);
-
-            return;
-        }
-
-        int accent = Colors.A100 | BBSSettings.primaryColor.get();
-        boolean opened = RoundedDraw.begin(context.batcher);
-
-        RoundedDraw.fill(context.batcher, a.x, a.y, a.ex(), a.ey(), RADIUS, RoundedDraw.ALL, focused ? 0xe60d1118 : 0xd90f141d);
-        RoundedDraw.outline(context.batcher, a.x, a.y, a.ex(), a.ey(), RADIUS, RoundedDraw.ALL, focused ? accent : 0xff344258);
-
-        if (focused)
-        {
-            context.batcher.box(a.x + RADIUS, a.ey() - 2, a.ex() - RADIUS, a.ey() - 1, accent);
-        }
-
-        RoundedDraw.end(context.batcher, opened);
+        UITheme.textbox(context.batcher, a, RADIUS, focused);
     }
 }

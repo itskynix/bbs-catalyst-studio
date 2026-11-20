@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.framework.elements.windows;
 
+import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D;
 import mchorse.bbs_mod.utils.colors.Colors;
 
@@ -126,6 +127,7 @@ public class RoundedDraw
     /** The part of the rounded shape that lies between rows {@code by1} and {@code by2}. */
     public static void band(Batcher2D batcher, int x1, int y1, int x2, int y2, int r, int corners, int by1, int by2, int color)
     {
+        r = radius(r);
         by1 = Math.max(by1, y1);
         by2 = Math.min(by2, y2);
 
@@ -159,8 +161,19 @@ public class RoundedDraw
     }
 
     /** A one pixel line round the shape. */
+    /**
+     * The radius a shape is drawn with: none under the Classic theme, whose windows and controls are
+     * square like the original BBS ones, so every rounded shape of the studio turns square with it.
+     */
+    public static int radius(int r)
+    {
+        return BBSSettings.uiTheme() == BBSSettings.THEME_CLASSIC ? 0 : r;
+    }
+
     public static void outline(Batcher2D batcher, int x1, int y1, int x2, int y2, int r, int corners, int color)
     {
+        r = radius(r);
+
         if (x2 <= x1 || y2 <= y1 || Colors.getA(color) <= 0F)
         {
             return;
@@ -206,6 +219,8 @@ public class RoundedDraw
      */
     public static void ring(Batcher2D batcher, int x1, int y1, int x2, int y2, int r, int thickness, int color)
     {
+        r = radius(r);
+
         if (thickness <= 0 || x2 <= x1 || y2 <= y1 || Colors.getA(color) <= 0F)
         {
             return;

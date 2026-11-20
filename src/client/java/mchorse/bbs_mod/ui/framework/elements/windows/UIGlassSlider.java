@@ -1,6 +1,5 @@
 package mchorse.bbs_mod.ui.framework.elements.windows;
 
-import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.utils.FontRenderer;
@@ -57,35 +56,10 @@ public class UIGlassSlider extends UIElement
         return this.value;
     }
 
-    /** The 4 pixel rail, filled up to the thumb, and the thumb: dark frame, light disc, accent core. */
+    /** The rail, filled up to the thumb, and the thumb, in the look of the interface theme (see {@link UITheme}). */
     public static void paintTrack(UIContext context, int start, int end, int cy, int thumbX, boolean lit, int base)
     {
-        int accent = Colors.A100 | BBSSettings.primaryColor.get();
-
-        if (FrutigerAero.on())
-        {
-            boolean opened = RoundedDraw.begin(context.batcher);
-
-            FrutigerAero.slider(context.batcher, start, end, cy, thumbX, lit, base);
-            RoundedDraw.end(context.batcher, opened);
-
-            return;
-        }
-
-        RoundedDraw.fill(context.batcher, start, cy - 2, end, cy + 2, 2, RoundedDraw.ALL, 0xff3a4558);
-
-        if (thumbX > start)
-        {
-            RoundedDraw.fill(context.batcher, start, cy - 2, thumbX, cy + 2, 2, RoundedDraw.ALL, accent);
-        }
-
-        int size = lit ? base + 2 : base;
-        int inner = size - 4;
-        int core = lit ? 6 : 4;
-
-        RoundedDraw.fill(context.batcher, thumbX - size / 2, cy - size / 2, thumbX - size / 2 + size, cy - size / 2 + size, size / 2, RoundedDraw.ALL, 0xff0d1118);
-        RoundedDraw.fill(context.batcher, thumbX - inner / 2, cy - inner / 2, thumbX - inner / 2 + inner, cy - inner / 2 + inner, inner / 2, RoundedDraw.ALL, 0xfff2f5fa);
-        RoundedDraw.fill(context.batcher, thumbX - core / 2, cy - core / 2, thumbX - core / 2 + core, cy - core / 2 + core, core / 2, RoundedDraw.ALL, accent);
+        UITheme.slider(context.batcher, start, end, cy, thumbX, lit, base);
     }
 
     private int railStart()

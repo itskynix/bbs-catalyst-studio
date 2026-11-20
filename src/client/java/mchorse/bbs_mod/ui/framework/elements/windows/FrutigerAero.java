@@ -8,8 +8,8 @@ import mchorse.bbs_mod.utils.colors.Colors;
 
 /**
  * The Frutiger Aero look (Windows Vista and 7): glossy glass the colour of a clear sky over water,
- * with emerald and turquoise gel buttons. Switched on in Settings, Personalization, and read every
- * frame, so it takes over the moment it is ticked.
+ * with emerald and turquoise gel buttons. One of the interface themes picked in Settings,
+ * Personalization (see {@link UITheme}), read every frame, so it takes over the moment it is picked.
  *
  * <p>Its signature is the gloss: every glassy surface is lighter in its top half and has a sharp
  * horizontal light just under the middle, the horizon of a curved glass catching the sky. Under that

@@ -3,9 +3,7 @@ package mchorse.bbs_mod.ui.framework.elements.context;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.utils.FontRenderer;
-import mchorse.bbs_mod.ui.framework.elements.windows.FrutigerAero;
-import mchorse.bbs_mod.ui.framework.elements.windows.GlassChrome;
-import mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw;
+import mchorse.bbs_mod.ui.framework.elements.windows.UITheme;
 import mchorse.bbs_mod.ui.utils.Area;
 import mchorse.bbs_mod.ui.utils.icons.Icon;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
@@ -28,9 +26,6 @@ public class UIWin11ContextMenu extends UIContextMenu
     private static final int SEPARATOR = 7;
     private static final int QUICK = 28;
     private static final int RADIUS = 6;
-
-    private static final int GLASS = 0xeb171d29;
-    private static final int FRAME = 0xff2a3444;
 
     private final List<Entry> quick = new ArrayList<>();
     private final List<Entry> rows = new ArrayList<>();
@@ -183,28 +178,7 @@ public class UIWin11ContextMenu extends UIContextMenu
     @Override
     protected void renderBackground(UIContext context)
     {
-        Area a = this.area;
-
-        if (FrutigerAero.on())
-        {
-            FrutigerAero.menu(context, a, RADIUS);
-
-            return;
-        }
-
-        boolean opened = RoundedDraw.begin(context.batcher);
-
-        GlassChrome.shadow(context, a.x, a.y, a.ex(), a.ey(), 10, 0.5F);
-        RoundedDraw.fill(context.batcher, a.x, a.y, a.ex(), a.ey(), RADIUS, RoundedDraw.ALL, GLASS);
-
-        for (int k = 0; k < Math.min(40, a.h); k += 2)
-        {
-            float fade = 1F - k / 40F;
-
-            RoundedDraw.band(context.batcher, a.x, a.y, a.ex(), a.ey(), RADIUS, RoundedDraw.ALL, a.y + k, a.y + k + 2, Colors.setA(Colors.WHITE, 0.06F * fade * fade));
-        }
-
-        RoundedDraw.end(context.batcher, opened);
+        UITheme.menu(context, this.area, RADIUS);
     }
 
     @Override
@@ -277,34 +251,16 @@ public class UIWin11ContextMenu extends UIContextMenu
             y += ROW;
         }
 
-        if (FrutigerAero.on())
-        {
-            FrutigerAero.menuFrame(context.batcher, a, RADIUS);
-
-            return;
-        }
-
-        RoundedDraw.outline(context.batcher, a.x + 1, a.y + 1, a.ex() - 1, a.ey() - 1, RADIUS - 1, RoundedDraw.ALL, Colors.setA(Colors.WHITE, 0.08F));
-        RoundedDraw.outline(context.batcher, a.x, a.y, a.ex(), a.ey(), RADIUS, RoundedDraw.ALL, FRAME);
+        UITheme.menuFrame(context.batcher, a, RADIUS);
     }
 
     private void pill(UIContext context, int x1, int y1, int x2, int y2)
     {
-        if (FrutigerAero.on())
-        {
-            boolean opened = RoundedDraw.begin(context.batcher);
-
-            FrutigerAero.pill(context.batcher, x1, y1, x2, y2);
-            RoundedDraw.end(context.batcher, opened);
-
-            return;
-        }
-
-        RoundedDraw.fill(context.batcher, x1, y1, x2, y2, 4, RoundedDraw.ALL, Colors.setA(Colors.WHITE, 0.09F));
+        UITheme.pill(context.batcher, x1, y1, x2, y2);
     }
 
     private void line(UIContext context, int y)
     {
-        context.batcher.box(this.area.x + PAD + 3, y, this.area.ex() - PAD - 3, y + 1, FrutigerAero.on() ? FrutigerAero.separator() : Colors.setA(Colors.WHITE, 0.12F));
+        context.batcher.box(this.area.x + PAD + 3, y, this.area.ex() - PAD - 3, y + 1, UITheme.separator());
     }
 }

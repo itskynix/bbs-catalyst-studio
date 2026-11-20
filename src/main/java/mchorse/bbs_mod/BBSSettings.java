@@ -235,7 +235,9 @@ public class BBSSettings {
 	public static ValueBoolean interfaceShadows;
 	public static ValueBoolean interfaceHighlights;
 	public static ValueBoolean interfaceGlow;
-	public static ValueBoolean frutigerAero;
+	public static ValueInt uiTheme;
+	/** The old Frutiger Aero switch, kept hidden only to carry it over to {@link #uiTheme} */
+	private static ValueBoolean legacyFrutigerAero;
 	public static ValueBoolean studioMusicEnabled;
 	public static ValueFloat studioMusicVolume;
 	public static ValueFloat welcomeMusicVolume;
@@ -461,13 +463,36 @@ public class BBSSettings {
 	/** The icy blue the surfaces are built from while the Frutiger Aero theme is on */
 	private static final int FRUTIGER_AERO_SURFACE = 0xcbe6fa;
 
+	public static final int THEME_GLASS_AERO = 0;
+	public static final int THEME_FRUTIGER_AERO = 1;
+	public static final int THEME_FLAT_AERO = 2;
+	public static final int THEME_CLASSIC = 3;
+
 	/**
-	 * Whether the Frutiger Aero theme is on: glossy sky blue glass and gel controls in place of the
-	 * dark Aero. Read every frame, so switching it needs no restart.
+	 * The interface theme: 0 Glass Aero, 1 Frutiger Aero, 2 Flat Aero, 3 Classic. Read every frame, so
+	 * switching it needs no restart. A config from before the themes with the old Frutiger Aero switch
+	 * on is carried over to Frutiger Aero the first time this is asked.
 	 */
+	public static int uiTheme()
+	{
+		if (uiTheme == null)
+		{
+			return THEME_GLASS_AERO;
+		}
+
+		if (legacyFrutigerAero != null && legacyFrutigerAero.get())
+		{
+			legacyFrutigerAero.set(false);
+			uiTheme.set(THEME_FRUTIGER_AERO);
+		}
+
+		return uiTheme.get();
+	}
+
+	/** Whether the Frutiger Aero theme is on: glossy sky blue glass and gel controls */
 	public static boolean frutigerAero()
 	{
-		return frutigerAero != null && frutigerAero.get();
+		return uiTheme() == THEME_FRUTIGER_AERO;
 	}
 
 	public static int getDefaultDuration()
@@ -747,7 +772,14 @@ public class BBSSettings {
 		interfaceShadows = builder.getBoolean("interface_shadows", true);
 		interfaceHighlights = builder.getBoolean("interface_highlights", false);
 		interfaceGlow = builder.getBoolean("interface_glow", true);
-		frutigerAero = builder.getBoolean("frutiger_aero", false);
+		uiTheme = builder.getInt("ui_theme", THEME_GLASS_AERO, 0, 3).modes(
+			IKey.raw("Glass Aero"),
+			IKey.raw("Frutiger Aero"),
+			IKey.raw("Flat Aero"),
+			IKey.raw("Classic")
+		);
+		legacyFrutigerAero = builder.getBoolean("frutiger_aero", false);
+		legacyFrutigerAero.invisible();
 		studioMusicEnabled = builder.getBoolean("studio_music", true);
 		studioMusicVolume = builder.getFloat("studio_music_volume", 0.65F, 0F, 1F).slider();
 		welcomeMusicVolume = builder.getFloat("welcome_music_volume", 0.8F, 0F, 1F).slider();

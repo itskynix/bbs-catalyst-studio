@@ -1,6 +1,5 @@
 package mchorse.bbs_mod.ui.framework.elements.windows;
 
-import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D;
@@ -493,11 +492,8 @@ public class UIDesktopWindow extends UIElement
                 return;
             }
 
-            if (this.hover)
-            {
-                /* flush with the window's corner, so only that corner is round */
-                RoundedDraw.band(context.batcher, a.x, a.y, a.ex(), a.ey(), RADIUS - 1, RoundedDraw.TR, a.y, a.ey(), UIDesktopWindow.CLOSE_HOVER);
-            }
+            /* flush with the window's corner, so only that corner is round */
+            UITheme.close(context.batcher, a, this.hover);
 
             context.batcher.icon(Icons.CLOSE, this.hover ? Colors.WHITE : Colors.setA(Colors.WHITE, 0.75F), a.mx(), a.my(), 0.5F, 0.5F);
         }

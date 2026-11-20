@@ -1,6 +1,5 @@
 package mchorse.bbs_mod.ui.framework.elements.overlay;
 
-import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.graphics.window.Window;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.Keys;
@@ -14,9 +13,8 @@ import mchorse.bbs_mod.ui.framework.elements.utils.UILabel;
 import mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D;
 import mchorse.bbs_mod.ui.framework.elements.windows.FrutigerAero;
 import mchorse.bbs_mod.ui.framework.elements.windows.GlassChrome;
-import mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw;
+import mchorse.bbs_mod.ui.framework.elements.windows.UITheme;
 import mchorse.bbs_mod.ui.framework.elements.windows.UIClipElement;
-import mchorse.bbs_mod.ui.framework.elements.windows.UIDesktopWindow;
 import mchorse.bbs_mod.ui.utils.icons.Icon;
 import mchorse.bbs_mod.ui.utils.UI;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
@@ -530,15 +528,8 @@ public class UIOverlayPanel extends UIElement
             context.batcher.box(this.icons.area.x, this.icons.area.y, this.icons.area.ex() - 1, this.icons.area.ey() - 1, FrutigerAero.on() ? 0x1a0f2742 : 0x14ffffff);
         }
 
-        if (FrutigerAero.on())
-        {
-            FrutigerAero.close(context.batcher, this.close.area, this.close.area.isInside(context));
-        }
-        else if (this.close.area.isInside(context))
-        {
-            /* flush with the panel's corner, so only that corner is round */
-            RoundedDraw.band(context.batcher, this.close.area.x, this.close.area.y, this.close.area.ex(), this.close.area.ey(), GlassChrome.RADIUS - 1, RoundedDraw.TR, this.close.area.y, this.close.area.ey(), UIDesktopWindow.CLOSE_HOVER);
-        }
+        /* flush with the panel's corner, so only that corner is round; a red crystal under Frutiger Aero */
+        UITheme.close(context.batcher, this.close.area, this.close.area.isInside(context));
 
         if (this.icon != null)
         {

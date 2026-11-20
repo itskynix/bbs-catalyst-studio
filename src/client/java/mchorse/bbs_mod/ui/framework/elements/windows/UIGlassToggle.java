@@ -1,19 +1,16 @@
 package mchorse.bbs_mod.ui.framework.elements.windows;
 
-import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIToggle;
 import mchorse.bbs_mod.ui.framework.elements.utils.FontRenderer;
 import mchorse.bbs_mod.ui.utils.Area;
-import mchorse.bbs_mod.utils.colors.Colors;
 
 import java.util.function.Consumer;
 
 /**
- * The Windows 11 switch: a 32 by 16 pill. Off it is dark glass with a thin grey frame and a small
- * round knob on the left; on it is filled with the accent with a white knob on the right. The knob
- * slides between the two, and swells a little under the mouse.
+ * A switch: a 30 by 15 pill whose knob slides between off on the left and on on the right, in
+ * the look of the interface theme, see {@link UITheme}.
  */
 public class UIGlassToggle extends UIToggle
 {
@@ -53,38 +50,7 @@ public class UIGlassToggle extends UIToggle
 
         int x = a.ex() - W;
         int y = a.my() - H / 2;
-        int accent = Colors.A100 | BBSSettings.primaryColor.get();
-
-        if (FrutigerAero.on())
-        {
-            /* Frosted glass off, an emerald gel on, and a white pearl for the knob */
-            boolean opened = RoundedDraw.begin(context.batcher);
-            int pearl = H - 4 + (hover ? 1 : 0);
-            int px = x + 2 + Math.round((W - H) * toggle.glassSlide);
-
-            FrutigerAero.toggleWell(context.batcher, x, y, W, H, on, hover);
-            FrutigerAero.pearl(context.batcher, px, a.my() - pearl / 2, pearl);
-            RoundedDraw.end(context.batcher, opened);
-            toggle.renderLockedArea(context);
-
-            return;
-        }
-
-        if (on)
-        {
-            RoundedDraw.fill(context.batcher, x, y, x + W, y + H, H / 2, RoundedDraw.ALL, hover ? Colors.mulRGB(accent, 0.9F) : accent);
-        }
-        else
-        {
-            RoundedDraw.fill(context.batcher, x, y, x + W, y + H, H / 2, RoundedDraw.ALL, hover ? 0xa0202838 : 0x80141a26);
-            RoundedDraw.outline(context.batcher, x, y, x + W, y + H, H / 2, RoundedDraw.ALL, 0xff8a93a0);
-        }
-
-        int knob = (on ? 9 : 7) + (hover ? 2 : 0);
-        int kx = x + (H - knob) / 2 + Math.round((W - H) * toggle.glassSlide);
-        int ky = a.my() - knob / 2;
-
-        RoundedDraw.fill(context.batcher, kx, ky, kx + knob, ky + knob, knob / 2, RoundedDraw.ALL, on ? Colors.WHITE : 0xffc4cbd6);
+        UITheme.toggle(context.batcher, x, y, W, H, on, hover, toggle.glassSlide);
 
         toggle.renderLockedArea(context);
     }

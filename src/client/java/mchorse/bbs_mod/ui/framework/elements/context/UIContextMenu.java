@@ -1,10 +1,7 @@
 package mchorse.bbs_mod.ui.framework.elements.context;
 
-import mchorse.bbs_mod.ui.framework.elements.windows.FrutigerAero;
+import mchorse.bbs_mod.ui.framework.elements.windows.UITheme;
 import mchorse.bbs_mod.ui.framework.elements.windows.GlassChrome;
-import mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw;
-import mchorse.bbs_mod.ui.utils.Area;
-import mchorse.bbs_mod.utils.colors.Colors;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.utils.EventPropagation;
@@ -95,41 +92,12 @@ public abstract class UIContextMenu extends UIElement
 
         super.render(context);
 
-        if (FrutigerAero.on())
-        {
-            FrutigerAero.menuFrame(context.batcher, this.area, GlassChrome.RADIUS);
-
-            return;
-        }
-
-        RoundedDraw.outline(context.batcher, this.area.x + 1, this.area.y + 1, this.area.ex() - 1, this.area.ey() - 1, GlassChrome.RADIUS - 1, RoundedDraw.ALL, Colors.setA(Colors.WHITE, 0.08F));
-        RoundedDraw.outline(context.batcher, this.area.x, this.area.y, this.area.ex(), this.area.ey(), GlassChrome.RADIUS, RoundedDraw.ALL, GlassChrome.BORDER);
+        UITheme.menuFrame(context.batcher, this.area, GlassChrome.RADIUS);
     }
 
-    /** Dark glass with round corners, the same as every desktop window: every context menu has it. */
+    /** The ground of every context menu, in the look of the interface theme (see {@link UITheme}). */
     protected void renderBackground(UIContext context)
     {
-        Area a = this.area;
-
-        if (FrutigerAero.on())
-        {
-            FrutigerAero.menu(context, a, GlassChrome.RADIUS);
-
-            return;
-        }
-
-        boolean opened = RoundedDraw.begin(context.batcher);
-
-        GlassChrome.shadow(context, a.x, a.y, a.ex(), a.ey(), 10, 0.5F);
-        RoundedDraw.fill(context.batcher, a.x, a.y, a.ex(), a.ey(), GlassChrome.RADIUS, RoundedDraw.ALL, 0xeb171d29);
-
-        for (int k = 0; k < Math.min(40, a.h); k += 2)
-        {
-            float fade = 1F - k / 40F;
-
-            RoundedDraw.band(context.batcher, a.x, a.y, a.ex(), a.ey(), GlassChrome.RADIUS, RoundedDraw.ALL, a.y + k, a.y + k + 2, Colors.setA(Colors.WHITE, 0.06F * fade * fade));
-        }
-
-        RoundedDraw.end(context.batcher, opened);
+        UITheme.menu(context, this.area, GlassChrome.RADIUS);
     }
 }

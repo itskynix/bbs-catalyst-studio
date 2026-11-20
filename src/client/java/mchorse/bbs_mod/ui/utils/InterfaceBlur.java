@@ -70,7 +70,7 @@ public class InterfaceBlur
     /** Blur once per frame, retaining the existing background and overlay settings. */
     public static void apply()
     {
-        if (applied || broken || !BBSSettings.interfaceBlur.get())
+        if (applied || broken || !BBSSettings.interfaceBlur.get() || BBSSettings.uiTheme() >= BBSSettings.THEME_FLAT_AERO)
         {
             return;
         }

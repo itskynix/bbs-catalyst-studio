@@ -69,7 +69,7 @@ public class UIGlassButton extends UIButton
         }
         else
         {
-            context.batcher.text(label, a.mx(font.getWidth(label)), a.my(font.getHeight()), primary ? contrast(accent) : Colors.WHITE, false);
+            context.batcher.text(label, a.mx(font.getWidth(label)), a.my(font.getHeight()), UITheme.buttonText(primary, contrast(accent)), false);
         }
 
         button.renderLockedArea(context);
@@ -91,37 +91,12 @@ public class UIGlassButton extends UIButton
     }
 
     /**
-     * The body of a button without its label, for any control that wants to look like one: dark glass
-     * with a thin frame and a glint along the top, or the accent for the primary one. One batch.
+     * The body of a button without its label, for any control that wants to look like one, in the look
+     * of the interface theme (see {@link UITheme}). One batch.
      */
     public static void paintGround(UIContext context, Area a, boolean primary, boolean hover)
     {
-        if (FrutigerAero.on())
-        {
-            FrutigerAero.button(context.batcher, a, RADIUS, primary, hover);
-
-            return;
-        }
-
-        int accent = Colors.A100 | BBSSettings.primaryColor.get();
-        int fill = primary ? (hover ? Colors.mulRGB(accent, 0.88F) : accent) : (hover ? SECONDARY_HOVER : SECONDARY_FILL);
-        boolean opened = RoundedDraw.begin(context.batcher);
-
-        RoundedDraw.fill(context.batcher, a.x, a.y, a.ex(), a.ey(), RADIUS, RoundedDraw.ALL, fill);
-
-        for (int k = 0; k < 4; k++)
-        {
-            float fade = 1F - k / 4F;
-
-            RoundedDraw.band(context.batcher, a.x, a.y, a.ex(), a.ey(), RADIUS, RoundedDraw.ALL, a.y + k, a.y + k + 1, Colors.setA(Colors.WHITE, (primary ? 0.20F : 0.09F) * fade));
-        }
-
-        if (!primary)
-        {
-            RoundedDraw.outline(context.batcher, a.x, a.y, a.ex(), a.ey(), RADIUS, RoundedDraw.ALL, hover ? 0xff4a5a75 : SECONDARY_FRAME);
-        }
-
-        RoundedDraw.end(context.batcher, opened);
+        UITheme.button(context.batcher, a, RADIUS, primary, hover);
     }
 
     /** The same body filled with a colour of its own. One batch. */
