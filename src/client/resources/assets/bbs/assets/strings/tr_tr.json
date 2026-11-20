@@ -3055,6 +3055,8 @@
     "bbs.config.personalization.interface_highlights-comment": "Düğmelerin ve anahtarların üst ve sol kenarı boyunca aydınlık bir çizgi. Varsayılan olarak kapalıdır: derinlik yerine kabartma görünümü verir.",
     "bbs.config.personalization.interface_glow": "Parlama",
     "bbs.config.personalization.interface_glow-comment": "Bindirme panelleri, bağlam menüleri, ipuçları, bildirimler ve zaman çizelgesindeki geçerli klip çevresindeki yumuşak parlama.",
+    "bbs.config.personalization.frutiger_aero": "Frutiger Aero Teması",
+    "bbs.config.personalization.frutiger_aero-comment": "Koyu camı parlak Frutiger Aero görünümüne çevirir: berrak gökyüzü mavisi cam, başlık çubuklarında parlayan bir ufuk ışığı, su mavisi ve zümrüt yeşili jel düğmeler ve anahtarlar, koyu lacivert yazılar ve simgeler. Yeniden başlatmadan anında geçer.",
     "bbs.config.personalization.studio_music": "Stüdyo Arayüz Müziği",
     "bbs.config.personalization.studio_music-comment": "Hub, Catalyst Studio, film editörü ve atölye panellerinde kesintisiz döngüyle çalan enstrümantal müzik. Oynatma ya da kayıt sırasında kısılır.",
     "bbs.config.personalization.studio_music_volume": "Stüdyo Müziği Ses Seviyesi",

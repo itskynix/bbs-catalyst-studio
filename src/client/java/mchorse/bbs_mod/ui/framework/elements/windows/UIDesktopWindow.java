@@ -3,6 +3,7 @@ package mchorse.bbs_mod.ui.framework.elements.windows;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.framework.UIContext;
+import mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D;
 import mchorse.bbs_mod.ui.framework.elements.IUIElement;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIButton;
@@ -480,6 +481,17 @@ public class UIDesktopWindow extends UIElement
         protected void renderSkin(UIContext context)
         {
             Area a = this.area;
+
+            if (FrutigerAero.on())
+            {
+                /* The red crystal capsule, with the cross kept white on it */
+                FrutigerAero.close(context.batcher, a, this.hover);
+                Batcher2D.keepWhite += 1;
+                context.batcher.icon(Icons.CLOSE, Colors.WHITE, a.mx(), a.my(), 0.5F, 0.5F);
+                Batcher2D.keepWhite -= 1;
+
+                return;
+            }
 
             if (this.hover)
             {

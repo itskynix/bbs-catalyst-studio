@@ -13,6 +13,12 @@ public class Icon
     public int textureW = 256;
     public int textureH = 256;
 
+    /**
+     * Whether the icon is drawn in its own colours (a logo, a colour wheel) rather than plain white:
+     * such an icon is never tinted dark on light surfaces.
+     */
+    public boolean colored;
+
     public Icon(Link texture, String id, int x, int y)
     {
         this(texture, id, x, y, 16, 16);
@@ -34,5 +40,13 @@ public class Icon
 
         this.textureW = textureW;
         this.textureH = textureH;
+    }
+
+    /** Marks the icon as drawn in its own colours, see {@link #colored} */
+    public Icon colored()
+    {
+        this.colored = true;
+
+        return this;
     }
 }

@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.framework.elements.context;
 
+import mchorse.bbs_mod.ui.framework.elements.windows.FrutigerAero;
 import mchorse.bbs_mod.ui.framework.elements.windows.GlassChrome;
 import mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw;
 import mchorse.bbs_mod.ui.utils.Area;
@@ -94,6 +95,13 @@ public abstract class UIContextMenu extends UIElement
 
         super.render(context);
 
+        if (FrutigerAero.on())
+        {
+            FrutigerAero.menuFrame(context.batcher, this.area, GlassChrome.RADIUS);
+
+            return;
+        }
+
         RoundedDraw.outline(context.batcher, this.area.x + 1, this.area.y + 1, this.area.ex() - 1, this.area.ey() - 1, GlassChrome.RADIUS - 1, RoundedDraw.ALL, Colors.setA(Colors.WHITE, 0.08F));
         RoundedDraw.outline(context.batcher, this.area.x, this.area.y, this.area.ex(), this.area.ey(), GlassChrome.RADIUS, RoundedDraw.ALL, GlassChrome.BORDER);
     }
@@ -102,6 +110,13 @@ public abstract class UIContextMenu extends UIElement
     protected void renderBackground(UIContext context)
     {
         Area a = this.area;
+
+        if (FrutigerAero.on())
+        {
+            FrutigerAero.menu(context, a, GlassChrome.RADIUS);
+
+            return;
+        }
 
         boolean opened = RoundedDraw.begin(context.batcher);
 

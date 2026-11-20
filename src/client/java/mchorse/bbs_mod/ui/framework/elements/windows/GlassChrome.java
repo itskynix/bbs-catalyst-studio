@@ -28,6 +28,13 @@ public class GlassChrome
      */
     public static void paint(UIContext context, Area a, int titleHeight, int footerStart, boolean front)
     {
+        if (FrutigerAero.on())
+        {
+            FrutigerAero.chrome(context, a, titleHeight, footerStart, front);
+
+            return;
+        }
+
         int titleEnd = a.y + titleHeight;
         int r = RADIUS;
 
@@ -113,6 +120,13 @@ public class GlassChrome
     /** The inner highlight and the frame; drawn over the content so nothing covers them. */
     public static void frame(UIContext context, Area a, boolean front)
     {
+        if (FrutigerAero.on())
+        {
+            FrutigerAero.frame(context, a, front);
+
+            return;
+        }
+
         int border = front ? (Colors.A100 | BBSSettings.primaryColor.get()) : BORDER;
         boolean opened = RoundedDraw.begin(context.batcher);
 

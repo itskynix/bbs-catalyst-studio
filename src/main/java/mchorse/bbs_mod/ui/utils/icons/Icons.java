@@ -15,7 +15,7 @@ public class Icons
     public static final Icon GEAR = register(new Icon(ATLAS, "gear", 0, 0));
     public static final Icon MORE = register(new Icon(ATLAS, "more", 16, 0));
     public static final Icon SAVED = register(new Icon(ATLAS, "saved", 32, 0));
-    public static final Icon SAVE = register(new Icon(ATLAS, "save", 48, 0));
+    public static final Icon SAVE = register(new Icon(ATLAS, "save", 48, 0).colored());
     public static final Icon ADD = register(new Icon(ATLAS, "add", 64, 0));
     public static final Icon DUPE = register(new Icon(ATLAS, "dupe", 80, 0));
     public static final Icon REMOVE = register(new Icon(ATLAS, "remove", 96, 0));
@@ -105,9 +105,9 @@ public class Icons
     public static final Icon PLAYER = register(new Icon(ATLAS, "player", 224, 64));
     public static final Icon TRASH = register(new Icon(ATLAS, "trash", 240, 64));
 
-    public static final Icon YOUTUBE = register(new Icon(ATLAS, "youtube", 0, 80));
-    public static final Icon TWITTER = register(new Icon(ATLAS, "twitter", 16, 80));
-    public static final Icon CHICKEN = register(new Icon(ATLAS, "chicken", 32, 80));
+    public static final Icon YOUTUBE = register(new Icon(ATLAS, "youtube", 0, 80).colored());
+    public static final Icon TWITTER = register(new Icon(ATLAS, "twitter", 16, 80).colored());
+    public static final Icon CHICKEN = register(new Icon(ATLAS, "chicken", 32, 80).colored());
     public static final Icon SPRAY = register(new Icon(ATLAS, "spray", 48, 80));
     public static final Icon BUCKET = register(new Icon(ATLAS, "bucket", 64, 80));
     public static final Icon TREE = register(new Icon(ATLAS, "tree", 80, 80));
@@ -156,9 +156,9 @@ public class Icons
     public static final Icon KEY = register(new Icon(ATLAS, "key", 224, 112));
     public static final Icon VOICE = register(new Icon(ATLAS, "voice", 240, 112));
 
-    public static final Icon TWITCH = register(new Icon(ATLAS, "twitch", 0, 128));
-    public static final Icon BILIBILI = register(new Icon(ATLAS, "bilibili", 16, 128));
-    public static final Icon TIKTOK = register(new Icon(ATLAS, "tiktok", 32, 128));
+    public static final Icon TWITCH = register(new Icon(ATLAS, "twitch", 0, 128).colored());
+    public static final Icon BILIBILI = register(new Icon(ATLAS, "bilibili", 16, 128).colored());
+    public static final Icon TIKTOK = register(new Icon(ATLAS, "tiktok", 32, 128).colored());
     public static final Icon LINK = register(new Icon(ATLAS, "link", 48, 128));
     public static final Icon USER = register(new Icon(ATLAS, "user", 64, 128));
     public static final Icon MORPH = register(new Icon(ATLAS, "morph", 80, 128));
@@ -167,7 +167,7 @@ public class Icons
     public static final Icon Y = register(new Icon(ATLAS, "y", 128, 128));
     public static final Icon Z = register(new Icon(ATLAS, "z", 144, 128));
     public static final Icon VIDEO_CAMERA = register(new Icon(ATLAS, "video_camera", 160, 128));
-    public static final Icon COLOR = register(new Icon(ATLAS, "color", 176, 128));
+    public static final Icon COLOR = register(new Icon(ATLAS, "color", 176, 128).colored());
     public static final Icon CLIP_HANLDE_LEFT = register(new Icon(ATLAS, "clip_hanlde_left", 192, 128, 8, 16));
     public static final Icon CLIP_HANLDE_RIGHT = register(new Icon(ATLAS, "clip_hanlde_right", 200, 128, 8, 16));
     public static final Icon ACTION = register(new Icon(ATLAS, "action", 208, 128));

@@ -62,6 +62,16 @@ public class UIGlassSlider extends UIElement
     {
         int accent = Colors.A100 | BBSSettings.primaryColor.get();
 
+        if (FrutigerAero.on())
+        {
+            boolean opened = RoundedDraw.begin(context.batcher);
+
+            FrutigerAero.slider(context.batcher, start, end, cy, thumbX, lit, base);
+            RoundedDraw.end(context.batcher, opened);
+
+            return;
+        }
+
         RoundedDraw.fill(context.batcher, start, cy - 2, end, cy + 2, 2, RoundedDraw.ALL, 0xff3a4558);
 
         if (thumbX > start)

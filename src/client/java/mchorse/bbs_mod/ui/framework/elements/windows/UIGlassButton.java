@@ -4,6 +4,7 @@ import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIButton;
+import mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D;
 import mchorse.bbs_mod.ui.framework.elements.utils.FontRenderer;
 import mchorse.bbs_mod.ui.utils.Area;
 import mchorse.bbs_mod.utils.colors.Colors;
@@ -49,7 +50,27 @@ public class UIGlassButton extends UIButton
         FontRenderer font = context.batcher.getFont();
         String label = font.limitToWidth(button.label.get(), a.w - 8);
 
-        context.batcher.text(label, a.mx(font.getWidth(label)), a.my(font.getHeight()), primary ? contrast(accent) : Colors.WHITE, false);
+        if (FrutigerAero.on())
+        {
+            /* White on the turquoise gel, ocean navy on the ice glass */
+            int x = a.mx(font.getWidth(label));
+            int y = a.my(font.getHeight());
+
+            if (primary)
+            {
+                Batcher2D.keepWhite += 1;
+                context.batcher.text(label, x, y, Colors.WHITE, false);
+                Batcher2D.keepWhite -= 1;
+            }
+            else
+            {
+                context.batcher.text(label, x, y, Colors.A100 | FrutigerAero.INK, false);
+            }
+        }
+        else
+        {
+            context.batcher.text(label, a.mx(font.getWidth(label)), a.my(font.getHeight()), primary ? contrast(accent) : Colors.WHITE, false);
+        }
 
         button.renderLockedArea(context);
     }
@@ -75,6 +96,13 @@ public class UIGlassButton extends UIButton
      */
     public static void paintGround(UIContext context, Area a, boolean primary, boolean hover)
     {
+        if (FrutigerAero.on())
+        {
+            FrutigerAero.button(context.batcher, a, RADIUS, primary, hover);
+
+            return;
+        }
+
         int accent = Colors.A100 | BBSSettings.primaryColor.get();
         int fill = primary ? (hover ? Colors.mulRGB(accent, 0.88F) : accent) : (hover ? SECONDARY_HOVER : SECONDARY_FILL);
         boolean opened = RoundedDraw.begin(context.batcher);

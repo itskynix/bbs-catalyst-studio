@@ -235,6 +235,7 @@ public class BBSSettings {
 	public static ValueBoolean interfaceShadows;
 	public static ValueBoolean interfaceHighlights;
 	public static ValueBoolean interfaceGlow;
+	public static ValueBoolean frutigerAero;
 	public static ValueBoolean studioMusicEnabled;
 	public static ValueFloat studioMusicVolume;
 	public static ValueFloat welcomeMusicVolume;
@@ -332,7 +333,8 @@ public class BBSSettings {
 	 */
 	private static void buildSurfaces()
 	{
-		int color = secondaryColor == null ? DEFAULT_SECONDARY_COLOR : secondaryColor.get() & Colors.RGB;
+		/* Frutiger Aero sits on icy blue glass whatever the secondary colour is */
+		int color = frutigerAero() ? FRUTIGER_AERO_SURFACE : (secondaryColor == null ? DEFAULT_SECONDARY_COLOR : secondaryColor.get() & Colors.RGB);
 
 		if (color == surfaceSource)
 		{
@@ -454,6 +456,18 @@ public class BBSSettings {
 	public static boolean hasInterfaceGlow()
 	{
 		return interfaceGlow == null || interfaceGlow.get();
+	}
+
+	/** The icy blue the surfaces are built from while the Frutiger Aero theme is on */
+	private static final int FRUTIGER_AERO_SURFACE = 0xcbe6fa;
+
+	/**
+	 * Whether the Frutiger Aero theme is on: glossy sky blue glass and gel controls in place of the
+	 * dark Aero. Read every frame, so switching it needs no restart.
+	 */
+	public static boolean frutigerAero()
+	{
+		return frutigerAero != null && frutigerAero.get();
 	}
 
 	public static int getDefaultDuration()
@@ -733,6 +747,7 @@ public class BBSSettings {
 		interfaceShadows = builder.getBoolean("interface_shadows", true);
 		interfaceHighlights = builder.getBoolean("interface_highlights", false);
 		interfaceGlow = builder.getBoolean("interface_glow", true);
+		frutigerAero = builder.getBoolean("frutiger_aero", false);
 		studioMusicEnabled = builder.getBoolean("studio_music", true);
 		studioMusicVolume = builder.getFloat("studio_music_volume", 0.65F, 0F, 1F).slider();
 		welcomeMusicVolume = builder.getFloat("welcome_music_volume", 0.8F, 0F, 1F).slider();

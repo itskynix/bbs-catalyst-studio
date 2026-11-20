@@ -578,10 +578,25 @@ public class Batcher2D
 
     /* Icon */
 
-    /** In the light theme white foreground (text/icons) becomes black; other colours pass through. */
+    /**
+     * While above zero, white text and icons stay white on light surfaces: for things drawn on their
+     * own coloured ground, like the gel buttons of the Frutiger Aero theme. Raise it before drawing
+     * and lower it after.
+     */
+    public static int keepWhite;
+
+    /**
+     * On light surfaces white foreground (text/icons) becomes dark: black, or a deep ocean navy under
+     * the Frutiger Aero theme. Other colours pass through.
+     */
     private static int darkenWhite(int color)
     {
-        return (color & 0xFFFFFF) == 0xFFFFFF ? (color & 0xFF000000) : color;
+        if (keepWhite > 0 || (color & 0xFFFFFF) != 0xFFFFFF)
+        {
+            return color;
+        }
+
+        return (color & 0xFF000000) | (BBSSettings.frutigerAero() ? 0x0F2742 : 0);
     }
 
     public void icon(Icon icon, float x, float y)
@@ -606,7 +621,7 @@ public class Batcher2D
             return;
         }
 
-        if (BBSSettings.lightSurfaces())
+        if (BBSSettings.lightSurfaces() && !icon.colored)
         {
             color = darkenWhite(color);
         }
@@ -629,7 +644,7 @@ public class Batcher2D
             return;
         }
 
-        if (BBSSettings.lightSurfaces())
+        if (BBSSettings.lightSurfaces() && !icon.colored)
         {
             color = darkenWhite(color);
         }
@@ -644,7 +659,7 @@ public class Batcher2D
 
     public void iconArea(Icon icon, int color, float x, float y, float w, float h)
     {
-        if (BBSSettings.lightSurfaces())
+        if (BBSSettings.lightSurfaces() && !icon.colored)
         {
             color = darkenWhite(color);
         }

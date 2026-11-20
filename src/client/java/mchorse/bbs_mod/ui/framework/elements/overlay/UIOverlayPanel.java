@@ -11,6 +11,8 @@ import mchorse.bbs_mod.ui.framework.elements.events.UIOverlayCloseEvent;
 import mchorse.bbs_mod.ui.framework.elements.utils.EventPropagation;
 import mchorse.bbs_mod.ui.framework.elements.utils.UIDraggable;
 import mchorse.bbs_mod.ui.framework.elements.utils.UILabel;
+import mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D;
+import mchorse.bbs_mod.ui.framework.elements.windows.FrutigerAero;
 import mchorse.bbs_mod.ui.framework.elements.windows.GlassChrome;
 import mchorse.bbs_mod.ui.framework.elements.windows.RoundedDraw;
 import mchorse.bbs_mod.ui.framework.elements.windows.UIClipElement;
@@ -75,7 +77,21 @@ public class UIOverlayPanel extends UIElement
         super();
 
         this.title = UI.label(title);
-        this.close = new UIIcon(Icons.CLOSE, (b) -> this.close());
+        this.close = new UIIcon(Icons.CLOSE, (b) -> this.close())
+        {
+            @Override
+            protected void renderSkin(UIContext context)
+            {
+                /* On the red crystal of the Frutiger Aero close button the cross stays white */
+                boolean aero = FrutigerAero.on();
+
+                if (aero) Batcher2D.keepWhite += 1;
+
+                super.renderSkin(context);
+
+                if (aero) Batcher2D.keepWhite -= 1;
+            }
+        };
         this.content = new UIClipElement();
         this.icons = new UIElement();
 
@@ -511,10 +527,14 @@ public class UIOverlayPanel extends UIElement
 
         if (!this.icons.getChildren().isEmpty())
         {
-            context.batcher.box(this.icons.area.x, this.icons.area.y, this.icons.area.ex() - 1, this.icons.area.ey() - 1, 0x14ffffff);
+            context.batcher.box(this.icons.area.x, this.icons.area.y, this.icons.area.ex() - 1, this.icons.area.ey() - 1, FrutigerAero.on() ? 0x1a0f2742 : 0x14ffffff);
         }
 
-        if (this.close.area.isInside(context))
+        if (FrutigerAero.on())
+        {
+            FrutigerAero.close(context.batcher, this.close.area, this.close.area.isInside(context));
+        }
+        else if (this.close.area.isInside(context))
         {
             /* flush with the panel's corner, so only that corner is round */
             RoundedDraw.band(context.batcher, this.close.area.x, this.close.area.y, this.close.area.ex(), this.close.area.ey(), GlassChrome.RADIUS - 1, RoundedDraw.TR, this.close.area.y, this.close.area.ey(), UIDesktopWindow.CLOSE_HOVER);

@@ -215,6 +215,8 @@
 	"bbs.config.personalization.interface_highlights-comment": "A lit edge along the top and left side of buttons and toggles. Off by default: it reads as an embossed look rather than as depth.",
 	"bbs.config.personalization.interface_glow": "Glow",
 	"bbs.config.personalization.interface_glow-comment": "The soft glow around overlay panels, context menus, tooltips, notifications and the current clip in the timeline.",
+	"bbs.config.personalization.frutiger_aero": "Frutiger Aero Theme",
+	"bbs.config.personalization.frutiger_aero-comment": "Turns the dark glass into the glossy Frutiger Aero look: bright sky blue glass, a shining horizon highlight on title bars, water blue and emerald gel buttons and switches, and dark navy text and icons. Switches over at once, no restart needed.",
 	"bbs.config.personalization.studio_music": "Studio Interface Music",
 	"bbs.config.personalization.studio_music-comment": "The instrumental music that loops under the hub, Catalyst Studio, the film editor and the workshop panels. It steps aside while the editor plays or records.",
 	"bbs.config.personalization.studio_music_volume": "Studio Music Volume",

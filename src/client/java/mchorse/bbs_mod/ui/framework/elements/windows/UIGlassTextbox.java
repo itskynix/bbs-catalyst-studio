@@ -32,6 +32,13 @@ public class UIGlassTextbox extends UITextbox
     /** The box under the text: dark glass, a thin frame, and while focused an accent frame with a line below. */
     public static void paintGround(UIContext context, Area a, boolean focused)
     {
+        if (FrutigerAero.on())
+        {
+            FrutigerAero.textbox(context.batcher, a, RADIUS, focused);
+
+            return;
+        }
+
         int accent = Colors.A100 | BBSSettings.primaryColor.get();
         boolean opened = RoundedDraw.begin(context.batcher);
 

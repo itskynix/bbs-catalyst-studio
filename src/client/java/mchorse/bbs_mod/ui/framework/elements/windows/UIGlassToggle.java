@@ -55,6 +55,21 @@ public class UIGlassToggle extends UIToggle
         int y = a.my() - H / 2;
         int accent = Colors.A100 | BBSSettings.primaryColor.get();
 
+        if (FrutigerAero.on())
+        {
+            /* Frosted glass off, an emerald gel on, and a white pearl for the knob */
+            boolean opened = RoundedDraw.begin(context.batcher);
+            int pearl = H - 4 + (hover ? 1 : 0);
+            int px = x + 2 + Math.round((W - H) * toggle.glassSlide);
+
+            FrutigerAero.toggleWell(context.batcher, x, y, W, H, on, hover);
+            FrutigerAero.pearl(context.batcher, px, a.my() - pearl / 2, pearl);
+            RoundedDraw.end(context.batcher, opened);
+            toggle.renderLockedArea(context);
+
+            return;
+        }
+
         if (on)
         {
             RoundedDraw.fill(context.batcher, x, y, x + W, y + H, H / 2, RoundedDraw.ALL, hover ? Colors.mulRGB(accent, 0.9F) : accent);
