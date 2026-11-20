@@ -770,6 +770,7 @@ public class BBSModClient implements ClientModInitializer
         {
             StructureWand.renderWorld(context);
             mchorse.bbs_mod.physics.InWorldPhysicsTool.renderWorld(context);
+            mchorse.bbs_mod.forms.renderers.FakeSpaceFormRenderer.renderWorld(context);
 
             if (!BBSRendering.isIrisShadersEnabled())
             {

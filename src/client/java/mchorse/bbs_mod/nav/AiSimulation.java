@@ -257,7 +257,8 @@ public final class AiSimulation
         /* Looking about while it waits: how far off the body, how far up or down, and for how long */
         float lookOffset;
         float lookPitch;
-        int lookTimer;
+        int lookTimer = 60;
+        int lookHold;
         float speed;
         List<NavGrid.Node> path;
         int next;
@@ -429,80 +430,131 @@ public final class AiSimulation
         turn(agent, replay, vx, vz);
     }
 
+    /** How far the head turns in a tick at most, as a mob's look control: yaw and pitch */
+    private static final float HEAD_YAW_SPEED = 10F;
+    private static final float HEAD_PITCH_SPEED = 6F;
+    /** How far the head may be off the body before the body has to come round, standing */
+    private static final float BODY_SLACK = 45F;
+    /** How far the head may be off the body at all */
+    private static final float NECK = 75F;
+
     /**
-     * Turning the way a Minecraft mob does: the head first, the body after it.
+     * Turning the way a Minecraft mob does - its look control turning the head, its body control
+     * bringing the body after it.
      *
-     * <p>The head (its look control) turns quickly toward what it wants to see - where the actor is
-     * heading, or where the controller wants it to look - and, while the actor waits, now and then to
-     * something beside it. It never turns more than 75 degrees off the body. The body (its body control)
-     * follows at the rotation rate: while walking it turns to the way it walks (or to where the controller
-     * wants), and while standing it stays put until the head is more than 40 degrees off, then catches
-     * up with it. So a turn starts with a look and ends with the shoulders, never all of it at once.</p>
+     * <p>The angles are never wrapped into -180..180 here: each one moves by the shortest way round to
+     * its goal (the wrapped difference), at most so far a tick, and is otherwise left to run on. A head
+     * at 179 and a body at -179 are then 179 and 181, two degrees apart as they really are, and nothing
+     * downstream - the blend between two ticks, the head bone turned by head minus body - ever takes the
+     * long way round.</p>
+     *
+     * <ul>
+     * <li><b>The head</b> looks where it is going while it walks: the next point of its path, at eye
+     * height, or where the controller wants it to look. Standing, it looks ahead, and every 50 to 120
+     * ticks glances for 20 to 40 ticks at something up to 45 degrees aside and 15 up or down, then
+     * looks ahead again.</li>
+     * <li><b>The body</b> turns to the way it walks (or to the controller's wish) at the rotation rate
+     * while walking. Standing, it stays put while the head is within 45 degrees of it, and comes round
+     * after the head at the rotation rate once it is not.</li>
+     * <li><b>The neck</b> never turns the head more than 75 degrees off the body.</li>
+     * </ul>
      */
     private static void turn(Agent agent, Form settings, double vx, double vz)
     {
-        double speed = Math.hypot(vx, vz);
-        boolean walking = speed > 0.1D;
-        float rate = settings.rotationRate.get() * DT;
+        boolean walking = Math.hypot(vx, vz) > 0.1D;
+        float rate = Math.max(settings.rotationRate.get() * DT, 0.5F);
         Float wanted = null;
 
         if (settings.useControllerDesiredRotation.get() && agent.moving)
         {
-            wanted = (float) Math.toDegrees(Math.atan2(-(agent.goalX - agent.x), agent.goalZ - agent.z));
+            wanted = yawTo(agent.goalX - agent.x, agent.goalZ - agent.z);
         }
         else if (settings.orientToMovement.get() && walking)
         {
-            wanted = (float) Math.toDegrees(Math.atan2(-vx, vz));
+            wanted = yawTo(vx, vz);
         }
 
-        /* The head: where it is going, or a look about while it waits */
         float headGoal;
         float pitchGoal = 0F;
 
-        if (wanted != null)
+        if (agent.moving && agent.path != null && agent.next < agent.path.size())
         {
-            headGoal = wanted;
-            agent.lookTimer = 0;
+            /* Where it is going: the next point of the way, at eye height */
+            NavGrid.Node point = agent.path.get(agent.next);
+            double dx = point.centerX() - agent.x;
+            double dz = point.centerZ() - agent.z;
+            double flat = Math.hypot(dx, dz);
+
+            headGoal = wanted != null ? wanted : (flat > 0.05D ? yawTo(dx, dz) : agent.head);
+            pitchGoal = flat > 0.05D ? (float) Math.max(-30D, Math.min(30D, -Math.toDegrees(Math.atan2(point.y - agent.y, flat)))) : 0F;
+            agent.lookTimer = 50 + agent.random.nextInt(71);
+            agent.lookHold = 0;
         }
         else
         {
-            if (--agent.lookTimer <= 0)
+            /* Standing: ahead, with a glance aside now and then */
+            if (agent.lookHold > 0)
             {
-                boolean look = agent.random.nextFloat() < 0.45F;
+                agent.lookHold -= 1;
 
-                agent.lookOffset = look ? (agent.random.nextFloat() * 2F - 1F) * 70F : 0F;
-                agent.lookPitch = look ? (agent.random.nextFloat() * 2F - 1F) * 15F : 0F;
-                agent.lookTimer = 30 + agent.random.nextInt(70);
+                if (agent.lookHold == 0)
+                {
+                    agent.lookOffset = 0F;
+                    agent.lookPitch = 0F;
+                    agent.lookTimer = 50 + agent.random.nextInt(71);
+                }
+            }
+            else if (--agent.lookTimer <= 0)
+            {
+                agent.lookOffset = (agent.random.nextFloat() * 2F - 1F) * 45F;
+                agent.lookPitch = (agent.random.nextFloat() * 2F - 1F) * 15F;
+                agent.lookHold = 20 + agent.random.nextInt(21);
             }
 
-            headGoal = agent.yaw + agent.lookOffset;
+            headGoal = (wanted != null ? wanted : agent.yaw) + agent.lookOffset;
             pitchGoal = agent.lookPitch;
         }
 
-        float headRate = Math.max(rate * 2.5F, 9F);
-
-        agent.head = wrap(agent.head + clamp(wrap(headGoal - agent.head), headRate));
-        agent.pitch += clamp(pitchGoal - agent.pitch, headRate * 0.6F);
+        /* The head, by the short way round, no faster than a mob's */
+        agent.head += clamp(wrapDegrees(headGoal - agent.head), Math.max(HEAD_YAW_SPEED, rate * 1.5F));
+        agent.pitch += clamp(pitchGoal - agent.pitch, HEAD_PITCH_SPEED);
 
         /* The body */
         if (walking)
         {
-            float bodyGoal = wanted != null ? wanted : agent.head;
+            float bodyGoal = wanted != null ? wanted : yawTo(vx, vz);
 
-            agent.yaw = wrap(agent.yaw + clamp(wrap(bodyGoal - agent.yaw), rate));
+            agent.yaw += clamp(wrapDegrees(bodyGoal - agent.yaw), rate);
         }
-        else if (Math.abs(wrap(agent.head - agent.yaw)) > 40F)
+        else
         {
-            agent.yaw = wrap(agent.yaw + clamp(wrap(agent.head - agent.yaw), rate));
+            float off = wrapDegrees(agent.head - agent.yaw);
+
+            if (Math.abs(off) > BODY_SLACK)
+            {
+                agent.yaw += clamp(off - Math.signum(off) * BODY_SLACK * 0.5F, rate);
+            }
         }
 
-        /* The neck has its limit: past it, the body is dragged round */
-        float neck = wrap(agent.head - agent.yaw);
+        /* The neck: never more than so far off the body; past it the body is brought round */
+        float neck = wrapDegrees(agent.head - agent.yaw);
 
-        if (Math.abs(neck) > 75F)
+        if (Math.abs(neck) > NECK)
         {
-            agent.yaw = wrap(agent.head - Math.signum(neck) * 75F);
+            agent.yaw += neck - Math.signum(neck) * NECK;
         }
+    }
+
+    /** The game's yaw of a direction: 0 faces +Z and turns toward -X */
+    private static float yawTo(double dx, double dz)
+    {
+        return (float) Math.toDegrees(Math.atan2(-dx, dz));
+    }
+
+    /** The shortest turn between two yaws, in -180..180 */
+    private static float wrapDegrees(float degrees)
+    {
+        return degrees - 360F * (float) Math.floor((degrees + 180F) / 360F);
     }
 
     private static float clamp(float value, float most)

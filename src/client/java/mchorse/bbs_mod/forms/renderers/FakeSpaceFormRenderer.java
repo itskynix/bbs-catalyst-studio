@@ -6,6 +6,7 @@ import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.client.BBSRendering;
 import mchorse.bbs_mod.forms.FormPortals;
 import mchorse.bbs_mod.forms.forms.FakeSpaceForm;
+import mchorse.bbs_mod.forms.renderers.utils.FakeSpaceSky;
 import mchorse.bbs_mod.resources.Link;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.utils.Bufs;
@@ -45,7 +46,7 @@ public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
     private static final float PI = (float) Math.PI;
 
     /** The form's front, which the stars streak away from */
-    private static final Vector3f FRONT = new Vector3f(0F, 0F, 1F);
+    private final Vector3f front = new Vector3f(0F, 0F, 1F);
 
     /** How much the scene is shrunk in an editor preview */
     private static final float PREVIEW_SCALE = 0.03F;
@@ -171,17 +172,106 @@ public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
                 return;
             }
 
-            Color background = this.form.backgroundColor.get();
+            /* Not drawn here: an actor or a block whose own place is off screen is not drawn at all, and its sky
+             * went with it - a hole of empty space wherever the camera looked away from the form. The scene is
+             * kept and drawn after the world's entities, wherever the form is (see renderWorld). */
+            SCENES.put(this, new Scene(world, System.nanoTime()));
+        }
+        finally
+        {
+            RenderSystem.depthMask(true);
+            RenderSystem.defaultBlendFunc();
+            RenderSystem.enableCull();
+            RenderSystem.disableBlend();
+        }
+    }
 
-            mchorse.bbs_mod.forms.renderers.utils.FakeSpaceSky.drawn(background.r, background.g, background.b);
+    /* The scenes in the world, drawn after its entities whether or not their form was drawn this frame */
 
-            Vec3d camera = mc.gameRenderer.getCamera().getPos();
-            float scale = Math.max(world.getColumn(0, new Vector3f()).length(), 1.0E-4F);
-            Vector3f eye = new Matrix4f(world).invert().transformPosition(new Vector3f((float) camera.x, (float) camera.y, (float) camera.z));
-            float radius = Math.max(32F, Math.min(mc.gameRenderer.getViewDistance() * 0.9F, 1500F)) / scale;
+    private record Scene(Matrix4f world, long seen) {}
 
-            this.sky(stack.peek().getPositionMatrix(), eye, radius);
-            this.scene(stack, eye, seconds);
+    private static final java.util.Map<FakeSpaceFormRenderer, Scene> SCENES = new java.util.WeakHashMap<>();
+
+    /** How long a scene whose form stopped being drawn (culled, out of view) is still kept, in nanoseconds */
+    private static final long KEEP_NANOS = 60_000_000_000L;
+
+    /**
+     * Draws the space scenes of the world: the sky of the newest one around the camera, a whole sphere
+     * just inside the far plane with nothing culled and no depth written, so it covers every direction;
+     * and every scene's planets, belt and galaxy where its form is.
+     */
+    public static void renderWorld(net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext context)
+    {
+        if (SCENES.isEmpty())
+        {
+            return;
+        }
+
+        long now = System.nanoTime();
+
+        SCENES.values().removeIf((scene) -> now - scene.seen() > KEEP_NANOS);
+
+        if (SCENES.isEmpty() || BBSRendering.isIrisShadowPass() || FormPortals.isRenderingPortal())
+        {
+            return;
+        }
+
+        MinecraftClient mc = MinecraftClient.getInstance();
+        MatrixStack stack = context.matrixStack();
+        Vec3d camera = context.camera().getPos();
+        float delta = context./*$ wtd*/tickDelta()/**/;
+        float seconds = mc.world == null ? 0F : (mc.world.getTime() % 72000L + delta) / 20F;
+        FakeSpaceFormRenderer newest = null;
+        long newestSeen = Long.MIN_VALUE;
+
+        for (java.util.Map.Entry<FakeSpaceFormRenderer, Scene> entry : SCENES.entrySet())
+        {
+            if (entry.getValue().seen() > newestSeen)
+            {
+                newest = entry.getKey();
+                newestSeen = entry.getValue().seen();
+            }
+        }
+
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.disableCull();
+        RenderSystem.enableDepthTest();
+
+        try
+        {
+            /* The sky: round the camera, in the world's axes, never moved or cut by the form */
+            if (newest != null)
+            {
+                Scene scene = SCENES.get(newest);
+                Color background = newest.form.backgroundColor.get();
+                float radius = Math.max(32F, mc.gameRenderer.getFarPlaneDistance() * 0.85F);
+
+                newest.front.set(0F, 0F, 1F);
+                scene.world().transformDirection(newest.front);
+
+                if (newest.front.lengthSquared() < 1.0E-8F)
+                {
+                    newest.front.set(0F, 0F, 1F);
+                }
+
+                newest.front.normalize();
+                FakeSpaceSky.drawn(background.r, background.g, background.b);
+                newest.sky(stack.peek().getPositionMatrix(), new Vector3f(), radius);
+            }
+
+            /* The scenes where their forms are */
+            for (java.util.Map.Entry<FakeSpaceFormRenderer, Scene> entry : SCENES.entrySet())
+            {
+                Matrix4f world = entry.getValue().world();
+                Vector3f eye = new Matrix4f(world).invert().transformPosition(new Vector3f((float) camera.x, (float) camera.y, (float) camera.z));
+
+                stack.push();
+                stack.translate(-camera.x, -camera.y, -camera.z);
+                stack.multiplyPositionMatrix(world);
+                entry.getKey().scene(stack, eye, seconds);
+                stack.pop();
+            }
         }
         finally
         {
@@ -310,11 +400,11 @@ public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
 
     private void star(BufferBuilder builder, Matrix4f m, Vector3f eye, float radius, float width, float streak, float variety, float level, float r, float g, float bl)
     {
-        float along = this.a.dot(FRONT);
+        float along = this.a.dot(this.front);
         float sine = (float) Math.sqrt(Math.max(0F, 1F - along * along));
         float length = streak * (0.03F + 0.55F * sine) * (0.4F + 0.6F * variety);
 
-        this.b.set(this.a).fma(-along, FRONT);
+        this.b.set(this.a).fma(-along, this.front);
 
         if (length < 0.002F || this.b.lengthSquared() < 1.0E-8F)
         {

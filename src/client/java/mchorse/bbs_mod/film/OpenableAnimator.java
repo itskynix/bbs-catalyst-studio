@@ -112,21 +112,38 @@ public final class OpenableAnimator
     private static Target target()
     {
         Recorder recorder = BBSModClient.getFilms().getRecorder();
-
-        if (recorder != null && recorder.film != null)
-        {
-            return new Target(recorder.film, () -> Math.max(0, recorder.tick), recorder::createEntities, (id) -> recorder.getEntities().get(id));
-        }
-
         UIDashboard dashboard = BBSModClient.getDashboardIfCreated();
         UIFilmPanel panel = dashboard == null ? null : dashboard.getPanel(UIFilmPanel.class);
 
-        if (panel != null && panel.getData() != null)
+        /* Only while a take is being recorded: otherwise a click on a door is a click on a door */
+        if (recorder != null && recorder.film != null)
         {
-            return new Target(panel.getData(), () -> Math.max(0, panel.getCursor()), () -> panel.getController().createEntities(), (id) -> panel.getController().getEntities().get(id));
+            return new Target(recorder.film, () -> Math.max(0, recorder.tick), () ->
+            {
+                recorder.createEntities();
+                refreshList(panel);
+            }, (id) -> recorder.getEntities().get(id));
+        }
+
+        if (panel != null && panel.getData() != null && panel.isRecording())
+        {
+            return new Target(panel.getData(), () -> Math.max(0, panel.getCursor()), () ->
+            {
+                panel.getController().createEntities();
+                refreshList(panel);
+            }, (id) -> panel.getController().getEntities().get(id));
         }
 
         return null;
+    }
+
+    /** The film editor's replay list shows the new actor at once */
+    private static void refreshList(UIFilmPanel panel)
+    {
+        if (panel != null && panel.replayEditor != null && panel.replayEditor.replaysList != null)
+        {
+            panel.replayEditor.replaysList.replays.refreshReplayList();
+        }
     }
 
     /** Called before the game handles a use click; true when it was taken */
@@ -146,7 +163,7 @@ public final class OpenableAnimator
 
         Form settings = settingsForm(mc);
 
-        if (settings == null)
+        if (settings == null || target() == null)
         {
             return false;
         }
@@ -188,8 +205,6 @@ public final class OpenableAnimator
 
         if (target == null)
         {
-            mc.player.sendMessage(Text.literal(UIKeys.OPENABLE_NEEDS_FILM.get()), true);
-
             return false;
         }
 
@@ -241,6 +256,7 @@ public final class OpenableAnimator
 
         replay.label.set(form.getDisplayName());
         replay.form.set(form);
+        replay.shadow.set(false);
         replay.keyframes.x.insert(0, base.getX() + 0.5D);
         replay.keyframes.y.insert(0, (double) base.getY());
         replay.keyframes.z.insert(0, base.getZ() + 0.5D);
