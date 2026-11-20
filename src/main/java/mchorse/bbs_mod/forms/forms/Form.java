@@ -108,6 +108,8 @@ public abstract class Form extends ValueGroup
     /** How far an openable swings when fully open, in degrees while it is being moved */
     public final ValueFloat openableAngle = new ValueFloat("openable_angle", 90F, 15F, 135F);
     /** How far it must be opened (0.1 to 0.9 of the way) for letting go to finish the opening; below it closes again */
+    /** Letting go keeps it at the angle it was let go at, instead of finishing the opening or closing it */
+    public final ValueBoolean holdOpenAngle = new ValueBoolean("hold_open_angle", false);
     public final ValueFloat openableThreshold = new ValueFloat("openable_threshold", 0.5F, 0.1F, 0.9F);
 
     /* Locomotion smoothing: an actor with this form speeds up, turns and stops with some inertia on the screen, and lands exactly on its keyed place */
@@ -268,7 +270,7 @@ public abstract class Form extends ValueGroup
 
         this.add(this.hotkey);
 
-        for (BaseValue value : new BaseValue[] {this.interactiveOpenables, this.openableAngle, this.openableThreshold, this.locomotionSmoothing, this.locomotionTime,
+        for (BaseValue value : new BaseValue[] {this.interactiveOpenables, this.openableAngle, this.openableThreshold, this.holdOpenAngle, this.locomotionSmoothing, this.locomotionTime,
             this.hasAi, this.aiIdleMin, this.aiIdleMax, this.aiSpeed, this.aiSeed, this.aiAvoidance, this.orientToMovement, this.useControllerDesiredRotation, this.rotationRate})
         {
             value.invisible();

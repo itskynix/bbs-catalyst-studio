@@ -751,6 +751,7 @@ public class BBSModClient implements ClientModInitializer
         mchorse.bbs_mod.physics.InWorldPhysicsTool.register();
         mchorse.bbs_mod.film.OpenableAnimator.register();
         mchorse.bbs_mod.film.LocomotionSmoother.register();
+        mchorse.bbs_mod.nav.ModelBlockAi.register();
 
         if (mchorse.bbs_mod.physics.BBSPhysics.integrated())
         {

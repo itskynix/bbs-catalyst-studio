@@ -43,7 +43,11 @@ public final class AiSimulation
         public final float[] x;
         public final float[] y;
         public final float[] z;
+        /** The body's yaw */
         public final float[] yaw;
+        /** The head's yaw and pitch, which lead the body */
+        public final float[] headYaw;
+        public final float[] pitch;
 
         Track(int length)
         {
@@ -51,6 +55,8 @@ public final class AiSimulation
             this.y = new float[length];
             this.z = new float[length];
             this.yaw = new float[length];
+            this.headYaw = new float[length];
+            this.pitch = new float[length];
         }
 
         public int length()
@@ -74,12 +80,7 @@ public final class AiSimulation
 
     public static Volume findVolume(Film film)
     {
-        if (film == null)
-        {
-            return null;
-        }
-
-        for (Replay replay : film.replays.getList())
+        for (Replay replay : film == null ? List.<Replay>of() : film.replays.getList())
         {
             Form root = replay.form.get();
             NavigationVolumeForm[] found = new NavigationVolumeForm[1];
@@ -238,8 +239,10 @@ public final class AiSimulation
         return cached.tracks.get(replay.getId());
     }
 
-    private static final class Agent
+    static final class Agent
     {
+        /** Who it is, for telling two on one spot apart */
+        String id = "";
         Replay replay;
         Form settings;
         Track track;
@@ -247,7 +250,14 @@ public final class AiSimulation
         double x;
         double y;
         double z;
+        /** The body's yaw; the head leads it */
         float yaw;
+        float head;
+        float pitch;
+        /* Looking about while it waits: how far off the body, how far up or down, and for how long */
+        float lookOffset;
+        float lookPitch;
+        int lookTimer;
         float speed;
         List<NavGrid.Node> path;
         int next;
@@ -274,6 +284,7 @@ public final class AiSimulation
             }
 
             agent.replay = replay;
+            agent.id = replay.getId();
             agent.settings = replay.form.get();
             agent.track = new Track(ticks);
             agent.random = new Random(replay.getId().hashCode() * 31L + agent.settings.aiSeed.get() * 7919L + 12345L);
@@ -281,6 +292,7 @@ public final class AiSimulation
             agent.y = node.y;
             agent.z = node.centerZ();
             agent.yaw = replay.keyframes.yaw.isEmpty() ? 0F : (float) replay.keyframes.yaw.interpolate(0F, 0D).doubleValue();
+            agent.head = agent.yaw;
             agent.idle = 1 + agent.random.nextInt(20);
             agents.add(agent);
             result.tracks.put(replay.getId(), agent.track);
@@ -296,13 +308,15 @@ public final class AiSimulation
                 agent.track.y[tick] = (float) agent.y;
                 agent.track.z[tick] = (float) agent.z;
                 agent.track.yaw[tick] = agent.yaw;
+                agent.track.headYaw[tick] = agent.head;
+                agent.track.pitch[tick] = agent.pitch;
             }
         }
 
         return result;
     }
 
-    private static void step(Agent agent, List<Agent> agents, NavGrid grid)
+    static void step(Agent agent, List<Agent> agents, NavGrid grid)
     {
         Form replay = agent.settings;
         float wanted = 0F;
@@ -380,7 +394,7 @@ public final class AiSimulation
                     if (distance < 1.0E-4D)
                     {
                         /* On the very same spot: the one drawn first gives way to the left */
-                        dx = agent.replay.getId().compareTo(other.replay.getId()) < 0 ? 1D : -1D;
+                        dx = agent.id.compareTo(other.id) < 0 ? 1D : -1D;
                         dz = 0D;
                         distance = 1D;
                     }
@@ -412,31 +426,92 @@ public final class AiSimulation
             agent.y += Math.max(-8D * DT, Math.min(8D * DT, ground - agent.y));
         }
 
-        /* Turning: at its rate, towards where it is going or what the controller wants */
+        turn(agent, replay, vx, vz);
+    }
+
+    /**
+     * Turning the way a Minecraft mob does: the head first, the body after it.
+     *
+     * <p>The head (its look control) turns quickly toward what it wants to see - where the actor is
+     * heading, or where the controller wants it to look - and, while the actor waits, now and then to
+     * something beside it. It never turns more than 75 degrees off the body. The body (its body control)
+     * follows at the rotation rate: while walking it turns to the way it walks (or to where the controller
+     * wants), and while standing it stays put until the head is more than 40 degrees off, then catches
+     * up with it. So a turn starts with a look and ends with the shoulders, never all of it at once.</p>
+     */
+    private static void turn(Agent agent, Form settings, double vx, double vz)
+    {
         double speed = Math.hypot(vx, vz);
-        Float desired = null;
+        boolean walking = speed > 0.1D;
+        float rate = settings.rotationRate.get() * DT;
+        Float wanted = null;
 
-        if (replay.useControllerDesiredRotation.get() && agent.moving)
+        if (settings.useControllerDesiredRotation.get() && agent.moving)
         {
-            desired = (float) Math.toDegrees(Math.atan2(-(agent.goalX - agent.x), agent.goalZ - agent.z));
+            wanted = (float) Math.toDegrees(Math.atan2(-(agent.goalX - agent.x), agent.goalZ - agent.z));
         }
-        else if (replay.orientToMovement.get() && speed > 0.1D)
+        else if (settings.orientToMovement.get() && walking)
         {
-            desired = (float) Math.toDegrees(Math.atan2(-vx, vz));
+            wanted = (float) Math.toDegrees(Math.atan2(-vx, vz));
         }
 
-        if (desired != null)
-        {
-            float diff = wrap(desired - agent.yaw);
-            float most = replay.rotationRate.get() * DT;
+        /* The head: where it is going, or a look about while it waits */
+        float headGoal;
+        float pitchGoal = 0F;
 
-            agent.yaw += Math.max(-most, Math.min(most, diff));
-            agent.yaw = wrap(agent.yaw);
+        if (wanted != null)
+        {
+            headGoal = wanted;
+            agent.lookTimer = 0;
+        }
+        else
+        {
+            if (--agent.lookTimer <= 0)
+            {
+                boolean look = agent.random.nextFloat() < 0.45F;
+
+                agent.lookOffset = look ? (agent.random.nextFloat() * 2F - 1F) * 70F : 0F;
+                agent.lookPitch = look ? (agent.random.nextFloat() * 2F - 1F) * 15F : 0F;
+                agent.lookTimer = 30 + agent.random.nextInt(70);
+            }
+
+            headGoal = agent.yaw + agent.lookOffset;
+            pitchGoal = agent.lookPitch;
+        }
+
+        float headRate = Math.max(rate * 2.5F, 9F);
+
+        agent.head = wrap(agent.head + clamp(wrap(headGoal - agent.head), headRate));
+        agent.pitch += clamp(pitchGoal - agent.pitch, headRate * 0.6F);
+
+        /* The body */
+        if (walking)
+        {
+            float bodyGoal = wanted != null ? wanted : agent.head;
+
+            agent.yaw = wrap(agent.yaw + clamp(wrap(bodyGoal - agent.yaw), rate));
+        }
+        else if (Math.abs(wrap(agent.head - agent.yaw)) > 40F)
+        {
+            agent.yaw = wrap(agent.yaw + clamp(wrap(agent.head - agent.yaw), rate));
+        }
+
+        /* The neck has its limit: past it, the body is dragged round */
+        float neck = wrap(agent.head - agent.yaw);
+
+        if (Math.abs(neck) > 75F)
+        {
+            agent.yaw = wrap(agent.head - Math.signum(neck) * 75F);
         }
     }
 
+    private static float clamp(float value, float most)
+    {
+        return Math.max(-most, Math.min(most, value));
+    }
+
     /** Picks somewhere to go that can be reached, or waits a little and tries again */
-    private static void choose(Agent agent, NavGrid grid)
+    static void choose(Agent agent, NavGrid grid)
     {
         NavGrid.Node here = grid.nearest(agent.x, agent.y, agent.z);
 

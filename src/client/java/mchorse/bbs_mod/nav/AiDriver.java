@@ -41,12 +41,15 @@ public final class AiDriver
         entity.setPrevX(track.x[p]);
         entity.setPrevY(track.y[p]);
         entity.setPrevZ(track.z[p]);
-        entity.setYaw(track.yaw[i]);
-        entity.setHeadYaw(track.yaw[i]);
+        /* The head leads and the body follows, as a mob's do */
+        entity.setYaw(track.headYaw[i]);
+        entity.setHeadYaw(track.headYaw[i]);
         entity.setBodyYaw(track.yaw[i]);
-        entity.setPrevYaw(near(track.yaw[p], track.yaw[i]));
-        entity.setPrevHeadYaw(near(track.yaw[p], track.yaw[i]));
+        entity.setPitch(track.pitch[i]);
+        entity.setPrevYaw(near(track.headYaw[p], track.headYaw[i]));
+        entity.setPrevHeadYaw(near(track.headYaw[p], track.headYaw[i]));
         entity.setPrevBodyYaw(near(track.yaw[p], track.yaw[i]));
+        entity.setPrevPitch(track.pitch[p]);
     }
 
     /** The previous yaw moved by whole turns next to the current, so the blend between them is the short way round */
@@ -65,6 +68,11 @@ public final class AiDriver
         return previous;
     }
 
+    private static double wrapDegrees(double degrees)
+    {
+        return degrees - 360D * Math.floor((degrees + 180D) / 360D);
+    }
+
     /**
      * Writes the walk into the replay's own keyframes - the place and the way it faces, a key every
      * second tick, joined in a straight line - and turns the AI off, so that what is left is plain
@@ -79,7 +87,7 @@ public final class AiDriver
             return 0;
         }
 
-        KeyframeChannel<Double>[] channels = new KeyframeChannel[] {replay.keyframes.x, replay.keyframes.y, replay.keyframes.z, replay.keyframes.yaw, replay.keyframes.headYaw, replay.keyframes.bodyYaw};
+        KeyframeChannel<Double>[] channels = new KeyframeChannel[] {replay.keyframes.x, replay.keyframes.y, replay.keyframes.z, replay.keyframes.yaw, replay.keyframes.headYaw, replay.keyframes.bodyYaw, replay.keyframes.pitch};
 
         for (KeyframeChannel<Double> channel : channels)
         {
@@ -88,6 +96,7 @@ public final class AiDriver
 
         int last = track.length() - 1;
         double previous = 0D;
+        double previousHead = 0D;
 
         for (int tick = 0; tick <= last; tick += 2)
         {
@@ -109,7 +118,11 @@ public final class AiDriver
 
             previous = yaw;
 
-            double[] values = {track.x[tick], track.y[tick], track.z[tick], yaw, yaw, yaw};
+            double head = tick > 0 ? previousHead + wrapDegrees(track.headYaw[tick] - previousHead) : track.headYaw[tick];
+
+            previousHead = head;
+
+            double[] values = {track.x[tick], track.y[tick], track.z[tick], head, head, yaw, track.pitch[tick]};
 
             for (int c = 0; c < channels.length; c++)
             {

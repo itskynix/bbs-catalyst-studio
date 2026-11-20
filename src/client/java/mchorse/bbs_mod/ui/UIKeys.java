@@ -866,6 +866,8 @@ public class UIKeys
     public static final IKey FILM_REPLAY_OPENABLE_THRESHOLD = L10n.lang("bbs.ui.film.replay.openable_threshold");
     public static final IKey FILM_REPLAY_OPENABLE_THRESHOLD_TOOLTIP = L10n.lang("bbs.ui.film.replay.openable_threshold-tooltip");
     public static final IKey OPENABLE_NEEDS_FILM = L10n.lang("bbs.ui.film.replay.openable_needs_film");
+    public static final IKey FORMS_HOLD_OPEN_ANGLE = L10n.lang("bbs.ui.film.replay.hold_open_angle");
+    public static final IKey FORMS_HOLD_OPEN_ANGLE_TOOLTIP = L10n.lang("bbs.ui.film.replay.hold_open_angle-tooltip");
     public static final IKey FILM_REPLAY_LOCOMOTION_SMOOTHING = L10n.lang("bbs.ui.film.replay.locomotion_smoothing");
     public static final IKey FILM_REPLAY_LOCOMOTION_SMOOTHING_TOOLTIP = L10n.lang("bbs.ui.film.replay.locomotion_smoothing-tooltip");
     public static final IKey FILM_REPLAY_LOCOMOTION_TIME = L10n.lang("bbs.ui.film.replay.locomotion_time");

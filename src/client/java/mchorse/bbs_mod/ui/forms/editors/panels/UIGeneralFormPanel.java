@@ -174,7 +174,8 @@ public class UIGeneralFormPanel extends UIFormPanel
         section.fields.add(
             this.toggle(UIKeys.FILM_REPLAY_INTERACTIVE_OPENABLES, () -> this.form.interactiveOpenables, UIKeys.FILM_REPLAY_INTERACTIVE_OPENABLES_TOOLTIP),
             UI.labelRow(UIKeys.FILM_REPLAY_OPENABLE_ANGLE, this.trackpad(() -> this.form.openableAngle, 15D, 135D, false, UIKeys.FILM_REPLAY_OPENABLE_ANGLE_TOOLTIP)),
-            UI.labelRow(UIKeys.FILM_REPLAY_OPENABLE_THRESHOLD, this.trackpad(() -> this.form.openableThreshold, 0.1D, 0.9D, false, UIKeys.FILM_REPLAY_OPENABLE_THRESHOLD_TOOLTIP))
+            UI.labelRow(UIKeys.FILM_REPLAY_OPENABLE_THRESHOLD, this.trackpad(() -> this.form.openableThreshold, 0.1D, 0.9D, false, UIKeys.FILM_REPLAY_OPENABLE_THRESHOLD_TOOLTIP)),
+            this.toggle(UIKeys.FORMS_HOLD_OPEN_ANGLE, () -> this.form.holdOpenAngle, UIKeys.FORMS_HOLD_OPEN_ANGLE_TOOLTIP)
         );
         section.setExpanded(false);
 

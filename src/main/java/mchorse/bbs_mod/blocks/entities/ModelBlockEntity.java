@@ -96,6 +96,9 @@ public class ModelBlockEntity extends BlockEntity
         this.currentYaw = currentYaw;
     }
 
+    /** Set by the client: moves the stand-in of a block whose form has AI, before it is updated */
+    public static java.util.function.BiConsumer<ModelBlockEntity, IEntity> CLIENT_AI;
+
     public void tick(World world, BlockPos pos, BlockState state)
     {
         ModelBlockEntityUpdateCallback.EVENT.invoker().update(this);
@@ -111,6 +114,12 @@ public class ModelBlockEntity extends BlockEntity
         this.entity.setPrevY(y);
         this.entity.setPrevZ(z);
         this.entity.setPosition(x, y, z);
+
+        /* A form with AI walks the block's stand-in about on the client (see ModelBlockAi) */
+        if (CLIENT_AI != null && world.isClient())
+        {
+            CLIENT_AI.accept(this, this.entity);
+        }
 
         this.entity.update();
         this.entity.setWorld(world);

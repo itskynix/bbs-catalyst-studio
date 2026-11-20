@@ -138,8 +138,24 @@ public class ModelBlockEntityRenderer implements BlockEntityRenderer<ModelBlockE
             matrices.push();
 
             Transform applied = transform;
+            mchorse.bbs_mod.nav.ModelBlockAi.Shown walking = mchorse.bbs_mod.nav.ModelBlockAi.shown(entity, tickDelta);
 
-            if (properties.isLookAt())
+            if (walking != null)
+            {
+                /* A form with AI walking about: drawn where its walk is, the body turned, the head leading it */
+                IEntity iEntity = entity.getEntity();
+
+                matrices.translate(walking.dx(), walking.dy(), walking.dz());
+                iEntity.setBodyYaw(walking.bodyYaw());
+                iEntity.setPrevBodyYaw(walking.prevBodyYaw());
+                iEntity.setHeadYaw(walking.headYaw());
+                iEntity.setPrevHeadYaw(walking.prevHeadYaw());
+                iEntity.setYaw(walking.headYaw());
+                iEntity.setPrevYaw(walking.prevHeadYaw());
+                iEntity.setPitch(walking.pitch());
+                iEntity.setPrevPitch(walking.prevPitch());
+            }
+            else if (properties.isLookAt())
             {
                 applied = this.applyLookingAnimation(mc, entity, properties, tickDelta);
             }
@@ -155,6 +171,13 @@ public class ModelBlockEntityRenderer implements BlockEntityRenderer<ModelBlockE
             }
 
             MatrixStackUtils.applyTransform(matrices, applied);
+
+            if (walking != null)
+            {
+                float body = walking.prevBodyYaw() + (walking.bodyYaw() - walking.prevBodyYaw()) * walking.delta();
+
+                matrices.multiply(net.minecraft.util.math.RotationAxis.POSITIVE_Y.rotationDegrees(-body));
+            }
 
             int lightAbove = WorldRenderer.getLightmapCoordinates(entity.getWorld(), pos.add((int) transform.translate.x, (int) transform.translate.y, (int) transform.translate.z));
             Camera camera = mc.gameRenderer.getCamera();

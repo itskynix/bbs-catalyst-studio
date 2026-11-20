@@ -64,6 +64,8 @@ public final class OpenableAnimator
         float start;
         float openness;
         float threshold;
+        /** Letting go keeps it where it is, instead of finishing or shutting it */
+        boolean hold;
         /** -1 while the hand moves it, then the ticks into the settle */
         int settle = -1;
         float from;
@@ -144,7 +146,27 @@ public final class OpenableAnimator
 
         Form settings = settingsForm(mc);
 
-        if (settings == null || !(mc.crosshairTarget instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK)
+        if (settings == null)
+        {
+            return false;
+        }
+
+        /* An openable already made into an actor: taken up again where it is, no new actor */
+        Target existing = target();
+
+        if (existing != null)
+        {
+            Drag again = regrab(mc, existing, settings);
+
+            if (again != null)
+            {
+                drag = again;
+
+                return true;
+            }
+        }
+
+        if (!(mc.crosshairTarget instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK)
         {
             return false;
         }
@@ -230,6 +252,7 @@ public final class OpenableAnimator
         next.start = open ? 1F : 0F;
         next.openness = next.start;
         next.threshold = settings.openableThreshold.get();
+        next.hold = settings.holdOpenAngle.get();
 
         /* Shut or open as it was from the film's start to this tick */
         key(next, 0, next.start);
@@ -243,6 +266,69 @@ public final class OpenableAnimator
 
         ClientNetwork.sendOpenableTakeover(taken);
         target.rebuild().run();
+
+        return next;
+    }
+
+    /**
+     * The actor of an openable the player is looking at, if any is nearer than the block under the
+     * crosshair: its box (a door two blocks high, a double chest two wide) against the line of sight.
+     */
+    private static Drag regrab(MinecraftClient mc, Target target, Form settings)
+    {
+        net.minecraft.util.math.Vec3d eye = mc.player.getCameraPosVec(1F);
+        double reach = mc.interactionManager.getReachDistance();
+        net.minecraft.util.math.Vec3d end = eye.add(mc.player.getRotationVec(1F).multiply(reach));
+        double blockDistance = mc.crosshairTarget != null && mc.crosshairTarget.getType() == HitResult.Type.BLOCK ? mc.crosshairTarget.getPos().squaredDistanceTo(eye) : Double.MAX_VALUE;
+        Replay best = null;
+        BlockForm bestForm = null;
+        double bestDistance = blockDistance + 1.0E-3D;
+
+        for (Replay replay : target.film().replays.getList())
+        {
+            if (!(replay.form.get() instanceof BlockForm form) || OpenableModel.kindOf(form.blockState.get()) == null || !replay.enabled.get())
+            {
+                continue;
+            }
+
+            IEntity entity = target.entity().apply(replay.getId());
+            double x = entity != null ? entity.getX() : replay.keyframes.x.interpolateDouble(0);
+            double y = entity != null ? entity.getY() : replay.keyframes.y.interpolateDouble(0);
+            double z = entity != null ? entity.getZ() : replay.keyframes.z.interpolateDouble(0);
+            net.minecraft.util.math.Box box = new net.minecraft.util.math.Box(x - 0.5D, y, z - 0.5D, x + 0.5D, y + 1D, z + 0.5D);
+            BlockPos partner = form.openablePair.get() ? OpenableModel.partnerOffset(form.blockState.get()) : null;
+
+            if (partner != null)
+            {
+                box = box.union(box.offset(partner.getX(), partner.getY(), partner.getZ()));
+            }
+
+            java.util.Optional<net.minecraft.util.math.Vec3d> hit = box.raycast(eye, end);
+
+            if (hit.isPresent() && hit.get().squaredDistanceTo(eye) < bestDistance)
+            {
+                best = replay;
+                bestForm = entity != null && entity.getForm() instanceof BlockForm shown ? shown : form;
+                bestDistance = hit.get().squaredDistanceTo(eye);
+            }
+        }
+
+        if (best == null)
+        {
+            return null;
+        }
+
+        Drag next = new Drag();
+
+        next.target = target;
+        next.replay = best;
+        next.start = bestForm.openness.get();
+        next.openness = next.start;
+        next.threshold = settings.openableThreshold.get();
+        next.hold = settings.holdOpenAngle.get();
+
+        /* From where it stands now, at this tick */
+        key(next, target.tick().getAsInt(), next.start);
 
         return next;
     }
@@ -335,10 +421,17 @@ public final class OpenableAnimator
                 return;
             }
 
-            /* Let go: past the threshold it opens, short of it it closes */
+            /* Let go: past the threshold it opens, short of it it closes - or it stays where it was let go */
             current.settle = 0;
             current.from = current.openness;
-            current.goal = current.openness >= current.threshold ? 1F : 0F;
+            current.goal = current.hold ? current.openness : (current.openness >= current.threshold ? 1F : 0F);
+
+            if (current.hold)
+            {
+                drag = null;
+
+                return;
+            }
         }
 
         current.settle += 1;

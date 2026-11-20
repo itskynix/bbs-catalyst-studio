@@ -87,13 +87,20 @@ public class ReplayCrowdGlanceDriver
         }
 
         ReplayCrowdGlance glance = replay.crowdGlance;
-        Replay target = glance.enabled.get() && film != null ? find(film, glance.target.get()) : null;
 
-        if (target == null || target == replay)
+        if (!glance.enabled.get() || film == null)
         {
             STATES.remove(entity);
 
             return;
+        }
+
+        /* A picked target, or with none picked whoever of the film comes nearest: a crowd glances at passers-by */
+        Replay target = find(film, glance.target.get());
+
+        if (target == replay)
+        {
+            target = null;
         }
 
         State state = STATES.computeIfAbsent(entity, (e) -> new State());
@@ -115,9 +122,11 @@ public class ReplayCrowdGlanceDriver
                 from = Math.max(0, ticks - MAX_REPLAY);
             }
 
+            Places places = new Places(film);
+
             for (int t = from; t <= ticks; t++)
             {
-                step(state, replay, target, glance, t);
+                step(state, film, places, replay, target, glance, t);
             }
 
             state.tick = ticks;
@@ -143,20 +152,25 @@ public class ReplayCrowdGlanceDriver
     }
 
     /** One tick of the glance, read off the keyframes of both replays at that tick. */
-    private static void step(State state, Replay replay, Replay target, ReplayCrowdGlance glance, int t)
+    private static void step(State state, Film film, Places places, Replay replay, Replay target, ReplayCrowdGlance glance, int t)
     {
-        ReplayKeyframes keys = replay.keyframes;
-        ReplayKeyframes goal = target.keyframes;
-        int at = target.getTick(t);
+        double[] self = places.at(replay, t);
 
-        double dx = goal.x.interpolateDouble(at) - keys.x.interpolateDouble(t);
-        double feet = goal.y.interpolateDouble(at) - keys.y.interpolateDouble(t);
-        double dz = goal.z.interpolateDouble(at) - keys.z.interpolateDouble(t);
+        if (target == null)
+        {
+            target = nearest(film, places, replay, self, t, glance.radius.get());
+        }
+
+        double[] other = target == null ? null : places.at(target, target.getTick(t));
+
+        double dx = other == null ? 0D : other[0] - self[0];
+        double feet = other == null ? 1.0E6D : other[1] - self[1];
+        double dz = other == null ? 0D : other[2] - self[2];
         double flat = Math.sqrt(dx * dx + dz * dz);
-        double body = keys.bodyYaw.interpolateDouble(t);
+        double body = self[3];
 
         /* Distance is feet to feet, the look is eyes to eyes */
-        double dy = feet + eye(target) - eye(replay);
+        double dy = target == null ? 0D : feet + eye(target) - eye(replay);
 
         /* The game's yaw: 0 faces +Z and turns toward -X, the same aim as ReplayLookAt */
         double yaw = flat < 1.0E-4D ? body : Math.toDegrees(Math.atan2(dz, dx)) - 90D;
@@ -214,6 +228,71 @@ public class ReplayCrowdGlanceDriver
                 state.phase = IDLE;
                 state.rest = glance.cooldownTicks.get();
             }
+        }
+    }
+
+    /** The nearest other actor of the film within the radius at a tick, or null */
+    private static Replay nearest(Film film, Places places, Replay replay, double[] self, int t, float radius)
+    {
+        Replay best = null;
+        double distance = radius * radius;
+
+        for (Replay other : film.replays.getList())
+        {
+            if (other == replay || !other.enabled.get())
+            {
+                continue;
+            }
+
+            double[] at = places.at(other, other.getTick(t));
+            double dx = at[0] - self[0];
+            double dy = at[1] - self[1];
+            double dz = at[2] - self[2];
+            double d = dx * dx + dy * dy + dz * dz;
+
+            if (d <= distance)
+            {
+                best = other;
+                distance = d;
+            }
+        }
+
+        return best;
+    }
+
+    /**
+     * Where an actor is and which way its body faces at a tick: from its walk when it has AI (its
+     * keyframes say nothing then), else from its keyframes. The walks are looked up once per call.
+     */
+    private static final class Places
+    {
+        private final Film film;
+        private final Map<Replay, mchorse.bbs_mod.nav.AiSimulation.Track> tracks = new java.util.HashMap<>();
+
+        Places(Film film)
+        {
+            this.film = film;
+        }
+
+        double[] at(Replay replay, int t)
+        {
+            Form form = replay.form.get();
+
+            if (form != null && form.hasAi.get())
+            {
+                mchorse.bbs_mod.nav.AiSimulation.Track track = this.tracks.computeIfAbsent(replay, (r) -> mchorse.bbs_mod.nav.AiSimulation.track(this.film, r));
+
+                if (track != null)
+                {
+                    int i = Math.max(0, Math.min(track.length() - 1, t));
+
+                    return new double[] {track.x[i], track.y[i], track.z[i], track.yaw[i]};
+                }
+            }
+
+            ReplayKeyframes keys = replay.keyframes;
+
+            return new double[] {keys.x.interpolateDouble(t), keys.y.interpolateDouble(t), keys.z.interpolateDouble(t), keys.bodyYaw.interpolateDouble(t)};
         }
     }
 

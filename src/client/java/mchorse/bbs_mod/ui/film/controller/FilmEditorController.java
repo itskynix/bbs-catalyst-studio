@@ -88,9 +88,10 @@ public class FilmEditorController extends BaseFilmController
             replay.keyframes.apply(ticks, entity, entity == this.controller.getControlled() ? groups : null);
             this.applyMtrSync(replay, ticks, entity, false);
             ReplayLookAt.apply(replay, this.film, ticks, entity);
-            ReplayCrowdGlanceDriver.apply(replay, this.film, ticks, entity);
             mchorse.bbs_mod.nav.AiDriver.apply(replay, this.film, ticks, entity);
             mchorse.bbs_mod.film.LocomotionSmoother.apply(replay, ticks, entity);
+            /* Last of the head turns: over whatever the keys, the look-at and the AI gave the head */
+            ReplayCrowdGlanceDriver.apply(replay, this.film, ticks, entity);
             replay.applyClientActions(ticks, entity, this.film);
         }
 

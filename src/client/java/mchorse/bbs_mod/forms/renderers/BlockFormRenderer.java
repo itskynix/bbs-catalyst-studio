@@ -64,6 +64,42 @@ public class BlockFormRenderer extends FormRenderer<BlockForm>
     private final SingleBlockRenderView fluidView = new SingleBlockRenderView();
 
     private BlockEntity blockEntity;
+
+    /* The openness shown between ticks: the value of the tick before and this tick's, blended by the frame */
+    private float transition;
+    private float openPrev;
+    private float openNow;
+    private long openTick = Long.MIN_VALUE;
+
+    /**
+     * The openness to draw this frame. A film writes the track once a tick, and a hand moving it writes it
+     * many times a tick: either way what is drawn goes in a straight line from the tick before's value to
+     * the newest, so it never steps.
+     */
+    private float shownOpenness()
+    {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        float value = this.form.openness.get();
+        long tick = mc.world == null ? 0L : mc.world.getTime();
+
+        if (this.openTick == Long.MIN_VALUE || Math.abs(tick - this.openTick) > 1L)
+        {
+            this.openPrev = this.openNow = value;
+        }
+        else if (tick != this.openTick)
+        {
+            this.openPrev = this.openNow;
+            this.openNow = value;
+        }
+        else
+        {
+            this.openNow = value;
+        }
+
+        this.openTick = tick;
+
+        return this.openPrev + (this.openNow - this.openPrev) * Math.max(0F, Math.min(1F, this.transition));
+    }
     private BlockState blockEntityState;
 
     public BlockFormRenderer(BlockForm form)
@@ -155,6 +191,8 @@ public class BlockFormRenderer extends FormRenderer<BlockForm>
     @Override
     protected void render3D(FormRenderingContext context)
     {
+        this.transition = context.getTransition();
+
         CustomVertexConsumerProvider consumers = FormUtilsClient.getProvider();
         int light = context.light;
 
@@ -307,8 +345,10 @@ public class BlockFormRenderer extends FormRenderer<BlockForm>
         }
 
         /* A door, trapdoor, gate or chest swung open a share of the way, or drawn with its other half */
-        if (!picking && (this.form.openness.get() > 1.0E-4F || this.form.openablePair.get())
-            && mchorse.bbs_mod.film.OpenableModel.render(state, this.form.openness.get(), this.form.openAngle.get(), this.form.openablePair.get(), matrices, consumers, light, overlay))
+        float openness = this.shownOpenness();
+
+        if (!picking && (openness > 1.0E-4F || this.form.openablePair.get())
+            && mchorse.bbs_mod.film.OpenableModel.render(state, openness, this.form.openAngle.get(), this.form.openablePair.get(), matrices, consumers, light, overlay))
         {
             return;
         }
