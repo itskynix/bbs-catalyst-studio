@@ -38,6 +38,7 @@ public class UIPlanetEditorOverlayPanel extends UIOverlayPanel
     private final FakeSpaceForm.Planet planet;
     private final UIButton textureButton;
     private final UIButton ringTextureButton;
+    private final mchorse.bbs_mod.ui.framework.elements.utils.UILabel textureState;
 
     public UIPlanetEditorOverlayPanel(FakeSpaceForm.Planet planet)
     {
@@ -54,6 +55,8 @@ public class UIPlanetEditorOverlayPanel extends UIOverlayPanel
         this.ringTextureButton = new UIButton(IKey.EMPTY, (b) -> this.pick(planet.ringTexture));
         this.ringTextureButton.tooltip(UIKeys.FAKE_SPACE_PLANET_RING_TEXTURE_TOOLTIP);
 
+        this.textureState = UI.label(IKey.EMPTY).color(0x88ffffff);
+
         UIButton clearTexture = new UIButton(UIKeys.FAKE_SPACE_PLANET_CLEAR_TEXTURE, (b) ->
         {
             planet.texture.set(null);
@@ -69,6 +72,7 @@ public class UIPlanetEditorOverlayPanel extends UIOverlayPanel
             UI.label(UIKeys.FAKE_SPACE_PLANET_SURFACE).background(),
             UI.labelRow(key("name"), UIValues.textbox(60, () -> planet.name)),
             UI.labelRow(key("texture"), this.textureButton),
+            this.textureState,
             clearTexture,
             UI.labelRow(key("uv_offset"), UI.row(this.trackpad(() -> planet.uvOffsetX, -2D, 2D, "uv_offset"), this.trackpad(() -> planet.uvOffsetY, -2D, 2D, "uv_offset"))),
             UI.labelRow(key("uv_scale"), UI.row(this.trackpad(() -> planet.uvScaleX, 0.1D, 8D, "uv_scale"), this.trackpad(() -> planet.uvScaleY, 0.1D, 8D, "uv_scale"))),
@@ -138,7 +142,8 @@ public class UIPlanetEditorOverlayPanel extends UIOverlayPanel
 
     private void pick(ValueLink value)
     {
-        UITexturePicker.open(this.getContext(), value.get(), (link) ->
+        /* Inside this window, filling it: opened over the studio it would sit under the window, out of reach */
+        UITexturePicker.open(this, value.get(), (link) ->
         {
             value.set(link);
             this.updateTextureLabels();
@@ -147,8 +152,9 @@ public class UIPlanetEditorOverlayPanel extends UIOverlayPanel
 
     private void updateTextureLabels()
     {
-        this.textureButton.label = this.planet.texture.get() == null ? UIKeys.FAKE_SPACE_PLANET_PROCEDURAL : IKey.constant(this.planet.texture.get().toString());
-        this.ringTextureButton.label = this.planet.ringTexture.get() == null ? UIKeys.FAKE_SPACE_PLANET_PROCEDURAL : IKey.constant(this.planet.ringTexture.get().toString());
+        this.textureButton.label = this.planet.texture.get() == null ? UIKeys.FAKE_SPACE_PLANET_PICK_TEXTURE : IKey.constant(this.planet.texture.get().toString());
+        this.ringTextureButton.label = this.planet.ringTexture.get() == null ? UIKeys.FAKE_SPACE_PLANET_PICK_TEXTURE : IKey.constant(this.planet.ringTexture.get().toString());
+        this.textureState.label = this.planet.texture.get() == null ? UIKeys.FAKE_SPACE_PLANET_PROCEDURAL : UIKeys.FAKE_SPACE_PLANET_TEXTURED;
     }
 
     /** The planet alone at the middle, sized to fit, turned by the mouse */

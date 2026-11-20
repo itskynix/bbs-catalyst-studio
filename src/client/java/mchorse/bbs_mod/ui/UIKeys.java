@@ -1527,6 +1527,8 @@ public class UIKeys
     public static final IKey FAKE_SPACE_PLANET_PLACE = L10n.lang("bbs.ui.forms.editors.fake_space.planet.place");
     public static final IKey FAKE_SPACE_PLANET_SKY = L10n.lang("bbs.ui.forms.editors.fake_space.planet.sky");
     public static final IKey FAKE_SPACE_PLANET_PROCEDURAL = L10n.lang("bbs.ui.forms.editors.fake_space.planet.procedural");
+    public static final IKey FAKE_SPACE_PLANET_PICK_TEXTURE = L10n.lang("bbs.ui.forms.editors.fake_space.planet.pick_texture");
+    public static final IKey FAKE_SPACE_PLANET_TEXTURED = L10n.lang("bbs.ui.forms.editors.fake_space.planet.textured");
     public static final IKey FAKE_SPACE_PLANET_CLEAR_TEXTURE = L10n.lang("bbs.ui.forms.editors.fake_space.planet.clear_texture");
     public static final IKey FAKE_SPACE_PLANET_TEXTURE_TOOLTIP = L10n.lang("bbs.ui.forms.editors.fake_space.planet.texture-tooltip");
     public static final IKey FAKE_SPACE_PLANET_RING_TEXTURE_TOOLTIP = L10n.lang("bbs.ui.forms.editors.fake_space.planet.ring_texture-tooltip");

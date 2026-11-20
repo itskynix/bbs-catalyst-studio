@@ -1424,6 +1424,8 @@
     "bbs.ui.forms.editors.physics_field.turbulence": "Çalkantı",
     "bbs.ui.forms.editors.physics_field.turbulence-tooltip": "Cisimleri savuran ve döndüren rastgele çalkantı, blok bölü saniye kare. Film her kaydedildiğinde aynıdır",
     "bbs.ui.forms.editors.fake_space.title": "Yapay Uzay Sahnesi",
+    "bbs.ui.forms.editors.fake_space.planet.pick_texture": "Doku Seç...",
+    "bbs.ui.forms.editors.fake_space.planet.textured": "Yüzeye doku sarılı",
     "bbs.ui.forms.editors.fake_space.asteroids": "Asteroit Kuşağı",
     "bbs.ui.forms.editors.fake_space.planet_editor": "Gezegen Editörü",
     "bbs.ui.forms.editors.fake_space.planet_add": "Gezegen Ekle",

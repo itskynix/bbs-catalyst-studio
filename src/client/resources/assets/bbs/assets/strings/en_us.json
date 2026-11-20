@@ -1926,6 +1926,8 @@
 	"bbs.ui.forms.editors.physics_field.turbulence": "Turbulence",
 	"bbs.ui.forms.editors.physics_field.turbulence-tooltip": "The random buffeting that shoves and tumbles things, in blocks per second squared. The same every time the film is recorded",
 	"bbs.ui.forms.editors.fake_space.title": "Artificial Space Scene",
+	"bbs.ui.forms.editors.fake_space.planet.pick_texture": "Pick Texture...",
+	"bbs.ui.forms.editors.fake_space.planet.textured": "A texture is laid on the surface",
 	"bbs.ui.forms.editors.fake_space.asteroids": "Asteroid Belt",
 	"bbs.ui.forms.editors.fake_space.planet_editor": "Planet Editor",
 	"bbs.ui.forms.editors.fake_space.planet_add": "Add Planet",

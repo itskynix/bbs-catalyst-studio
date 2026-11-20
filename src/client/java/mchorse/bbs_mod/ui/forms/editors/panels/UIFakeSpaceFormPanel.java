@@ -33,6 +33,16 @@ public class UIFakeSpaceFormPanel extends UIFormPanel<FakeSpaceForm>
     {
         super(editor);
 
+        /* Where the scene is, which way it is turned and how big: the planets, the belt and the galaxy all move with it */
+        mchorse.bbs_mod.ui.framework.elements.input.UIPropTransform transform = new mchorse.bbs_mod.ui.framework.elements.input.UIPropTransform().withAnchor().callbacks(() -> this.form.transform).barBackground();
+
+        transform.enableHotkeys();
+        transform.valueBinding(() -> transform.setTransform(this.form == null ? null : this.form.transform.get()));
+
+        UISection place = this.section(UIKeys.FORMS_EDITORS_GENERAL_SECTION_TRANSFORM, "fake_space.transform", true);
+
+        place.fields.add(transform);
+
         UISection sky = this.section(UIKeys.FORMS_FAKE_SPACE_SKY, "fake_space.sky", true);
 
         sky.fields.add(
@@ -116,7 +126,7 @@ public class UIFakeSpaceFormPanel extends UIFormPanel<FakeSpaceForm>
             this.color("galaxy_arm_color", () -> this.form.galaxyArmColor)
         );
 
-        this.options.add(sky, nebula, planet, asteroids, galaxy);
+        this.options.add(place, sky, nebula, planet, asteroids, galaxy);
     }
 
     private String planetLabel(FakeSpaceForm.Planet planet)

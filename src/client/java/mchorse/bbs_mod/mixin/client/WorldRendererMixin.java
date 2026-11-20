@@ -60,6 +60,22 @@ public class WorldRendererMixin
     @Inject(method = "renderSky(Lnet/minecraft/client/util/math/MatrixStack;Lorg/joml/Matrix4f;FLnet/minecraft/client/render/Camera;ZLjava/lang/Runnable;)V", at = @At("HEAD"), cancellable = true)
     public void onRenderSky(CallbackInfo info)
     {
+        /* An artificial space scene in the world: none of the vanilla sky, only the colour of empty space behind its dome */
+        if (mchorse.bbs_mod.forms.renderers.utils.FakeSpaceSky.isActive())
+        {
+            float r = mchorse.bbs_mod.forms.renderers.utils.FakeSpaceSky.red();
+            float g = mchorse.bbs_mod.forms.renderers.utils.FakeSpaceSky.green();
+            float b = mchorse.bbs_mod.forms.renderers.utils.FakeSpaceSky.blue();
+
+            GL11.glClearColor(r, g, b, 1F);
+            GL11.glClear(GL11.GL_COLOR_BUFFER_BIT);
+            RenderSystem.setShaderFogColor(r, g, b, 1F);
+
+            info.cancel();
+
+            return;
+        }
+
         if (BBSRendering.isChromaSky())
         {
             Color color = Color.rgba(BBSRendering.getChromaArgb());
@@ -78,7 +94,7 @@ public class WorldRendererMixin
     @Inject(method = "renderClouds(Lnet/minecraft/client/util/math/MatrixStack;Lorg/joml/Matrix4f;FDDD)V", at = @At("HEAD"), cancellable = true)
     public void onRenderClouds(CallbackInfo info)
     {
-        if (BBSRendering.isGreenScreen())
+        if (BBSRendering.isGreenScreen() || mchorse.bbs_mod.forms.renderers.utils.FakeSpaceSky.isActive())
         {
             info.cancel();
         }
@@ -87,7 +103,7 @@ public class WorldRendererMixin
     @Inject(method = "renderWeather(Lnet/minecraft/client/render/LightmapTextureManager;FDDD)V", at = @At("HEAD"), cancellable = true)
     public void onRenderWeather(CallbackInfo info)
     {
-        if (BBSRendering.isGreenScreen())
+        if (BBSRendering.isGreenScreen() || mchorse.bbs_mod.forms.renderers.utils.FakeSpaceSky.isActive())
         {
             info.cancel();
         }

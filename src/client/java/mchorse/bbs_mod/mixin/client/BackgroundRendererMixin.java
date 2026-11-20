@@ -22,6 +22,14 @@ public class BackgroundRendererMixin
     @Inject(method = "render", at = @At("TAIL"))
     private static void onBackgroundRender(Camera camera, float tickDelta, ClientWorld world, int viewDistance, float skyDarkness, CallbackInfo info)
     {
+        /* In an artificial space scene the horizon and the fog are the colour of empty space, not the blue of the sky */
+        if (mchorse.bbs_mod.forms.renderers.utils.FakeSpaceSky.isActive())
+        {
+            red = mchorse.bbs_mod.forms.renderers.utils.FakeSpaceSky.red();
+            green = mchorse.bbs_mod.forms.renderers.utils.FakeSpaceSky.green();
+            blue = mchorse.bbs_mod.forms.renderers.utils.FakeSpaceSky.blue();
+        }
+
         BBSRendering.setFogColor(red, green, blue);
         RenderSystem.clearColor(red, green, blue, 1.0F);
     }

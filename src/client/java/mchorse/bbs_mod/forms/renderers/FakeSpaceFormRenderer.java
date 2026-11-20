@@ -171,6 +171,10 @@ public class FakeSpaceFormRenderer extends FormRenderer<FakeSpaceForm>
                 return;
             }
 
+            Color background = this.form.backgroundColor.get();
+
+            mchorse.bbs_mod.forms.renderers.utils.FakeSpaceSky.drawn(background.r, background.g, background.b);
+
             Vec3d camera = mc.gameRenderer.getCamera().getPos();
             float scale = Math.max(world.getColumn(0, new Vector3f()).length(), 1.0E-4F);
             Vector3f eye = new Matrix4f(world).invert().transformPosition(new Vector3f((float) camera.x, (float) camera.y, (float) camera.z));

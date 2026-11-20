@@ -189,6 +189,74 @@ public final class SceneClips
                 return true;
             });
         }
+
+        /* And the fields placed in the world as model blocks round the scene */
+        for (mchorse.bbs_mod.blocks.entities.ModelBlockEntity block : modelBlocks())
+        {
+            mchorse.bbs_mod.utils.pose.Transform transform = block.getProperties().getTransform();
+            double bx = block.getPos().getX() + 0.5D + transform.translate.x - this.scene.getOriginX();
+            double by = block.getPos().getY() + transform.translate.y - this.scene.getOriginY();
+            double bz = block.getPos().getZ() + 0.5D + transform.translate.z - this.scene.getOriginZ();
+
+            if (bx * bx + by * by + bz * bz > BLOCK_REACH * BLOCK_REACH)
+            {
+                continue;
+            }
+
+            FormTreeWalk.walk(block.getProperties().getForm(), (form, path, anchor) ->
+            {
+                if (form instanceof PhysicsFieldForm field)
+                {
+                    double x = bx;
+                    double y = by;
+                    double z = bz;
+
+                    for (Form at = field; at != null; at = at.getParentForm())
+                    {
+                        Vector3f translate = at.transform.get().translate;
+
+                        x += translate.x;
+                        y += translate.y;
+                        z += translate.z;
+                    }
+
+                    SceneField push = SceneField.of(field, (float) x, (float) y, (float) z, gravity, dt, tick, this.gravityTouched);
+
+                    if (push != null)
+                    {
+                        this.fields.add(push);
+                    }
+                }
+
+                return true;
+            });
+        }
+    }
+
+    /** How far from the scene a model block's field still counts, in blocks */
+    private static final double BLOCK_REACH = 256D;
+
+    /** The model blocks seen lately: they are gathered over each tick as they update, so one asked about early in a tick may not be in yet */
+    private static final java.util.Map<mchorse.bbs_mod.blocks.entities.ModelBlockEntity, Long> SEEN = new java.util.WeakHashMap<>();
+
+    private static List<mchorse.bbs_mod.blocks.entities.ModelBlockEntity> modelBlocks()
+    {
+        long now = System.currentTimeMillis();
+
+        for (mchorse.bbs_mod.blocks.entities.ModelBlockEntity block : mchorse.bbs_mod.client.BBSRendering.capturedModelBlocks)
+        {
+            SEEN.put(block, now);
+        }
+
+        List<mchorse.bbs_mod.blocks.entities.ModelBlockEntity> blocks = new ArrayList<>();
+
+        SEEN.entrySet().removeIf((entry) -> now - entry.getValue() > 2000L || entry.getKey().isRemoved());
+        blocks.addAll(SEEN.keySet());
+
+        /* A fixed order, so that two fields on one body add up the same way every recording */
+        blocks.sort(java.util.Comparator.comparingLong((b) -> b.getPos().asLong()));
+
+        return blocks;
     }
 
     /** Whether a point is inside a field that takes what is there away from the animation */
