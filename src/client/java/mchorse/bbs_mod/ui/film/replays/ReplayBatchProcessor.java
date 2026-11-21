@@ -94,6 +94,12 @@ public class ReplayBatchProcessor
         /** How strong the sway and the changes of pace are, 0 to 2 */
         public double followIntensity = 1D;
 
+        /** The tick the follow begins on: everything before it is left as it is */
+        public int followStartTick;
+
+        /** How fast a follower goes, in blocks a second; 5.6 is a sprint */
+        public double followSpeed = 5.6D;
+
         /** Turn the follower to the way it walks, and to the target while it stands */
         public boolean followRotate = true;
 
@@ -460,9 +466,6 @@ public class ReplayBatchProcessor
     /** How far apart followers standing round the same point are kept, in blocks along the circle */
     private static final double SLOT_SPACING = 0.8D;
 
-    /** How fast a follower runs when it has a range to wait for or runs a chase, in blocks a tick: a sprint */
-    private static final double CHASE_SPEED = 0.28D;
-
     /** A target further than this many times the trigger range is lost: the follower slows to a stop */
     private static final double LOSE_FACTOR = 1.75D;
 
@@ -485,6 +488,11 @@ public class ReplayBatchProcessor
      * same side are fanned out along the circle {@link #SLOT_SPACING} blocks apart. The slot turns
      * only with the heading. A follower is moved to its slot with the smoothness (1 / (N + 1) of the
      * way a tick, 0 holds it there), and anything still inside the circle is put back on it.</p>
+     *
+     * <p>The follow begins on the start tick: nothing before it is touched, and a follower starts
+     * from where its own keyframes have it at that tick, with the angles they give, and walks from
+     * there at the follow speed. It is never put on the target: it goes a few blocks a second at
+     * most, eases off as it nears its place and stops on the circle of the minimum distance.</p>
      *
      * <p>With a trigger range a follower stands where it is, its keyframes untouched, until the
      * target comes in range; from that tick on it chases, and slows to a stop if the target gets
@@ -604,8 +612,16 @@ public class ReplayBatchProcessor
         double range = Math.max(0D, params.followTriggerRange);
         boolean ranged = range > 0D;
         boolean organic = params.followOrganic;
-        boolean chase = ranged || organic;
         double intensity = Math.max(0D, Math.min(2D, params.followIntensity));
+
+        /* A follower goes the way a character goes, a few blocks a second at most: it is never put at the target */
+        double stepSpeed = Math.max(0.5D, Math.min(20D, params.followSpeed)) / 20D;
+        int from = Math.max(0, params.followStartTick);
+
+        if (from > ticks)
+        {
+            return null;
+        }
 
         for (int n = 0; n < followers.size(); n++)
         {
@@ -638,13 +654,13 @@ public class ReplayBatchProcessor
             }
 
             /* The first tick the target is in range; a follower it never comes near keeps its keyframes */
-            int start = 0;
+            int start = from;
 
             if (ranged)
             {
                 start = -1;
 
-                for (int t = 0; t <= ticks; t++)
+                for (int t = from; t <= ticks; t++)
                 {
                     if (Math.hypot(ox[t] - tx[t], oz[t] - tz[t]) <= range)
                     {
@@ -663,7 +679,7 @@ public class ReplayBatchProcessor
             double startBody = 0D;
             boolean hasStartBody = false;
 
-            if (start > 0 && yaws.length > 0 && yaws[0] != null)
+            if (yaws.length > 0 && yaws[0] != null)
             {
                 startBody = yaws[0].getFactory().getY(yaws[0].interpolate(start));
                 hasStartBody = true;
@@ -740,10 +756,10 @@ public class ReplayBatchProcessor
 
                 if (t == start)
                 {
-                    /* A follower that waited starts where it stood; one that chases from the first tick, on its slot */
-                    sx = ranged ? ox[t] : px;
-                    sy = ranged ? oy[t] : goal[1];
-                    sz = ranged ? oz[t] : pz;
+                    /* A follower starts where it stands at that tick, and walks from there */
+                    sx = ox[t];
+                    sy = oy[t];
+                    sz = oz[t];
 
                     double heading0 = Math.toRadians(heading[t]);
 
@@ -757,6 +773,9 @@ public class ReplayBatchProcessor
                     double stepX = (px - sx) * alpha;
                     double stepZ = (pz - sz) * alpha;
                     double stepY = (goal[1] - sy) * alpha;
+                    double limitY = stepSpeed * 1.5D;
+
+                    stepY = Math.max(-limitY, Math.min(limitY, stepY));
 
                     if (ranged)
                     {
@@ -776,7 +795,6 @@ public class ReplayBatchProcessor
                         stepY *= speedScale;
                     }
 
-                    if (chase)
                     {
                         paceTarget = 1D;
 
@@ -810,7 +828,8 @@ public class ReplayBatchProcessor
                         }
 
                         double effective = organic ? Math.max(0.3D, 1D + (pace - 1D) * intensity) : 1D;
-                        double cap = Math.max(CHASE_SPEED, targetSpeed[t] * 1.05D) * effective * speedScale;
+                        /* Near its place it slows down, to a stop if the target stands, to the target's own pace if it walks */
+                        double cap = Math.min(stepSpeed * effective, gap * 0.5D + targetSpeed[t]) * speedScale;
                         double length = Math.hypot(stepX, stepZ);
 
                         if (length > cap)
@@ -910,7 +929,7 @@ public class ReplayBatchProcessor
                     body = hasStartBody ? startBody : wanted;
                     head = body;
 
-                    if (yaws.length > 2 && yaws[2] != null && start > 0)
+                    if (yaws.length > 2 && yaws[2] != null)
                     {
                         head = yaws[2].getFactory().getY(yaws[2].interpolate(start));
                     }

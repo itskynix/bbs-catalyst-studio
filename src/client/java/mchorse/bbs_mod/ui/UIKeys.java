@@ -2198,6 +2198,10 @@ public class UIKeys
     public static final IKey SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_INTENSITY_TOOLTIP = L10n.lang("bbs.ui.scene.replays.context.process.param.follow_intensity-tooltip");
     public static final IKey SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_ORGANIC = L10n.lang("bbs.ui.scene.replays.context.process.param.follow_organic");
     public static final IKey SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_ORGANIC_TOOLTIP = L10n.lang("bbs.ui.scene.replays.context.process.param.follow_organic-tooltip");
+    public static final IKey SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_SPEED = L10n.lang("bbs.ui.scene.replays.context.process.param.follow_speed");
+    public static final IKey SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_SPEED_TOOLTIP = L10n.lang("bbs.ui.scene.replays.context.process.param.follow_speed-tooltip");
+    public static final IKey SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_CURSOR = L10n.lang("bbs.ui.scene.replays.context.process.param.follow_cursor");
+    public static final IKey SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_CURSOR_TOOLTIP = L10n.lang("bbs.ui.scene.replays.context.process.param.follow_cursor-tooltip");
     public static final IKey SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_ROTATE = L10n.lang("bbs.ui.scene.replays.context.process.param.follow_rotate");
     public static final IKey SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_ROTATE_TOOLTIP = L10n.lang("bbs.ui.scene.replays.context.process.param.follow_rotate-tooltip");
     public static final IKey SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_GROUND = L10n.lang("bbs.ui.scene.replays.context.process.param.follow_ground");

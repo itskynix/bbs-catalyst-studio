@@ -1517,7 +1517,7 @@ public class UIReplayList extends UIList<ReplayListEntry>
             return;
         }
 
-        UIOverlay.addOverlay(this.getContext(), new UIProcessReplaysPanel(this.panel, this.getSelectedReplaysInViewOrder()), 500, 480);
+        UIOverlay.addOverlay(this.getContext(), new UIProcessReplaysPanel(this.panel, this.getSelectedReplaysInViewOrder()), 500, 520);
     }
 
     private void offsetTimeReplays()

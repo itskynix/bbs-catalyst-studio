@@ -119,6 +119,8 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
         public double followTriggerRange = 0;
         public double followIntensity = 1;
         public boolean followOrganic = false;
+        public boolean followFromCursor = true;
+        public double followSpeed = 5.6;
         public double followSmooth = 0;
         public boolean followRotate = true;
         public boolean followKeepGround = false;
@@ -410,6 +412,7 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
             PROCESS_STATE.followMinDistance = this.normal.followMinDistance.getValue();
             PROCESS_STATE.followTriggerRange = this.normal.followTriggerRange.getValue();
             PROCESS_STATE.followIntensity = this.normal.followIntensity.getValue();
+            PROCESS_STATE.followSpeed = this.normal.followSpeed.getValue();
 
             Film film = this.filmPanel.getData();
 
@@ -423,6 +426,8 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
             params.followTriggerRange = PROCESS_STATE.followTriggerRange;
             params.followIntensity = PROCESS_STATE.followIntensity;
             params.followOrganic = PROCESS_STATE.followOrganic;
+            params.followSpeed = PROCESS_STATE.followSpeed;
+            params.followStartTick = PROCESS_STATE.followFromCursor ? this.filmPanel.getCursor() : 0;
             params.followRotate = PROCESS_STATE.followRotate;
             params.followKeepGround = PROCESS_STATE.followKeepGround;
             params.followDuration = film == null ? 0 : film.calculateDuration();
@@ -565,6 +570,8 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
         private final UITrackpad followTriggerRange;
         private final UITrackpad followIntensity;
         private final UIToggle followOrganic;
+        private final UIToggle followFromCursor;
+        private final UITrackpad followSpeed;
         private final UIToggle followRotate;
         private final UIToggle followKeepGround;
 
@@ -662,6 +669,15 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
             this.followOrganic = new UIToggle(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_ORGANIC, PROCESS_STATE.followOrganic, (b) -> PROCESS_STATE.followOrganic = b.getValue());
             this.followOrganic.tooltip(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_ORGANIC_TOOLTIP);
 
+            this.followSpeed = new UITrackpad();
+            this.followSpeed.limit(0.5, 20, false);
+            this.followSpeed.setValue(PROCESS_STATE.followSpeed);
+            this.followSpeed.tooltip(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_SPEED_TOOLTIP);
+
+            /* The label says which tick it is: the playhead of the film editor, which the modal leaves where it was */
+            this.followFromCursor = new UIToggle(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_CURSOR.format(String.valueOf(UIProcessReplaysPanel.this.filmPanel.getCursor())), PROCESS_STATE.followFromCursor, (b) -> PROCESS_STATE.followFromCursor = b.getValue());
+            this.followFromCursor.tooltip(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_CURSOR_TOOLTIP);
+
             this.followRotate = new UIToggle(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_ROTATE, PROCESS_STATE.followRotate, (b) -> PROCESS_STATE.followRotate = b.getValue());
             this.followRotate.tooltip(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_ROTATE_TOOLTIP);
 
@@ -714,6 +730,7 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
                         rows = this.addRow(rows, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_TARGET, this.followTarget);
                         rows = this.addRow(rows, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_OFFSET, this.followX, this.followY, this.followZ);
                         rows = this.addRow(rows, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_SMOOTH, this.followSmooth);
+                        rows = this.addRow(rows, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_SPEED, this.followSpeed);
                         rows = this.addRow(rows, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_MIN_DISTANCE, this.followMinDistance);
                         rows = this.addRow(rows, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_TRIGGER_RANGE, this.followTriggerRange);
                         rows = this.addRow(rows, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_INTENSITY, this.followIntensity);
@@ -732,7 +749,7 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
 
             if (operation == NormalOperation.FOLLOW_TARGET)
             {
-                for (UIToggle toggle : new UIToggle[] {this.followRotate, this.followKeepGround, this.followOrganic})
+                for (UIToggle toggle : new UIToggle[] {this.followFromCursor, this.followRotate, this.followKeepGround, this.followOrganic})
                 {
                     toggle.relative(this.params).x(0).y(rows * (UIConstants.CONTROL_HEIGHT + UIConstants.MARGIN)).w(1F).h(UIConstants.CONTROL_HEIGHT);
                     this.params.add(toggle);
