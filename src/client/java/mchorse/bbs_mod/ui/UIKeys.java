@@ -2192,6 +2192,12 @@ public class UIKeys
     public static final IKey SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_SMOOTH_TOOLTIP = L10n.lang("bbs.ui.scene.replays.context.process.param.follow_smooth-tooltip");
     public static final IKey SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_MIN_DISTANCE = L10n.lang("bbs.ui.scene.replays.context.process.param.follow_min_distance");
     public static final IKey SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_MIN_DISTANCE_TOOLTIP = L10n.lang("bbs.ui.scene.replays.context.process.param.follow_min_distance-tooltip");
+    public static final IKey SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_TRIGGER_RANGE = L10n.lang("bbs.ui.scene.replays.context.process.param.follow_trigger_range");
+    public static final IKey SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_TRIGGER_RANGE_TOOLTIP = L10n.lang("bbs.ui.scene.replays.context.process.param.follow_trigger_range-tooltip");
+    public static final IKey SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_INTENSITY = L10n.lang("bbs.ui.scene.replays.context.process.param.follow_intensity");
+    public static final IKey SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_INTENSITY_TOOLTIP = L10n.lang("bbs.ui.scene.replays.context.process.param.follow_intensity-tooltip");
+    public static final IKey SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_ORGANIC = L10n.lang("bbs.ui.scene.replays.context.process.param.follow_organic");
+    public static final IKey SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_ORGANIC_TOOLTIP = L10n.lang("bbs.ui.scene.replays.context.process.param.follow_organic-tooltip");
     public static final IKey SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_ROTATE = L10n.lang("bbs.ui.scene.replays.context.process.param.follow_rotate");
     public static final IKey SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_ROTATE_TOOLTIP = L10n.lang("bbs.ui.scene.replays.context.process.param.follow_rotate-tooltip");
     public static final IKey SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_GROUND = L10n.lang("bbs.ui.scene.replays.context.process.param.follow_ground");

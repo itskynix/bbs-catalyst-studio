@@ -85,6 +85,15 @@ public class ReplayBatchProcessor
         /** The nearest a follower comes to the point it follows, in blocks */
         public double followMinDistance = 1.2D;
 
+        /** How close the target must come for the chase to begin, in blocks; 0 chases from the first tick */
+        public double followTriggerRange;
+
+        /** A chase that is run rather than drawn with a ruler: sway, sprints and tiring, and a head that leads the body */
+        public boolean followOrganic;
+
+        /** How strong the sway and the changes of pace are, 0 to 2 */
+        public double followIntensity = 1D;
+
         /** Turn the follower to the way it walks, and to the target while it stands */
         public boolean followRotate = true;
 
@@ -451,6 +460,18 @@ public class ReplayBatchProcessor
     /** How far apart followers standing round the same point are kept, in blocks along the circle */
     private static final double SLOT_SPACING = 0.8D;
 
+    /** How fast a follower runs when it has a range to wait for or runs a chase, in blocks a tick: a sprint */
+    private static final double CHASE_SPEED = 0.28D;
+
+    /** A target further than this many times the trigger range is lost: the follower slows to a stop */
+    private static final double LOSE_FACTOR = 1.75D;
+
+    /** The farthest a chase sways to either side of its path, in blocks, at an intensity of 1 */
+    private static final double SWAY = 0.35D;
+
+    /** How many ticks the body trails the head in a chase */
+    private static final int BODY_LAG = 3;
+
     /**
      * Makes each replay follow the target through the whole film, one keyframe a tick.
      *
@@ -464,6 +485,12 @@ public class ReplayBatchProcessor
      * same side are fanned out along the circle {@link #SLOT_SPACING} blocks apart. The slot turns
      * only with the heading. A follower is moved to its slot with the smoothness (1 / (N + 1) of the
      * way a tick, 0 holds it there), and anything still inside the circle is put back on it.</p>
+     *
+     * <p>With a trigger range a follower stands where it is, its keyframes untouched, until the
+     * target comes in range; from that tick on it chases, and slows to a stop if the target gets
+     * beyond 1.75 times the range, running again when it is back in. A chase can be made organic:
+     * a sway to the sides of its path, sprints when the gap opens and tiring after a long run,
+     * every phase from a seed of the replay's own.</p>
      *
      * <p>Turning, when rotating is on: the body goes the way the follower walks, or to the target
      * while it stands, and the head the same a little quicker, each at a limited rate, so it never
@@ -554,9 +581,31 @@ public class ReplayBatchProcessor
             }
         }
 
+        /* How fast the target itself goes, a little averaged: what a chaser has to beat to ever catch up */
+        double[] targetSpeed = new double[ticks + 1];
+
+        for (int t = 1; t <= ticks; t++)
+        {
+            double sum = 0D;
+            int count = 0;
+
+            for (int k = Math.max(1, t - 3); k <= t; k++)
+            {
+                sum += Math.hypot(tx[k] - tx[k - 1], tz[k] - tz[k - 1]);
+                count++;
+            }
+
+            targetSpeed[t] = sum / Math.max(1, count);
+        }
+
         double alpha = 1D / (Math.max(0D, params.followSmooth) + 1D);
         double min = Math.max(0D, params.followMinDistance);
         double step = min > 0D ? SLOT_SPACING / Math.max(min, 0.4D) : 0D;
+        double range = Math.max(0D, params.followTriggerRange);
+        boolean ranged = range > 0D;
+        boolean organic = params.followOrganic;
+        boolean chase = ranged || organic;
+        double intensity = Math.max(0D, Math.min(2D, params.followIntensity));
 
         for (int n = 0; n < followers.size(); n++)
         {
@@ -570,48 +619,115 @@ public class ReplayBatchProcessor
                 return Error.NEED_POSITION_CHANNELS;
             }
 
-            /* Where the follower starts from decides which side of the target it keeps to */
-            double ox = x.getFactory().getY(x.interpolate(0F));
-            double oz = z.getFactory().getY(z.interpolate(0F));
-            double[] goal0 = followGoal(params, tx[0], ty[0], tz[0], heading[0]);
-            double ax = ox - goal0[0];
-            double az = oz - goal0[2];
-
-            /* The slot, as an angle from the heading: the side it came from, or behind when it came from nowhere */
-            double approach = ax * ax + az * az > 1.0E-6D
-                ? Math.atan2(az, ax) * (180D / Math.PI) - 90D
-                : heading[0] + 180D;
-            double slot = approach - heading[0] + Math.toDegrees((n - (followers.size() - 1) / 2D) * step);
-
             KeyframeChannel[] yaws = params.followRotate ? new KeyframeChannel[] {
                 (KeyframeChannel) replay.replay.keyframes.get("yaw"),
                 (KeyframeChannel) replay.replay.keyframes.get("bodyYaw"),
                 (KeyframeChannel) replay.replay.keyframes.get("headYaw")
             } : new KeyframeChannel[0];
 
-            x.removeAll();
-            z.removeAll();
+            /* Where the follower stands on its own, before anything is written: it waits there for the target to come in range */
+            double[] ox = new double[ticks + 1];
+            double[] oy = new double[ticks + 1];
+            double[] oz = new double[ticks + 1];
+
+            for (int t = 0; t <= ticks; t++)
+            {
+                ox[t] = x.getFactory().getY(x.interpolate(t));
+                oz[t] = z.getFactory().getY(z.interpolate(t));
+                oy[t] = y == null ? ty[t] : y.getFactory().getY(y.interpolate(t));
+            }
+
+            /* The first tick the target is in range; a follower it never comes near keeps its keyframes */
+            int start = 0;
+
+            if (ranged)
+            {
+                start = -1;
+
+                for (int t = 0; t <= ticks; t++)
+                {
+                    if (Math.hypot(ox[t] - tx[t], oz[t] - tz[t]) <= range)
+                    {
+                        start = t;
+
+                        break;
+                    }
+                }
+
+                if (start < 0)
+                {
+                    continue;
+                }
+            }
+
+            double startBody = 0D;
+            boolean hasStartBody = false;
+
+            if (start > 0 && yaws.length > 0 && yaws[0] != null)
+            {
+                startBody = yaws[0].getFactory().getY(yaws[0].interpolate(start));
+                hasStartBody = true;
+            }
+
+            /* Where the follower starts from decides which side of the target it keeps to */
+            double[] goal0 = followGoal(params, tx[start], ty[start], tz[start], heading[start]);
+            double ax = ox[start] - goal0[0];
+            double az = oz[start] - goal0[2];
+
+            /* The slot, as an angle from the heading: the side it came from, or behind when it came from nowhere */
+            double approach = ax * ax + az * az > 1.0E-6D
+                ? Math.atan2(az, ax) * (180D / Math.PI) - 90D
+                : heading[start] + 180D;
+            double slot = approach - heading[start] + Math.toDegrees((n - (followers.size() - 1) / 2D) * step);
+
+            /* A range keeps what the follower did before the target came: only what is from then on is written afresh */
+            clearFrom(x, start);
+            clearFrom(z, start);
 
             if (!params.followKeepGround)
             {
-                y.removeAll();
+                clearFrom(y, start);
             }
 
             for (KeyframeChannel yaw : yaws)
             {
                 if (yaw != null)
                 {
-                    yaw.removeAll();
+                    clearFrom(yaw, start);
                 }
             }
+
+            /* Every random phase of this one's run comes from its own seed: the same on every run, different from the others' */
+            SplittableRandom random = new SplittableRandom(mix64(replay.replay.getId().hashCode() * 31L + replay.i * 0x9e3779b97f4a7c15L));
+            double[] period = {46D + random.nextDouble() * 24D, 17D + random.nextDouble() * 10D, 7D + random.nextDouble() * 4D};
+            double[] phase = {random.nextDouble() * Math.PI * 2D, random.nextDouble() * Math.PI * 2D, random.nextDouble() * Math.PI * 2D};
+            double bodyPhase = random.nextDouble() * Math.PI * 2D;
+            int nextTire = 80 + random.nextInt(61);
 
             double sx = 0D;
             double sy = 0D;
             double sz = 0D;
+            double lastOutX = 0D;
+            double lastOutZ = 0D;
             double body = 0D;
             double head = 0D;
+            double lastSpeed = 0D;
+            double lastGap = 0D;
+            double dirX = 0D;
+            double dirZ = 0D;
+            double moveFactor = 0D;
+            double speedScale = 1D;
+            double pace = 1D;
+            double paceTarget;
+            boolean chasing = true;
+            int runTicks = 0;
+            int sprintLeft = 0;
+            int tireLeft = 0;
+            double sprintPace = 1.2D;
+            double tirePace = 0.7D;
+            double[] bodyWant = new double[ticks + 1];
 
-            for (int t = 0; t <= ticks; t++)
+            for (int t = start; t <= ticks; t++)
             {
                 double[] goal = followGoal(params, tx[t], ty[t], tz[t], heading[t]);
 
@@ -619,69 +735,194 @@ public class ReplayBatchProcessor
                 double slotRadians = Math.toRadians(heading[t] + slot);
                 double px = goal[0] - Math.sin(slotRadians) * min;
                 double pz = goal[2] + Math.cos(slotRadians) * min;
-                double lastX = sx;
-                double lastZ = sz;
+                double beforeX = sx;
+                double beforeZ = sz;
 
-                if (t == 0)
+                if (t == start)
                 {
-                    sx = px;
-                    sy = goal[1];
-                    sz = pz;
+                    /* A follower that waited starts where it stood; one that chases from the first tick, on its slot */
+                    sx = ranged ? ox[t] : px;
+                    sy = ranged ? oy[t] : goal[1];
+                    sz = ranged ? oz[t] : pz;
+
+                    double heading0 = Math.toRadians(heading[t]);
+
+                    dirX = -Math.sin(heading0);
+                    dirZ = Math.cos(heading0);
+                    lastGap = Math.hypot(px - sx, pz - sz);
                 }
                 else
                 {
-                    sx += (px - sx) * alpha;
-                    sy += (goal[1] - sy) * alpha;
-                    sz += (pz - sz) * alpha;
+                    double gap = Math.hypot(px - sx, pz - sz);
+                    double stepX = (px - sx) * alpha;
+                    double stepZ = (pz - sz) * alpha;
+                    double stepY = (goal[1] - sy) * alpha;
+
+                    if (ranged)
+                    {
+                        /* Out of reach the follower slows to a stop; back in range it runs again */
+                        double away = Math.hypot(tx[t] - sx, tz[t] - sz);
+
+                        if (chasing && away > range * LOSE_FACTOR)
+                        {
+                            chasing = false;
+                        }
+                        else if (!chasing && away <= range)
+                        {
+                            chasing = true;
+                        }
+
+                        speedScale += ((chasing ? 1D : 0D) - speedScale) * 0.12D;
+                        stepY *= speedScale;
+                    }
+
+                    if (chase)
+                    {
+                        paceTarget = 1D;
+
+                        if (organic)
+                        {
+                            /* A gap that opens is a reason to sprint, a long run without a pause one to tire */
+                            if (sprintLeft > 0)
+                            {
+                                sprintLeft--;
+                                paceTarget = sprintPace;
+                            }
+                            else if (tireLeft > 0)
+                            {
+                                tireLeft--;
+                                paceTarget = tirePace;
+                            }
+                            else if (gap > 2.5D && gap > lastGap + 0.02D)
+                            {
+                                sprintLeft = 15 + random.nextInt(26);
+                                sprintPace = 1.15D + random.nextDouble() * 0.15D;
+                            }
+                            else if (runTicks >= nextTire)
+                            {
+                                tireLeft = 18 + random.nextInt(23);
+                                tirePace = 0.65D + random.nextDouble() * 0.15D;
+                                runTicks = 0;
+                                nextTire = 80 + random.nextInt(61);
+                            }
+
+                            pace += (paceTarget - pace) * 0.2D;
+                        }
+
+                        double effective = organic ? Math.max(0.3D, 1D + (pace - 1D) * intensity) : 1D;
+                        double cap = Math.max(CHASE_SPEED, targetSpeed[t] * 1.05D) * effective * speedScale;
+                        double length = Math.hypot(stepX, stepZ);
+
+                        if (length > cap)
+                        {
+                            stepX *= cap / length;
+                            stepZ *= cap / length;
+                        }
+                    }
+
+                    sx += stepX;
+                    sy += stepY;
+                    sz += stepZ;
+                    lastGap = gap;
                 }
 
                 /* Never inside the circle: whatever is, even when the target walks into it, goes back out along the line from the centre */
-                double ex = sx - goal[0];
-                double ez = sz - goal[2];
-                double distance = Math.sqrt(ex * ex + ez * ez);
+                double[] kept = outside(sx, sz, goal, min, slotRadians);
 
-                if (min > 0D && distance < min)
+                sx = kept[0];
+                sz = kept[1];
+
+                double speed = Math.hypot(sx - beforeX, sz - beforeZ);
+
+                if (t > start)
                 {
-                    double ux = distance > 1.0E-6D ? ex / distance : -Math.sin(slotRadians);
-                    double uz = distance > 1.0E-6D ? ez / distance : Math.cos(slotRadians);
+                    lastSpeed = speed;
 
-                    sx = goal[0] + ux * min;
-                    sz = goal[2] + uz * min;
+                    if (speed > 0.03D)
+                    {
+                        runTicks++;
+                        dirX = (sx - beforeX) / speed;
+                        dirZ = (sz - beforeZ) / speed;
+                    }
+                    else
+                    {
+                        runTicks = Math.max(0, runTicks - 2);
+                    }
                 }
 
-                appendKey(x, t, sx);
-                appendKey(z, t, sz);
+                /* The sway to either side of the way it runs: only while it runs, and fading as it stops */
+                double outX = sx;
+                double outZ = sz;
+
+                moveFactor += ((lastSpeed > 0.03D ? 1D : 0D) - moveFactor) * 0.25D;
+
+                if (organic && intensity > 0D)
+                {
+                    double wave = 0.6D * Math.sin(Math.PI * 2D * t / period[0] + phase[0])
+                        + 0.3D * Math.sin(Math.PI * 2D * t / period[1] + phase[1])
+                        + 0.1D * Math.sin(Math.PI * 2D * t / period[2] + phase[2]);
+                    double sway = SWAY * intensity * moveFactor * wave;
+
+                    outX = sx - dirZ * sway;
+                    outZ = sz + dirX * sway;
+
+                    double[] swayed = outside(outX, outZ, goal, min, slotRadians);
+
+                    outX = swayed[0];
+                    outZ = swayed[1];
+                }
+
+                appendKey(x, t, outX);
+                appendKey(z, t, outZ);
 
                 if (!params.followKeepGround)
                 {
                     appendKey(y, t, sy);
                 }
 
-                if (!params.followRotate)
+                if (yaws.length == 0)
                 {
+                    lastOutX = outX;
+                    lastOutZ = outZ;
+
                     continue;
                 }
 
-                double dx = sx - lastX;
-                double dz = sz - lastZ;
+                double dx = outX - lastOutX;
+                double dz = outZ - lastOutZ;
+                double toTarget = Math.atan2(tz[t] - outZ, tx[t] - outX) * (180D / Math.PI) - 90D;
+                boolean targetClose = (tx[t] - outX) * (tx[t] - outX) + (tz[t] - outZ) * (tz[t] - outZ) > 1.0E-6D;
                 double wanted;
 
-                if (t > 0 && dx * dx + dz * dz > WALK_STEP * WALK_STEP)
+                if (t > start && dx * dx + dz * dz > WALK_STEP * WALK_STEP)
                 {
                     wanted = Math.atan2(dz, dx) * (180D / Math.PI) - 90D;
                 }
                 else
                 {
-                    double fx = tx[t] - sx;
-                    double fz = tz[t] - sz;
-
-                    wanted = fx * fx + fz * fz > 1.0E-6D ? Math.atan2(fz, fx) * (180D / Math.PI) - 90D : (t == 0 ? tyaw[0] : body);
+                    wanted = targetClose ? toTarget : (t == start ? tyaw[t] : body);
                 }
 
-                if (t == 0)
+                bodyWant[t] = wanted;
+
+                if (t == start)
                 {
-                    body = wanted;
-                    head = wanted;
+                    body = hasStartBody ? startBody : wanted;
+                    head = body;
+
+                    if (yaws.length > 2 && yaws[2] != null && start > 0)
+                    {
+                        head = yaws[2].getFactory().getY(yaws[2].interpolate(start));
+                    }
+                }
+                else if (organic)
+                {
+                    /* The head locks on the target at once; the body comes after it a few ticks late, with a little sway of its own */
+                    double lagged = bodyWant[Math.max(start, t - BODY_LAG)];
+                    double wobble = 4D * intensity * moveFactor * Math.sin(Math.PI * 2D * t / 14D + bodyPhase);
+
+                    head = turnToward(head, targetClose ? toTarget : wanted, 34D);
+                    body = turnToward(body, lagged + wobble, 12D);
                 }
                 else
                 {
@@ -689,16 +930,55 @@ public class ReplayBatchProcessor
                     head = turnToward(head, wanted, HEAD_TURN_RATE);
                 }
 
-                if (yaws.length > 0)
-                {
-                    if (yaws[0] != null) appendKey(yaws[0], t, body);
-                    if (yaws[1] != null) appendKey(yaws[1], t, body);
-                    if (yaws[2] != null) appendKey(yaws[2], t, head);
-                }
+                if (yaws[0] != null) appendKey(yaws[0], t, body);
+                if (yaws.length > 1 && yaws[1] != null) appendKey(yaws[1], t, body);
+                if (yaws.length > 2 && yaws[2] != null) appendKey(yaws[2], t, head);
+
+                lastOutX = outX;
+                lastOutZ = outZ;
             }
         }
 
         return null;
+    }
+
+    /** Puts a point that is inside the stop circle back out on it, along the line from the centre */
+    private static double[] outside(double x, double z, double[] centre, double min, double slotRadians)
+    {
+        double ex = x - centre[0];
+        double ez = z - centre[2];
+        double distance = Math.sqrt(ex * ex + ez * ez);
+
+        if (min <= 0D || distance >= min)
+        {
+            return new double[] {x, z};
+        }
+
+        double ux = distance > 1.0E-6D ? ex / distance : -Math.sin(slotRadians);
+        double uz = distance > 1.0E-6D ? ez / distance : Math.cos(slotRadians);
+
+        return new double[] {centre[0] + ux * min, centre[2] + uz * min};
+    }
+
+    /** Drops the keyframes of a channel from a tick onwards, keeping what came before */
+    private static void clearFrom(KeyframeChannel channel, int tick)
+    {
+        if (tick <= 0)
+        {
+            channel.removeAll();
+
+            return;
+        }
+
+        List keyframes = channel.getKeyframes();
+
+        for (int i = keyframes.size() - 1; i >= 0; i--)
+        {
+            if (((Keyframe) keyframes.get(i)).getTick() >= tick)
+            {
+                channel.remove(i);
+            }
+        }
     }
 
     /** The target's place plus the offset, the offset turned by the way the target is heading */
