@@ -89,6 +89,12 @@ public class VideoRecorder
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc != null && mc.player != null)
         {
+            /* A red message is a render that went wrong */
+            if (message.startsWith("§c") && BBSSettings.videoPlaySoundAfterExport.get())
+            {
+                UIUtils.playCriticalError();
+            }
+
             mc.execute(() ->
             {
                 if (mc.player != null)

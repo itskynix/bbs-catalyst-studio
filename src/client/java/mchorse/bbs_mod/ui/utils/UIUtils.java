@@ -2,6 +2,7 @@ package mchorse.bbs_mod.ui.utils;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.BBSMod;
+import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.utils.OS;
@@ -128,6 +129,35 @@ public class UIUtils
     public static void playClick()
     {
         playClick(1F);
+    }
+
+    private static final mchorse.bbs_mod.resources.Link CRITICAL_ERROR = mchorse.bbs_mod.resources.Link.assets("sounds/critical_error.ogg");
+    private static long lastCritical;
+
+    /**
+     * The sound of something that went wrong - a modal window answering a click beside it, a render
+     * that failed. Played the way the render-complete sound is, through BBS's own sound manager, so it
+     * keeps its volume; a short cooldown keeps a run of clicks or errors from piling it up. When the
+     * file cannot be played the plain click answers instead.
+     */
+    public static void playCriticalError()
+    {
+        long now = System.currentTimeMillis();
+
+        if (now - lastCritical < 300L)
+        {
+            return;
+        }
+
+        lastCritical = now;
+
+        MinecraftClient.getInstance().execute(() ->
+        {
+            if (BBSModClient.getSounds().play(CRITICAL_ERROR) == null)
+            {
+                playClick(0.6F);
+            }
+        });
     }
 
     public static void playClick(float pitch)

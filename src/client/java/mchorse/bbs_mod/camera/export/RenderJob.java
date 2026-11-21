@@ -124,6 +124,11 @@ public class RenderJob
             this.completedAtMs = System.currentTimeMillis();
         }
 
+        if (status == Status.FAILED && mchorse.bbs_mod.BBSSettings.videoPlaySoundAfterExport.get())
+        {
+            mchorse.bbs_mod.ui.utils.UIUtils.playCriticalError();
+        }
+
         RenderQueue.notifyListeners();
     }
 

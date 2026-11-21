@@ -323,6 +323,7 @@ public class UIOverlay extends UIElement
 
         this.bringToFront();
         panel.flash();
+        mchorse.bbs_mod.ui.utils.UIUtils.playCriticalError();
 
         return true;
     }
