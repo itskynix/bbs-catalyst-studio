@@ -11,6 +11,7 @@ import mchorse.bbs_mod.utils.keyframes.Keyframe;
 import mchorse.bbs_mod.utils.keyframes.KeyframeChannel;
 import mchorse.bbs_mod.utils.keyframes.factories.KeyframeFactories;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.SplittableRandom;
 import java.util.concurrent.ThreadLocalRandom;
@@ -80,6 +81,9 @@ public class ReplayBatchProcessor
 
         /** How many ticks behind the target the follower lags; 0 holds it on the target */
         public double followSmooth;
+
+        /** The nearest a follower comes to the point it follows, in blocks */
+        public double followMinDistance = 1.2D;
 
         /** Turn the follower to the way it walks, and to the target while it stands */
         public boolean followRotate = true;
@@ -434,13 +438,36 @@ public class ReplayBatchProcessor
         return lookAt(selected, params.lookAtTarget);
     }
 
+    /** How fast the way the target is heading may swing, in degrees a tick */
+    private static final double HEADING_RATE = 30D;
+
+    /** How fast a follower's body turns, in degrees a tick; its head goes a little faster */
+    private static final double BODY_TURN_RATE = 14D;
+    private static final double HEAD_TURN_RATE = 24D;
+
+    /** How far the target must go in one tick for it to count as walking, in blocks */
+    private static final double WALK_STEP = 0.02D;
+
+    /** How far apart followers standing round the same point are kept, in blocks along the circle */
+    private static final double SLOT_SPACING = 0.8D;
+
     /**
-     * Makes each replay follow the target through the whole film: every tick the follower is put at the
-     * target's place plus an offset in the target's own frame (x to its right, y up, z ahead), the
-     * offset turning with the target. A smoothness of N ticks lets the follower close `1 / (N + 1)` of
-     * the way to that place every tick, so 0 sticks to the target and more trails behind it. The
-     * keyframes of the position channels, and of the three yaw channels when rotating, are written
-     * afresh, one a tick.
+     * Makes each replay follow the target through the whole film, one keyframe a tick.
+     *
+     * <p>The place followed is the target's plus the offset (x to its right, y up, z ahead), turned
+     * by the way the target is <em>heading</em>: where it really moves, smoothed and turned at a
+     * limited rate, and held where it is while the target stands. Not by the target's yaw, so a
+     * target that turns on the spot does not sweep the followers round itself.</p>
+     *
+     * <p>A follower never comes nearer than the minimum distance to that place. Each has a slot on the
+     * circle of that radius round it, on the side it came from; several followers that came from the
+     * same side are fanned out along the circle {@link #SLOT_SPACING} blocks apart. The slot turns
+     * only with the heading. A follower is moved to its slot with the smoothness (1 / (N + 1) of the
+     * way a tick, 0 holds it there), and anything still inside the circle is put back on it.</p>
+     *
+     * <p>Turning, when rotating is on: the body goes the way the follower walks, or to the target
+     * while it stands, and the head the same a little quicker, each at a limited rate, so it never
+     * flips half a turn between two ticks.</p>
      */
     private static Error applyFollow(List<VisibleReplay> selected, NormalParams params)
     {
@@ -502,15 +529,38 @@ public class ReplayBatchProcessor
             }
         }
 
-        double alpha = 1D / (Math.max(0D, params.followSmooth) + 1D);
+        /* The way the target heads at every tick, shared by all the followers */
+        double[] heading = new double[ticks + 1];
+
+        heading[0] = tyaw[0];
+
+        for (int t = 1; t <= ticks; t++)
+        {
+            double dx = tx[t] - tx[t - 1];
+            double dz = tz[t] - tz[t - 1];
+
+            heading[t] = dx * dx + dz * dz > WALK_STEP * WALK_STEP
+                ? turnToward(heading[t - 1], Math.atan2(dz, dx) * (180D / Math.PI) - 90D, HEADING_RATE)
+                : heading[t - 1];
+        }
+
+        List<VisibleReplay> followers = new ArrayList<>();
 
         for (VisibleReplay replay : selected)
         {
-            if (replay.replay == params.followTarget)
+            if (replay.replay != params.followTarget)
             {
-                continue;
+                followers.add(replay);
             }
+        }
 
+        double alpha = 1D / (Math.max(0D, params.followSmooth) + 1D);
+        double min = Math.max(0D, params.followMinDistance);
+        double step = min > 0D ? SLOT_SPACING / Math.max(min, 0.4D) : 0D;
+
+        for (int n = 0; n < followers.size(); n++)
+        {
+            VisibleReplay replay = followers.get(n);
             KeyframeChannel x = (KeyframeChannel) replay.replay.keyframes.get("x");
             KeyframeChannel y = (KeyframeChannel) replay.replay.keyframes.get("y");
             KeyframeChannel z = (KeyframeChannel) replay.replay.keyframes.get("z");
@@ -519,6 +569,19 @@ public class ReplayBatchProcessor
             {
                 return Error.NEED_POSITION_CHANNELS;
             }
+
+            /* Where the follower starts from decides which side of the target it keeps to */
+            double ox = x.getFactory().getY(x.interpolate(0F));
+            double oz = z.getFactory().getY(z.interpolate(0F));
+            double[] goal0 = followGoal(params, tx[0], ty[0], tz[0], heading[0]);
+            double ax = ox - goal0[0];
+            double az = oz - goal0[2];
+
+            /* The slot, as an angle from the heading: the side it came from, or behind when it came from nowhere */
+            double approach = ax * ax + az * az > 1.0E-6D
+                ? Math.atan2(az, ax) * (180D / Math.PI) - 90D
+                : heading[0] + 180D;
+            double slot = approach - heading[0] + Math.toDegrees((n - (followers.size() - 1) / 2D) * step);
 
             KeyframeChannel[] yaws = params.followRotate ? new KeyframeChannel[] {
                 (KeyframeChannel) replay.replay.keyframes.get("yaw"),
@@ -545,32 +608,45 @@ public class ReplayBatchProcessor
             double sx = 0D;
             double sy = 0D;
             double sz = 0D;
-            double facing = 0D;
+            double body = 0D;
+            double head = 0D;
 
             for (int t = 0; t <= ticks; t++)
             {
-                double radians = Math.toRadians(tyaw[t]);
-                double fx = -Math.sin(radians);
-                double fz = Math.cos(radians);
-                double rx = -Math.cos(radians);
-                double rz = -Math.sin(radians);
-                double gx = tx[t] + rx * params.followX + fx * params.followZ;
-                double gy = ty[t] + params.followY;
-                double gz = tz[t] + rz * params.followX + fz * params.followZ;
-                double px = sx;
-                double pz = sz;
+                double[] goal = followGoal(params, tx[t], ty[t], tz[t], heading[t]);
+
+                /* The slot on the stop circle round the place followed, turned only with the heading */
+                double slotRadians = Math.toRadians(heading[t] + slot);
+                double px = goal[0] - Math.sin(slotRadians) * min;
+                double pz = goal[2] + Math.cos(slotRadians) * min;
+                double lastX = sx;
+                double lastZ = sz;
 
                 if (t == 0)
                 {
-                    sx = gx;
-                    sy = gy;
-                    sz = gz;
+                    sx = px;
+                    sy = goal[1];
+                    sz = pz;
                 }
                 else
                 {
-                    sx += (gx - sx) * alpha;
-                    sy += (gy - sy) * alpha;
-                    sz += (gz - sz) * alpha;
+                    sx += (px - sx) * alpha;
+                    sy += (goal[1] - sy) * alpha;
+                    sz += (pz - sz) * alpha;
+                }
+
+                /* Never inside the circle: whatever is, even when the target walks into it, goes back out along the line from the centre */
+                double ex = sx - goal[0];
+                double ez = sz - goal[2];
+                double distance = Math.sqrt(ex * ex + ez * ez);
+
+                if (min > 0D && distance < min)
+                {
+                    double ux = distance > 1.0E-6D ? ex / distance : -Math.sin(slotRadians);
+                    double uz = distance > 1.0E-6D ? ez / distance : Math.cos(slotRadians);
+
+                    sx = goal[0] + ux * min;
+                    sz = goal[2] + uz * min;
                 }
 
                 appendKey(x, t, sx);
@@ -586,56 +662,76 @@ public class ReplayBatchProcessor
                     continue;
                 }
 
-                double dx = sx - px;
-                double dz = sz - pz;
+                double dx = sx - lastX;
+                double dz = sz - lastZ;
                 double wanted;
 
-                if (t > 0 && dx * dx + dz * dz > 1.0E-6D)
+                if (t > 0 && dx * dx + dz * dz > WALK_STEP * WALK_STEP)
                 {
                     wanted = Math.atan2(dz, dx) * (180D / Math.PI) - 90D;
                 }
-                else if (t == 0)
+                else
                 {
-                    double ax = tx[t] - sx;
-                    double az = tz[t] - sz;
+                    double fx = tx[t] - sx;
+                    double fz = tz[t] - sz;
 
-                    wanted = ax * ax + az * az > 1.0E-6D ? Math.atan2(az, ax) * (180D / Math.PI) - 90D : tyaw[t];
+                    wanted = fx * fx + fz * fz > 1.0E-6D ? Math.atan2(fz, fx) * (180D / Math.PI) - 90D : (t == 0 ? tyaw[0] : body);
+                }
+
+                if (t == 0)
+                {
+                    body = wanted;
+                    head = wanted;
                 }
                 else
                 {
-                    wanted = facing;
+                    body = turnToward(body, wanted, BODY_TURN_RATE);
+                    head = turnToward(head, wanted, HEAD_TURN_RATE);
                 }
 
-                /* The turn the short way round, so the keyframes never spin a full circle */
-                if (t > 0)
+                if (yaws.length > 0)
                 {
-                    double diff = (wanted - facing) % 360D;
-
-                    if (diff < -180D)
-                    {
-                        diff += 360D;
-                    }
-                    else if (diff > 180D)
-                    {
-                        diff -= 360D;
-                    }
-
-                    wanted = facing + diff;
-                }
-
-                facing = wanted;
-
-                for (KeyframeChannel yaw : yaws)
-                {
-                    if (yaw != null)
-                    {
-                        appendKey(yaw, t, facing);
-                    }
+                    if (yaws[0] != null) appendKey(yaws[0], t, body);
+                    if (yaws[1] != null) appendKey(yaws[1], t, body);
+                    if (yaws[2] != null) appendKey(yaws[2], t, head);
                 }
             }
         }
 
         return null;
+    }
+
+    /** The target's place plus the offset, the offset turned by the way the target is heading */
+    private static double[] followGoal(NormalParams params, double x, double y, double z, double heading)
+    {
+        double radians = Math.toRadians(heading);
+        double fx = -Math.sin(radians);
+        double fz = Math.cos(radians);
+        double rx = -Math.cos(radians);
+        double rz = -Math.sin(radians);
+
+        return new double[] {
+            x + rx * params.followX + fx * params.followZ,
+            y + params.followY,
+            z + rz * params.followX + fz * params.followZ
+        };
+    }
+
+    /** An angle taken toward another the short way round by at most a rate; the result is kept near the first, never wrapped */
+    private static double turnToward(double from, double to, double rate)
+    {
+        double diff = (to - from) % 360D;
+
+        if (diff < -180D)
+        {
+            diff += 360D;
+        }
+        else if (diff > 180D)
+        {
+            diff -= 360D;
+        }
+
+        return from + Math.max(-rate, Math.min(rate, diff));
     }
 
     /** Adds a keyframe at the end of a channel that is being written from its first tick onwards */

@@ -114,7 +114,8 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
         public int followTarget = -1;
         public double followX;
         public double followY;
-        public double followZ = -2;
+        public double followZ = 0;
+        public double followMinDistance = 1.2;
         public double followSmooth = 0;
         public boolean followRotate = true;
         public boolean followKeepGround = false;
@@ -403,6 +404,7 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
             PROCESS_STATE.followY = this.normal.followY.getValue();
             PROCESS_STATE.followZ = this.normal.followZ.getValue();
             PROCESS_STATE.followSmooth = this.normal.followSmooth.getValue();
+            PROCESS_STATE.followMinDistance = this.normal.followMinDistance.getValue();
 
             Film film = this.filmPanel.getData();
 
@@ -412,6 +414,7 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
             params.followY = PROCESS_STATE.followY;
             params.followZ = PROCESS_STATE.followZ;
             params.followSmooth = PROCESS_STATE.followSmooth;
+            params.followMinDistance = PROCESS_STATE.followMinDistance;
             params.followRotate = PROCESS_STATE.followRotate;
             params.followKeepGround = PROCESS_STATE.followKeepGround;
             params.followDuration = film == null ? 0 : film.calculateDuration();
@@ -550,6 +553,7 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
         private final UITrackpad followY;
         private final UITrackpad followZ;
         private final UITrackpad followSmooth;
+        private final UITrackpad followMinDistance;
         private final UIToggle followRotate;
         private final UIToggle followKeepGround;
 
@@ -629,6 +633,11 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
             this.followSmooth.setValue(PROCESS_STATE.followSmooth);
             this.followSmooth.tooltip(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_SMOOTH_TOOLTIP);
 
+            this.followMinDistance = new UITrackpad();
+            this.followMinDistance.limit(0, 16, false);
+            this.followMinDistance.setValue(PROCESS_STATE.followMinDistance);
+            this.followMinDistance.tooltip(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_MIN_DISTANCE_TOOLTIP);
+
             this.followRotate = new UIToggle(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_ROTATE, PROCESS_STATE.followRotate, (b) -> PROCESS_STATE.followRotate = b.getValue());
             this.followRotate.tooltip(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_ROTATE_TOOLTIP);
 
@@ -681,6 +690,7 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
                         rows = this.addRow(rows, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_TARGET, this.followTarget);
                         rows = this.addRow(rows, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_OFFSET, this.followX, this.followY, this.followZ);
                         rows = this.addRow(rows, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_SMOOTH, this.followSmooth);
+                        rows = this.addRow(rows, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_MIN_DISTANCE, this.followMinDistance);
                     }
                     default ->
                     {}
