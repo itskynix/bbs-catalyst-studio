@@ -61,7 +61,7 @@ public final class NavigationWandRenderer
 
         if (now - refreshed > 750L)
         {
-            saved = NavigationNetworks.get(NavigationNetworks.activeFilm());
+            saved = NavigationNetworks.sceneNetwork(NavigationNetworks.activeFilm());
             refreshed = now;
         }
 
@@ -72,9 +72,22 @@ public final class NavigationWandRenderer
     {
         MinecraftClient mc = MinecraftClient.getInstance();
 
-        if (mc.player == null || mc.world == null || !NavigationWandController.isHolding(mc.player))
+        boolean holding = mc.player != null && NavigationWandController.isHolding(mc.player);
+
+        if (mc.player == null || mc.world == null || (!holding && !NavPreview.isVisible()))
         {
             NavigationWandController.setView(null, null);
+
+            return;
+        }
+
+        if (!holding)
+        {
+            /* The preview key alone: what is saved, and the volumes, nothing of the wand's own */
+            NavigationWandController.setView(null, null);
+            beginOverlay();
+            renderSaved(mc.world, context.matrixStack(), context.camera().getPos(), saved());
+            endOverlay();
 
             return;
         }
@@ -91,18 +104,8 @@ public final class NavigationWandRenderer
         MatrixStack stack = context.matrixStack();
         NavigationNetwork network = saved();
 
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
-        RenderSystem.disableDepthTest();
-        RenderSystem.disableCull();
-
-        for (NavigationNetwork.Box saved : network.boxes)
-        {
-            stack.push();
-            stack.translate(saved.x() - camera.x, saved.y() - camera.y, saved.z() - camera.z);
-            Draw.renderBox(stack, 0, 0, 0, saved.sx(), saved.sy(), saved.sz(), SAVED[0], SAVED[1], SAVED[2], 0.55F);
-            stack.pop();
-        }
+        beginOverlay();
+        renderSaved(mc.world, stack, camera, network);
 
         if (box != null)
         {
@@ -122,7 +125,6 @@ public final class NavigationWandRenderer
             renderBlock(stack, camera, b, 1F, 0.69F, 0.29F, 0.3F);
         }
 
-        renderPath(mc.world, stack, camera, network.path, SAVED, 0.75F);
         renderPath(mc.world, stack, camera, NavigationSelection.getPath(), PAINT, 1F);
 
         if (pick != null && !pick.equals(a) && !pick.equals(b))
@@ -133,9 +135,60 @@ public final class NavigationWandRenderer
             stack.pop();
         }
 
+        endOverlay();
+    }
+
+    private static void beginOverlay()
+    {
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.disableDepthTest();
+        RenderSystem.disableCull();
+    }
+
+    private static void endOverlay()
+    {
         RenderSystem.enableCull();
         RenderSystem.enableDepthTest();
         RenderSystem.disableBlend();
+    }
+
+    /**
+     * What is saved for the scene: each box as a clear emerald frame with a faint fill, the saved path
+     * with its lines, and the box of the navigation volume of the film, in its own colour.
+     */
+    private static void renderSaved(ClientWorld world, MatrixStack stack, Vec3d camera, NavigationNetwork network)
+    {
+        for (NavigationNetwork.Box saved : network.boxes)
+        {
+            stack.push();
+            stack.translate(saved.x() - camera.x, saved.y() - camera.y, saved.z() - camera.z);
+
+            RenderSystem.setShader(GameRenderer::getPositionColorProgram);
+
+            BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+
+            Draw.fillBox(builder, stack, 0, 0, 0, saved.sx(), saved.sy(), saved.sz(), SAVED[0], SAVED[1], SAVED[2], 0.07F);
+            Bufs.draw(builder);
+            Draw.renderBox(stack, 0, 0, 0, saved.sx(), saved.sy(), saved.sz(), SAVED[0], SAVED[1], SAVED[2], 1F, 0.04F);
+            stack.pop();
+        }
+
+        renderPath(world, stack, camera, network.path, SAVED, 0.9F);
+
+        AiSimulation.Volume volume = AiSimulation.findVolume(NavigationNetworks.activeFilm());
+
+        if (volume != null && volume.form() != null)
+        {
+            float w = volume.form().width.get();
+            float h = volume.form().height.get();
+            float l = volume.form().length.get();
+
+            stack.push();
+            stack.translate(volume.x() - w / 2D - camera.x, volume.y() - camera.y, volume.z() - l / 2D - camera.z);
+            Draw.renderBox(stack, 0, 0, 0, w, h, l, 0.3F, 0.9F, 1F, 0.9F, 0.04F);
+            stack.pop();
+        }
     }
 
     private static void renderSelection(MatrixStack stack, Vec3d camera, Box box, Direction face)

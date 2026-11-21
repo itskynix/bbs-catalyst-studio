@@ -23,6 +23,7 @@
     "key.bbs.item_editor": "Eşya Düzenleyicisi",
     "key.bbs.dashboard": "Gösterge Paneli",
     "key.bbs.free_cam": "Dünya İçi Free-Cam",
+    "key.bbs.navmesh_preview": "Navigasyon Ağını Göster ve Gizle",
     "bbs.free_cam.on": "Free-Cam açık - WASD ile uç, tekerlek hızı değiştirir, dönmek için tuşa tekrar bas",
     "bbs.free_cam.off": "Free-Cam kapalı",
     "key.bbs.demorph": "Normale Dönüş",

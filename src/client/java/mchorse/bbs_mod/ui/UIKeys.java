@@ -2476,6 +2476,10 @@ public class UIKeys
     public static final IKey NAV_WAND_NOTHING = L10n.lang("bbs.ui.navigation_wand.nothing");
     public static final IKey NAV_WAND_ERASED = L10n.lang("bbs.ui.navigation_wand.erased");
     public static final IKey NAV_WAND_NOT_WALKABLE = L10n.lang("bbs.ui.navigation_wand.not_walkable");
+    public static final IKey NAV_WAND_LABEL_DELETE = L10n.lang("bbs.ui.navigation_wand.label_delete");
+    public static final IKey NAV_WAND_NETWORK_DELETED = L10n.lang("bbs.ui.navigation_wand.network_deleted");
+    public static final IKey NAV_WAND_PREVIEW_ON = L10n.lang("bbs.ui.navigation_wand.preview_on");
+    public static final IKey NAV_WAND_PREVIEW_OFF = L10n.lang("bbs.ui.navigation_wand.preview_off");
     public static final IKey NAV_WAND_LABEL_PAINT = L10n.lang("bbs.ui.navigation_wand.label_paint");
     public static final IKey NAV_WAND_LABEL_ERASE = L10n.lang("bbs.ui.navigation_wand.label_erase");
     public static final IKey NAV_WAND_LABEL_MODE = L10n.lang("bbs.ui.navigation_wand.label_mode");

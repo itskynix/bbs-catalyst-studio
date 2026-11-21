@@ -48,6 +48,12 @@ public final class ModelBlockAi
     private ModelBlockAi()
     {}
 
+    /** Lets go of every live walk: each block starts again on the mesh as it is now, with a fresh blackboard */
+    public static void reset()
+    {
+        LIVE.clear();
+    }
+
     public static void register()
     {
         ModelBlockEntity.CLIENT_AI = ModelBlockAi::tick;

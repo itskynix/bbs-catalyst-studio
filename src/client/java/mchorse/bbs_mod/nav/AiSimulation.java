@@ -70,6 +70,12 @@ public final class AiSimulation
 
     private static final Map<Film, AiSimulation> CACHE = new WeakHashMap<>();
 
+    /** Throws away every walk worked out, so the next one asked for is made again, from the start */
+    public static void invalidate()
+    {
+        CACHE.clear();
+    }
+
     private final long key;
     private final Map<String, Track> tracks = new HashMap<>();
 

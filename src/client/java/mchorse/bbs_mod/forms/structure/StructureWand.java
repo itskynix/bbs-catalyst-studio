@@ -678,6 +678,12 @@ public class StructureWand
      */
     public static void renderHints(Batcher2D batcher, List<Hint> plain, List<Hint> modified, String status, int statusColor)
     {
+        renderHints(batcher, plain, modified, status, statusColor, null);
+    }
+
+    /** The same, with a notice on a line of its own above the status: what just happened, instead of the action bar the hints would cover */
+    public static void renderHints(Batcher2D batcher, List<Hint> plain, List<Hint> modified, String status, int statusColor, String notice)
+    {
         MinecraftClient mc = MinecraftClient.getInstance();
         FontRenderer font = batcher.getFont();
         int leftWidth = columnWidth(font, plain);
@@ -692,6 +698,11 @@ public class StructureWand
         if (status != null && !status.isEmpty())
         {
             batcher.textShadow(status, (width - font.getWidth(status)) / 2F, y - 13, statusColor);
+        }
+
+        if (notice != null && !notice.isEmpty())
+        {
+            batcher.textShadow(notice, (width - font.getWidth(notice)) / 2F, y - 26, 0xffffe066);
         }
 
         for (int i = 0; i < rows; i++)

@@ -55,6 +55,14 @@ public final class NavigationWandController
 
     private static Mode mode = Mode.BOX;
 
+    /** Set by a save, cleared when the right button is let go */
+    private static boolean saveLatched;
+
+    /** What just happened, shown on top of the hint for a moment */
+    private static String notice = "";
+    private static long noticeTime = Long.MIN_VALUE;
+    private static final long NOTICE_MILLIS = 2500L;
+
     /** The face of the box under the crosshair this frame: what the wheel acts on */
     private static Direction face;
 
@@ -87,6 +95,15 @@ public final class NavigationWandController
 
     public static void register()
     {
+        /* A held right button repeats the use every few ticks: Alt and it saves once per press, not again on an empty selection */
+        net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK.register((mc) ->
+        {
+            if (!mc.options.useKey.isPressed())
+            {
+                saveLatched = false;
+            }
+        });
+
         AttackBlockCallback.EVENT.register((player, world, hand, pos, direction) -> isHolding(player, hand) ? ActionResult.FAIL : ActionResult.PASS);
         UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> isHolding(player, hand) ? ActionResult.FAIL : ActionResult.PASS);
 
@@ -119,8 +136,16 @@ public final class NavigationWandController
 
         if (Window.isAltPressed())
         {
-            NavigationSelection.clear();
-            message(UIKeys.NAV_WAND_CLEARED.get());
+            /* The draft goes first; with no draft, or with Shift held too, what is saved goes */
+            if (!NavigationSelection.isEmpty() && !Window.isShiftPressed())
+            {
+                NavigationSelection.clear();
+                message(UIKeys.NAV_WAND_CLEARED.get());
+            }
+            else
+            {
+                deleteSaved();
+            }
         }
         else if (mode == Mode.BOX)
         {
@@ -146,9 +171,14 @@ public final class NavigationWandController
             return false;
         }
 
+        /* Alt with the right button saves whatever the mode: nothing of the mode's own right click happens */
         if (Window.isAltPressed())
         {
-            save();
+            if (!saveLatched)
+            {
+                saveLatched = true;
+                save();
+            }
         }
         else if (mode == Mode.BOX)
         {
@@ -239,59 +269,89 @@ public final class NavigationWandController
             return;
         }
 
-        Film film = NavigationNetworks.activeFilm();
-        NavigationNetwork network = NavigationNetworks.get(film);
-
-        if (network.path.remove(pos))
+        if (NavigationNetworks.sceneNetwork(NavigationNetworks.activeFilm()).path.contains(pos))
         {
-            NavigationNetworks.save(film, network);
-            NavigationNetworks.invalidate();
+            NavigationNetworks.update((network) -> network.path.remove(pos));
             NavigationWandRenderer.refresh();
             message(UIKeys.NAV_WAND_ERASED.get());
         }
     }
 
-    /** Alt and the right button: the box and the painted blocks go into the network of the scene, and the selection is cleared */
+    /**
+     * Alt and the right button: whatever is drafted - the box, the painted blocks, or both, in either
+     * mode - goes into the network of the scene, in the film and in the world's file alike, and the
+     * draft is cleared. What the AI walks on is made again at once.
+     */
     private static void save()
     {
         int blocks = NavigationSelection.getPath().size();
-        int boxes = NavigationSelection.isReady() ? 1 : 0;
+        boolean box = NavigationSelection.isReady();
 
-        if (blocks == 0 && boxes == 0)
+        if (blocks == 0 && !box)
         {
             message(UIKeys.NAV_WAND_NOTHING.get());
 
             return;
         }
 
-        Film film = NavigationNetworks.activeFilm();
-        NavigationNetwork network = NavigationNetworks.get(film).copy();
+        NavigationNetwork.Box saved = null;
 
-        if (boxes > 0)
+        if (box)
         {
             BlockPos min = NavigationSelection.getMin();
             Vec3i size = NavigationSelection.getSize();
 
-            network.boxes.add(new NavigationNetwork.Box(min.getX(), min.getY(), min.getZ(), size.getX(), size.getY(), size.getZ()));
+            saved = new NavigationNetwork.Box(min.getX(), min.getY(), min.getZ(), size.getX(), size.getY(), size.getZ());
         }
 
-        network.path.addAll(NavigationSelection.getPath());
+        NavigationNetwork.Box added = saved;
+        java.util.List<BlockPos> painted = new java.util.ArrayList<>(NavigationSelection.getPath());
 
-        NavigationNetworks.save(film, network);
-        NavigationNetworks.invalidate();
+        NavigationNetworks.update((network) ->
+        {
+            if (added != null && !network.boxes.contains(added))
+            {
+                network.boxes.add(added);
+            }
+
+            network.path.addAll(painted);
+        });
+
         NavigationSelection.clear();
         NavigationWandRenderer.refresh();
-        message(UIKeys.NAV_WAND_SAVED.format(String.valueOf(blocks), String.valueOf(boxes)).get());
+        nodesCounted = Long.MIN_VALUE;
+        message(UIKeys.NAV_WAND_SAVED.format(String.valueOf(blocks), String.valueOf(box ? 1 : 0)).get());
+    }
+
+    /** Everything saved goes, in the film and in the world's file */
+    private static void deleteSaved()
+    {
+        NavigationNetworks.update((network) ->
+        {
+            network.boxes.clear();
+            network.path.clear();
+        });
+
+        NavigationWandRenderer.refresh();
+        nodesCounted = Long.MIN_VALUE;
+        message(UIKeys.NAV_WAND_NETWORK_DELETED.get());
     }
 
     private static void message(String text)
     {
-        MinecraftClient mc = MinecraftClient.getInstance();
+        notify(text);
+    }
 
-        if (mc.player != null)
-        {
-            mc.player.sendMessage(Text.literal(text), true);
-        }
+    /** A notice on top of the wand's hint for a moment; shown even with the wand put away, for the preview key */
+    public static void notify(String text)
+    {
+        notice = text == null ? "" : text;
+        noticeTime = System.currentTimeMillis();
+    }
+
+    private static String notice()
+    {
+        return System.currentTimeMillis() - noticeTime < NOTICE_MILLIS ? notice : null;
     }
 
     private static String modeName(Mode mode)
@@ -365,8 +425,20 @@ public final class NavigationWandController
     {
         MinecraftClient mc = MinecraftClient.getInstance();
 
-        if (mc.player == null || mc.currentScreen != null || mc.options.hudHidden || !isHolding(mc.player))
+        if (mc.player == null || mc.currentScreen != null || mc.options.hudHidden)
         {
+            return;
+        }
+
+        if (!isHolding(mc.player))
+        {
+            String alone = notice();
+
+            if (alone != null)
+            {
+                StructureWand.renderHints(batcher, new java.util.ArrayList<>(), new java.util.ArrayList<>(), null, 0, alone);
+            }
+
             return;
         }
 
@@ -391,7 +463,9 @@ public final class NavigationWandController
         }
 
         modified.add(new StructureWand.Hint(UIKeys.STRUCTURE_WAND_SAVE.get(), Colors.WHITE, StructureWand.Glyph.ALT, StructureWand.Glyph.RMB));
-        modified.add(new StructureWand.Hint(UIKeys.STRUCTURE_WAND_CLEAR.get(), Colors.WHITE, StructureWand.Glyph.ALT, StructureWand.Glyph.LMB));
+        modified.add(NavigationSelection.isEmpty()
+            ? new StructureWand.Hint(UIKeys.NAV_WAND_LABEL_DELETE.get(), 0xff7070, StructureWand.Glyph.ALT, StructureWand.Glyph.LMB)
+            : new StructureWand.Hint(UIKeys.STRUCTURE_WAND_CLEAR.get(), Colors.WHITE, StructureWand.Glyph.ALT, StructureWand.Glyph.LMB));
 
         if (box && face != null && NavigationSelection.isReady())
         {
@@ -415,7 +489,7 @@ public final class NavigationWandController
 
         status += "   ·   " + UIKeys.NAV_WAND_NETWORK_NODES.format(String.valueOf(sceneNodes())).get();
 
-        StructureWand.renderHints(batcher, plain, modified, status, box ? Colors.A100 | StructureWand.COLOR_A : Colors.A100 | PATH_COLOR);
+        StructureWand.renderHints(batcher, plain, modified, status, box ? Colors.A100 | StructureWand.COLOR_A : Colors.A100 | PATH_COLOR, notice());
     }
 
     private static final int PATH_COLOR = 0x4ade80;

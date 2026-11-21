@@ -23,6 +23,7 @@
     "key.bbs.item_editor": "Item Editor",
     "key.bbs.dashboard": "Dashboard",
     "key.bbs.free_cam": "World Free-Cam",
+    "key.bbs.navmesh_preview": "Toggle Navmesh Preview",
     "bbs.free_cam.on": "Free-Cam on - WASD to fly, wheel changes speed, press the key again to return",
     "bbs.free_cam.off": "Free-Cam off",
     "key.bbs.demorph": "Demorph",

@@ -102,26 +102,63 @@ public final class NavigationNetworks
     /** Writes the network where {@link #get} reads it from: the film when one is open, else the world's file */
     public static void save(Film film, NavigationNetwork network)
     {
-        String text = network.toText();
-
         if (film != null)
         {
-            film.navigation.set(text);
+            film.navigation.set(network.toText());
 
             return;
         }
 
+        writeWorld(network);
+    }
+
+    private static void writeWorld(NavigationNetwork network)
+    {
         try
         {
             File file = file();
 
             file.getParentFile().mkdirs();
-            Files.write(file.toPath(), text.getBytes(StandardCharsets.UTF_8));
+            Files.write(file.toPath(), network.toText().getBytes(StandardCharsets.UTF_8));
         }
         catch (Exception e)
         {
             e.printStackTrace();
         }
+    }
+
+    /**
+     * Changes what is saved, the same way in the film open in the editor and in the world's file, so
+     * the two never tell different stories; then everything made of them is thrown away - the meshes,
+     * the walks of the film's AI and the live walks of the model blocks - and made again from the new
+     * network at once, each actor with a fresh blackboard.
+     */
+    public static void update(java.util.function.Consumer<NavigationNetwork> change)
+    {
+        Film film = activeFilm();
+
+        if (film != null)
+        {
+            NavigationNetwork network = NavigationNetwork.fromText(film.navigation.get());
+
+            change.accept(network);
+            film.navigation.set(network.toText());
+        }
+
+        NavigationNetwork world = NavigationNetwork.fromText(readWorld());
+
+        change.accept(world);
+        writeWorld(world);
+
+        invalidate();
+        AiSimulation.invalidate();
+        ModelBlockAi.reset();
+    }
+
+    /** Everything saved for the scene, every source joined: what the wand shows and what the AI walks on */
+    public static NavigationNetwork sceneNetwork(Film film)
+    {
+        return NavigationNetwork.fromText(sceneText(film));
     }
 
     /* Meshes */
