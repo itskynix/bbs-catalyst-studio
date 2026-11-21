@@ -73,18 +73,16 @@ public final class ModelBlockAi
             return;
         }
 
-        AiSimulation.Volume volume = AiSimulation.findVolume(film());
+        NavGrid grid = AiSimulation.sceneGrid(film());
 
-        if (volume == null)
+        if (grid == null)
         {
             LIVE.remove(block);
 
             return;
         }
 
-        NavGrid grid = NavGrids.get(volume.form(), volume.x(), volume.y(), volume.z());
-
-        if (grid == null || grid.getNodes().isEmpty())
+        if (grid.getNodes().isEmpty())
         {
             return;
         }

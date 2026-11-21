@@ -183,6 +183,22 @@ public final class AiSimulation
         return null;
     }
 
+    /**
+     * The mesh an AI actor of the film walks on: the navigation volume's, when there is one, joined
+     * with what the navigation wand left in the scene. Null when there is nothing to walk on.
+     */
+    public static NavGrid sceneGrid(Film film)
+    {
+        return sceneGrid(film, findVolume(film));
+    }
+
+    private static NavGrid sceneGrid(Film film, Volume volume)
+    {
+        NavGrid grid = volume == null ? null : NavGrids.get(volume.form(), volume.x(), volume.y(), volume.z());
+
+        return NavigationNetworks.scene(film, grid);
+    }
+
     private static Volume lastBlockVolume;
     private static long lastBlockVolumeTime;
 
@@ -206,17 +222,19 @@ public final class AiSimulation
         }
 
         Volume volume = findVolume(film);
-
-        if (volume == null)
-        {
-            return null;
-        }
-
-        NavGrid grid = NavGrids.get(volume.form(), volume.x(), volume.y(), volume.z());
+        NavGrid grid = sceneGrid(film, volume);
 
         if (grid == null || grid.getNodes().isEmpty())
         {
             return null;
+        }
+
+        /* Without a volume the actors that have no place of their own start on the first floor of the mesh */
+        if (volume == null)
+        {
+            NavGrid.Node first = grid.getNodes().get(0);
+
+            volume = new Volume(null, first.centerX(), first.y, first.centerZ());
         }
 
         int ticks = Math.max(MIN_TICKS, Math.min(MAX_TICKS, film.calculateDuration() + 20));
@@ -314,6 +332,15 @@ public final class AiSimulation
         double watchZ;
         int followTimer;
         int tick;
+
+        /* What it knows and is doing, for the decisions of a walk of its own (see AiDecisionEngine) */
+        final AiBlackboard bb = new AiBlackboard();
+
+        /** How far above the floor a hop has it */
+        double hop;
+
+        /** Whether its path is one it is making up a node at a time, so that arriving at the end is not the end */
+        boolean wandering;
     }
 
     /** The camera of the film on every tick: x, y, z of where it is, or null when it has no clips */
@@ -544,7 +571,7 @@ public final class AiSimulation
                 step(agent, agents, grid);
 
                 agent.track.x[tick] = (float) agent.x;
-                agent.track.y[tick] = (float) agent.y;
+                agent.track.y[tick] = (float) (agent.y + agent.hop);
                 agent.track.z[tick] = (float) agent.z;
                 agent.track.yaw[tick] = agent.yaw;
                 agent.track.headYaw[tick] = agent.head;
@@ -562,6 +589,8 @@ public final class AiSimulation
         double dirX = 0D;
         double dirZ = 0D;
 
+        AiDecisionEngine.tick(agent);
+
         if (agent.target != null)
         {
             plan(agent, grid);
@@ -577,24 +606,32 @@ public final class AiSimulation
             if (distance < 0.12D)
             {
                 agent.next += 1;
+                AiDecisionEngine.reached(agent, target);
                 agent.y = agent.y + (target.y - agent.y) * 0.5D;
+
+                /* At the end of a path it is making up as it goes, it decides what next: stop, or another node on */
+                if (agent.wandering && agent.next >= agent.path.size() && agent.target == null)
+                {
+                    AiDecisionEngine.arrive(agent, grid, target);
+                }
             }
             else
             {
                 dirX = dx / distance;
                 dirZ = dz / distance;
-                wanted = replay.aiSpeed.get();
+                wanted = replay.aiSpeed.get() * AiDecisionEngine.speedFactor(agent);
 
-                /* Slow down for the last block of the way */
-                if (agent.next == agent.path.size() - 1)
+                /* Slow down for the last block of the way: not on a way it is making up as it goes */
+                if (agent.next == agent.path.size() - 1 && !agent.wandering)
                 {
                     wanted *= (float) Math.max(0.25D, Math.min(1D, distance));
                 }
             }
 
-            if (agent.next >= agent.path.size())
+            if (agent.path != null && agent.next >= agent.path.size())
             {
                 agent.moving = false;
+                agent.wandering = false;
                 agent.path = null;
                 float min = Math.min(replay.aiIdleMin.get(), replay.aiIdleMax.get());
                 float max = Math.max(replay.aiIdleMin.get(), replay.aiIdleMax.get());
@@ -612,7 +649,7 @@ public final class AiSimulation
         }
         else
         {
-            choose(agent, grid);
+            AiDecisionEngine.choose(agent, grid);
         }
 
         agent.speed += Math.max(-ACCELERATION * DT, Math.min(ACCELERATION * DT, wanted - agent.speed));
@@ -749,6 +786,13 @@ public final class AiSimulation
             agent.lookHold = 0;
             agent.lookTimer = 50 + agent.random.nextInt(71);
         }
+        else if (agent.bb.activeAction == AiBlackboard.Action.IDLE_LOOK || agent.bb.activeAction == AiBlackboard.Action.HESITATE_TURN_BACK)
+        {
+            /* A pause of its own accord: looking where the decision put its head */
+            headGoal = agent.yaw + agent.bb.lookYawOffset;
+            pitchGoal = agent.bb.lookPitchOffset;
+            agent.lookHold = 0;
+        }
         else
         {
             /* Standing: ahead, with a glance aside now and then */
@@ -879,39 +923,13 @@ public final class AiSimulation
         agent.path = path;
         agent.next = 1;
         agent.moving = true;
+        agent.wandering = false;
         agent.goalX = at[0];
         agent.goalZ = at[2];
-    }
 
-    /** Picks somewhere to go that can be reached, or waits a little and tries again */
-    static void choose(Agent agent, NavGrid grid)
-    {
-        NavGrid.Node here = grid.nearest(agent.x, agent.y, agent.z);
-
-        for (int attempt = 0; attempt < 6; attempt++)
-        {
-            NavGrid.Node goal = grid.random(agent.random);
-
-            if (goal == null || goal == here || Math.hypot(goal.x - agent.x, goal.z - agent.z) < 2D)
-            {
-                continue;
-            }
-
-            List<NavGrid.Node> path = grid.path(here, goal);
-
-            if (path != null && path.size() > 1)
-            {
-                agent.path = path;
-                agent.next = 1;
-                agent.moving = true;
-                agent.goalX = goal.centerX();
-                agent.goalZ = goal.centerZ();
-
-                return;
-            }
-        }
-
-        agent.idle = 20;
+        /* From afar it runs, near it walks */
+        agent.bb.running = Math.hypot(at[0] - agent.x, at[2] - agent.z) > 8D;
+        agent.bb.runTimer = 40;
     }
 
     private static float wrap(float degrees)

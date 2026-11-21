@@ -163,6 +163,118 @@ public final class NavGrid
         return grid;
     }
 
+    /** Whether an agent of the given height can stand on the block at the position: the floor is its top, or NaN when it cannot */
+    public static double standable(World world, int x, int y, int z, float height)
+    {
+        return floorAt(world, new BlockPos.Mutable(), x, y, z, height);
+    }
+
+    /**
+     * A mesh of only the blocks given - the painted path of the navigation wand. A block that cannot
+     * be stood on is left out. The blocks join where they are in neighbouring columns and no further
+     * apart in height than a step, so a painted line is a path, and where lines meet there is a junction.
+     */
+    public static NavGrid buildFromBlocks(World world, java.util.Collection<BlockPos> blocks, float height, float maxStep)
+    {
+        int minX = Integer.MAX_VALUE;
+        int minY = Integer.MAX_VALUE;
+        int minZ = Integer.MAX_VALUE;
+        int maxX = Integer.MIN_VALUE;
+        int maxY = Integer.MIN_VALUE;
+        int maxZ = Integer.MIN_VALUE;
+
+        for (BlockPos pos : blocks)
+        {
+            minX = Math.min(minX, pos.getX());
+            minY = Math.min(minY, pos.getY());
+            minZ = Math.min(minZ, pos.getZ());
+            maxX = Math.max(maxX, pos.getX());
+            maxY = Math.max(maxY, pos.getY());
+            maxZ = Math.max(maxZ, pos.getZ());
+        }
+
+        if (blocks.isEmpty())
+        {
+            minX = minY = minZ = 0;
+            maxX = maxY = maxZ = -1;
+        }
+
+        NavGrid grid = new NavGrid(minX, minY, minZ, maxX - minX + 1, maxY - minY + 1, maxZ - minZ + 1, maxStep);
+        BlockPos.Mutable pos = new BlockPos.Mutable();
+
+        for (BlockPos block : blocks)
+        {
+            double floor = floorAt(world, pos, block.getX(), block.getY(), block.getZ(), height);
+
+            if (!Double.isNaN(floor))
+            {
+                grid.columns.computeIfAbsent(key(block.getX(), block.getZ()), (k) -> new ArrayList<>(1)).add(new Node(block.getX(), block.getZ(), floor));
+            }
+        }
+
+        grid.refresh();
+
+        return grid;
+    }
+
+    /** One mesh out of several: all their floors, a floor two of them share only once */
+    public static NavGrid merge(List<NavGrid> grids)
+    {
+        int minX = Integer.MAX_VALUE;
+        int minY = Integer.MAX_VALUE;
+        int minZ = Integer.MAX_VALUE;
+        int maxX = Integer.MIN_VALUE;
+        int maxY = Integer.MIN_VALUE;
+        int maxZ = Integer.MIN_VALUE;
+        float step = 0F;
+
+        for (NavGrid grid : grids)
+        {
+            if (grid.nodes.isEmpty())
+            {
+                continue;
+            }
+
+            minX = Math.min(minX, grid.minX);
+            minY = Math.min(minY, grid.minY);
+            minZ = Math.min(minZ, grid.minZ);
+            maxX = Math.max(maxX, grid.minX + grid.sizeX);
+            maxY = Math.max(maxY, grid.minY + grid.sizeY);
+            maxZ = Math.max(maxZ, grid.minZ + grid.sizeZ);
+            step = Math.max(step, grid.maxStep);
+        }
+
+        if (minX == Integer.MAX_VALUE)
+        {
+            return new NavGrid(0, 0, 0, 0, 0, 0, 1F);
+        }
+
+        NavGrid merged = new NavGrid(minX, minY, minZ, maxX - minX, maxY - minY, maxZ - minZ, step);
+
+        for (NavGrid grid : grids)
+        {
+            for (Node node : grid.nodes)
+            {
+                List<Node> column = merged.columns.computeIfAbsent(key(node.x, node.z), (k) -> new ArrayList<>(1));
+                boolean have = false;
+
+                for (Node other : column)
+                {
+                    have |= Math.abs(other.y - node.y) < 0.01D;
+                }
+
+                if (!have)
+                {
+                    column.add(new Node(node.x, node.z, node.y));
+                }
+            }
+        }
+
+        merged.refresh();
+
+        return merged;
+    }
+
     /**
      * The height of the floor the block at ({@code x}, {@code y}, {@code z}) is, or NaN when it is not
      * one an agent of {@code height} can stand on.

@@ -481,14 +481,7 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
     /** The navigation mesh of the film's volume, or of one on a model block of the world; null when there is none */
     private NavGrid findNavGrid(Film film)
     {
-        AiSimulation.Volume volume = AiSimulation.findVolume(film);
-
-        if (volume == null)
-        {
-            return null;
-        }
-
-        NavGrid grid = NavGrids.get(volume.form(), volume.x(), volume.y(), volume.z());
+        NavGrid grid = AiSimulation.sceneGrid(film);
 
         return grid == null || grid.getNodes().isEmpty() ? null : grid;
     }

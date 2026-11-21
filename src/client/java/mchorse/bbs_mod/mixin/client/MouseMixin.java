@@ -86,7 +86,7 @@ public class MouseMixin
     @Inject(method = "onMouseScroll", at = @At("HEAD"), cancellable = true)
     public void wandScroll(long window, double horizontal, double vertical, CallbackInfo ci)
     {
-        if (window == Window.getWindow() && StructureWand.onScroll(vertical))
+        if (window == Window.getWindow() && (StructureWand.onScroll(vertical) || mchorse.bbs_mod.nav.NavigationWandController.onScroll(vertical)))
         {
             ci.cancel();
         }

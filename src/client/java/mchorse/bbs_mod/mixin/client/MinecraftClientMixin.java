@@ -60,7 +60,7 @@ public class MinecraftClientMixin
     @Inject(method = "doAttack", at = @At("HEAD"), cancellable = true)
     public void wandAttack(CallbackInfoReturnable<Boolean> cir)
     {
-        if (StructureWand.onAttack())
+        if (StructureWand.onAttack() || mchorse.bbs_mod.nav.NavigationWandController.onAttack())
         {
             cir.setReturnValue(false);
         }
@@ -69,7 +69,7 @@ public class MinecraftClientMixin
     @Inject(method = "doItemUse", at = @At("HEAD"), cancellable = true)
     public void wandUse(CallbackInfo ci)
     {
-        if (StructureWand.onUse())
+        if (StructureWand.onUse() || mchorse.bbs_mod.nav.NavigationWandController.onUse())
         {
             ci.cancel();
         }

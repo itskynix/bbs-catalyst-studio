@@ -1,0 +1,374 @@
+package mchorse.bbs_mod.nav;
+
+import com.mojang.blaze3d.systems.RenderSystem;
+import mchorse.bbs_mod.BBSSettings;
+import mchorse.bbs_mod.graphics.Draw;
+import mchorse.bbs_mod.utils.Bufs;
+import mchorse.bbs_mod.utils.colors.Color;
+import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.render.BufferBuilder;
+import net.minecraft.client.render.GameRenderer;
+import net.minecraft.client.render.VertexFormat;
+import net.minecraft.client.render.VertexFormats;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.client.world.ClientWorld;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
+import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.Vec3d;
+import net.minecraft.util.shape.VoxelShape;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.ArrayList;
+
+/**
+ * What the navigation wand shows in the world while it is held, half see-through and over
+ * everything: the box being selected with the face the wheel would push, the boxes already saved,
+ * the blocks of the path as flat markers with a line to each neighbour they join to - and a bigger
+ * marker where three or more ways meet, which is where an actor will have a choice to make.
+ */
+public final class NavigationWandRenderer
+{
+    private static final float[] PAINT = {0.22F, 0.82F, 1F};
+    private static final float[] SAVED = {0.29F, 0.87F, 0.5F};
+
+    private static final float FACE_HOVER = 0.28F;
+    private static final double RANGE = 96D;
+
+    /** The saved network, read now and then and not every frame */
+    private static NavigationNetwork saved = new NavigationNetwork();
+    private static long refreshed = Long.MIN_VALUE;
+
+    private static final Color COLOR = new Color();
+
+    private NavigationWandRenderer()
+    {}
+
+    /** Reads the saved network again at the next frame, after it changed */
+    public static void refresh()
+    {
+        refreshed = Long.MIN_VALUE;
+    }
+
+    private static NavigationNetwork saved()
+    {
+        long now = System.currentTimeMillis();
+
+        if (now - refreshed > 750L)
+        {
+            saved = NavigationNetworks.get(NavigationNetworks.activeFilm());
+            refreshed = now;
+        }
+
+        return saved;
+    }
+
+    public static void renderWorld(WorldRenderContext context)
+    {
+        MinecraftClient mc = MinecraftClient.getInstance();
+
+        if (mc.player == null || mc.world == null || !NavigationWandController.isHolding(mc.player))
+        {
+            NavigationWandController.setView(null, null);
+
+            return;
+        }
+
+        float tickDelta = context./*$ wtd*/tickDelta()/**/;
+        Vec3d camera = context.camera().getPos();
+        Box box = NavigationSelection.getBox();
+        boolean boxMode = NavigationWandController.getMode() == NavigationWandController.Mode.BOX;
+        BlockPos pick = boxMode ? NavigationWandController.pickBox(mc) : NavigationWandController.pickBlock(mc);
+        Direction face = box == null || !boxMode ? null : findFace(mc.player.getCameraPosVec(tickDelta), mc.player.getRotationVec(tickDelta), box);
+
+        NavigationWandController.setView(face, pick);
+
+        MatrixStack stack = context.matrixStack();
+        NavigationNetwork network = saved();
+
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.disableDepthTest();
+        RenderSystem.disableCull();
+
+        for (NavigationNetwork.Box saved : network.boxes)
+        {
+            stack.push();
+            stack.translate(saved.x() - camera.x, saved.y() - camera.y, saved.z() - camera.z);
+            Draw.renderBox(stack, 0, 0, 0, saved.sx(), saved.sy(), saved.sz(), SAVED[0], SAVED[1], SAVED[2], 0.55F);
+            stack.pop();
+        }
+
+        if (box != null)
+        {
+            renderSelection(stack, camera, box, face);
+        }
+
+        BlockPos a = NavigationSelection.getA();
+        BlockPos b = NavigationSelection.getB();
+
+        if (a != null)
+        {
+            renderBlock(stack, camera, a, 0.31F, 0.71F, 1F, 0.3F);
+        }
+
+        if (b != null)
+        {
+            renderBlock(stack, camera, b, 1F, 0.69F, 0.29F, 0.3F);
+        }
+
+        renderPath(mc.world, stack, camera, network.path, SAVED, 0.75F);
+        renderPath(mc.world, stack, camera, NavigationSelection.getPath(), PAINT, 1F);
+
+        if (pick != null && !pick.equals(a) && !pick.equals(b))
+        {
+            stack.push();
+            stack.translate(pick.getX() - camera.x, pick.getY() - camera.y, pick.getZ() - camera.z);
+            Draw.renderBox(stack, 0, 0, 0, 1, 1, 1, 1F, 1F, 1F, 0.35F);
+            stack.pop();
+        }
+
+        RenderSystem.enableCull();
+        RenderSystem.enableDepthTest();
+        RenderSystem.disableBlend();
+    }
+
+    private static void renderSelection(MatrixStack stack, Vec3d camera, Box box, Direction face)
+    {
+        float w = (float) (box.maxX - box.minX);
+        float h = (float) (box.maxY - box.minY);
+        float d = (float) (box.maxZ - box.minZ);
+
+        COLOR.set(BBSSettings.primaryColor.get());
+
+        stack.push();
+        stack.translate(box.minX - camera.x, box.minY - camera.y, box.minZ - camera.z);
+
+        if (face != null)
+        {
+            RenderSystem.setShader(GameRenderer::getPositionColorProgram);
+
+            BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+
+            fillFace(builder, stack, face, w, h, d, COLOR.r, COLOR.g, COLOR.b, FACE_HOVER);
+            Bufs.draw(builder);
+        }
+
+        Draw.renderBox(stack, 0, 0, 0, w, h, d, COLOR.r, COLOR.g, COLOR.b, 1F);
+
+        if (face != null)
+        {
+            boolean positive = face.getDirection() == Direction.AxisDirection.POSITIVE;
+            Direction.Axis axis = face.getAxis();
+            float x = axis == Direction.Axis.X && positive ? w : 0;
+            float y = axis == Direction.Axis.Y && positive ? h : 0;
+            float z = axis == Direction.Axis.Z && positive ? d : 0;
+
+            Draw.renderBox(stack, x, y, z, axis == Direction.Axis.X ? 0 : w, axis == Direction.Axis.Y ? 0 : h, axis == Direction.Axis.Z ? 0 : d, 1F, 1F, 1F, 0.9F);
+        }
+
+        stack.pop();
+    }
+
+    private static void fillFace(BufferBuilder builder, MatrixStack stack, Direction side, float w, float h, float d, float r, float g, float b, float a)
+    {
+        switch (side)
+        {
+            case WEST -> Draw.fillQuad(builder, stack, 0, 0, 0, 0, 0, d, 0, h, d, 0, h, 0, r, g, b, a);
+            case EAST -> Draw.fillQuad(builder, stack, w, 0, 0, w, 0, d, w, h, d, w, h, 0, r, g, b, a);
+            case DOWN -> Draw.fillQuad(builder, stack, 0, 0, 0, w, 0, 0, w, 0, d, 0, 0, d, r, g, b, a);
+            case UP -> Draw.fillQuad(builder, stack, 0, h, 0, w, h, 0, w, h, d, 0, h, d, r, g, b, a);
+            case NORTH -> Draw.fillQuad(builder, stack, 0, 0, 0, w, 0, 0, w, h, 0, 0, h, 0, r, g, b, a);
+            case SOUTH -> Draw.fillQuad(builder, stack, 0, 0, d, w, 0, d, w, h, d, 0, h, d, r, g, b, a);
+        }
+    }
+
+    private static void renderBlock(MatrixStack stack, Vec3d camera, BlockPos pos, float r, float g, float b, float fill)
+    {
+        stack.push();
+        stack.translate(pos.getX() - camera.x, pos.getY() - camera.y, pos.getZ() - camera.z);
+
+        RenderSystem.setShader(GameRenderer::getPositionColorProgram);
+
+        BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+
+        Draw.fillBox(builder, stack, 0, 0, 0, 1, 1, 1, r, g, b, fill);
+        Bufs.draw(builder);
+        Draw.renderBox(stack, 0, 0, 0, 1, 1, 1, r, g, b, 1F);
+        stack.pop();
+    }
+
+    /** The ray's first face of a box, or the one it leaves by from inside it; null when it misses */
+    private static Direction findFace(Vec3d origin, Vec3d direction, Box box)
+    {
+        double tNear = Double.NEGATIVE_INFINITY;
+        double tFar = Double.POSITIVE_INFINITY;
+        Direction near = null;
+        Direction far = null;
+
+        for (Direction.Axis axis : Direction.Axis.values())
+        {
+            double o = origin.getComponentAlongAxis(axis);
+            double d = direction.getComponentAlongAxis(axis);
+            double lo = box.getMin(axis);
+            double hi = box.getMax(axis);
+
+            if (Math.abs(d) < 1E-9)
+            {
+                if (o < lo || o > hi)
+                {
+                    return null;
+                }
+
+                continue;
+            }
+
+            double tLo = (lo - o) / d;
+            double tHi = (hi - o) / d;
+            Direction loFace = Direction.from(axis, Direction.AxisDirection.NEGATIVE);
+            Direction hiFace = Direction.from(axis, Direction.AxisDirection.POSITIVE);
+            double tEnter = Math.min(tLo, tHi);
+            double tExit = Math.max(tLo, tHi);
+
+            if (tEnter > tNear)
+            {
+                tNear = tEnter;
+                near = tLo < tHi ? loFace : hiFace;
+            }
+
+            if (tExit < tFar)
+            {
+                tFar = tExit;
+                far = tLo < tHi ? hiFace : loFace;
+            }
+        }
+
+        if (tNear > tFar || tFar < 0)
+        {
+            return null;
+        }
+
+        return tNear > 0 ? near : far;
+    }
+
+    /** A block of a path: where the walk is, the height of its floor and the middle of its column */
+    private record Spot(BlockPos pos, double y)
+    {
+        double x()
+        {
+            return this.pos.getX() + 0.5D;
+        }
+
+        double z()
+        {
+            return this.pos.getZ() + 0.5D;
+        }
+    }
+
+    /**
+     * The blocks of a path as flat markers, and a line from each to the neighbours it joins: those in
+     * a neighbouring column no more than a step higher or lower. A block with three or more neighbours is
+     * a junction and gets a bigger marker.
+     */
+    private static void renderPath(ClientWorld world, MatrixStack stack, Vec3d camera, Set<BlockPos> blocks, float[] color, float alpha)
+    {
+        if (blocks.isEmpty())
+        {
+            return;
+        }
+
+        List<Spot> spots = new ArrayList<>();
+        Map<Long, List<Spot>> columns = new HashMap<>();
+
+        for (BlockPos pos : blocks)
+        {
+            if (pos.getSquaredDistance(camera.x, camera.y, camera.z) > RANGE * RANGE)
+            {
+                continue;
+            }
+
+            VoxelShape shape = world.getBlockState(pos).getCollisionShape(world, pos);
+            Spot spot = new Spot(pos, pos.getY() + (shape.isEmpty() ? 1D : shape.getMax(Direction.Axis.Y)));
+
+            spots.add(spot);
+            columns.computeIfAbsent(((long) pos.getX() << 32) ^ (pos.getZ() & 0xffffffffL), (k) -> new ArrayList<>()).add(spot);
+        }
+
+        Set<Spot> junctions = new HashSet<>();
+        List<Spot[]> links = new ArrayList<>();
+
+        for (Spot spot : spots)
+        {
+            int count = 0;
+
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                for (int dz = -1; dz <= 1; dz++)
+                {
+                    if (dx == 0 && dz == 0)
+                    {
+                        continue;
+                    }
+
+                    List<Spot> column = columns.get(((long) (spot.pos().getX() + dx) << 32) ^ ((spot.pos().getZ() + dz) & 0xffffffffL));
+
+                    if (column == null)
+                    {
+                        continue;
+                    }
+
+                    for (Spot other : column)
+                    {
+                        if (Math.abs(other.y() - spot.y()) <= 1.0001D)
+                        {
+                            count++;
+
+                            /* each pair once */
+                            if (dx > 0 || (dx == 0 && dz > 0))
+                            {
+                                links.add(new Spot[] {spot, other});
+                            }
+
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (count >= 3)
+            {
+                junctions.add(spot);
+            }
+        }
+
+        stack.push();
+        stack.translate(-camera.x, -camera.y, -camera.z);
+
+        RenderSystem.setShader(GameRenderer::getPositionColorProgram);
+
+        BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+
+        for (Spot[] link : links)
+        {
+            Draw.fillBoxTo(builder, stack, (float) link[0].x(), (float) link[0].y() + 0.08F, (float) link[0].z(), (float) link[1].x(), (float) link[1].y() + 0.08F, (float) link[1].z(), 0.07F, color[0], color[1], color[2], alpha * 0.8F);
+        }
+
+        for (Spot spot : spots)
+        {
+            float half = junctions.contains(spot) ? 0.3F : 0.17F;
+            float r = junctions.contains(spot) ? 1F : color[0];
+            float g = junctions.contains(spot) ? 0.85F : color[1];
+            float b = junctions.contains(spot) ? 0.3F : color[2];
+
+            Draw.fillBox(builder, stack, (float) spot.x() - half, (float) spot.y() + 0.02F, (float) spot.z() - half, (float) spot.x() + half, (float) spot.y() + 0.09F, (float) spot.z() + half, r, g, b, alpha * 0.85F);
+        }
+
+        Bufs.draw(builder);
+        stack.pop();
+    }
+}

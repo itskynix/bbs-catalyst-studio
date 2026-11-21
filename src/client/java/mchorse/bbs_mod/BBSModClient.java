@@ -748,6 +748,7 @@ public class BBSModClient implements ClientModInitializer
         keyZoom = this.createKeyMouse("zoom", 2);
 
         StructureWand.register();
+        mchorse.bbs_mod.nav.NavigationWandController.register();
         mchorse.bbs_mod.physics.InWorldPhysicsTool.register();
         mchorse.bbs_mod.film.OpenableAnimator.register();
         mchorse.bbs_mod.film.LocomotionSmoother.register();
@@ -772,6 +773,7 @@ public class BBSModClient implements ClientModInitializer
         WorldRenderEvents.AFTER_ENTITIES.register((context) ->
         {
             StructureWand.renderWorld(context);
+            mchorse.bbs_mod.nav.NavigationWandRenderer.renderWorld(context);
             mchorse.bbs_mod.physics.InWorldPhysicsTool.renderWorld(context);
 
             if (!BBSRendering.isIrisShadersEnabled())
