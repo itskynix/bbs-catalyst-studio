@@ -42,7 +42,7 @@ public final class NavigationWandRenderer
 
     /** The saved network, read now and then and not every frame */
     private static NavigationNetwork saved = new NavigationNetwork();
-    private static long refreshed = Long.MIN_VALUE;
+    private static long refreshed = 0L;
 
     private static final Color COLOR = new Color();
 
@@ -52,7 +52,7 @@ public final class NavigationWandRenderer
     /** Reads the saved network again at the next frame, after it changed */
     public static void refresh()
     {
-        refreshed = Long.MIN_VALUE;
+        refreshed = 0L;
     }
 
     private static NavigationNetwork saved()

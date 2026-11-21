@@ -31,7 +31,7 @@ public final class NavigationNetworks
     private static class Entry
     {
         String text = "";
-        long scanned = Long.MIN_VALUE;
+        long scanned = 0L;
         NavGrid grid;
     }
 
@@ -231,7 +231,7 @@ public final class NavigationNetworks
     }
 
     private static String cachedWorldText = "";
-    private static long cachedWorldRead = Long.MIN_VALUE;
+    private static long cachedWorldRead = 0L;
 
     /** The world's file is read once in a while, not every frame */
     private static String readWorldCached()
@@ -250,7 +250,7 @@ public final class NavigationNetworks
     /** Makes the next read of the world's file a fresh one, after it was written */
     public static void invalidate()
     {
-        cachedWorldRead = Long.MIN_VALUE;
+        cachedWorldRead = 0L;
         MESHES.clear();
         lastScene = null;
     }

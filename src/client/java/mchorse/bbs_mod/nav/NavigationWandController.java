@@ -60,7 +60,7 @@ public final class NavigationWandController
 
     /** What just happened, shown on top of the hint for a moment */
     private static String notice = "";
-    private static long noticeTime = Long.MIN_VALUE;
+    private static long noticeTime = 0L;
     private static final long NOTICE_MILLIS = 2500L;
 
     /** The face of the box under the crosshair this frame: what the wheel acts on */
@@ -319,7 +319,7 @@ public final class NavigationWandController
 
         NavigationSelection.clear();
         NavigationWandRenderer.refresh();
-        nodesCounted = Long.MIN_VALUE;
+        nodesCounted = 0L;
         message(UIKeys.NAV_WAND_SAVED.format(String.valueOf(blocks), String.valueOf(box ? 1 : 0)).get());
     }
 
@@ -333,7 +333,7 @@ public final class NavigationWandController
         });
 
         NavigationWandRenderer.refresh();
-        nodesCounted = Long.MIN_VALUE;
+        nodesCounted = 0L;
         message(UIKeys.NAV_WAND_NETWORK_DELETED.get());
     }
 
@@ -495,7 +495,7 @@ public final class NavigationWandController
     private static final int PATH_COLOR = 0x4ade80;
 
     private static int nodes;
-    private static long nodesCounted = Long.MIN_VALUE;
+    private static long nodesCounted = 0L;
 
     /** How many floors the AI of the scene has to walk on, counted twice a second */
     private static int sceneNodes()
