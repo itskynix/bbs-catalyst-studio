@@ -2,10 +2,10 @@ package mchorse.bbs_mod.nav;
 
 import mchorse.bbs_mod.BBSMod;
 import mchorse.bbs_mod.film.Film;
+import mchorse.bbs_mod.forms.structure.StructureWand;
 import mchorse.bbs_mod.graphics.window.Window;
 import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D;
-import mchorse.bbs_mod.ui.framework.elements.utils.FontRenderer;
 import mchorse.bbs_mod.utils.ClientCompat;
 import mchorse.bbs_mod.utils.colors.Colors;
 import net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback;
@@ -354,9 +354,13 @@ public final class NavigationWandController
 
     /* HUD */
 
-    private static final int ROW = 11;
-
-    /** The hint above the hotbar: the mode, what is selected, and what the buttons do in this mode */
+    /**
+     * The hint above the hotbar, drawn the way the structure wand draws its own: the mode and what is
+     * selected on the status line, and below it the mouse buttons, the wheel and the key caps with what
+     * they do in the mode the wand is in, the bare gestures on the left and the ones with a key held on
+     * the right. The status line also says how many floors the AI of the scene has to walk on, so a
+     * saved box or path that gives none shows at once.
+     */
     public static void renderHud(Batcher2D batcher)
     {
         MinecraftClient mc = MinecraftClient.getInstance();
@@ -366,51 +370,72 @@ public final class NavigationWandController
             return;
         }
 
-        FontRenderer font = batcher.getFont();
-        String[] lines;
+        java.util.List<StructureWand.Hint> plain = new java.util.ArrayList<>();
+        java.util.List<StructureWand.Hint> modified = new java.util.ArrayList<>();
+        boolean box = mode == Mode.BOX;
 
-        if (mode == Mode.BOX)
+        if (box)
         {
-            lines = new String[] {
-                UIKeys.NAV_WAND_HINT_CORNER_A.get(),
-                UIKeys.NAV_WAND_HINT_CORNER_B.get(),
-                UIKeys.NAV_WAND_HINT_PUSH.get(),
-                UIKeys.NAV_WAND_HINT_SAVE.get(),
-                UIKeys.NAV_WAND_HINT_MODE.get()
-            };
+            plain.add(new StructureWand.Hint(UIKeys.STRUCTURE_WAND_CORNER_A.get(), StructureWand.COLOR_A, StructureWand.Glyph.LMB));
+            plain.add(new StructureWand.Hint(UIKeys.STRUCTURE_WAND_CORNER_B.get(), StructureWand.COLOR_B, StructureWand.Glyph.RMB));
+
+            if (face != null && NavigationSelection.isReady())
+            {
+                plain.add(new StructureWand.Hint(UIKeys.STRUCTURE_WAND_PUSH.get(), Colors.WHITE, StructureWand.Glyph.WHEEL));
+            }
         }
         else
         {
-            lines = new String[] {
-                UIKeys.NAV_WAND_HINT_PAINT.get(),
-                UIKeys.NAV_WAND_HINT_ERASE.get(),
-                UIKeys.NAV_WAND_HINT_SAVE.get(),
-                UIKeys.NAV_WAND_HINT_MODE.get()
-            };
+            plain.add(new StructureWand.Hint(UIKeys.NAV_WAND_LABEL_PAINT.get(), PATH_COLOR, StructureWand.Glyph.RMB));
+            plain.add(new StructureWand.Hint(UIKeys.NAV_WAND_LABEL_ERASE.get(), Colors.WHITE, StructureWand.Glyph.LMB));
         }
 
-        int width = mc.getWindow().getScaledWidth();
-        int height = mc.getWindow().getScaledHeight();
-        int y = height - 54 - lines.length * ROW;
+        modified.add(new StructureWand.Hint(UIKeys.STRUCTURE_WAND_SAVE.get(), Colors.WHITE, StructureWand.Glyph.ALT, StructureWand.Glyph.RMB));
+        modified.add(new StructureWand.Hint(UIKeys.STRUCTURE_WAND_CLEAR.get(), Colors.WHITE, StructureWand.Glyph.ALT, StructureWand.Glyph.LMB));
+
+        if (box && face != null && NavigationSelection.isReady())
+        {
+            modified.add(new StructureWand.Hint(UIKeys.STRUCTURE_WAND_MOVE.get(), Colors.WHITE, StructureWand.Glyph.ALT, StructureWand.Glyph.WHEEL));
+        }
+
+        modified.add(new StructureWand.Hint(UIKeys.NAV_WAND_LABEL_MODE.get(), Colors.LIGHTER_GRAY, StructureWand.Glyph.SHIFT, StructureWand.Glyph.WHEEL));
 
         String status = modeName(mode);
 
-        if (mode == Mode.BOX && NavigationSelection.isReady())
+        if (box && NavigationSelection.isReady())
         {
             Vec3i size = NavigationSelection.getSize();
 
             status += "   " + size.getX() + " × " + size.getY() + " × " + size.getZ();
         }
-        else if (mode == Mode.PATH)
+        else if (!box)
         {
             status += "   " + UIKeys.NAV_WAND_STATUS_BLOCKS.format(String.valueOf(NavigationSelection.getPath().size())).get();
         }
 
-        batcher.textShadow(status, (width - font.getWidth(status)) / 2F, y - 13, mode == Mode.BOX ? 0xff4fb4ff : 0xff4ade80);
+        status += "   ·   " + UIKeys.NAV_WAND_NETWORK_NODES.format(String.valueOf(sceneNodes())).get();
 
-        for (int i = 0; i < lines.length; i++)
+        StructureWand.renderHints(batcher, plain, modified, status, box ? Colors.A100 | StructureWand.COLOR_A : Colors.A100 | PATH_COLOR);
+    }
+
+    private static final int PATH_COLOR = 0x4ade80;
+
+    private static int nodes;
+    private static long nodesCounted = Long.MIN_VALUE;
+
+    /** How many floors the AI of the scene has to walk on, counted twice a second */
+    private static int sceneNodes()
+    {
+        long now = System.currentTimeMillis();
+
+        if (now - nodesCounted > 500L)
         {
-            batcher.textShadow(lines[i], (width - font.getWidth(lines[i])) / 2F, y + i * ROW, i == lines.length - 1 ? Colors.LIGHTER_GRAY : Colors.WHITE);
+            NavGrid grid = AiSimulation.sceneGrid(NavigationNetworks.activeFilm());
+
+            nodes = grid == null ? 0 : grid.getNodes().size();
+            nodesCounted = now;
         }
+
+        return nodes;
     }
 }

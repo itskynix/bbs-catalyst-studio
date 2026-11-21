@@ -482,7 +482,8 @@ public final class AiSimulation
             agent.z = node.centerZ();
             agent.yaw = replay.keyframes.yaw.isEmpty() ? 0F : (float) replay.keyframes.yaw.interpolate(0F, 0D).doubleValue();
             agent.head = agent.yaw;
-            agent.idle = 1 + agent.random.nextInt(20);
+            /* On its way within the first few ticks */
+            agent.idle = 1 + agent.random.nextInt(4);
             agents.add(agent);
             result.tracks.put(replay.getId(), agent.track);
         }

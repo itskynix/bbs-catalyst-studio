@@ -106,7 +106,7 @@ public final class ModelBlockAi
             agent.x = node.centerX();
             agent.y = node.y;
             agent.z = node.centerZ();
-            agent.idle = 1 + agent.random.nextInt(20);
+            agent.idle = 1 + agent.random.nextInt(4);
 
             live = new Live();
             live.agent = agent;

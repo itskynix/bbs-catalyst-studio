@@ -204,7 +204,18 @@ public final class NavGrid
 
         for (BlockPos block : blocks)
         {
+            /* The floor is the top of the painted block, where the feet are, not the block itself */
             double floor = floorAt(world, pos, block.getX(), block.getY(), block.getZ(), height);
+
+            if (Double.isNaN(floor))
+            {
+                /* Painted, so meant to be walked on: the top of what is there, or a whole block up */
+                pos.set(block.getX(), block.getY(), block.getZ());
+
+                net.minecraft.util.shape.VoxelShape shape = world.getBlockState(pos).getCollisionShape(world, pos);
+
+                floor = block.getY() + (shape.isEmpty() ? 1D : Math.min(1D, shape.getMax(Direction.Axis.Y)));
+            }
 
             if (!Double.isNaN(floor))
             {
@@ -506,7 +517,8 @@ public final class NavGrid
         {
             double d = Math.abs(node.y - y);
 
-            if (d <= this.maxStep + 0.5D && d < distance)
+            /* A wide reach up and down: a walker a little off its floor still finds it */
+            if (d <= Math.max(this.maxStep + 0.5D, 2.5D) && d < distance)
             {
                 best = node.y;
                 distance = d;

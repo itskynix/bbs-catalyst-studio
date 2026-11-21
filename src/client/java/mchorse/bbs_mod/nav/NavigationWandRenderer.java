@@ -256,24 +256,17 @@ public final class NavigationWandRenderer
         return tNear > 0 ? near : far;
     }
 
-    /** A block of a path: where the walk is, the height of its floor and the middle of its column */
-    private record Spot(BlockPos pos, double y)
-    {
-        double x()
-        {
-            return this.pos.getX() + 0.5D;
-        }
+    /** The height the marks of a path are drawn at over the block it is: just over its top face */
+    private static final double TOP = 1.03D;
 
-        double z()
-        {
-            return this.pos.getZ() + 0.5D;
-        }
-    }
+    /** The four ways a path joins: north, south, east, west */
+    private static final int[][] SIDES = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
 
     /**
-     * The blocks of a path as flat markers, and a line from each to the neighbours it joins: those in
-     * a neighbouring column no more than a step higher or lower. A block with three or more neighbours is
-     * a junction and gets a bigger marker.
+     * The blocks of a path as flat markers on their top face, and a line from each to the neighbours it
+     * joins in the four directions, a step up or down at most; drawn from the top middle of the one
+     * block, (x + 0.5, y + 1.03, z + 0.5), to the top middle of the other. A block that joins three
+     * ways or four is a junction and gets a bigger, yellow marker.
      */
     private static void renderPath(ClientWorld world, MatrixStack stack, Vec3d camera, Set<BlockPos> blocks, float[] color, float alpha)
     {
@@ -282,8 +275,8 @@ public final class NavigationWandRenderer
             return;
         }
 
-        List<Spot> spots = new ArrayList<>();
-        Map<Long, List<Spot>> columns = new HashMap<>();
+        List<BlockPos> shown = new ArrayList<>();
+        Map<Long, List<BlockPos>> columns = new HashMap<>();
 
         for (BlockPos pos : blocks)
         {
@@ -292,58 +285,8 @@ public final class NavigationWandRenderer
                 continue;
             }
 
-            VoxelShape shape = world.getBlockState(pos).getCollisionShape(world, pos);
-            Spot spot = new Spot(pos, pos.getY() + (shape.isEmpty() ? 1D : shape.getMax(Direction.Axis.Y)));
-
-            spots.add(spot);
-            columns.computeIfAbsent(((long) pos.getX() << 32) ^ (pos.getZ() & 0xffffffffL), (k) -> new ArrayList<>()).add(spot);
-        }
-
-        Set<Spot> junctions = new HashSet<>();
-        List<Spot[]> links = new ArrayList<>();
-
-        for (Spot spot : spots)
-        {
-            int count = 0;
-
-            for (int dx = -1; dx <= 1; dx++)
-            {
-                for (int dz = -1; dz <= 1; dz++)
-                {
-                    if (dx == 0 && dz == 0)
-                    {
-                        continue;
-                    }
-
-                    List<Spot> column = columns.get(((long) (spot.pos().getX() + dx) << 32) ^ ((spot.pos().getZ() + dz) & 0xffffffffL));
-
-                    if (column == null)
-                    {
-                        continue;
-                    }
-
-                    for (Spot other : column)
-                    {
-                        if (Math.abs(other.y() - spot.y()) <= 1.0001D)
-                        {
-                            count++;
-
-                            /* each pair once */
-                            if (dx > 0 || (dx == 0 && dz > 0))
-                            {
-                                links.add(new Spot[] {spot, other});
-                            }
-
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (count >= 3)
-            {
-                junctions.add(spot);
-            }
+            shown.add(pos);
+            columns.computeIfAbsent(column(pos.getX(), pos.getZ()), (k) -> new ArrayList<>()).add(pos);
         }
 
         stack.push();
@@ -353,22 +296,99 @@ public final class NavigationWandRenderer
 
         BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
 
-        for (Spot[] link : links)
+        for (BlockPos pos : shown)
         {
-            Draw.fillBoxTo(builder, stack, (float) link[0].x(), (float) link[0].y() + 0.08F, (float) link[0].z(), (float) link[1].x(), (float) link[1].y() + 0.08F, (float) link[1].z(), 0.07F, color[0], color[1], color[2], alpha * 0.8F);
-        }
+            int ways = 0;
 
-        for (Spot spot : spots)
-        {
-            float half = junctions.contains(spot) ? 0.3F : 0.17F;
-            float r = junctions.contains(spot) ? 1F : color[0];
-            float g = junctions.contains(spot) ? 0.85F : color[1];
-            float b = junctions.contains(spot) ? 0.3F : color[2];
+            for (int[] side : SIDES)
+            {
+                BlockPos other = joined(columns, pos, side[0], side[1]);
 
-            Draw.fillBox(builder, stack, (float) spot.x() - half, (float) spot.y() + 0.02F, (float) spot.z() - half, (float) spot.x() + half, (float) spot.y() + 0.09F, (float) spot.z() + half, r, g, b, alpha * 0.85F);
+                if (other == null)
+                {
+                    continue;
+                }
+
+                ways++;
+
+                /* each pair once: from the one to the east or south of the other */
+                if (side[0] > 0 || side[1] > 0)
+                {
+                    line(builder, stack, pos, other, color, alpha * 0.85F);
+                }
+            }
+
+            boolean junction = ways >= 3;
+            float half = junction ? 0.28F : 0.16F;
+            float x = pos.getX() + 0.5F;
+            float y = (float) (pos.getY() + TOP);
+            float z = pos.getZ() + 0.5F;
+
+            Draw.fillBox(builder, stack, x - half, y - 0.02F, z - half, x + half, y + 0.04F, z + half,
+                junction ? 1F : color[0], junction ? 0.85F : color[1], junction ? 0.3F : color[2], alpha * 0.9F);
         }
 
         Bufs.draw(builder);
         stack.pop();
+    }
+
+    private static long column(int x, int z)
+    {
+        return ((long) x << 32) ^ (z & 0xffffffffL);
+    }
+
+    /** The block of the path next to one the given way that it joins: in the next column, a block higher or lower at most */
+    private static BlockPos joined(Map<Long, List<BlockPos>> columns, BlockPos pos, int dx, int dz)
+    {
+        List<BlockPos> column = columns.get(column(pos.getX() + dx, pos.getZ() + dz));
+
+        if (column == null)
+        {
+            return null;
+        }
+
+        BlockPos best = null;
+
+        for (BlockPos other : column)
+        {
+            int dy = Math.abs(other.getY() - pos.getY());
+
+            if (dy <= 1 && (best == null || dy < Math.abs(best.getY() - pos.getY())))
+            {
+                best = other;
+            }
+        }
+
+        return best;
+    }
+
+    /**
+     * A line from the top middle of one block to the top middle of another, as two thin ribbons crossed
+     * along it - one lying flat, one standing - so it reads from above and from the side alike.
+     */
+    private static void line(BufferBuilder builder, MatrixStack stack, BlockPos from, BlockPos to, float[] color, float alpha)
+    {
+        float x1 = from.getX() + 0.5F;
+        float y1 = (float) (from.getY() + TOP);
+        float z1 = from.getZ() + 0.5F;
+        float x2 = to.getX() + 0.5F;
+        float y2 = (float) (to.getY() + TOP);
+        float z2 = to.getZ() + 0.5F;
+        float dx = x2 - x1;
+        float dz = z2 - z1;
+        float length = (float) Math.sqrt(dx * dx + dz * dz);
+
+        if (length < 1.0E-4F)
+        {
+            return;
+        }
+
+        /* Across the line, flat on the ground */
+        float px = -dz / length * 0.05F;
+        float pz = dx / length * 0.05F;
+        float h = 0.05F;
+
+        Draw.fillQuad(builder, stack, x1 + px, y1, z1 + pz, x2 + px, y2, z2 + pz, x2 - px, y2, z2 - pz, x1 - px, y1, z1 - pz, color[0], color[1], color[2], alpha);
+        Draw.fillQuad(builder, stack, x1, y1 - h, z1, x2, y2 - h, z2, x2, y2 + h, z2, x1, y1 + h, z1, color[0], color[1], color[2], alpha);
     }
 }

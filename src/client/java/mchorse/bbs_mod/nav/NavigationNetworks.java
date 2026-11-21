@@ -14,7 +14,6 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.WeakHashMap;
 
 /**
  * Where the navigation wand's boxes and paths live, and the mesh made of them.
@@ -36,8 +35,8 @@ public final class NavigationNetworks
         NavGrid grid;
     }
 
-    private static final Map<Film, Entry> FILMS = new WeakHashMap<>();
-    private static final Entry WORLD = new Entry();
+    /** The meshes made lately, by the text they were made of */
+    private static final Map<String, Entry> MESHES = new java.util.LinkedHashMap<>();
 
     /** The last mesh joined, and what it was joined from, so that asking again every frame costs nothing */
     private static NavGrid lastVolume;
@@ -127,7 +126,31 @@ public final class NavigationNetworks
 
     /* Meshes */
 
-    /** The mesh of the network of the film (or the world), or null when there is none */
+    /**
+     * Everything saved for the scene, as one text: what the given film holds (the one being played),
+     * what the film open in the editor holds when it is another, and what the world's file holds.
+     * A box or a path block saved in any of them is walked on in all, whichever one the wand wrote to.
+     */
+    private static String sceneText(Film film)
+    {
+        java.util.LinkedHashSet<String> lines = new java.util.LinkedHashSet<>();
+        Film editor = activeFilm();
+
+        for (String text : new String[] {film == null ? "" : film.navigation.get(), editor == null || editor == film ? "" : editor.navigation.get(), readWorldCached()})
+        {
+            for (String line : text.split("\n"))
+            {
+                if (!line.isBlank())
+                {
+                    lines.add(line.trim());
+                }
+            }
+        }
+
+        return String.join("\n", lines);
+    }
+
+    /** The mesh of what is saved for the scene, or null when there is none; made again when that changes, and every ten seconds for the blocks */
     public static NavGrid grid(Film film)
     {
         ClientWorld world = MinecraftClient.getInstance().world;
@@ -137,23 +160,33 @@ public final class NavigationNetworks
             return null;
         }
 
-        boolean fromFilm = film != null && !film.navigation.get().isEmpty();
-        String text = fromFilm ? film.navigation.get() : readWorldCached();
+        String text = sceneText(film);
 
         if (text.isEmpty())
         {
             return null;
         }
 
-        Entry entry = fromFilm ? FILMS.computeIfAbsent(film, (f) -> new Entry()) : WORLD;
+        Entry entry = MESHES.get(text);
         long now = world.getTime();
 
-        if (entry.grid != null && entry.text.equals(text) && now - entry.scanned < RESCAN_TICKS)
+        if (entry != null && entry.grid != null && now - entry.scanned < RESCAN_TICKS && now >= entry.scanned)
         {
             return entry.grid;
         }
 
-        entry.text = text;
+        if (entry == null)
+        {
+            entry = new Entry();
+            entry.text = text;
+            MESHES.put(text, entry);
+
+            while (MESHES.size() > 4)
+            {
+                MESHES.remove(MESHES.keySet().iterator().next());
+            }
+        }
+
         entry.scanned = now;
         entry.grid = build(world, NavigationNetwork.fromText(text));
 
@@ -181,7 +214,8 @@ public final class NavigationNetworks
     public static void invalidate()
     {
         cachedWorldRead = Long.MIN_VALUE;
-        WORLD.scanned = Long.MIN_VALUE;
+        MESHES.clear();
+        lastScene = null;
     }
 
     private static NavGrid build(ClientWorld world, NavigationNetwork network)

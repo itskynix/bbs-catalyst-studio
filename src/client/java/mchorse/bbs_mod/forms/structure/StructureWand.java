@@ -533,13 +533,14 @@ public class StructureWand
 
     /* HUD */
 
-    private enum Glyph
+    /** What a hint shows to press: a mouse button, the wheel, or a modifier key cap */
+    public enum Glyph
     {
-        LMB, RMB, WHEEL, ALT
+        LMB, RMB, WHEEL, ALT, SHIFT
     }
 
     /** One entry of the hint row: what to press, and what it does. */
-    private record Hint(String label, int color, Glyph... glyphs)
+    public record Hint(String label, int color, Glyph... glyphs)
     {
         private static final int JOIN = 9;
         private static final int AFTER = 5;
@@ -576,19 +577,24 @@ public class StructureWand
 
         private static int glyphWidth(FontRenderer font, Glyph glyph)
         {
-            return glyph == Glyph.ALT ? 16 + font.getWidth("Alt") : InputRenderer.MOUSE_WIDTH;
+            return glyph == Glyph.ALT || glyph == Glyph.SHIFT ? 16 + font.getWidth(keyName(glyph)) : InputRenderer.MOUSE_WIDTH;
+        }
+
+        private static String keyName(Glyph glyph)
+        {
+            return glyph == Glyph.SHIFT ? "Shift" : "Alt";
         }
 
         private static int renderGlyph(Batcher2D batcher, Glyph glyph, int x, int y)
         {
-            if (glyph == Glyph.ALT)
+            if (glyph == Glyph.ALT || glyph == Glyph.SHIFT)
             {
                 int width = glyphWidth(batcher.getFont(), glyph);
 
                 batcher.icon(Icons.KEY_CAP_LEFT, x, y);
                 batcher.iconArea(Icons.KEY_CAP_REPEATABLE, x + 4, y, width - 8, ROW);
                 batcher.icon(Icons.KEY_CAP_RIGHT, x + width, y, 1F, 0F);
-                batcher.text("Alt", x + 8, y + 5, Colors.A100);
+                batcher.text(keyName(glyph), x + 8, y + 5, Colors.A100);
 
                 return width;
             }
@@ -661,6 +667,43 @@ public class StructureWand
             if (i < alt.size())
             {
                 alt.get(i).render(batcher, x + leftWidth + COLUMN_GAP, y + i * ROW);
+            }
+        }
+    }
+
+    /**
+     * The hint block of a wand above the hotbar: a status line, then two columns of hints, the bare
+     * gestures on the left and the ones with a modifier on the right. For other wands to draw theirs
+     * the same way.
+     */
+    public static void renderHints(Batcher2D batcher, List<Hint> plain, List<Hint> modified, String status, int statusColor)
+    {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        FontRenderer font = batcher.getFont();
+        int leftWidth = columnWidth(font, plain);
+        int rightWidth = columnWidth(font, modified);
+        int total = leftWidth + (rightWidth == 0 ? 0 : COLUMN_GAP + rightWidth);
+        int rows = Math.max(plain.size(), modified.size());
+        int width = mc.getWindow().getScaledWidth();
+        int height = mc.getWindow().getScaledHeight();
+        int y = height - 54 - rows * ROW;
+        int x = (width - total) / 2;
+
+        if (status != null && !status.isEmpty())
+        {
+            batcher.textShadow(status, (width - font.getWidth(status)) / 2F, y - 13, statusColor);
+        }
+
+        for (int i = 0; i < rows; i++)
+        {
+            if (i < plain.size())
+            {
+                plain.get(i).render(batcher, x, y + i * ROW);
+            }
+
+            if (i < modified.size())
+            {
+                modified.get(i).render(batcher, x + leftWidth + COLUMN_GAP, y + i * ROW);
             }
         }
     }

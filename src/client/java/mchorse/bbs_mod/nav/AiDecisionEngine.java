@@ -219,6 +219,26 @@ final class AiDecisionEngine
 
             if (ahead.isEmpty())
             {
+                /* A floor with no neighbour: somewhere else of the mesh it can get to, the long way */
+                for (int attempt = 0; attempt < 6; attempt++)
+                {
+                    NavGrid.Node goal = grid.random(agent.random);
+                    List<NavGrid.Node> path = goal == null || goal == here ? null : grid.path(here, goal);
+
+                    if (path != null && path.size() > 1)
+                    {
+                        agent.path = path;
+                        agent.next = 1;
+                        agent.moving = true;
+                        agent.wandering = false;
+                        agent.goalX = goal.centerX();
+                        agent.goalZ = goal.centerZ();
+                        bb.currentGoalNode = goal;
+
+                        return;
+                    }
+                }
+
                 agent.idle = 40;
 
                 return;
