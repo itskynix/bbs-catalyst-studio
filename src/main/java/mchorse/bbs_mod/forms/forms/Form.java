@@ -126,6 +126,10 @@ public abstract class Form extends ValueGroup
     /** Another number is another walk */
     public final ValueInt aiSeed = new ValueInt("ai_seed", 0, 0, 9999);
     public final ValueBoolean aiAvoidance = new ValueBoolean("ai_avoidance", true);
+    /** Who it follows: empty walks about at random, 'camera' or the name of another actor of the film follows that one */
+    public final ValueString aiFollowTarget = new ValueString("ai_follow_target", "");
+    /** How near it comes to what it follows, in blocks */
+    public final ValueFloat aiFollowDistance = new ValueFloat("ai_follow_distance", 1.2F, 0F, 16F);
     /** Turn to face the way it moves */
     public final ValueBoolean orientToMovement = new ValueBoolean("orient_to_movement", true);
     /** Turn to face where it is heading for, the controller's wish, which wins over the way it moves */
@@ -271,7 +275,7 @@ public abstract class Form extends ValueGroup
         this.add(this.hotkey);
 
         for (BaseValue value : new BaseValue[] {this.interactiveOpenables, this.openableAngle, this.openableThreshold, this.holdOpenAngle, this.locomotionSmoothing, this.locomotionTime,
-            this.hasAi, this.aiIdleMin, this.aiIdleMax, this.aiSpeed, this.aiSeed, this.aiAvoidance, this.orientToMovement, this.useControllerDesiredRotation, this.rotationRate})
+            this.hasAi, this.aiIdleMin, this.aiIdleMax, this.aiSpeed, this.aiSeed, this.aiAvoidance, this.aiFollowTarget, this.aiFollowDistance, this.orientToMovement, this.useControllerDesiredRotation, this.rotationRate})
         {
             value.invisible();
             this.add(value);

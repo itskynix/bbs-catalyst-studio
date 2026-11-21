@@ -206,6 +206,8 @@ public class UIGeneralFormPanel extends UIFormPanel
             UI.labelRow(UIKeys.FILM_REPLAY_AI_SPEED, this.trackpad(() -> this.form.aiSpeed, 0.3D, 8D, false, UIKeys.FILM_REPLAY_AI_SPEED_TOOLTIP)),
             UI.labelRow(UIKeys.FILM_REPLAY_AI_SEED, this.trackpad(() -> this.form.aiSeed, 0D, 9999D, true, UIKeys.FILM_REPLAY_AI_SEED_TOOLTIP)),
             this.toggle(UIKeys.FILM_REPLAY_AI_AVOIDANCE, () -> this.form.aiAvoidance, UIKeys.FILM_REPLAY_AI_AVOIDANCE_TOOLTIP),
+            UI.labelRow(UIKeys.FILM_REPLAY_AI_FOLLOW_TARGET, UIValues.textbox(() -> this.form.aiFollowTarget).tooltip(UIKeys.FILM_REPLAY_AI_FOLLOW_TARGET_TOOLTIP)),
+            UI.labelRow(UIKeys.FILM_REPLAY_AI_FOLLOW_DISTANCE, this.trackpad(() -> this.form.aiFollowDistance, 0D, 16D, false, UIKeys.FILM_REPLAY_AI_FOLLOW_DISTANCE_TOOLTIP)),
             this.toggle(UIKeys.FILM_REPLAY_ORIENT_TO_MOVEMENT, () -> this.form.orientToMovement, UIKeys.FILM_REPLAY_ORIENT_TO_MOVEMENT_TOOLTIP),
             this.toggle(UIKeys.FILM_REPLAY_CONTROLLER_ROTATION, () -> this.form.useControllerDesiredRotation, UIKeys.FILM_REPLAY_CONTROLLER_ROTATION_TOOLTIP),
             UI.labelRow(UIKeys.FILM_REPLAY_ROTATION_RATE, this.trackpad(() -> this.form.rotationRate, 30D, 1080D, false, UIKeys.FILM_REPLAY_ROTATION_RATE_TOOLTIP))

@@ -2,6 +2,7 @@ package mchorse.bbs_mod.ui.film.replays;
 
 import mchorse.bbs_mod.camera.clips.CameraClipContext;
 import mchorse.bbs_mod.camera.data.Position;
+import mchorse.bbs_mod.nav.NavGrid;
 import mchorse.bbs_mod.film.replays.Replay;
 import mchorse.bbs_mod.math.IExpression;
 import mchorse.bbs_mod.math.MathBuilder;
@@ -97,6 +98,12 @@ public class ReplayBatchProcessor
         /** The tick the follow begins on: everything before it is left as it is */
         public int followStartTick;
 
+        /** The navigation mesh of the scene, when it has a volume: followers find their own way on it. Null walks straight. */
+        public NavGrid followGrid;
+
+        /** The floor of the world, for a follower that has no mesh to stand on. Null keeps its own height. */
+        public GroundNear followGround;
+
         /** How fast a follower goes, in blocks a second; 5.6 is a sprint */
         public double followSpeed = 5.6D;
 
@@ -114,6 +121,13 @@ public class ReplayBatchProcessor
     public interface GroundProvider
     {
         double getGroundY(double x, double z);
+    }
+
+    /** The floor of the world under or near a point: the height of the top of the nearest block to stand on below it, NaN when there is none */
+    @FunctionalInterface
+    public interface GroundNear
+    {
+        double groundY(double x, double y, double z);
     }
 
     public static Error applyAdvanced(List<VisibleReplay> selected, List<String> selectedProperties, String expressionText)
@@ -472,6 +486,12 @@ public class ReplayBatchProcessor
     /** The farthest a chase sways to either side of its path, in blocks, at an intensity of 1 */
     private static final double SWAY = 0.35D;
 
+    /** How often a follower finds its way again on the mesh, in ticks, at most */
+    private static final int REPLAN_TICKS = 8;
+
+    /** How high a camera sits above the feet of someone standing where it is */
+    private static final double EYE = 1.62D;
+
     /** How many ticks the body trails the head in a chase */
     private static final int BODY_LAG = 3;
 
@@ -493,6 +513,13 @@ public class ReplayBatchProcessor
      * from where its own keyframes have it at that tick, with the angles they give, and walks from
      * there at the follow speed. It is never put on the target: it goes a few blocks a second at
      * most, eases off as it nears its place and stops on the circle of the minimum distance.</p>
+     *
+     * <p>A follower never copies what the target does with its body: its height is the floor under
+     * its own feet, from the navigation mesh or else from the blocks of the world, so a jump, a crouch
+     * or a climb of the target stay the target's. Where the scene has a navigation volume the follower
+     * finds its own way to its place on the mesh (A*), again every few ticks or when the target moves
+     * to another node, so it goes round what is in the way, by another stair or another corridor if
+     * there is one. Without a volume, or off the mesh, it walks straight.</p>
      *
      * <p>With a trigger range a follower stands where it is, its keyframes untouched, until the
      * target comes in range; from that tick on it chases, and slows to a stop if the target gets
@@ -743,6 +770,12 @@ public class ReplayBatchProcessor
             double tirePace = 0.7D;
             double[] bodyWant = new double[ticks + 1];
 
+            /* Its way round the obstacles, on the mesh, from where it is to its place: found again as the target moves */
+            List<NavGrid.Node> route = null;
+            int routeNext = 1;
+            int lastPlan = -100;
+            NavGrid.Node lastDestination = null;
+
             for (int t = start; t <= ticks; t++)
             {
                 double[] goal = followGoal(params, tx[t], ty[t], tz[t], heading[t]);
@@ -769,13 +802,59 @@ public class ReplayBatchProcessor
                 }
                 else
                 {
+                    /* Straight at its place, unless the mesh has a way round something in between */
+                    double aimX = px;
+                    double aimZ = pz;
                     double gap = Math.hypot(px - sx, pz - sz);
-                    double stepX = (px - sx) * alpha;
-                    double stepZ = (pz - sz) * alpha;
-                    double stepY = (goal[1] - sy) * alpha;
-                    double limitY = stepSpeed * 1.5D;
+                    double ease = alpha;
 
-                    stepY = Math.max(-limitY, Math.min(limitY, stepY));
+                    if (params.followGrid != null)
+                    {
+                        NavGrid.Node here = nodeNear(params.followGrid, sx, sy, sz);
+                        NavGrid.Node destination = nodeNear(params.followGrid, px, ty[t] - (params.followCamera != null ? EYE : 0D), pz);
+
+                        if (here == null || destination == null)
+                        {
+                            route = null;
+                        }
+                        else if (route == null || t - lastPlan >= REPLAN_TICKS || (destination != lastDestination && t - lastPlan >= 3))
+                        {
+                            List<NavGrid.Node> path = params.followGrid.path(here, destination);
+
+                            route = path != null && path.size() > 1 ? path : null;
+                            routeNext = 1;
+                            lastPlan = t;
+                            lastDestination = destination;
+                        }
+
+                        if (route != null)
+                        {
+                            /* Past the points it has already reached */
+                            while (routeNext < route.size() - 1 && Math.hypot(route.get(routeNext).centerX() - sx, route.get(routeNext).centerZ() - sz) < 0.35D)
+                            {
+                                routeNext++;
+                            }
+
+                            if (routeNext < route.size() - 1)
+                            {
+                                NavGrid.Node way = route.get(routeNext);
+                                double left = Math.hypot(way.centerX() - sx, way.centerZ() - sz);
+
+                                for (int i = routeNext; i < route.size() - 1; i++)
+                                {
+                                    left += Math.hypot(route.get(i + 1).centerX() - route.get(i).centerX(), route.get(i + 1).centerZ() - route.get(i).centerZ());
+                                }
+
+                                aimX = way.centerX();
+                                aimZ = way.centerZ();
+                                gap = left + Math.hypot(px - route.get(route.size() - 1).centerX(), pz - route.get(route.size() - 1).centerZ());
+                                ease = 1D;
+                            }
+                        }
+                    }
+
+                    double stepX = (aimX - sx) * ease;
+                    double stepZ = (aimZ - sz) * ease;
 
                     if (ranged)
                     {
@@ -792,7 +871,6 @@ public class ReplayBatchProcessor
                         }
 
                         speedScale += ((chasing ? 1D : 0D) - speedScale) * 0.12D;
-                        stepY *= speedScale;
                     }
 
                     {
@@ -840,7 +918,6 @@ public class ReplayBatchProcessor
                     }
 
                     sx += stepX;
-                    sy += stepY;
                     sz += stepZ;
                     lastGap = gap;
                 }
@@ -850,6 +927,17 @@ public class ReplayBatchProcessor
 
                 sx = kept[0];
                 sz = kept[1];
+
+                /* Its height is that of the floor it walks on, not the target's: a jump, a crouch, a ladder are the target's own */
+                if (t > start)
+                {
+                    double floor = floorFor(params, sx, sy, sz);
+
+                    if (!Double.isNaN(floor))
+                    {
+                        sy += Math.max(-0.3D, Math.min(0.3D, floor + params.followY - sy));
+                    }
+                }
 
                 double speed = Math.hypot(sx - beforeX, sz - beforeZ);
 
@@ -959,6 +1047,27 @@ public class ReplayBatchProcessor
         }
 
         return null;
+    }
+
+    /** The mesh's node at a point, or null when the point is not within a couple of blocks of the mesh, which is a place to walk straight */
+    private static NavGrid.Node nodeNear(NavGrid grid, double x, double y, double z)
+    {
+        NavGrid.Node node = grid.nearest(x, y, z);
+
+        return node != null && Math.hypot(node.centerX() - x, node.centerZ() - z) <= 2.5D ? node : null;
+    }
+
+    /** The floor under a follower: the mesh's, or the world's when the mesh has none there; NaN when nothing is known */
+    private static double floorFor(NormalParams params, double x, double y, double z)
+    {
+        double floor = params.followGrid == null ? Double.NaN : params.followGrid.floorAt(x, y, z);
+
+        if (Double.isNaN(floor) && params.followGround != null)
+        {
+            floor = params.followGround.groundY(x, y, z);
+        }
+
+        return floor;
     }
 
     /** Puts a point that is inside the stop circle back out on it, along the line from the centre */

@@ -892,6 +892,10 @@ public class UIKeys
     public static final IKey FILM_REPLAY_AI_SEED_TOOLTIP = L10n.lang("bbs.ui.film.replay.ai_seed-tooltip");
     public static final IKey FILM_REPLAY_AI_AVOIDANCE = L10n.lang("bbs.ui.film.replay.ai_avoidance");
     public static final IKey FILM_REPLAY_AI_AVOIDANCE_TOOLTIP = L10n.lang("bbs.ui.film.replay.ai_avoidance-tooltip");
+    public static final IKey FILM_REPLAY_AI_FOLLOW_TARGET = L10n.lang("bbs.ui.film.replay.ai_follow_target");
+    public static final IKey FILM_REPLAY_AI_FOLLOW_TARGET_TOOLTIP = L10n.lang("bbs.ui.film.replay.ai_follow_target-tooltip");
+    public static final IKey FILM_REPLAY_AI_FOLLOW_DISTANCE = L10n.lang("bbs.ui.film.replay.ai_follow_distance");
+    public static final IKey FILM_REPLAY_AI_FOLLOW_DISTANCE_TOOLTIP = L10n.lang("bbs.ui.film.replay.ai_follow_distance-tooltip");
     public static final IKey FILM_REPLAY_ORIENT_TO_MOVEMENT = L10n.lang("bbs.ui.film.replay.orient_to_movement");
     public static final IKey FILM_REPLAY_ORIENT_TO_MOVEMENT_TOOLTIP = L10n.lang("bbs.ui.film.replay.orient_to_movement-tooltip");
     public static final IKey FILM_REPLAY_CONTROLLER_ROTATION = L10n.lang("bbs.ui.film.replay.use_controller_desired_rotation");

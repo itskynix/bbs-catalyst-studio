@@ -45,6 +45,16 @@ public final class ModelBlockAi
     /** What the renderer needs for a frame: the offset from the block's own place, and the turns */
     public record Shown(double dx, double dy, double dz, float bodyYaw, float prevBodyYaw, float headYaw, float prevHeadYaw, float pitch, float prevPitch, float delta) {}
 
+    /** The camera of the game, at the feet of someone standing under it */
+    private static final AiSimulation.Target CAMERA = (tick, out) ->
+    {
+        net.minecraft.util.math.Vec3d eye = net.minecraft.client.MinecraftClient.getInstance().gameRenderer.getCamera().getPos();
+
+        out[0] = eye.x;
+        out[1] = eye.y - 1.62D;
+        out[2] = eye.z;
+    };
+
     private ModelBlockAi()
     {}
 
@@ -122,6 +132,12 @@ public final class ModelBlockAi
 
         /* The form may be a new object after an edit: the walk goes on with its settings */
         agent.settings = form;
+
+        /* A block has no film to find an actor in: the camera is what it can follow */
+        String reference = form.aiFollowTarget.get().trim();
+
+        agent.target = reference.equalsIgnoreCase("camera") || reference.equalsIgnoreCase("kamera") ? CAMERA : null;
+        agent.watching = agent.target != null && agent.watching;
         live.prevX = agent.x;
         live.prevY = agent.y;
         live.prevZ = agent.z;

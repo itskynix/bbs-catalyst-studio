@@ -1,10 +1,13 @@
 package mchorse.bbs_mod.nav;
 
+import mchorse.bbs_mod.camera.clips.CameraClipContext;
+import mchorse.bbs_mod.camera.data.Position;
 import mchorse.bbs_mod.film.Film;
 import mchorse.bbs_mod.film.replays.Replay;
 import mchorse.bbs_mod.forms.forms.Form;
 import mchorse.bbs_mod.forms.forms.NavigationVolumeForm;
 import mchorse.bbs_mod.physics.forms.FormTreeWalk;
+import mchorse.bbs_mod.utils.clips.Clip;
 import org.joml.Vector3f;
 
 import java.util.ArrayList;
@@ -70,9 +73,27 @@ public final class AiSimulation
     private final long key;
     private final Map<String, Track> tracks = new HashMap<>();
 
+    /** Whether any actor follows something, so that the walk depends on where that goes; and what that was when it was worked out */
+    private boolean follows;
+    private long signature;
+    private long checked;
+
     private AiSimulation(long key)
     {
         this.key = key;
+    }
+
+    /** How often the places the followed things go are looked at again, to see whether the walk has to be made again, in milliseconds */
+    private static final long RECHECK = 500L;
+
+    /** How high a camera sits above the feet of someone standing where it is */
+    private static final double EYE = 1.62D;
+
+    /** Where something an actor follows is on a tick of the film: its feet, in out as x, y, z */
+    @FunctionalInterface
+    interface Target
+    {
+        void at(int tick, double[] out);
     }
 
     /** The volume of a film: its form, and where the bottom middle of its box is */
@@ -219,6 +240,8 @@ public final class AiSimulation
                 key = key * 31L + Float.hashCode(settings.aiSpeed.get());
                 key = key * 31L + settings.aiSeed.get();
                 key = key * 31L + (settings.aiAvoidance.get() ? 1 : 0);
+                key = key * 31L + settings.aiFollowTarget.get().hashCode();
+                key = key * 31L + Float.hashCode(settings.aiFollowDistance.get());
                 key = key * 31L + (settings.orientToMovement.get() ? 1 : 0);
                 key = key * 31L + (settings.useControllerDesiredRotation.get() ? 1 : 0);
                 key = key * 31L + Float.hashCode(settings.rotationRate.get());
@@ -229,11 +252,27 @@ public final class AiSimulation
         }
 
         AiSimulation cached = CACHE.get(film);
+        long now = System.currentTimeMillis();
 
         if (cached == null || cached.key != key)
         {
-            cached = simulate(actors, volume, grid, ticks, key);
+            cached = simulate(film, actors, volume, grid, ticks, key, targetSignature(film, actors));
+            cached.checked = now;
             CACHE.put(film, cached);
+        }
+        else if (cached.follows && now - cached.checked > RECHECK)
+        {
+            /* What is followed may have been moved in the timeline since: the walk is made again when it has */
+            long signature = targetSignature(film, actors);
+
+            cached.checked = now;
+
+            if (signature != cached.signature)
+            {
+                cached = simulate(film, actors, volume, grid, ticks, key, signature);
+                cached.checked = now;
+                CACHE.put(film, cached);
+            }
         }
 
         return cached.tracks.get(replay.getId());
@@ -266,11 +305,133 @@ public final class AiSimulation
         double goalX;
         double goalZ;
         boolean moving;
+
+        /* Following something: what, where it was last seen, whether it stands near it looking at it */
+        Target target;
+        boolean watching;
+        double watchX;
+        double watchY;
+        double watchZ;
+        int followTimer;
+        int tick;
     }
 
-    private static AiSimulation simulate(List<Replay> actors, Volume volume, NavGrid grid, int ticks, long key)
+    /** The camera of the film on every tick: x, y, z of where it is, or null when it has no clips */
+    private static double[][] cameraTrack(Film film, int ticks)
+    {
+        double[][] out = new double[3][ticks + 1];
+        Position position = new Position();
+        CameraClipContext context = new CameraClipContext();
+
+        context.clips = film.camera;
+
+        for (int t = 0; t <= ticks; t++)
+        {
+            cameraAt(context, position, t);
+
+            out[0][t] = position.point.x;
+            out[1][t] = position.point.y;
+            out[2][t] = position.point.z;
+        }
+
+        return out;
+    }
+
+    private static void cameraAt(CameraClipContext context, Position position, int tick)
+    {
+        context.clipData.clear();
+        context.setup(tick, 0F);
+
+        for (Clip clip : context.clips.getClips(tick))
+        {
+            context.apply(clip, position);
+        }
+
+        context.currentLayer = 0;
+    }
+
+    private static boolean isCamera(String reference)
+    {
+        return reference.equalsIgnoreCase("camera") || reference.equalsIgnoreCase("kamera");
+    }
+
+    /** The actor of the film a reference names, by its id or its name, other than the follower itself */
+    private static Replay findActor(Film film, Replay self, String reference)
+    {
+        for (Replay replay : film.replays.getList())
+        {
+            if (replay != self && (replay.getId().equals(reference) || replay.getName().equalsIgnoreCase(reference)))
+            {
+                return replay;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * A number that changes when the places followed change: the camera and the actors that are
+     * followed, a few places along every ten ticks. Zero when nothing follows anything.
+     */
+    private static long targetSignature(Film film, List<Replay> actors)
+    {
+        long hash = 7L;
+        CameraClipContext context = null;
+        Position position = new Position();
+        int ticks = film.calculateDuration() + 20;
+
+        for (Replay actor : actors)
+        {
+            String reference = actor.form.get().aiFollowTarget.get().trim();
+
+            if (reference.isEmpty())
+            {
+                continue;
+            }
+
+            hash = hash * 31L + reference.hashCode();
+
+            if (isCamera(reference))
+            {
+                if (context == null)
+                {
+                    context = new CameraClipContext();
+                    context.clips = film.camera;
+                }
+
+                for (int t = 0; t <= ticks; t += 10)
+                {
+                    cameraAt(context, position, t);
+
+                    hash = hash * 31L + Math.round(position.point.x * 20D);
+                    hash = hash * 31L + Math.round(position.point.z * 20D);
+                }
+            }
+            else
+            {
+                Replay target = findActor(film, actor, reference);
+
+                if (target == null)
+                {
+                    continue;
+                }
+
+                for (int t = 0; t <= ticks; t += 10)
+                {
+                    hash = hash * 31L + Math.round(target.keyframes.x.interpolate(t, 0D) * 20D);
+                    hash = hash * 31L + Math.round(target.keyframes.z.interpolate(t, 0D) * 20D);
+                }
+            }
+        }
+
+        return hash;
+    }
+
+    private static AiSimulation simulate(Film film, List<Replay> actors, Volume volume, NavGrid grid, int ticks, long key, long signature)
     {
         AiSimulation result = new AiSimulation(key);
+
+        result.signature = signature;
         List<Agent> agents = new ArrayList<>();
 
         for (Replay replay : actors)
@@ -299,10 +460,87 @@ public final class AiSimulation
             result.tracks.put(replay.getId(), agent.track);
         }
 
+        /* What each follows: the camera, an actor with AI that is walked along with it, or an actor's keyframes */
+        double[][] camera = null;
+
+        for (Agent agent : agents)
+        {
+            String reference = agent.settings.aiFollowTarget.get().trim();
+
+            if (reference.isEmpty())
+            {
+                continue;
+            }
+
+            if (isCamera(reference))
+            {
+                if (camera == null)
+                {
+                    camera = cameraTrack(film, ticks);
+                }
+
+                double[][] points = camera;
+
+                agent.target = (tick, out) ->
+                {
+                    int i = Math.max(0, Math.min(ticks, tick));
+
+                    out[0] = points[0][i];
+                    out[1] = points[1][i] - EYE;
+                    out[2] = points[2][i];
+                };
+                result.follows = true;
+
+                continue;
+            }
+
+            Replay target = findActor(film, agent.replay, reference);
+
+            if (target == null)
+            {
+                continue;
+            }
+
+            Agent walking = null;
+
+            for (Agent other : agents)
+            {
+                if (other.replay == target)
+                {
+                    walking = other;
+                }
+            }
+
+            if (walking != null)
+            {
+                Agent other = walking;
+
+                agent.target = (tick, out) ->
+                {
+                    out[0] = other.x;
+                    out[1] = other.y;
+                    out[2] = other.z;
+                };
+            }
+            else
+            {
+                agent.target = (tick, out) ->
+                {
+                    out[0] = target.keyframes.x.interpolate(tick, 0D);
+                    out[1] = target.keyframes.y.interpolate(tick, 0D);
+                    out[2] = target.keyframes.z.interpolate(tick, 0D);
+                };
+            }
+
+            result.follows = true;
+        }
+
         for (int tick = 0; tick < ticks; tick++)
         {
             for (Agent agent : agents)
             {
+                agent.tick = tick;
+
                 step(agent, agents, grid);
 
                 agent.track.x[tick] = (float) agent.x;
@@ -323,6 +561,11 @@ public final class AiSimulation
         float wanted = 0F;
         double dirX = 0D;
         double dirZ = 0D;
+
+        if (agent.target != null)
+        {
+            plan(agent, grid);
+        }
 
         if (agent.moving && agent.path != null && agent.next < agent.path.size())
         {
@@ -358,6 +601,10 @@ public final class AiSimulation
 
                 agent.idle = Math.max(1, Math.round((min + agent.random.nextFloat() * (max - min)) * 20F));
             }
+        }
+        else if (agent.target != null)
+        {
+            /* Following and standing: it is near what it follows and has nothing else to do but watch it */
         }
         else if (agent.idle > 0)
         {
@@ -490,6 +737,18 @@ public final class AiSimulation
             agent.lookTimer = 50 + agent.random.nextInt(71);
             agent.lookHold = 0;
         }
+        else if (agent.target != null && agent.watching)
+        {
+            /* Standing near what it follows: looking at it */
+            double dx = agent.watchX - agent.x;
+            double dz = agent.watchZ - agent.z;
+            double flat = Math.hypot(dx, dz);
+
+            headGoal = flat > 0.05D ? yawTo(dx, dz) : agent.head;
+            pitchGoal = flat > 0.05D ? (float) Math.max(-30D, Math.min(30D, -Math.toDegrees(Math.atan2(agent.watchY - agent.y, flat)))) : 0F;
+            agent.lookHold = 0;
+            agent.lookTimer = 50 + agent.random.nextInt(71);
+        }
         else
         {
             /* Standing: ahead, with a glance aside now and then */
@@ -560,6 +819,68 @@ public final class AiSimulation
     private static float clamp(float value, float most)
     {
         return Math.max(-most, Math.min(most, value));
+    }
+
+    /**
+     * What an actor that follows does about it: sees where the followed thing is, stands and watches
+     * when it is within the follow distance, and otherwise finds its way to it on the mesh (A*), every
+     * few ticks, to the last node that is still the follow distance away. Whatever path it was on
+     * is replaced; the walking itself is the same walk of every actor with AI.
+     */
+    static void plan(Agent agent, NavGrid grid)
+    {
+        double[] at = new double[3];
+
+        agent.target.at(agent.tick, at);
+
+        agent.watchX = at[0];
+        agent.watchY = at[1];
+        agent.watchZ = at[2];
+
+        double min = Math.max(0D, agent.settings.aiFollowDistance.get());
+
+        if (Math.hypot(at[0] - agent.x, at[2] - agent.z) <= min + 0.25D)
+        {
+            agent.moving = false;
+            agent.path = null;
+            agent.watching = true;
+
+            return;
+        }
+
+        agent.watching = false;
+
+        if (agent.moving && agent.path != null && --agent.followTimer > 0)
+        {
+            return;
+        }
+
+        agent.followTimer = 5;
+
+        NavGrid.Node here = grid.nearest(agent.x, agent.y, agent.z);
+        NavGrid.Node goal = grid.nearest(at[0], at[1], at[2]);
+        List<NavGrid.Node> path = grid.path(here, goal);
+
+        /* Stop short: the nodes that are nearer than the follow distance are not walked to */
+        while (path != null && path.size() > 1 && Math.hypot(path.get(path.size() - 1).centerX() - at[0], path.get(path.size() - 1).centerZ() - at[2]) < Math.max(min, 0.6D))
+        {
+            path.remove(path.size() - 1);
+        }
+
+        if (path == null || path.size() < 2)
+        {
+            agent.moving = false;
+            agent.path = null;
+            agent.watching = true;
+
+            return;
+        }
+
+        agent.path = path;
+        agent.next = 1;
+        agent.moving = true;
+        agent.goalX = at[0];
+        agent.goalZ = at[2];
     }
 
     /** Picks somewhere to go that can be reached, or waits a little and tries again */

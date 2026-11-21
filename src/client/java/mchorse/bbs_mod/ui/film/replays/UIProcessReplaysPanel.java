@@ -5,6 +5,9 @@ import mchorse.bbs_mod.film.replays.Replay;
 import mchorse.bbs_mod.film.replays.ReplayKeyframes;
 import mchorse.bbs_mod.l10n.L10n;
 import mchorse.bbs_mod.l10n.keys.IKey;
+import mchorse.bbs_mod.nav.AiSimulation;
+import mchorse.bbs_mod.nav.NavGrid;
+import mchorse.bbs_mod.nav.NavGrids;
 import mchorse.bbs_mod.settings.values.base.BaseValue;
 import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.film.UIFilmPanel;
@@ -32,6 +35,8 @@ import mchorse.bbs_mod.utils.keyframes.KeyframeChannel;
 import mchorse.bbs_mod.utils.keyframes.factories.KeyframeFactories;
 import mchorse.bbs_mod.ui.utils.Label;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.shape.VoxelShape;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.Vec3d;
@@ -428,6 +433,8 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
             params.followOrganic = PROCESS_STATE.followOrganic;
             params.followSpeed = PROCESS_STATE.followSpeed;
             params.followStartTick = PROCESS_STATE.followFromCursor ? this.filmPanel.getCursor() : 0;
+            params.followGrid = this.findNavGrid(film);
+            params.followGround = this.createFloorProvider();
             params.followRotate = PROCESS_STATE.followRotate;
             params.followKeepGround = PROCESS_STATE.followKeepGround;
             params.followDuration = film == null ? 0 : film.calculateDuration();
@@ -468,6 +475,62 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
         }
 
         return error == null;
+    }
+
+    /** The navigation mesh of the film's volume, or of one on a model block of the world; null when there is none */
+    private NavGrid findNavGrid(Film film)
+    {
+        AiSimulation.Volume volume = AiSimulation.findVolume(film);
+
+        if (volume == null)
+        {
+            return null;
+        }
+
+        NavGrid grid = NavGrids.get(volume.form(), volume.x(), volume.y(), volume.z());
+
+        return grid == null || grid.getNodes().isEmpty() ? null : grid;
+    }
+
+    /**
+     * The top of the nearest block under a point to stand on, looking from a little above it down a few
+     * blocks, then a little up when it is inside one. NaN when there is no world or no floor in reach.
+     */
+    private ReplayBatchProcessor.GroundNear createFloorProvider()
+    {
+        World world = MinecraftClient.getInstance().world;
+
+        if (world == null)
+        {
+            return null;
+        }
+
+        return (x, y, z) ->
+        {
+            BlockPos.Mutable pos = new BlockPos.Mutable();
+            int bx = (int) Math.floor(x);
+            int bz = (int) Math.floor(z);
+            int top = (int) Math.floor(y + 1.2D);
+
+            for (int by = top; by >= Math.max(world.getBottomY(), top - 12); by--)
+            {
+                pos.set(bx, by, bz);
+
+                VoxelShape shape = world.getBlockState(pos).getCollisionShape(world, pos);
+
+                if (!shape.isEmpty())
+                {
+                    double surface = by + shape.getMax(net.minecraft.util.math.Direction.Axis.Y);
+
+                    if (surface <= y + 1.2D)
+                    {
+                        return surface;
+                    }
+                }
+            }
+
+            return Double.NaN;
+        };
     }
 
     private ReplayBatchProcessor.GroundProvider createGroundProvider()
