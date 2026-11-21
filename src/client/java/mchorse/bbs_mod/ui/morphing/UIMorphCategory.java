@@ -76,6 +76,12 @@ public enum UIMorphCategory
         return classify(form) == this;
     }
 
+    /** The folder a model form's key puts it in, the empty string for one with none; null for any other form */
+    public static String modelFolder(Form form)
+    {
+        return form instanceof ModelForm model ? UIMorphNaming.modelFolder(model.model.get()) : null;
+    }
+
     /** The one category a form belongs to; everything unlisted is a utility. */
     public static UIMorphCategory classify(Form form)
     {

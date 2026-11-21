@@ -55,6 +55,9 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
     /** What the dialog remembers between openings — the last operation and its inputs. */
     private static final ProcessReplaysState PROCESS_STATE = new ProcessReplaysState();
 
+    /** The follow target that stands for the camera of the film rather than for a replay */
+    private static final int FOLLOW_CAMERA = -2;
+
     private final UIFilmPanel filmPanel;
 
     /** The picked replays in view order, snapshotted at opening (the overlay is modal). */
@@ -106,6 +109,15 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
         public boolean advanced;
         public boolean fill = false;
         public int lookAtTarget = -1;
+
+        /** The follow target: an index in the film's replays, FOLLOW_CAMERA for the camera, -1 for none */
+        public int followTarget = -1;
+        public double followX;
+        public double followY;
+        public double followZ = -2;
+        public double followSmooth = 0;
+        public boolean followRotate = true;
+        public boolean followKeepGround = false;
 
         public NormalOperation operation = NormalOperation.RANDOM;
         public double randomMin = -1;
@@ -384,6 +396,26 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
         params.shift = PROCESS_STATE.shift;
         params.fill = PROCESS_STATE.fill;
         params.lookAtTarget = this.resolveLookAtTargetReplay();
+
+        if (operation == NormalOperation.FOLLOW_TARGET)
+        {
+            PROCESS_STATE.followX = this.normal.followX.getValue();
+            PROCESS_STATE.followY = this.normal.followY.getValue();
+            PROCESS_STATE.followZ = this.normal.followZ.getValue();
+            PROCESS_STATE.followSmooth = this.normal.followSmooth.getValue();
+
+            Film film = this.filmPanel.getData();
+
+            params.followTarget = PROCESS_STATE.followTarget == FOLLOW_CAMERA ? null : this.resolveReplay(PROCESS_STATE.followTarget);
+            params.followCamera = PROCESS_STATE.followTarget == FOLLOW_CAMERA && film != null ? film.camera : null;
+            params.followX = PROCESS_STATE.followX;
+            params.followY = PROCESS_STATE.followY;
+            params.followZ = PROCESS_STATE.followZ;
+            params.followSmooth = PROCESS_STATE.followSmooth;
+            params.followRotate = PROCESS_STATE.followRotate;
+            params.followKeepGround = PROCESS_STATE.followKeepGround;
+            params.followDuration = film == null ? 0 : film.calculateDuration();
+        }
         params.groundProvider = operation == NormalOperation.FIT_HEIGHT ? this.createGroundProvider() : null;
 
         ReplayBatchProcessor.Error error = ReplayBatchProcessor.applyNormal(selected, selectedProperties, operation.op, params);
@@ -464,6 +496,20 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
         };
     }
 
+    /** Whether a replay is one of those being processed; compared by identity, as a batch is mostly look-alikes */
+    private boolean isProcessed(Replay replay)
+    {
+        for (Replay processed : this.replays)
+        {
+            if (processed == replay)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private Replay resolveLookAtTargetReplay()
     {
         return PROCESS_STATE.operation == NormalOperation.LOOK_AT ? this.resolveReplay(PROCESS_STATE.lookAtTarget) : null;
@@ -499,6 +545,13 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
         private final UITrackpad shift;
         private final UIToggle fill;
         private final UIButton lookAtTarget;
+        private final UIButton followTarget;
+        private final UITrackpad followX;
+        private final UITrackpad followY;
+        private final UITrackpad followZ;
+        private final UITrackpad followSmooth;
+        private final UIToggle followRotate;
+        private final UIToggle followKeepGround;
 
         private final UIElement params = new UIElement();
         private final UIText hint = new UIText(IKey.EMPTY).padding(0, 0).lineHeight(10);
@@ -553,6 +606,35 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
             this.lookAtTarget = new UIButton(IKey.EMPTY, (b) -> this.openTargetMenu());
             this.lookAtTarget.tooltip(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_LOOK_AT_TARGET_TOOLTIP);
 
+            this.followTarget = new UIButton(IKey.EMPTY, (b) -> this.openFollowMenu());
+            this.followTarget.tooltip(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_TARGET_TOOLTIP);
+
+            this.followX = new UITrackpad();
+            this.followX.limit(-10000, 10000, false);
+            this.followX.setValue(PROCESS_STATE.followX);
+            this.followX.tooltip(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_OFFSET_TOOLTIP);
+
+            this.followY = new UITrackpad();
+            this.followY.limit(-10000, 10000, false);
+            this.followY.setValue(PROCESS_STATE.followY);
+            this.followY.tooltip(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_OFFSET_TOOLTIP);
+
+            this.followZ = new UITrackpad();
+            this.followZ.limit(-10000, 10000, false);
+            this.followZ.setValue(PROCESS_STATE.followZ);
+            this.followZ.tooltip(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_OFFSET_TOOLTIP);
+
+            this.followSmooth = new UITrackpad();
+            this.followSmooth.limit(0, 40, true);
+            this.followSmooth.setValue(PROCESS_STATE.followSmooth);
+            this.followSmooth.tooltip(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_SMOOTH_TOOLTIP);
+
+            this.followRotate = new UIToggle(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_ROTATE, PROCESS_STATE.followRotate, (b) -> PROCESS_STATE.followRotate = b.getValue());
+            this.followRotate.tooltip(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_ROTATE_TOOLTIP);
+
+            this.followKeepGround = new UIToggle(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_GROUND, PROCESS_STATE.followKeepGround, (b) -> PROCESS_STATE.followKeepGround = b.getValue());
+            this.followKeepGround.tooltip(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_GROUND_TOOLTIP);
+
             /* The list scrolls: eleven operations and what they ask for would not fit one panel */
             int opsHeight = UIConstants.CONTROL_HEIGHT * Math.min(NormalOperation.values().length, 7);
 
@@ -594,6 +676,12 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
                     case SQUARE, SQUARE_OUTLINE, CUBE, SPHERE, CIRCLE, CIRCLE_OUTLINE -> rows = this.addRow(rows, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_SIZE, this.size);
                     case LOOK_AT -> rows = this.addRow(rows, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_LOOK_AT_TARGET, this.lookAtTarget);
                     case SHIFT -> rows = this.addRow(rows, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_SHIFT, this.shift);
+                    case FOLLOW_TARGET ->
+                    {
+                        rows = this.addRow(rows, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_TARGET, this.followTarget);
+                        rows = this.addRow(rows, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_OFFSET, this.followX, this.followY, this.followZ);
+                        rows = this.addRow(rows, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_SMOOTH, this.followSmooth);
+                    }
                     default ->
                     {}
                 }
@@ -606,6 +694,16 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
                 rows += 1;
             }
 
+            if (operation == NormalOperation.FOLLOW_TARGET)
+            {
+                for (UIToggle toggle : new UIToggle[] {this.followRotate, this.followKeepGround})
+                {
+                    toggle.relative(this.params).x(0).y(rows * (UIConstants.CONTROL_HEIGHT + UIConstants.MARGIN)).w(1F).h(UIConstants.CONTROL_HEIGHT);
+                    this.params.add(toggle);
+                    rows += 1;
+                }
+            }
+
             int height = rows <= 0 ? 0 : rows * UIConstants.CONTROL_HEIGHT + (rows - 1) * UIConstants.MARGIN;
 
             this.params.h(height);
@@ -613,9 +711,14 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
         }
 
         /** One labelled row of the parameters, stacked under the ones before it. */
-        private int addRow(int rows, IKey label, UIElement field)
+        private int addRow(int rows, IKey label, UIElement... fields)
         {
-            UIElement row = UI.row(this.paramLabel(label, 104), field);
+            UIElement[] elements = new UIElement[fields.length + 1];
+
+            elements[0] = this.paramLabel(label, 104);
+            System.arraycopy(fields, 0, elements, 1, fields.length);
+
+            UIElement row = UI.row(elements);
 
             row.relative(this.params).y(rows * (UIConstants.CONTROL_HEIGHT + UIConstants.MARGIN)).w(1F).h(UIConstants.CONTROL_HEIGHT).resize();
             this.params.add(row);
@@ -638,6 +741,15 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
             }
 
             this.setTargetLabel(this.lookAtTarget, PROCESS_STATE.lookAtTarget);
+
+            if (PROCESS_STATE.followTarget == FOLLOW_CAMERA)
+            {
+                this.followTarget.label = UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_CAMERA;
+            }
+            else
+            {
+                this.setTargetLabel(this.followTarget, PROCESS_STATE.followTarget);
+            }
         }
 
         private void setTargetLabel(UIButton button, int index)
@@ -685,6 +797,53 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
             });
         }
 
+        /**
+         * The camera and the replays of the film to follow. The replays that are being processed are
+         * left out: one cannot follow itself, and one that is itself being moved is no target.
+         */
+        private void openFollowMenu()
+        {
+            UIContext context = this.getContext();
+            Film film = UIProcessReplaysPanel.this.filmPanel.getData();
+
+            if (context == null || film == null)
+            {
+                return;
+            }
+
+            context.replaceContextMenu((manager) ->
+            {
+                manager.autoKeys();
+
+                manager.action(Icons.CAMERA, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_CAMERA, () ->
+                {
+                    PROCESS_STATE.followTarget = FOLLOW_CAMERA;
+
+                    this.updateTargetLabels();
+                });
+
+                List<Replay> replays = film.replays.getList();
+
+                for (int i = 0; i < replays.size(); i++)
+                {
+                    int index = i;
+                    Replay replay = replays.get(i);
+
+                    if (UIProcessReplaysPanel.this.isProcessed(replay))
+                    {
+                        continue;
+                    }
+
+                    manager.action(Icons.FILM, IKey.constant(replay.getName()), () ->
+                    {
+                        PROCESS_STATE.followTarget = index;
+
+                        this.updateTargetLabels();
+                    });
+                }
+            });
+        }
+
         private UILabel paramLabel(IKey key, int width)
         {
             UILabel label = UI.label(key, UIConstants.CONTROL_HEIGHT);
@@ -724,7 +883,8 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
         SPHERE(ReplayBatchProcessor.Operation.SPHERE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_SPHERE, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_SPHERE, Icons.SPHERE, true),
         FIT_HEIGHT(ReplayBatchProcessor.Operation.FIT_HEIGHT, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_FIT_HEIGHT, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_FIT_HEIGHT, Icons.ARROW_DOWN, false),
         LOOK_AT(ReplayBatchProcessor.Operation.LOOK_AT, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_LOOK_AT, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_LOOK_AT, Icons.LOOKING, false),
-        SHIFT(ReplayBatchProcessor.Operation.SHIFT, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_SHIFT, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_SHIFT, Icons.SHIFT_TO, true);
+        SHIFT(ReplayBatchProcessor.Operation.SHIFT, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_SHIFT, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_SHIFT, Icons.SHIFT_TO, true),
+        FOLLOW_TARGET(ReplayBatchProcessor.Operation.FOLLOW_TARGET, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_OP_FOLLOW_TARGET, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_HINT_FOLLOW_TARGET, Icons.MOVE_TO, false);
 
         public final ReplayBatchProcessor.Operation op;
         public final IKey title;

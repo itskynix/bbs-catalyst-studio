@@ -1,8 +1,12 @@
 package mchorse.bbs_mod.ui.film.replays;
 
+import mchorse.bbs_mod.camera.clips.CameraClipContext;
+import mchorse.bbs_mod.camera.data.Position;
 import mchorse.bbs_mod.film.replays.Replay;
 import mchorse.bbs_mod.math.IExpression;
 import mchorse.bbs_mod.math.MathBuilder;
+import mchorse.bbs_mod.utils.clips.Clip;
+import mchorse.bbs_mod.utils.clips.Clips;
 import mchorse.bbs_mod.utils.keyframes.Keyframe;
 import mchorse.bbs_mod.utils.keyframes.KeyframeChannel;
 import mchorse.bbs_mod.utils.keyframes.factories.KeyframeFactories;
@@ -25,7 +29,8 @@ public class ReplayBatchProcessor
         CUBE,
         SPHERE,
         FIT_HEIGHT,
-        LOOK_AT
+        LOOK_AT,
+        FOLLOW_TARGET
     }
 
     public enum Error
@@ -64,7 +69,27 @@ public class ReplayBatchProcessor
         public Replay lookAtTarget;
         public GroundProvider groundProvider;
 
-    }
+        /** Follow target: a replay, or the camera's clips when no replay is given */
+        public Replay followTarget;
+        public Clips followCamera;
+
+        /** Where from the target's point of view: x to its right, y up, z ahead of it */
+        public double followX;
+        public double followY;
+        public double followZ;
+
+        /** How many ticks behind the target the follower lags; 0 holds it on the target */
+        public double followSmooth;
+
+        /** Turn the follower to the way it walks, and to the target while it stands */
+        public boolean followRotate = true;
+
+        /** Leave the height keyframes as they are and follow in the horizontal plane only */
+        public boolean followKeepGround;
+
+        /** How many ticks of the film to write keyframes for */
+        public int followDuration;
+        }
 
     @FunctionalInterface
     public interface GroundProvider
@@ -139,6 +164,7 @@ public class ReplayBatchProcessor
             case RANDOM -> applyRandom(selected, selectedProperties, params);
             case FIT_HEIGHT -> applyFitHeight(selected, selectedProperties, params);
             case LOOK_AT -> applyLookAt(selected, params);
+            case FOLLOW_TARGET -> applyFollow(selected, params);
         };
     }
 
@@ -406,6 +432,216 @@ public class ReplayBatchProcessor
         }
 
         return lookAt(selected, params.lookAtTarget);
+    }
+
+    /**
+     * Makes each replay follow the target through the whole film: every tick the follower is put at the
+     * target's place plus an offset in the target's own frame (x to its right, y up, z ahead), the
+     * offset turning with the target. A smoothness of N ticks lets the follower close `1 / (N + 1)` of
+     * the way to that place every tick, so 0 sticks to the target and more trails behind it. The
+     * keyframes of the position channels, and of the three yaw channels when rotating, are written
+     * afresh, one a tick.
+     */
+    private static Error applyFollow(List<VisibleReplay> selected, NormalParams params)
+    {
+        if (params.followTarget == null && params.followCamera == null)
+        {
+            return Error.NEED_TARGET;
+        }
+
+        int ticks = Math.max(1, params.followDuration);
+        double[] tx = new double[ticks + 1];
+        double[] ty = new double[ticks + 1];
+        double[] tz = new double[ticks + 1];
+        double[] tyaw = new double[ticks + 1];
+
+        if (params.followTarget != null)
+        {
+            KeyframeChannel cx = (KeyframeChannel) params.followTarget.keyframes.get("x");
+            KeyframeChannel cy = (KeyframeChannel) params.followTarget.keyframes.get("y");
+            KeyframeChannel cz = (KeyframeChannel) params.followTarget.keyframes.get("z");
+            KeyframeChannel cyaw = (KeyframeChannel) params.followTarget.keyframes.get("yaw");
+
+            if (cx == null || cy == null || cz == null)
+            {
+                return Error.NEED_POSITION_CHANNELS;
+            }
+
+            for (int t = 0; t <= ticks; t++)
+            {
+                tx[t] = cx.getFactory().getY(cx.interpolate(t));
+                ty[t] = cy.getFactory().getY(cy.interpolate(t));
+                tz[t] = cz.getFactory().getY(cz.interpolate(t));
+                tyaw[t] = cyaw == null ? 0D : cyaw.getFactory().getY(cyaw.interpolate(t));
+            }
+        }
+        else
+        {
+            /* The camera's flight, tick by tick; its yaw is a half turn from an actor's looking the same way */
+            Position position = new Position();
+            CameraClipContext context = new CameraClipContext();
+
+            context.clips = params.followCamera;
+
+            for (int t = 0; t <= ticks; t++)
+            {
+                context.clipData.clear();
+                context.setup(t, 0F);
+
+                for (Clip clip : context.clips.getClips(t))
+                {
+                    context.apply(clip, position);
+                }
+
+                context.currentLayer = 0;
+
+                tx[t] = position.point.x;
+                ty[t] = position.point.y;
+                tz[t] = position.point.z;
+                tyaw[t] = position.angle.yaw - 180D;
+            }
+        }
+
+        double alpha = 1D / (Math.max(0D, params.followSmooth) + 1D);
+
+        for (VisibleReplay replay : selected)
+        {
+            if (replay.replay == params.followTarget)
+            {
+                continue;
+            }
+
+            KeyframeChannel x = (KeyframeChannel) replay.replay.keyframes.get("x");
+            KeyframeChannel y = (KeyframeChannel) replay.replay.keyframes.get("y");
+            KeyframeChannel z = (KeyframeChannel) replay.replay.keyframes.get("z");
+
+            if (x == null || z == null || (y == null && !params.followKeepGround))
+            {
+                return Error.NEED_POSITION_CHANNELS;
+            }
+
+            KeyframeChannel[] yaws = params.followRotate ? new KeyframeChannel[] {
+                (KeyframeChannel) replay.replay.keyframes.get("yaw"),
+                (KeyframeChannel) replay.replay.keyframes.get("bodyYaw"),
+                (KeyframeChannel) replay.replay.keyframes.get("headYaw")
+            } : new KeyframeChannel[0];
+
+            x.removeAll();
+            z.removeAll();
+
+            if (!params.followKeepGround)
+            {
+                y.removeAll();
+            }
+
+            for (KeyframeChannel yaw : yaws)
+            {
+                if (yaw != null)
+                {
+                    yaw.removeAll();
+                }
+            }
+
+            double sx = 0D;
+            double sy = 0D;
+            double sz = 0D;
+            double facing = 0D;
+
+            for (int t = 0; t <= ticks; t++)
+            {
+                double radians = Math.toRadians(tyaw[t]);
+                double fx = -Math.sin(radians);
+                double fz = Math.cos(radians);
+                double rx = -Math.cos(radians);
+                double rz = -Math.sin(radians);
+                double gx = tx[t] + rx * params.followX + fx * params.followZ;
+                double gy = ty[t] + params.followY;
+                double gz = tz[t] + rz * params.followX + fz * params.followZ;
+                double px = sx;
+                double pz = sz;
+
+                if (t == 0)
+                {
+                    sx = gx;
+                    sy = gy;
+                    sz = gz;
+                }
+                else
+                {
+                    sx += (gx - sx) * alpha;
+                    sy += (gy - sy) * alpha;
+                    sz += (gz - sz) * alpha;
+                }
+
+                appendKey(x, t, sx);
+                appendKey(z, t, sz);
+
+                if (!params.followKeepGround)
+                {
+                    appendKey(y, t, sy);
+                }
+
+                if (!params.followRotate)
+                {
+                    continue;
+                }
+
+                double dx = sx - px;
+                double dz = sz - pz;
+                double wanted;
+
+                if (t > 0 && dx * dx + dz * dz > 1.0E-6D)
+                {
+                    wanted = Math.atan2(dz, dx) * (180D / Math.PI) - 90D;
+                }
+                else if (t == 0)
+                {
+                    double ax = tx[t] - sx;
+                    double az = tz[t] - sz;
+
+                    wanted = ax * ax + az * az > 1.0E-6D ? Math.atan2(az, ax) * (180D / Math.PI) - 90D : tyaw[t];
+                }
+                else
+                {
+                    wanted = facing;
+                }
+
+                /* The turn the short way round, so the keyframes never spin a full circle */
+                if (t > 0)
+                {
+                    double diff = (wanted - facing) % 360D;
+
+                    if (diff < -180D)
+                    {
+                        diff += 360D;
+                    }
+                    else if (diff > 180D)
+                    {
+                        diff -= 360D;
+                    }
+
+                    wanted = facing + diff;
+                }
+
+                facing = wanted;
+
+                for (KeyframeChannel yaw : yaws)
+                {
+                    if (yaw != null)
+                    {
+                        appendKey(yaw, t, facing);
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /** Adds a keyframe at the end of a channel that is being written from its first tick onwards */
+    private static void appendKey(KeyframeChannel channel, int tick, double value)
+    {
+        channel.add(new Keyframe("", channel.getFactory(), (float) tick, channel.getFactory().yToValue(value)));
     }
 
     private static Error fitHeightToGround(List<VisibleReplay> selected, GroundProvider groundProvider)

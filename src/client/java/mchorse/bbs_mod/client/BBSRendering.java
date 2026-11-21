@@ -655,6 +655,7 @@ public class BBSRendering
         mchorse.bbs_mod.forms.renderers.AudioFormRenderer.reapOrphans();
         mchorse.bbs_mod.forms.renderers.AudioFormRenderer.clearRipples();
         mchorse.bbs_mod.forms.renderers.PostProcessFormRenderer.clearQueue();
+        mchorse.bbs_mod.forms.renderers.PostProcessFormRenderer.collectUnbound();
 
         renderingWorld = true;
         frameCapturedThisRender = false;

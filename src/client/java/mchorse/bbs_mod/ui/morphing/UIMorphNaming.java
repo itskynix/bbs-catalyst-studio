@@ -157,6 +157,49 @@ public class UIMorphNaming
         return last.isEmpty() ? fallback.get() : last;
     }
 
+    /**
+     * The folder of a model under assets/models, from its model key: 'player/steve' is 'player',
+     * 'props/chairs/oak' is 'props/chairs' and 'steve' has none, which is the empty string.
+     */
+    public static String modelFolder(String key)
+    {
+        if (key == null)
+        {
+            return "";
+        }
+
+        int colon = key.indexOf(':');
+        String path = colon >= 0 ? key.substring(colon + 1) : key;
+        int slash = path.lastIndexOf('/');
+
+        return slash <= 0 ? "" : path.substring(0, slash);
+    }
+
+    /** A folder path as a heading: 'props/chairs' is 'Props / Chairs' */
+    public static String folderTitle(String folder)
+    {
+        StringBuilder out = new StringBuilder();
+
+        for (String part : folder.split("/"))
+        {
+            String word = humanize(part);
+
+            if (word.isEmpty())
+            {
+                continue;
+            }
+
+            if (out.length() > 0)
+            {
+                out.append(" / ");
+            }
+
+            out.append(word);
+        }
+
+        return out.length() == 0 ? folder : out.toString();
+    }
+
     /** Namespace and extension off, separators to spaces, every word started with a capital. */
     public static String humanize(String raw)
     {

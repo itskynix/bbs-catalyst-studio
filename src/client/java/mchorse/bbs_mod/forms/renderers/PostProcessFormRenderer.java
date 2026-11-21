@@ -2,13 +2,21 @@ package mchorse.bbs_mod.forms.renderers;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.BBSModClient;
+import mchorse.bbs_mod.blocks.entities.ModelBlockEntity;
 import mchorse.bbs_mod.camera.clips.fx.FxOverlay;
 import mchorse.bbs_mod.camera.clips.fx.PostEffect;
 import mchorse.bbs_mod.camera.clips.fx.PostEffectStack;
 import mchorse.bbs_mod.client.BBSRendering;
+import mchorse.bbs_mod.film.BaseFilmController;
 import mchorse.bbs_mod.forms.FormPortals;
+import mchorse.bbs_mod.forms.FormUtilsClient;
+import mchorse.bbs_mod.forms.entities.IEntity;
+import mchorse.bbs_mod.forms.forms.Form;
 import mchorse.bbs_mod.forms.forms.PostProcessForm;
 import mchorse.bbs_mod.graphics.Draw;
+import mchorse.bbs_mod.physics.forms.FormTreeWalk;
+import mchorse.bbs_mod.ui.dashboard.UIDashboard;
+import mchorse.bbs_mod.ui.film.UIFilmPanel;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.UIScreen;
 import mchorse.bbs_mod.utils.Bufs;
@@ -28,6 +36,7 @@ import qualet.irlite.client.light.IRLightPositionResolver;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The post-process volume. It draws no geometry of its own in the world: every frame the world's
@@ -65,6 +74,77 @@ public class PostProcessFormRenderer extends FormRenderer<PostProcessForm>
     public static void clearQueue()
     {
         QUEUE.clear();
+    }
+
+    /**
+     * At the start of the world's frame: queues every unbound volume of the scene, wherever the camera
+     * looks. A volume is otherwise queued only when its form is drawn, and a form whose box is outside
+     * the camera's view is culled and never drawn, so an unbound volume would blink out the moment the
+     * camera turned away from its box. Unbound ignores the box, so it is gathered here instead, from
+     * the films playing, the film open in the editor and the model blocks of the loaded world (a
+     * volume drawn later in the frame is not queued twice).
+     */
+    public static void collectUnbound()
+    {
+        MinecraftClient mc = MinecraftClient.getInstance();
+
+        if (mc.world == null)
+        {
+            return;
+        }
+
+        float transition = mc./*$ gtd*/getTickDelta()/**/;
+        List<Map<String, IEntity>> scenes = new ArrayList<>();
+
+        for (BaseFilmController controller : BBSModClient.getFilms().getControllers())
+        {
+            scenes.add(controller.getEntities());
+        }
+
+        if (UIScreen.getCurrentMenu() instanceof UIDashboard dashboard && dashboard.getPanels().panel instanceof UIFilmPanel panel && panel.getController() != null)
+        {
+            scenes.add(panel.getController().getEntities());
+        }
+
+        for (Map<String, IEntity> entities : scenes)
+        {
+            for (IEntity entity : new ArrayList<>(entities.values()))
+            {
+                collectUnbound(entity.getForm(), transition);
+            }
+        }
+
+        for (ModelBlockEntity block : new ArrayList<>(BBSRendering.capturedModelBlocks))
+        {
+            if (!block.isRemoved() && block.getProperties().isEnabled())
+            {
+                collectUnbound(block.getProperties().getForm(), transition);
+            }
+        }
+    }
+
+    private static void collectUnbound(Form root, float transition)
+    {
+        if (root == null)
+        {
+            return;
+        }
+
+        FormTreeWalk.walk(root, (form, path, anchor) ->
+        {
+            /* A form that is hidden hides what is inside it too */
+            if (!form.visible.get())
+            {
+                return false;
+            }
+
+            if (form instanceof PostProcessForm volume && volume.unbound.get() && FormUtilsClient.getRenderer(form) instanceof PostProcessFormRenderer renderer)
+            {
+                renderer.queue(1F, transition);
+            }
+
+            return true;
+        });
     }
 
     /** Whether any queued volume asks for the world's depth, so it is kept before the hand is drawn */
@@ -175,7 +255,13 @@ public class PostProcessFormRenderer extends FormRenderer<PostProcessForm>
     /** Works out the camera's weight and queues this volume's effects scaled by it */
     private void queue(FormRenderingContext context)
     {
-        float weight = this.weight(context) * this.form.intensity.get();
+        this.queue(this.weight(context), context.getTransition());
+    }
+
+    /** Queues this volume's effects scaled by the camera's weight in it and the volume's intensity */
+    private void queue(float cameraWeight, float transition)
+    {
+        float weight = cameraWeight * this.form.intensity.get();
 
         if (weight <= 0.001F || this.form.stack.getAllTyped().isEmpty())
         {
@@ -192,7 +278,7 @@ public class PostProcessFormRenderer extends FormRenderer<PostProcessForm>
         }
 
         MinecraftClient mc = MinecraftClient.getInstance();
-        float seconds = mc.world == null ? 0F : (mc.world.getTime() % 72000L + context.getTransition()) / 20F;
+        float seconds = mc.world == null ? 0F : (mc.world.getTime() % 72000L + transition) / 20F;
         List<FxOverlay> overlays = new ArrayList<>();
 
         for (PostEffectStack.Layer layer : this.form.stack.getAllTyped())
