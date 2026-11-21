@@ -3,6 +3,8 @@ package mchorse.bbs_mod.ui.film.replays;
 import mchorse.bbs_mod.camera.clips.CameraClipContext;
 import mchorse.bbs_mod.camera.data.Position;
 import mchorse.bbs_mod.nav.NavGrid;
+import mchorse.bbs_mod.nav.WalkWorld;
+import net.minecraft.world.World;
 import mchorse.bbs_mod.film.replays.Replay;
 import mchorse.bbs_mod.math.IExpression;
 import mchorse.bbs_mod.math.MathBuilder;
@@ -103,6 +105,13 @@ public class ReplayBatchProcessor
 
         /** The floor of the world, for a follower that has no mesh to stand on. Null keeps its own height. */
         public GroundNear followGround;
+
+        /**
+         * The world the followers walk in: no position is written where the body does not fit, they slide
+         * along walls and step up a block, and where there is no mesh they find their own way over the
+         * ground. Null leaves the walk as it is worked out, through anything.
+         */
+        public World followWorld;
 
         /** How fast a follower goes, in blocks a second; 5.6 is a sprint */
         public double followSpeed = 5.6D;
@@ -486,6 +495,9 @@ public class ReplayBatchProcessor
     /** The farthest a chase sways to either side of its path, in blocks, at an intensity of 1 */
     private static final double SWAY = 0.35D;
 
+    /** How many cells of the world a follower looks at when it finds its way over the blocks */
+    private static final int WORLD_SEARCH = 3000;
+
     /** How often a follower finds its way again on the mesh, in ticks, at most */
     private static final int REPLAN_TICKS = 8;
 
@@ -519,7 +531,12 @@ public class ReplayBatchProcessor
      * or a climb of the target stay the target's. Where the scene has a navigation volume the follower
      * finds its own way to its place on the mesh (A*), again every few ticks or when the target moves
      * to another node, so it goes round what is in the way, by another stair or another corridor if
-     * there is one. Without a volume, or off the mesh, it walks straight.</p>
+     * there is one. Without a volume, or when it or its place are off the mesh, it finds its way over
+     * the blocks of the world itself ({@link WalkWorld}).</p>
+     *
+     * <p>Whatever the way, no position is written where the body of a player (0.6 by 1.8) would be in
+     * a block: a move that is blocked slides along the wall, a step of a block is climbed, and the
+     * height is that of the floor under the feet.</p>
      *
      * <p>With a trigger range a follower stands where it is, its keyframes untouched, until the
      * target comes in range; from that tick on it chases, and slows to a stop if the target gets
@@ -770,11 +787,15 @@ public class ReplayBatchProcessor
             double tirePace = 0.7D;
             double[] bodyWant = new double[ticks + 1];
 
-            /* Its way round the obstacles, on the mesh, from where it is to its place: found again as the target moves */
-            List<NavGrid.Node> route = null;
-            int routeNext = 1;
+            /* Its way round the obstacles, from where it is to its place: on the mesh, or over the blocks of the world: found again as the target moves */
+            List<double[]> way = null;
+            boolean wayComplete = true;
+            int wayNext = 1;
             int lastPlan = -100;
-            NavGrid.Node lastDestination = null;
+            long lastDestination = Long.MIN_VALUE;
+
+            /* Where its feet really stand: the height of the floor, from which the body is checked against the blocks; sy is that, eased */
+            double cy = oy[start];
 
             for (int t = start; t <= ticks; t++)
             {
@@ -802,54 +823,76 @@ public class ReplayBatchProcessor
                 }
                 else
                 {
-                    /* Straight at its place, unless the mesh has a way round something in between */
+                    /* Straight at its place, unless there is a way round something in between */
                     double aimX = px;
                     double aimZ = pz;
                     double gap = Math.hypot(px - sx, pz - sz);
                     double ease = alpha;
+                    double destinationY = ty[t] - (params.followCamera != null ? EYE : 0D);
+                    long destination = ((long) Math.floor(px) << 32) ^ ((long) Math.floor(pz) & 0xffffffffL);
 
-                    if (params.followGrid != null)
+                    if (way == null || t - lastPlan >= REPLAN_TICKS || (destination != lastDestination && t - lastPlan >= 3))
                     {
-                        NavGrid.Node here = nodeNear(params.followGrid, sx, sy, sz);
-                        NavGrid.Node destination = nodeNear(params.followGrid, px, ty[t] - (params.followCamera != null ? EYE : 0D), pz);
+                        way = null;
+                        wayComplete = true;
+                        wayNext = 1;
+                        lastPlan = t;
+                        lastDestination = destination;
 
-                        if (here == null || destination == null)
+                        /* On the mesh of the volume where there is one and both ends are on it, else over the blocks of the world */
+                        if (params.followGrid != null)
                         {
-                            route = null;
-                        }
-                        else if (route == null || t - lastPlan >= REPLAN_TICKS || (destination != lastDestination && t - lastPlan >= 3))
-                        {
-                            List<NavGrid.Node> path = params.followGrid.path(here, destination);
+                            NavGrid.Node here = nodeNear(params.followGrid, sx, cy, sz);
+                            NavGrid.Node goalNode = nodeNear(params.followGrid, px, destinationY, pz);
+                            List<NavGrid.Node> path = here != null && goalNode != null ? params.followGrid.path(here, goalNode) : null;
 
-                            route = path != null && path.size() > 1 ? path : null;
-                            routeNext = 1;
-                            lastPlan = t;
-                            lastDestination = destination;
-                        }
-
-                        if (route != null)
-                        {
-                            /* Past the points it has already reached */
-                            while (routeNext < route.size() - 1 && Math.hypot(route.get(routeNext).centerX() - sx, route.get(routeNext).centerZ() - sz) < 0.35D)
+                            if (path != null && path.size() > 1)
                             {
-                                routeNext++;
-                            }
+                                way = new ArrayList<>();
 
-                            if (routeNext < route.size() - 1)
-                            {
-                                NavGrid.Node way = route.get(routeNext);
-                                double left = Math.hypot(way.centerX() - sx, way.centerZ() - sz);
-
-                                for (int i = routeNext; i < route.size() - 1; i++)
+                                for (NavGrid.Node node : path)
                                 {
-                                    left += Math.hypot(route.get(i + 1).centerX() - route.get(i).centerX(), route.get(i + 1).centerZ() - route.get(i).centerZ());
+                                    way.add(new double[] {node.centerX(), node.centerZ(), node.y});
                                 }
-
-                                aimX = way.centerX();
-                                aimZ = way.centerZ();
-                                gap = left + Math.hypot(px - route.get(route.size() - 1).centerX(), pz - route.get(route.size() - 1).centerZ());
-                                ease = 1D;
                             }
+                        }
+
+                        if (way == null && params.followWorld != null)
+                        {
+                            WalkWorld.Route found = WalkWorld.path(params.followWorld, sx, cy, sz, px, pz, WORLD_SEARCH);
+
+                            if (found.points().size() > 1)
+                            {
+                                way = found.points();
+                                wayComplete = found.complete();
+                            }
+                        }
+                    }
+
+                    if (way != null)
+                    {
+                        /* Past the points it has already reached */
+                        while (wayNext < way.size() - 1 && Math.hypot(way.get(wayNext)[0] - sx, way.get(wayNext)[1] - sz) < 0.35D)
+                        {
+                            wayNext++;
+                        }
+
+                        boolean last = wayNext >= way.size() - 1;
+
+                        if (!last || !wayComplete)
+                        {
+                            double[] point = way.get(wayNext);
+                            double left = Math.hypot(point[0] - sx, point[1] - sz);
+
+                            for (int i = wayNext; i < way.size() - 1; i++)
+                            {
+                                left += Math.hypot(way.get(i + 1)[0] - way.get(i)[0], way.get(i + 1)[1] - way.get(i)[1]);
+                            }
+
+                            aimX = point[0];
+                            aimZ = point[1];
+                            gap = left + (wayComplete ? Math.hypot(px - way.get(way.size() - 1)[0], pz - way.get(way.size() - 1)[1]) : 0D);
+                            ease = 1D;
                         }
                     }
 
@@ -917,21 +960,37 @@ public class ReplayBatchProcessor
                         }
                     }
 
-                    sx += stepX;
-                    sz += stepZ;
+                    if (params.followWorld != null)
+                    {
+                        /* Only where the body fits: along a wall when the way is blocked, up a block when it is a step */
+                        double[] moved = WalkWorld.move(params.followWorld, sx, cy, sz, stepX, stepZ);
+
+                        sx = moved[0];
+                        cy = moved[1];
+                        sz = moved[2];
+                    }
+                    else
+                    {
+                        sx += stepX;
+                        sz += stepZ;
+                    }
+
                     lastGap = gap;
                 }
 
                 /* Never inside the circle: whatever is, even when the target walks into it, goes back out along the line from the centre */
                 double[] kept = outside(sx, sz, goal, min, slotRadians);
 
-                sx = kept[0];
-                sz = kept[1];
+                if (params.followWorld == null || WalkWorld.fits(params.followWorld, kept[0], cy, kept[1]))
+                {
+                    sx = kept[0];
+                    sz = kept[1];
+                }
 
                 /* Its height is that of the floor it walks on, not the target's: a jump, a crouch, a ladder are the target's own */
                 if (t > start)
                 {
-                    double floor = floorFor(params, sx, sy, sz);
+                    double floor = params.followWorld != null ? cy : floorFor(params, sx, sy, sz);
 
                     if (!Double.isNaN(floor))
                     {
@@ -975,8 +1034,17 @@ public class ReplayBatchProcessor
 
                     double[] swayed = outside(outX, outZ, goal, min, slotRadians);
 
-                    outX = swayed[0];
-                    outZ = swayed[1];
+                    /* The sway never takes it into a wall */
+                    if (params.followWorld == null || WalkWorld.fits(params.followWorld, swayed[0], cy, swayed[1]))
+                    {
+                        outX = swayed[0];
+                        outZ = swayed[1];
+                    }
+                    else
+                    {
+                        outX = sx;
+                        outZ = sz;
+                    }
                 }
 
                 appendKey(x, t, outX);

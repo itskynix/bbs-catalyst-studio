@@ -90,6 +90,8 @@ public class UIReplayPropertiesPanel extends UIElement
     /* Crowd glance: the switch, whom to glance at, and how */
     public UIToggle crowdGlance;
     public UIButton crowdGlanceTarget;
+    public UIButton aiFollowTarget;
+    public UITrackpad aiFollowDistance;
     public UITrackpad crowdGlanceRadius;
     public UITrackpad crowdGlanceDuration;
     public UITrackpad crowdGlanceNeck;
@@ -251,6 +253,7 @@ public class UIReplayPropertiesPanel extends UIElement
         }
 
         this.createCrowdGlanceFields();
+        this.createFollowFields();
         this.createPovSection();
 
         UISection lookAtSection = new UISection(UIKeys.FILM_REPLAY_LOOK_AT);
@@ -268,6 +271,13 @@ public class UIReplayPropertiesPanel extends UIElement
             this.labelled(UIKeys.FILM_REPLAY_CROWD_GLANCE_NECK, this.crowdGlanceNeck),
             this.labelled(UIKeys.FILM_REPLAY_CROWD_GLANCE_BLEND, this.crowdGlanceBlend),
             this.labelled(UIKeys.FILM_REPLAY_CROWD_GLANCE_COOLDOWN, this.crowdGlanceCooldown)
+        );
+
+        UISection followSection = new UISection(UIKeys.FILM_REPLAY_AI_FOLLOW_SECTION);
+
+        followSection.fields.add(
+            this.labelled(UIKeys.FILM_REPLAY_AI_FOLLOW_TARGET, this.aiFollowTarget),
+            this.labelled(UIKeys.FILM_REPLAY_AI_FOLLOW_DISTANCE, this.aiFollowDistance)
         );
 
         UISection shadowSection = new UISection(UIKeys.FILM_REPLAY_SHADOW);
@@ -288,6 +298,7 @@ public class UIReplayPropertiesPanel extends UIElement
 
         lookAtSection.setExpanded(false);
         crowdGlanceSection.setExpanded(false);
+        followSection.setExpanded(false);
         shadowSection.setExpanded(false);
         other.setExpanded(false);
 
@@ -296,6 +307,7 @@ public class UIReplayPropertiesPanel extends UIElement
             this.povSection,
             lookAtSection,
             crowdGlanceSection,
+            followSection,
             shadowSection,
             other
         );
@@ -668,6 +680,80 @@ public class UIReplayPropertiesPanel extends UIElement
     }
 
     /** The target of the crowd glance, for every picked replay */
+    /**
+     * The live AI's follow target: a drop-down of what there is to follow, picked rather than typed.
+     * Like every field here a change goes to all the picked replays.
+     */
+    private void createFollowFields()
+    {
+        this.aiFollowTarget = this.bound(new UIButton(IKey.EMPTY, (b) -> this.openFollowTargetMenu()), (r) -> this.aiFollowTarget.label = this.followLabel(r.aiFollowTarget.get()));
+        this.aiFollowTarget.tooltip(UIKeys.FILM_REPLAY_AI_FOLLOW_TARGET_TOOLTIP);
+
+        this.aiFollowDistance = this.bound(new UITrackpad((v) -> this.edit((replay) -> replay.aiFollowDistance.set(v.floatValue()))), (r) -> this.aiFollowDistance.setValue(r.aiFollowDistance.get()));
+        this.aiFollowDistance.limit(0, 16, false).tooltip(UIKeys.FILM_REPLAY_AI_FOLLOW_DISTANCE_TOOLTIP);
+    }
+
+    /** What a follow target is called: nothing, the camera, or the name of the replay with that id */
+    private IKey followLabel(String target)
+    {
+        if (target == null || target.isEmpty())
+        {
+            return UIKeys.FILM_REPLAY_AI_FOLLOW_NONE;
+        }
+
+        if (target.equals("camera"))
+        {
+            return UIKeys.FILM_REPLAY_AI_FOLLOW_CAMERA;
+        }
+
+        return this.replayLabel(target);
+    }
+
+    /** None, the camera and every other replay of the film; the picked ones are left out of their own list */
+    private void openFollowTargetMenu()
+    {
+        Film film = this.filmPanel.getData();
+
+        if (film == null || this.replay == null || this.list == null)
+        {
+            return;
+        }
+
+        List<Replay> picked = this.list.getSelectedReplays();
+
+        this.getContext().replaceContextMenu((manager) ->
+        {
+            manager.autoKeys();
+
+            manager.action(Icons.CLOSE, UIKeys.FILM_REPLAY_AI_FOLLOW_NONE, () -> this.edit((replay) -> replay.aiFollowTarget.set("")));
+            manager.action(Icons.CAMERA, UIKeys.FILM_REPLAY_AI_FOLLOW_CAMERA, () -> this.edit((replay) -> replay.aiFollowTarget.set("camera")));
+
+            for (Replay other : film.replays.getList())
+            {
+                boolean among = false;
+
+                for (Replay one : picked)
+                {
+                    among |= one == other;
+                }
+
+                /* One cannot follow itself; with a crowd picked the others of it are still there to follow */
+                if (among && picked.size() == 1)
+                {
+                    continue;
+                }
+
+                manager.action(Icons.FILM, IKey.constant(other.getName()), () -> this.edit((replay) ->
+                {
+                    if (replay != other)
+                    {
+                        replay.aiFollowTarget.set(other.getId());
+                    }
+                }));
+            }
+        });
+    }
+
     private void openCrowdGlanceTargetMenu()
     {
         Film film = this.filmPanel.getData();

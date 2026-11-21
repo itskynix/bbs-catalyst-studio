@@ -62,6 +62,12 @@ public class Replay extends ValueGroup
     public final ValueInt lookAtMode = new ValueInt("look_at_mode", 0);
     /** Id of the replay looked at, in mode 1 */
     public final ValueString lookAtTarget = new ValueString("look_at_target", "");
+
+    /** Who a replay with AI follows: empty walks about at random, 'camera' follows the camera of the film, anything else is the id of another replay */
+    public final ValueString aiFollowTarget = new ValueString("ai_follow_target", "");
+
+    /** How near it comes to what it follows, in blocks */
+    public final ValueFloat aiFollowDistance = new ValueFloat("ai_follow_distance", 1.2F, 0F, 16F);
     /** The point looked at in mode 3, unless the look_at_x/y/z tracks have keys */
     public final ValuePoint lookAtPoint = new ValuePoint("look_at_point", new Point(0, 0, 0));
 
@@ -99,6 +105,8 @@ public class Replay extends ValueGroup
 
         this.add(this.lookAtMode);
         this.add(this.lookAtTarget);
+        this.add(this.aiFollowTarget);
+        this.add(this.aiFollowDistance);
         this.add(this.lookAtPoint);
         this.add(this.crowdGlance);
 

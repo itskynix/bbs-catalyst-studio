@@ -435,6 +435,7 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
             params.followStartTick = PROCESS_STATE.followFromCursor ? this.filmPanel.getCursor() : 0;
             params.followGrid = this.findNavGrid(film);
             params.followGround = this.createFloorProvider();
+            params.followWorld = MinecraftClient.getInstance().world;
             params.followRotate = PROCESS_STATE.followRotate;
             params.followKeepGround = PROCESS_STATE.followKeepGround;
             params.followDuration = film == null ? 0 : film.calculateDuration();
@@ -865,6 +866,11 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
             else
             {
                 this.setTargetLabel(this.followTarget, PROCESS_STATE.followTarget);
+
+                if (PROCESS_STATE.followTarget < 0)
+                {
+                    this.followTarget.label = UIKeys.FILM_REPLAY_AI_FOLLOW_NONE;
+                }
             }
         }
 
@@ -930,6 +936,13 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
             context.replaceContextMenu((manager) ->
             {
                 manager.autoKeys();
+
+                manager.action(Icons.CLOSE, UIKeys.FILM_REPLAY_AI_FOLLOW_NONE, () ->
+                {
+                    PROCESS_STATE.followTarget = -1;
+
+                    this.updateTargetLabels();
+                });
 
                 manager.action(Icons.CAMERA, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_PARAM_FOLLOW_CAMERA, () ->
                 {

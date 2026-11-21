@@ -240,8 +240,8 @@ public final class AiSimulation
                 key = key * 31L + Float.hashCode(settings.aiSpeed.get());
                 key = key * 31L + settings.aiSeed.get();
                 key = key * 31L + (settings.aiAvoidance.get() ? 1 : 0);
-                key = key * 31L + settings.aiFollowTarget.get().hashCode();
-                key = key * 31L + Float.hashCode(settings.aiFollowDistance.get());
+                key = key * 31L + other.aiFollowTarget.get().hashCode();
+                key = key * 31L + Float.hashCode(other.aiFollowDistance.get());
                 key = key * 31L + (settings.orientToMovement.get() ? 1 : 0);
                 key = key * 31L + (settings.useControllerDesiredRotation.get() ? 1 : 0);
                 key = key * 31L + Float.hashCode(settings.rotationRate.get());
@@ -382,7 +382,7 @@ public final class AiSimulation
 
         for (Replay actor : actors)
         {
-            String reference = actor.form.get().aiFollowTarget.get().trim();
+            String reference = actor.aiFollowTarget.get().trim();
 
             if (reference.isEmpty())
             {
@@ -465,7 +465,7 @@ public final class AiSimulation
 
         for (Agent agent : agents)
         {
-            String reference = agent.settings.aiFollowTarget.get().trim();
+            String reference = agent.replay == null ? "" : agent.replay.aiFollowTarget.get().trim();
 
             if (reference.isEmpty())
             {
@@ -837,7 +837,7 @@ public final class AiSimulation
         agent.watchY = at[1];
         agent.watchZ = at[2];
 
-        double min = Math.max(0D, agent.settings.aiFollowDistance.get());
+        double min = Math.max(0D, agent.replay == null ? 1.2D : agent.replay.aiFollowDistance.get());
 
         if (Math.hypot(at[0] - agent.x, at[2] - agent.z) <= min + 0.25D)
         {
