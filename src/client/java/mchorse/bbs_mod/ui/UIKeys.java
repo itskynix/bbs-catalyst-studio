@@ -3052,7 +3052,6 @@ public class UIKeys
     public static final IKey MORPH_STUDIO_PICKER_MODEL_BLOCK = L10n.lang("bbs.ui.morph_studio.picker_model_block");
     public static final IKey MORPH_STUDIO_BACK_TO_PICKER = L10n.lang("bbs.ui.morph_studio.back_to_picker");
     public static final IKey MORPH_CATEGORY_ALL = L10n.lang("bbs.ui.morph_studio.categories.all");
-    public static final IKey MORPH_FOLDER_ALL = L10n.lang("bbs.ui.morph_studio.folders.all");
     public static final IKey MORPH_FOLDER_UNCATEGORIZED = L10n.lang("bbs.ui.morph_studio.folders.uncategorized");
     public static final IKey MORPH_CATEGORY_BLOCKS = L10n.lang("bbs.ui.morph_studio.categories.blocks");
     public static final IKey MORPH_CATEGORY_FAVORITES = L10n.lang("bbs.ui.morph_studio.categories.favorites");

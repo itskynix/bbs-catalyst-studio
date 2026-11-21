@@ -126,12 +126,21 @@ public class UIMorphFormCard extends UIClickable<UIMorphFormCard>
             context.batcher.outline(x + 1, y + 1, ex - 1, ey - 1, Colors.setA(isSelected ? primary : Colors.WHITE, isSelected ? 0.55F : 0.18F));
         }
 
+        /*
+         * The text under the picture takes what the card's size allows: the name, the technical name
+         * and the kind on a large card, the name and the technical name on a middling one, the name
+         * alone on a small one. The picture gets the rest.
+         */
+        int block = a.h >= 100 ? 36 : (a.h >= 80 ? 24 : 14);
+        boolean showCode = block >= 24;
+        boolean showType = block >= 36;
+
         /* 3D Preview Kutusu */
         int prevPad = 4;
         int prevX = x + prevPad;
         int prevY = y + prevPad;
         int prevEx = ex - prevPad;
-        int prevEy = y + 68;
+        int prevEy = ey - block;
 
         context.batcher.box(prevX, prevY, prevEx, prevEy, 0x55000000);
         context.batcher.outline(prevX, prevY, prevEx, prevEy, isHovered ? 0x30ffffff : 0x14ffffff);
@@ -149,17 +158,24 @@ public class UIMorphFormCard extends UIClickable<UIMorphFormCard>
 
         /* Title, then the technical name smaller and dimmer, then the kind */
         FontRenderer font = context.batcher.getFont();
+        int titleY = ey - block + 2;
         String name = font.limitToWidth(this.title, "...", a.w - 8);
-        context.batcher.text(name, x + 4, y + 70, Colors.WHITE, false);
+        context.batcher.text(name, x + 4, titleY, Colors.WHITE, false);
 
-        MatrixStack matrices = context.batcher.getContext().getMatrices();
-        float small = 0.8F;
+        if (showCode)
+        {
+            MatrixStack matrices = context.batcher.getContext().getMatrices();
+            float small = 0.8F;
 
-        matrices.push();
-        matrices.scale(small, small, 1F);
-        context.batcher.text(font.limitToWidth(this.code, "...", (int) ((a.w - 8) / small)), (int) ((x + 4) / small), (int) ((y + 82) / small), Colors.setA(Colors.WHITE, 0.38F), false);
-        matrices.pop();
+            matrices.push();
+            matrices.scale(small, small, 1F);
+            context.batcher.text(font.limitToWidth(this.code, "...", (int) ((a.w - 8) / small)), (int) ((x + 4) / small), (int) ((titleY + 12) / small), Colors.setA(Colors.WHITE, 0.38F), false);
+            matrices.pop();
+        }
 
-        context.batcher.text(font.limitToWidth(this.type, "...", a.w - 8), x + 4, y + 92, Colors.setA(Colors.WHITE, 0.55F), false);
+        if (showType)
+        {
+            context.batcher.text(font.limitToWidth(this.type, "...", a.w - 8), x + 4, titleY + 22, Colors.setA(Colors.WHITE, 0.55F), false);
+        }
     }
 }

@@ -33,7 +33,6 @@ import mchorse.bbs_mod.ui.utils.UI;
 import mchorse.bbs_mod.ui.utils.UIUtils;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.ui.utils.keys.KeyAction;
-import mchorse.bbs_mod.ui.utils.resizers.layout.GridResizer;
 import mchorse.bbs_mod.utils.Direction;
 import mchorse.bbs_mod.utils.colors.Colors;
 import org.lwjgl.glfw.GLFW;
@@ -93,13 +92,19 @@ public class UIMorphStudioScreen extends UIElement
     private final UITextbox searchBox;
     private final UIElement pillsRow;
     private final List<UICategoryPill> pills = new ArrayList<>();
-
-    /** The folders of the models, a second row of pills under the categories while Models is the category */
-    private final UIElement foldersRow;
-    private final List<UIFolderPill> folderPills = new ArrayList<>();
     private final UILabel sectionTitle;
     private final UIScrollView cardsScroll;
-    private final GridResizer cardsGrid;
+
+    /** The folders of models that are folded shut, by folder path ('' for the models in none); kept for the whole session */
+    private static final Set<String> FOLDED = new HashSet<>();
+
+    /** How large the cards are, in pixels; Ctrl and the wheel change it, and it is kept for the whole session */
+    private static int cardSize = 104;
+    private static final int CARD_MIN = 56;
+    private static final int CARD_MAX = 160;
+    private static final int CARD_STEP = 8;
+    private static final int CARD_GAP = 6;
+    private static final int HEADER_HEIGHT = 22;
 
     /* Veri ve Durum */
     private final Set<String> favorites = new HashSet<>();
@@ -109,9 +114,6 @@ public class UIMorphStudioScreen extends UIElement
     private Form selectedForm;
     private UIMorphCategory currentCategory = UIMorphCategory.ALL;
     private String searchQuery = "";
-
-    /** The folder the models are narrowed to: null for all of them, the empty string for the ones in no folder */
-    private String currentFolder;
 
     public UIMorphStudioScreen(Host host, boolean picker)
     {
@@ -227,6 +229,19 @@ public class UIMorphStudioScreen extends UIElement
         this.rightPanel = new UIElement()
         {
             @Override
+            protected IUIElement childrenMouseScrolled(UIContext context)
+            {
+                if (Window.isCtrlPressed() && context.mouseWheel != 0 && cardsScroll.area.isInside(context))
+                {
+                    zoomCards(context.mouseWheel > 0 ? CARD_STEP : -CARD_STEP);
+
+                    return this;
+                }
+
+                return super.childrenMouseScrolled(context);
+            }
+
+            @Override
             protected boolean subMouseScrolled(UIContext context)
             {
                 if (this.area.isInside(context) && context.mouseWheel != 0)
@@ -279,11 +294,6 @@ public class UIMorphStudioScreen extends UIElement
             this.pillsRow.add(pill);
         }
 
-        /* Model klasörleri: yalnızca Modeller kategorisinde görünen ikinci satır */
-        this.foldersRow = new UIElement();
-        this.foldersRow.relative(this.rightPanel).x(8).y(34).w(1F, -16).h(20);
-        this.foldersRow.setVisible(false);
-
         /* Dinamik Bölüm Başlığı */
         this.sectionTitle = UI.label(UIKeys.MORPH_STUDIO_RECENT_TITLE).color(Colors.setA(Colors.WHITE, 0.65F));
         this.sectionTitle.labelAnchor(0, 0.5F);
@@ -294,13 +304,8 @@ public class UIMorphStudioScreen extends UIElement
         this.cardsScroll.relative(this.rightPanel).x(6).y(76).w(1F, -12).h(1F, -82);
         this.cardsScroll.scroll.scrollSpeed = 24;
         this.cardsScroll.scroll.scrollItemSize = 1;
-        this.cardsGrid = this.cardsScroll.grid(6);
-        this.cardsGrid.padding(4);
-        this.cardsGrid.center();
-        this.cardsGrid.scroll();
-        this.cardsGrid.width(104).height(104);
 
-        this.rightPanel.add(searchContainer, this.pillsRow, this.foldersRow, this.sectionTitle, this.cardsScroll);
+        this.rightPanel.add(searchContainer, this.pillsRow, this.sectionTitle, this.cardsScroll);
         this.rightPanel.add(new UIRenderable(this::renderEmptyHint));
         this.add(this.rightPanel);
         this.add(new UIRenderable(this::renderDivider));
@@ -317,79 +322,6 @@ public class UIMorphStudioScreen extends UIElement
     {
         this.currentCategory = category;
         this.refresh();
-    }
-
-    public void setFolder(String folder)
-    {
-        this.currentFolder = folder;
-        this.refresh();
-    }
-
-    private boolean inModels()
-    {
-        return this.currentCategory == UIMorphCategory.MODELS;
-    }
-
-    /**
-     * Rebuilds the row of folders from the models there are: 'All', one for each folder under
-     * assets/models in alphabetical order and, last, the models that sit in no folder. The row shows
-     * only while Models is the category; any other category gives its room back to the cards.
-     */
-    private void rebuildFolders()
-    {
-        this.foldersRow.removeAll();
-        this.folderPills.clear();
-
-        boolean show = this.inModels();
-        java.util.TreeSet<String> folders = new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
-        boolean loose = false;
-
-        if (show)
-        {
-            for (Form form : this.allForms)
-            {
-                String folder = UIMorphCategory.classify(form) == UIMorphCategory.MODELS ? UIMorphCategory.modelFolder(form) : null;
-
-                if (folder == null)
-                {
-                    continue;
-                }
-
-                if (folder.isEmpty())
-                {
-                    loose = true;
-                }
-                else
-                {
-                    folders.add(folder);
-                }
-            }
-
-            if (this.currentFolder != null && !(this.currentFolder.isEmpty() ? loose : folders.contains(this.currentFolder)))
-            {
-                this.currentFolder = null;
-            }
-
-            this.folderPills.add(new UIFolderPill(this, null, UIKeys.MORPH_FOLDER_ALL.get()));
-
-            for (String folder : folders)
-            {
-                this.folderPills.add(new UIFolderPill(this, folder, UIMorphNaming.folderTitle(folder)));
-            }
-
-            if (loose)
-            {
-                this.folderPills.add(new UIFolderPill(this, "", UIKeys.MORPH_FOLDER_UNCATEGORIZED.get()));
-            }
-
-            for (UIFolderPill pill : this.folderPills)
-            {
-                pill.relative(this.foldersRow);
-                this.foldersRow.add(pill);
-            }
-        }
-
-        this.foldersRow.setVisible(show);
     }
 
     private void onSearchChanged(String query)
@@ -567,17 +499,10 @@ public class UIMorphStudioScreen extends UIElement
 
         String query = this.searchQuery.toLowerCase();
 
-        this.rebuildFolders();
-
-        /* Arama, kategori ve model klasörü filtreleme */
+        /* Arama ve kategori filtreleme */
         for (Form form : this.allForms)
         {
             if (!this.currentCategory.matches(form, this.favorites, this.recentForms))
-            {
-                continue;
-            }
-
-            if (this.inModels() && this.currentFolder != null && !this.currentFolder.equals(UIMorphCategory.modelFolder(form)))
             {
                 continue;
             }
@@ -631,84 +556,126 @@ public class UIMorphStudioScreen extends UIElement
         else
         {
             this.sectionTitle.label = this.currentCategory.title;
+        }
 
-            if (this.inModels() && this.currentFolder != null)
+        /* Modeller klasörlerine göre gruplanır: Modeller sekmesinde hepsi, Tümü sekmesinde modeller */
+        if (this.currentCategory == UIMorphCategory.MODELS || this.currentCategory == UIMorphCategory.ALL)
+        {
+            this.addGrouped(!query.isEmpty());
+        }
+        else
+        {
+            for (Form form : this.displayedForms)
             {
-                String folder = this.currentFolder.isEmpty() ? UIKeys.MORPH_FOLDER_UNCATEGORIZED.get() : UIMorphNaming.folderTitle(this.currentFolder);
-
-                this.sectionTitle.label = IKey.raw(this.currentCategory.title.get() + " / " + folder);
+                this.addCard(form);
             }
         }
 
-        /* Kartları ekle */
+        this.layoutCards();
+        this.cardsScroll.resize();
+        this.cardsScroll.scroll.clamp();
+    }
+
+    private void addCard(Form form)
+    {
+        this.cardsScroll.add(new UIMorphFormCard(this, form).relative(this.cardsScroll));
+    }
+
+    /**
+     * The forms in the order they are shown, the models under a heading for each folder they sit in:
+     * the forms that are not models first, then the folders in alphabetical order and last the
+     * models in none. A folded folder shows its heading only, unless a search is on: then every
+     * folder with a match is open, and a folder with none is not there at all.
+     */
+    private void addGrouped(boolean searching)
+    {
+        java.util.TreeMap<String, List<Form>> groups = new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        List<Form> loose = new ArrayList<>();
+
         for (Form form : this.displayedForms)
         {
-            this.cardsScroll.add(new UIMorphFormCard(this, form));
+            String folder = UIMorphCategory.classify(form) == UIMorphCategory.MODELS ? UIMorphCategory.modelFolder(form) : null;
+
+            if (folder == null)
+            {
+                loose.add(form);
+            }
+            else
+            {
+                groups.computeIfAbsent(folder, (k) -> new ArrayList<>()).add(form);
+            }
         }
 
-        this.layoutPills();
-        this.updateGridCentering();
+        for (Form form : loose)
+        {
+            this.addCard(form);
+        }
+
+        List<String> order = new ArrayList<>(groups.keySet());
+
+        /* The models in no folder come last, whatever the alphabet says */
+        if (order.remove(""))
+        {
+            order.add("");
+        }
+
+        for (String folder : order)
+        {
+            List<Form> forms = groups.get(folder);
+            boolean folded = !searching && FOLDED.contains(folder);
+
+            this.cardsScroll.add(new UIFolderHeader(this, folder, forms.size(), folded).relative(this.cardsScroll));
+
+            if (!folded)
+            {
+                for (Form form : forms)
+                {
+                    this.addCard(form);
+                }
+            }
+        }
+    }
+
+    public void toggleFolder(String folder)
+    {
+        if (!FOLDED.remove(folder))
+        {
+            FOLDED.add(folder);
+        }
+
+        this.refresh();
+    }
+
+    /** Grows or shrinks the cards, keeping the list at about the same place in itself */
+    private void zoomCards(int delta)
+    {
+        int size = Math.max(CARD_MIN, Math.min(CARD_MAX, cardSize + delta));
+
+        if (size == cardSize)
+        {
+            return;
+        }
+
+        double ratio = this.cardsScroll.scroll.getScroll() / Math.max(1D, this.cardsScroll.scroll.scrollSize);
+
+        cardSize = size;
+        this.layoutCards();
         this.cardsScroll.resize();
-        this.updateGridCentering();
+        this.cardsScroll.scroll.setScroll(ratio * this.cardsScroll.scroll.scrollSize);
         this.cardsScroll.scroll.clamp();
     }
 
     /** Pills are as wide as their words; when the row is too narrow they all shrink alike. */
     private void layoutPills()
     {
-        int available = Math.max(40, this.rightPanel.area.w - 16);
-        List<UIElement> items = new ArrayList<>();
-        List<Integer> widths = new ArrayList<>();
-
-        for (UICategoryPill pill : this.pills)
-        {
-            items.add(pill);
-            widths.add(pill.naturalWidth());
-        }
-
-        int rows = this.flow(items, widths, available);
-
-        this.pillsRow.h(rows * 24 - 4);
-
-        int folderRows = 0;
-
-        if (this.foldersRow.isVisible())
-        {
-            items = new ArrayList<>();
-            widths = new ArrayList<>();
-
-            for (UIFolderPill pill : this.folderPills)
-            {
-                items.add(pill);
-                widths.add(pill.naturalWidth());
-            }
-
-            folderRows = this.flow(items, widths, available);
-
-            this.foldersRow.y(34 + rows * 24).h(folderRows * 24 - 4);
-        }
-
-        int total = rows + folderRows;
-
-        this.sectionTitle.y(34 + total * 24);
-        this.cardsScroll.y(52 + total * 24).h(1F, -(58 + total * 24));
-
-        this.pillsRow.resize();
-        this.foldersRow.resize();
-        this.sectionTitle.resize();
-        this.cardsScroll.resize();
-    }
-
-    /** Lays items out left to right, wrapping to a new row of 24 pixels when one does not fit; returns the rows used */
-    private int flow(List<UIElement> items, List<Integer> widths, int available)
-    {
         int gap = 4;
+        int available = Math.max(40, this.rightPanel.area.w - 16);
         int x = 0;
         int row = 0;
 
-        for (int i = 0; i < items.size(); i++)
+        for (UICategoryPill pill : this.pills)
         {
-            int w = Math.min(available, widths.get(i));
+            int w = Math.min(available, pill.naturalWidth());
 
             if (x > 0 && x + w > available)
             {
@@ -716,30 +683,73 @@ public class UIMorphStudioScreen extends UIElement
                 row += 1;
             }
 
-            items.get(i).x(x).y(row * 24).w(w).h(20);
+            pill.x(x).y(row * 24).w(w).h(20);
             x += w + gap;
         }
 
-        return row + 1;
+        int rows = row + 1;
+
+        this.pillsRow.h(rows * 24 - 4);
+        this.sectionTitle.y(34 + rows * 24);
+        this.cardsScroll.y(52 + rows * 24).h(1F, -(58 + rows * 24));
+
+        this.pillsRow.resize();
+        this.sectionTitle.resize();
+        this.cardsScroll.resize();
     }
 
-    private void updateGridCentering()
+    /**
+     * Puts the cards in a grid of the chosen size, centred, and every folder heading on a row of its
+     * own across the whole width; the grid starts again under each heading.
+     */
+    private void layoutCards()
     {
-        int cardW = 104;
-        int gap = 6;
-        int scrollW = Math.max(cardW, this.cardsScroll.area.w);
-        int cols = Math.max(1, (scrollW + gap) / (cardW + gap));
-        int totalW = cols * cardW + (cols - 1) * gap;
-        int padX = Math.max(4, (scrollW - totalW) / 2);
+        int size = cardSize;
+        int width = Math.max(size, this.cardsScroll.area.w);
+        int cols = Math.max(1, (width - 8 + CARD_GAP) / (size + CARD_GAP));
+        int totalW = cols * size + (cols - 1) * CARD_GAP;
+        int padX = Math.max(4, (width - totalW) / 2);
+        int y = 4;
+        int col = 0;
 
-        this.cardsGrid.padding(padX, 4);
+        for (IUIElement child : this.cardsScroll.getChildren())
+        {
+            if (!(child instanceof UIElement element))
+            {
+                continue;
+            }
 
-        int count = this.cardsScroll.getChildren().size();
-        int rows = count == 0 ? 0 : (count + cols - 1) / cols;
-        int totalH = rows == 0 ? 0 : rows * 104 + (rows - 1) * gap + 8;
+            if (child instanceof UIFolderHeader)
+            {
+                if (col > 0)
+                {
+                    y += size + CARD_GAP;
+                    col = 0;
+                }
+
+                element.x(4).y(y).w(width - 8).h(HEADER_HEIGHT);
+                y += HEADER_HEIGHT + 4;
+
+                continue;
+            }
+
+            element.x(padX + col * (size + CARD_GAP)).y(y).w(size).h(size);
+            col += 1;
+
+            if (col == cols)
+            {
+                col = 0;
+                y += size + CARD_GAP;
+            }
+        }
+
+        if (col > 0)
+        {
+            y += size + CARD_GAP;
+        }
 
         this.cardsScroll.scroll.scrollItemSize = 1;
-        this.cardsScroll.scroll.setSize(totalH);
+        this.cardsScroll.scroll.setSize(y + 2);
         this.cardsScroll.scroll.clamp();
     }
 
@@ -749,7 +759,7 @@ public class UIMorphStudioScreen extends UIElement
         super.resize();
 
         this.layoutPills();
-        this.updateGridCentering();
+        this.layoutCards();
         this.cardsScroll.resize();
         this.cardsScroll.scroll.clamp();
     }
@@ -759,10 +769,8 @@ public class UIMorphStudioScreen extends UIElement
     {
         if (context.getKeyCode() == GLFW.GLFW_KEY_ENTER && context.getKeyAction() == KeyAction.PRESSED)
         {
-            if (!this.cardsScroll.getChildren().isEmpty())
+            for (IUIElement first : this.cardsScroll.getChildren())
             {
-                IUIElement first = this.cardsScroll.getChildren().get(0);
-
                 if (first instanceof UIMorphFormCard card)
                 {
                     this.morphInto(card.form);
@@ -939,36 +947,34 @@ public class UIMorphStudioScreen extends UIElement
         }
     }
 
-    /* Klasör Hapı Bileşeni */
+    /* Klasör Başlığı Bileşeni */
 
-    public static class UIFolderPill extends UIClickable<UIFolderPill>
+    /**
+     * The heading of a folder of models, across the whole width: an arrow that points down while the
+     * folder is open and right while it is folded, the folder's name and, at the right end, how many
+     * models there are in it. A click folds or unfolds it.
+     */
+    public static class UIFolderHeader extends UIClickable<UIFolderHeader>
     {
-        private final UIMorphStudioScreen studio;
-        private final String folder;
         private final String text;
+        private final String count;
+        private final boolean folded;
 
-        public UIFolderPill(UIMorphStudioScreen studio, String folder, String text)
+        public UIFolderHeader(UIMorphStudioScreen studio, String folder, int count, boolean folded)
         {
             super((c) ->
             {
                 UIUtils.playClick();
-                studio.setFolder(folder);
+                studio.toggleFolder(folder);
             });
 
-            this.studio = studio;
-            this.folder = folder;
-            this.text = text;
-            this.h(20);
-            this.w(this.naturalWidth());
-        }
-
-        public int naturalWidth()
-        {
-            return Batcher2D.getDefaultTextRenderer().getWidth(this.text) + 14;
+            this.text = folder.isEmpty() ? UIKeys.MORPH_FOLDER_UNCATEGORIZED.get() : UIMorphNaming.folderTitle(folder);
+            this.count = String.valueOf(count);
+            this.folded = folded;
         }
 
         @Override
-        protected UIFolderPill get()
+        protected UIFolderHeader get()
         {
             return this;
         }
@@ -977,19 +983,21 @@ public class UIMorphStudioScreen extends UIElement
         protected void renderSkin(UIContext context)
         {
             Area a = this.area;
-            boolean active = java.util.Objects.equals(this.studio.currentFolder, this.folder);
             int color = UIMorphCategory.MODELS.color;
-            int bg = active ? (0xd8000000 | (color & 0x223246)) : (this.hover ? 0xc0141a24 : 0x700e121a);
-            int border = active ? (Colors.A100 | color) : (this.hover ? 0x60ffffff : 0x24ffffff);
-            int textColor = active ? Colors.WHITE : (this.hover ? 0xe0ffffff : 0x90ffffff);
+            int bg = this.hover ? 0xc0141a24 : 0x900e121a;
 
             context.batcher.box(a.x, a.y, a.ex(), a.ey(), bg);
-            context.batcher.outline(a.x, a.y, a.ex(), a.ey(), border);
+            context.batcher.box(a.x, a.y, a.x + 2, a.ey(), Colors.A100 | color);
+            context.batcher.box(a.x, a.ey() - 1, a.ex(), a.ey(), 0x24ffffff);
 
             FontRenderer font = context.batcher.getFont();
-            String label = font.limitToWidth(this.text, a.w - 6);
+            int textY = a.my() - font.getHeight() / 2;
+            int countW = font.getWidth(this.count);
 
-            context.batcher.text(label, a.mx() - font.getWidth(label) / 2, a.my() - font.getHeight() / 2, textColor, false);
+            context.batcher.icon(this.folded ? Icons.ARROW_RIGHT : Icons.ARROW_DOWN, Colors.setA(Colors.WHITE, 0.8F), a.x + 4, a.my(), 0F, 0.5F);
+            context.batcher.icon(Icons.POSE, Colors.A100 | color, a.x + 22, a.my(), 0F, 0.5F);
+            context.batcher.text(font.limitToWidth(this.text, "...", a.w - 64 - countW), a.x + 42, textY, Colors.WHITE, false);
+            context.batcher.text(this.count, a.ex() - 8 - countW, textY, Colors.setA(Colors.WHITE, 0.55F), false);
         }
     }
 }
