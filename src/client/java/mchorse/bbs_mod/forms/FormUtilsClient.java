@@ -170,6 +170,7 @@ public class FormUtilsClient
         register(qualet.irlite.forms.PointLightForm.class, qualet.irlite.client.forms.PointLightFormRenderer::new);
         register(qualet.irlite.forms.SpotlightForm.class, qualet.irlite.client.forms.SpotlightFormRenderer::new);
         register(DecalForm.class, DecalFormRenderer::new);
+        register(mchorse.bbs_mod.forms.forms.DecayForm.class, mchorse.bbs_mod.forms.renderers.DecayFormRenderer::new);
         register(HeightFogForm.class, HeightFogFormRenderer::new);
         register(mchorse.bbs_mod.forms.forms.PostProcessForm.class, mchorse.bbs_mod.forms.renderers.PostProcessFormRenderer::new);
         register(mchorse.bbs_mod.forms.forms.PhysicsFieldForm.class, mchorse.bbs_mod.forms.renderers.PhysicsFieldFormRenderer::new);
@@ -182,6 +183,7 @@ public class FormUtilsClient
         mchorse.bbs_mod.forms.forms.PhysicsFieldForm.displayNameSupplier = () -> mchorse.bbs_mod.l10n.L10n.lang("bbs.ui.forms.physics_field", "Physics Field").get();
         mchorse.bbs_mod.forms.forms.FakeSpaceForm.displayNameSupplier = () -> mchorse.bbs_mod.l10n.L10n.lang("bbs.ui.forms.fake_space", "Artificial Space Scene").get();
         mchorse.bbs_mod.forms.forms.NavigationVolumeForm.displayNameSupplier = () -> mchorse.bbs_mod.l10n.L10n.lang("bbs.ui.forms.navigation_volume", "Navigation Volume").get();
+        mchorse.bbs_mod.forms.forms.DecayForm.displayNameSupplier = () -> mchorse.bbs_mod.l10n.L10n.lang("bbs.ui.forms.decay", "Decay").get();
 
         /* A volume's slot track: the effect in the slot, then which of its values */
         mchorse.bbs_mod.forms.forms.PostProcessForm.trackNameSupplier = (id, param) ->

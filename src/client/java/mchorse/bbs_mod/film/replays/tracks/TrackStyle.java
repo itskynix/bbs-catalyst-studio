@@ -81,6 +81,12 @@ public class TrackStyle
         {
             LABELS.put(id, mchorse.bbs_mod.l10n.L10n.lang("bbs.ui.forms.editors.fake_space." + id));
         }
+        /* The decay form's own tracks */
+        for (String id : new String[] {"decay_progress", "edge_softness", "depth_inset", "primary_color", "edge_color"})
+        {
+            LABELS.put(id, mchorse.bbs_mod.l10n.L10n.lang("bbs.ui.forms.editors.decay." + id));
+        }
+
         LABELS.put("occlusionFactor", IKey.constant("occlusion"));
         LABELS.put("aperture", UIKeys.CAMERA_PANELS_DOF_APERTURE);
         LABELS.put("bokeh_intensity", UIKeys.CAMERA_PANELS_DOF_BOKEH_INTENSITY);
@@ -173,6 +179,14 @@ public class TrackStyle
         COLORS.put("baseHeight", 0x2ecc71);
         COLORS.put("density", 0x3498db);
         COLORS.put("falloff", 0xe67e22);
+
+        /* Decay channels */
+        COLORS.put("decay_progress", 0xc27a3a);
+        COLORS.put("edge_softness", 0xd9b23f);
+        COLORS.put("noise_scale", 0x7fb069);
+        COLORS.put("depth_inset", 0x8a6d5a);
+        COLORS.put("primary_color", 0xb5651d);
+        COLORS.put("edge_color", 0xd9a066);
     }
 
     /**
@@ -301,6 +315,13 @@ public class TrackStyle
         ICONS.put("baseHeight", Icons.MOVE_UP);
         ICONS.put("density", Icons.FILTER);
         ICONS.put("falloff", Icons.FADING);
+
+        /* The decay */
+        ICONS.put("decay_progress", Icons.FADING);
+        ICONS.put("edge_softness", Icons.FILTER);
+        ICONS.put("noise_scale", Icons.SCALE);
+        ICONS.put("depth_inset", Icons.ARROW_DOWN);
+        putIcons(Icons.COLOR, "primary_color", "edge_color");
 
         /* Pose and transform, and their overlays - see getIcon(), which folds the numbered
          * overlays onto the thing they overlay: an overlay is that thing, layered. */

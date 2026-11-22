@@ -83,6 +83,7 @@ public class ExtraFormSection extends FormSection
         extra.addForm(new qualet.irlite.forms.PointLightForm());
         extra.addForm(new qualet.irlite.forms.SpotlightForm());
         extra.addForm(new DecalForm());
+        extra.addForm(new mchorse.bbs_mod.forms.forms.DecayForm());
         extra.addForm(new HeightFogForm());
         extra.addForm(new mchorse.bbs_mod.forms.forms.PostProcessForm());
         extra.addForm(new mchorse.bbs_mod.forms.forms.PhysicsFieldForm());

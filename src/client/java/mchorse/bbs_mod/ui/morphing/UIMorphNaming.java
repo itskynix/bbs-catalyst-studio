@@ -127,6 +127,7 @@ public class UIMorphNaming
         if (form instanceof ExtrudedForm) return UIKeys.MORPH_NAME_EXTRUDED;
         if (form instanceof LabelForm) return UIKeys.MORPH_NAME_LABEL;
         if (form instanceof DecalForm) return UIKeys.MORPH_NAME_DECAL;
+        if (form instanceof mchorse.bbs_mod.forms.forms.DecayForm) return UIKeys.MORPH_NAME_DECAY;
         if (form instanceof BillboardForm) return UIKeys.MORPH_NAME_BILLBOARD;
         if (form instanceof StructureForm) return UIKeys.MORPH_NAME_STRUCTURE;
 

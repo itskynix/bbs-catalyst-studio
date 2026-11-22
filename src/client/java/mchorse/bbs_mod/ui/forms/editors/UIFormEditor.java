@@ -188,6 +188,7 @@ public class UIFormEditor extends UIElement implements IUIFormList, ICursor, IBo
         register(qualet.irlite.forms.PointLightForm.class, qualet.irlite.client.ui.forms.editors.forms.UIPointLightForm::new);
         register(qualet.irlite.forms.SpotlightForm.class, qualet.irlite.client.ui.forms.editors.forms.UISpotlightForm::new);
         register(DecalForm.class, UIDecalForm::new);
+        register(mchorse.bbs_mod.forms.forms.DecayForm.class, mchorse.bbs_mod.ui.forms.editors.forms.UIDecayForm::new);
         register(HeightFogForm.class, UIHeightFogForm::new);
         register(mchorse.bbs_mod.forms.forms.PostProcessForm.class, mchorse.bbs_mod.ui.forms.editors.forms.UIPostProcessForm::new);
         register(mchorse.bbs_mod.forms.forms.PhysicsFieldForm.class, mchorse.bbs_mod.ui.forms.editors.forms.UIPhysicsFieldForm::new);
