@@ -25,6 +25,9 @@ public class WorldBlockChangeMixin
             return;
         }
         BlockShadowCache.invalidateChange((ClientWorld) (Object) this, pos, oldState, newState);
+
+        /* A decay volume over this block rebuilds its surfaces in the very next frame */
+        mchorse.bbs_mod.forms.renderers.DecayFormRenderer.onBlockChanged(pos);
     }
 }
 

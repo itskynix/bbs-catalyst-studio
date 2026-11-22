@@ -3,10 +3,11 @@ package mchorse.bbs_mod.forms.renderers;
 import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.client.BBSRendering;
+import mchorse.bbs_mod.client.BBSShaders;
 import mchorse.bbs_mod.forms.FormPortals;
 import mchorse.bbs_mod.forms.FormTranslucentQueue;
-import mchorse.bbs_mod.forms.forms.DecayForm;
 import mchorse.bbs_mod.forms.forms.BlockForm;
+import mchorse.bbs_mod.forms.forms.DecayForm;
 import mchorse.bbs_mod.forms.forms.Form;
 import mchorse.bbs_mod.forms.forms.ItemForm;
 import mchorse.bbs_mod.forms.forms.ModelForm;
@@ -20,15 +21,17 @@ import mchorse.bbs_mod.utils.VertexUtils;
 import mchorse.bbs_mod.utils.colors.Color;
 import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gl.GlUniform;
 import net.minecraft.client.gl.ShaderProgram;
 import net.minecraft.client.gl.VertexBuffer;
 import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.client.render.GameRenderer;
-import net.minecraft.client.render.LightmapTextureManager;
 import net.minecraft.client.render.OverlayTexture;
 import net.minecraft.client.render.VertexFormat;
 import net.minecraft.client.render.VertexFormats;
 import net.minecraft.client.render.WorldRenderer;
+import net.minecraft.client.texture.NativeImage;
+import net.minecraft.client.texture.NativeImageBackedTexture;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.util.math.BlockPos;
@@ -44,62 +47,111 @@ import org.joml.Vector3f;
 import org.qualet.irl.light.shadow.ShadowBakeState;
 import qualet.irlite.client.light.IRLightPositionResolver;
 
-import java.util.function.Supplier;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Set;
+import java.util.WeakHashMap;
 
 /**
- * Draws a form's decay as a skin of small flat cells, one sixteenth of a block each - the size of a
- * Minecraft texel - laid a hair above the surface. Each cell asks {@link DecayPattern} how decayed
- * its spot is and is left out when the answer is nothing, so a half decayed wall costs only the
- * decayed half. The cells go through the entity translucent program with a lightmap, so they are lit
- * by the world and by a shader pack like any other form, and they ride the translucent queue so they
- * sort with the rest of the forms.
+ * Draws a form's decay: every open side of a block in the box, or every side of the shell round an
+ * object, is one quad, and the pattern is worked out per pixel.
  *
- * <p>In surface mode the cells sit on the faces of the world's blocks inside the form's box; the box is
- * the form's own - the world matrix of its place and pose - so it can be turned and moved. In object
- * mode they sit on a shell of that box, in the form's own space, and the pattern is read there too, so
- * it moves with whatever the form is a part of.</p>
+ * <p>Without a shader pack the pattern runs on the GPU, in the {@code decay} core program (see
+ * {@link DecayPattern} for the maths it shares). The quads sit in a vertex buffer of their own, in the
+ * form's own space, and the buffer is only rebuilt when the sides themselves change; the progress,
+ * the colours and everything else animated are uniforms, so a decay that spreads over a whole hall
+ * costs one draw call and no CPU work a frame.</p>
  *
- * <p>The cells are kept between frames and rebuilt only when something they depend on changed: a value
- * of the form, the form's place, a lighting change, or, in surface mode, once in a while to follow
- * the world's blocks.</p>
+ * <p>Under a shader pack a program of ours would bypass the pack's gbuffers, so the decay is drawn
+ * through the entity translucent layer instead, with its pattern baked into an atlas: one 16 by 16
+ * tile a side, 64 tiles a row. What a point is - its decay time, its distance to the cracks - is kept
+ * between frames; only the colour is composed again while the progress is animated, through tables.</p>
+ *
+ * <p>The sides of a surface volume are found again the very frame a block inside the box changes:
+ * {@link #onBlockChanged} is called by the world as it happens, and nothing is scanned on a timer.</p>
  */
 public class DecayFormRenderer extends FormRenderer<DecayForm>
 {
-    /** The most cells one form builds, so a huge volume cannot cost a frame */
-    private static final int MAX_QUADS = 40000;
-    /** The most cells along one edge of a face */
-    private static final int MAX_CELLS = 64;
     /** The cell's lift above its surface, in blocks */
     private static final double LIFT = 0.004;
-    /** Floats one cell takes in the cache: 4 corners, the colour, 4 texture points, the light, the normal */
-    private static final int STRIDE = 12 + 4 + 8 + 1 + 3;
-
+    /** Floats one side takes: 4 corners in the form's space, 4 block texture points, the light, the normal, 4 corners where the pattern is read */
+    private static final int STRIDE = 12 + 8 + 1 + 3 + 12;
     private static final int[] TRIANGLES = {0, 1, 2, 0, 2, 3};
 
+    /** The atlas: 16 by 16 texels a side, 64 sides a row */
+    private static final int TILE = 16;
+    private static final int TILES_PER_ROW = 64;
+    private static final int ATLAS_WIDTH = TILE * TILES_PER_ROW;
+    /** The most sides the atlas holds: 1024 by 4096 texels */
+    private static final int ATLAS_MAX_SIDES = TILES_PER_ROW * 256;
+    private static final char OUTSIDE = 0xFFFF;
+    private static final int BINS = 1024;
+
+    /** Surface volumes alive, so a changed block can tell the ones over it */
+    private static final Set<DecayFormRenderer> SURFACES = Collections.newSetFromMap(new WeakHashMap<>());
+
     private final DecayPattern.Params params = new DecayPattern.Params();
-    private final float[] out = new float[4];
-    private final float[] scratch = new float[2];
 
-    private float[] cache = new float[STRIDE * 1024];
-    private int quads;
-    private long signature = Long.MIN_VALUE;
+    /* The sides */
+    private float[] sides = new float[STRIDE * 64];
+    private int count;
+    private long geometrySignature = Long.MIN_VALUE;
+    private int geometryVersion;
+    private boolean dirty;
+    /** The block box that was scanned, so a block change outside it is ignored; null when not a surface volume */
+    private int[] scanned;
+    /** When the scan saw a chunk that was not loaded, the world tick to look again at */
+    private long retryAt = -1L;
+    private final Matrix4f patternMatrix = new Matrix4f();
 
-    /* The build in progress */
-    private Matrix4d invWorld;
-    private Matrix3f localNormal;
+    /* The GPU path's buffer */
+    private VertexBuffer buffer;
+    private int bufferVersion = -1;
+    private long bufferQueuedAt;
+
+    /* The atlas path */
+    private NativeImageBackedTexture atlas;
+    private int atlasHeight;
+    private char[] field = new char[0];
+    private int fieldSides;
+    private long fieldSignature = Long.MIN_VALUE;
+    private long composeSignature = Long.MIN_VALUE;
+
+    /* The box */
     private float hx;
     private float hy;
     private float hz;
     private float cy;
-    private boolean boxLimited;
-    private float colorR;
-    private float colorG;
-    private float colorB;
-    private float colorA;
 
     public DecayFormRenderer(DecayForm form)
     {
         super(form);
+    }
+
+    /**
+     * A block changed in the world. Every surface volume whose box takes it in - or whose sides it
+     * touches, one block round - is rebuilt in the next frame drawn.
+     */
+    public static void onBlockChanged(BlockPos pos)
+    {
+        if (SURFACES.isEmpty())
+        {
+            return;
+        }
+
+        int x = pos.getX();
+        int y = pos.getY();
+        int z = pos.getZ();
+
+        for (DecayFormRenderer renderer : SURFACES)
+        {
+            int[] b = renderer.scanned;
+
+            if (b != null && x >= b[0] - 1 && x <= b[3] + 1 && y >= b[1] - 1 && y <= b[4] + 1 && z >= b[2] - 1 && z <= b[5] + 1)
+            {
+                renderer.dirty = true;
+            }
+        }
     }
 
     @Override
@@ -126,7 +178,7 @@ public class DecayFormRenderer extends FormRenderer<DecayForm>
 
                 DecayPattern.sample(p, fx * 3.0, (1F - fy) * 3.0, 0.5, 1F - fy, radial, out, scratch);
 
-                float a = Math.min(1F, out[3] * p.opacity);
+                float a = Math.min(1F, out[3]);
 
                 if (a < 0.02F)
                 {
@@ -172,46 +224,24 @@ public class DecayFormRenderer extends FormRenderer<DecayForm>
         boolean objectMode = this.form.mode.get() == DecayForm.MODE_OBJECT;
         boolean virtualWall = !objectMode && (mc.world == null || context.ui);
 
-        this.invWorld = null;
-
-        Color tint = new Color(1F, 1F, 1F, 1F);
-
-        tint.mul(context.color);
-
-        this.colorR = tint.r;
-        this.colorG = tint.g;
-        this.colorB = tint.b;
-        this.colorA = tint.a;
-
         this.resolveBox(objectMode);
+        this.updateGeometry(context, mc, objectMode, virtualWall);
 
-        long sig = this.signatureOf(context, p, objectMode, virtualWall, mc);
-
-        if (sig != this.signature)
-        {
-            this.signature = sig;
-            this.quads = 0;
-
-            if (virtualWall)
-            {
-                this.buildWall(context);
-            }
-            else if (objectMode)
-            {
-                this.buildShell(context);
-            }
-            else
-            {
-                this.buildSurfaces(context, mc);
-            }
-        }
-
-        if (this.quads == 0)
+        if (this.count == 0)
         {
             return;
         }
 
-        this.draw(context);
+        ShaderProgram program = BBSShaders.getDecayProgram();
+
+        if (program == null || BBSRendering.isIrisWorldShadersEnabled())
+        {
+            this.drawAtlas(context, p);
+        }
+        else
+        {
+            this.drawShader(context, p, program, objectMode || virtualWall);
+        }
     }
 
     /**
@@ -254,44 +284,6 @@ public class DecayFormRenderer extends FormRenderer<DecayForm>
         }
     }
 
-    private long signatureOf(FormRenderingContext context, DecayPattern.Params p, boolean objectMode, boolean virtualWall, MinecraftClient mc)
-    {
-        long h = p.signature();
-
-        h = h * 31 + this.form.mode.get();
-        h = h * 31 + Float.floatToIntBits(this.hx);
-        h = h * 31 + Float.floatToIntBits(this.hy);
-        h = h * 31 + Float.floatToIntBits(this.hz);
-        h = h * 31 + context.color;
-        h = h * 31 + (virtualWall ? 1 : 0);
-
-        if (objectMode || virtualWall)
-        {
-            h = h * 31 + context.light;
-        }
-
-        if (!objectMode && !virtualWall)
-        {
-            Matrix4f world = this.worldMatrix(context);
-
-            /* Rounded, so a form that stands still does not rebuild on float noise */
-            for (int i = 0; i < 4; i++)
-            {
-                for (int j = 0; j < 4; j++)
-                {
-                    h = h * 31 + Math.round(world.get(i, j) * 256F);
-                }
-            }
-
-            /* The world's own blocks change: look again about twice a second */
-            h = h * 31 + (mc.world == null ? 0 : mc.world.getTime() / 10L);
-        }
-
-        h = h * 31 + (this.form.preset.get() == DecayForm.PRESET_CUSTOM ? String.valueOf(this.form.texture.get()).hashCode() : 0);
-
-        return h;
-    }
-
     /** The form's place and pose in the world: the entity's world matrix, or just where a light would be placed when there is none */
     private Matrix4f worldMatrix(FormRenderingContext context)
     {
@@ -305,18 +297,84 @@ public class DecayFormRenderer extends FormRenderer<DecayForm>
         return new Matrix4f().translation((float) origin.x, (float) origin.y, (float) origin.z);
     }
 
-    /* Building */
+    /* The sides */
 
-    private void buildSurfaces(FormRenderingContext context, MinecraftClient mc)
+    private void updateGeometry(FormRenderingContext context, MinecraftClient mc, boolean objectMode, boolean virtualWall)
     {
-        ClientWorld world = mc.world;
-        Matrix4f worldMatrix = this.worldMatrix(context);
+        boolean surface = !objectMode && !virtualWall;
+        Matrix4f world = surface ? this.worldMatrix(context) : null;
+        long h = this.form.mode.get();
+
+        h = h * 31 + Float.floatToIntBits(this.hx);
+        h = h * 31 + Float.floatToIntBits(this.hy);
+        h = h * 31 + Float.floatToIntBits(this.hz);
+        h = h * 31 + Float.floatToIntBits(this.cy);
+        h = h * 31 + (virtualWall ? 1 : 0);
+
+        if (surface)
+        {
+            /* Rounded, so a form that stands still does not rebuild on float noise */
+            for (int i = 0; i < 4; i++)
+            {
+                for (int j = 0; j < 4; j++)
+                {
+                    h = h * 31 + Math.round(world.get(i, j) * 256F);
+                }
+            }
+
+            h = h * 31 + System.identityHashCode(mc.world);
+        }
+        else
+        {
+            h = h * 31 + context.light;
+        }
+
+        boolean retry = surface && this.retryAt >= 0L && mc.world != null && mc.world.getTime() >= this.retryAt;
+
+        if (h == this.geometrySignature && !this.dirty && !retry)
+        {
+            return;
+        }
+
+        this.geometrySignature = h;
+        this.dirty = false;
+        this.retryAt = -1L;
+        this.count = 0;
+        this.geometryVersion++;
+
+        if (surface)
+        {
+            this.buildSurfaces(mc.world, world);
+            SURFACES.add(this);
+        }
+        else
+        {
+            this.scanned = null;
+            SURFACES.remove(this);
+            this.patternMatrix.identity();
+
+            if (virtualWall)
+            {
+                this.addLocalSide(Direction.SOUTH, -this.hx, this.hx, this.cy - this.hy, this.cy + this.hy, 0, 0, context.light);
+            }
+            else
+            {
+                for (Direction dir : Direction.values())
+                {
+                    this.addLocalSide(dir, -this.hx, this.hx, this.cy - this.hy, this.cy + this.hy, -this.hz, this.hz, context.light);
+                }
+            }
+        }
+    }
+
+    /** The open sides of the world's blocks inside the box, in world blocks, brought to the form's space */
+    private void buildSurfaces(ClientWorld world, Matrix4f worldMatrix)
+    {
         Vector3f origin = worldMatrix.getTranslation(new Vector3f());
         Matrix4d inverse = new Matrix4d(worldMatrix).invert();
+        Matrix3f localNormal = new Matrix3f(worldMatrix).transpose();
 
-        this.invWorld = inverse;
-        this.localNormal = new Matrix3f(worldMatrix).transpose();
-        this.boxLimited = true;
+        this.patternMatrix.set(worldMatrix);
 
         double radius = Math.sqrt(this.hx * this.hx + this.hy * this.hy + this.hz * this.hz) + 1.0;
         int minX = MathHelper.floor(origin.x - radius);
@@ -325,10 +383,28 @@ public class DecayFormRenderer extends FormRenderer<DecayForm>
         int maxY = MathHelper.ceil(origin.y + radius);
         int minZ = MathHelper.floor(origin.z - radius);
         int maxZ = MathHelper.ceil(origin.z + radius);
+
+        this.scanned = new int[] {minX, minY, minZ, maxX, maxY, maxZ};
+
         BlockPos.Mutable pos = new BlockPos.Mutable();
         BlockPos.Mutable neighbor = new BlockPos.Mutable();
         double[][] corners = new double[4][3];
+        double[] local = new double[12];
+        Vector3d v = new Vector3d();
+        Vector3f normal = new Vector3f();
         double eps = 1e-6;
+
+        for (int cx = minX >> 4; cx <= maxX >> 4; cx++)
+        {
+            for (int cz = minZ >> 4; cz <= maxZ >> 4; cz++)
+            {
+                if (!world.getChunkManager().isChunkLoaded(cx, cz))
+                {
+                    /* Look again in a second: a chunk that arrives later brings no block change of its own */
+                    this.retryAt = world.getTime() + 20L;
+                }
+            }
+        }
 
         for (int x = minX; x <= maxX; x++)
         {
@@ -383,13 +459,38 @@ public class DecayFormRenderer extends FormRenderer<DecayForm>
                                 light = WorldRenderer.getLightmapCoordinates(world, pos.up());
                             }
 
-                            boxCorners(dir.ordinal(), x + box.minX, x + box.maxX, y + box.minY, y + box.maxY, z + box.minZ, z + box.maxZ, corners);
-                            this.face(corners, dir.ordinal(), light, true);
+                            boxCorners(dir, x + box.minX, x + box.maxX, y + box.minY, y + box.maxY, z + box.minZ, z + box.maxZ, corners);
 
-                            if (this.quads >= MAX_QUADS)
+                            /* Lifted, then into the form's space, where the box test is made */
+                            float lminX = Float.MAX_VALUE, lminY = Float.MAX_VALUE, lminZ = Float.MAX_VALUE;
+                            float lmaxX = -Float.MAX_VALUE, lmaxY = -Float.MAX_VALUE, lmaxZ = -Float.MAX_VALUE;
+
+                            for (int k = 0; k < 4; k++)
                             {
-                                return;
+                                corners[k][0] += dir.getOffsetX() * LIFT;
+                                corners[k][1] += dir.getOffsetY() * LIFT;
+                                corners[k][2] += dir.getOffsetZ() * LIFT;
+
+                                inverse.transformPosition(v.set(corners[k][0], corners[k][1], corners[k][2]));
+
+                                local[k * 3] = v.x;
+                                local[k * 3 + 1] = v.y;
+                                local[k * 3 + 2] = v.z;
+                                lminX = Math.min(lminX, (float) v.x);
+                                lminY = Math.min(lminY, (float) v.y);
+                                lminZ = Math.min(lminZ, (float) v.z);
+                                lmaxX = Math.max(lmaxX, (float) v.x);
+                                lmaxY = Math.max(lmaxY, (float) v.y);
+                                lmaxZ = Math.max(lmaxZ, (float) v.z);
                             }
+
+                            if (lmaxX < -this.hx || lminX > this.hx || lmaxY < -this.hy || lminY > this.hy || lmaxZ < -this.hz || lminZ > this.hz)
+                            {
+                                continue;
+                            }
+
+                            normal.set(dir.getOffsetX(), dir.getOffsetY(), dir.getOffsetZ()).mul(localNormal).normalize();
+                            this.addSide(local, corners, dir, light, normal);
                         }
                     }
                 }
@@ -397,38 +498,98 @@ public class DecayFormRenderer extends FormRenderer<DecayForm>
         }
     }
 
-    /** The shell of the form's box: its six sides, in the form's own space, so it travels with the form */
-    private void buildShell(FormRenderingContext context)
+    /** One side of the shell, or of the wall drawn without a world: in the form's space, where the pattern is read too */
+    private void addLocalSide(Direction dir, double minX, double maxX, double minY, double maxY, double minZ, double maxZ, int light)
     {
-        this.localNormal = null;
-        this.boxLimited = false;
-
         double[][] corners = new double[4][3];
-        double grow = 0.0;
+        double[] local = new double[12];
 
-        for (int dir = 0; dir < 6; dir++)
+        boxCorners(dir, minX, maxX, minY, maxY, minZ, maxZ, corners);
+
+        for (int k = 0; k < 4; k++)
         {
-            boxCorners(dir, -this.hx - grow, this.hx + grow, this.cy - this.hy - grow, this.cy + this.hy + grow, -this.hz - grow, this.hz + grow, corners);
-            this.face(corners, dir, context.light, false);
+            corners[k][0] += dir.getOffsetX() * LIFT;
+            corners[k][1] += dir.getOffsetY() * LIFT;
+            corners[k][2] += dir.getOffsetZ() * LIFT;
+            local[k * 3] = corners[k][0];
+            local[k * 3 + 1] = corners[k][1];
+            local[k * 3 + 2] = corners[k][2];
         }
+
+        this.addSide(local, corners, dir, light, new Vector3f(dir.getOffsetX(), dir.getOffsetY(), dir.getOffsetZ()));
     }
 
-    /** What the form editor's viewport and the form list show when there is no world: one wall, facing the viewer */
-    private void buildWall(FormRenderingContext context)
+    /**
+     * Keeps one side: {@code local} the corners in the form's space, {@code pattern} where the pattern
+     * is read (world blocks on a wall, the form's space on an object).
+     */
+    private void addSide(double[] local, double[][] pattern, Direction dir, int light, Vector3f normal)
     {
-        this.localNormal = null;
-        this.boxLimited = false;
+        int at = this.count * STRIDE;
 
-        double[][] corners = new double[4][3];
+        if (at + STRIDE > this.sides.length)
+        {
+            this.sides = Arrays.copyOf(this.sides, this.sides.length * 2);
+        }
 
-        boxCorners(Direction.SOUTH.ordinal(), -this.hx, this.hx, this.cy - this.hy, this.cy + this.hy, 0, 0, corners);
-        this.face(corners, Direction.SOUTH.ordinal(), context.light, false);
+        float[] d = this.sides;
+
+        for (int k = 0; k < 12; k++)
+        {
+            d[at + k] = (float) local[k];
+        }
+
+        /* The texture follows the block: a corner's place inside the side's block, by the side's two axes */
+        double cx = (pattern[0][0] + pattern[2][0]) * 0.5;
+        double cy = (pattern[0][1] + pattern[2][1]) * 0.5;
+        double cz = (pattern[0][2] + pattern[2][2]) * 0.5;
+        double bx = Math.floor(cx);
+        double by = Math.floor(cy);
+        double bz = Math.floor(cz);
+
+        for (int k = 0; k < 4; k++)
+        {
+            double px = pattern[k][0];
+            double py = pattern[k][1];
+            double pz = pattern[k][2];
+            double tu;
+            double tv;
+
+            if (dir.getAxis() == Direction.Axis.Y)
+            {
+                tu = px - bx;
+                tv = pz - bz;
+            }
+            else if (dir.getAxis() == Direction.Axis.Z)
+            {
+                tu = px - bx;
+                tv = 1.0 - (py - by);
+            }
+            else
+            {
+                tu = pz - bz;
+                tv = 1.0 - (py - by);
+            }
+
+            d[at + 12 + k * 2] = (float) tu;
+            d[at + 13 + k * 2] = (float) tv;
+            d[at + 24 + k * 3] = (float) px;
+            d[at + 25 + k * 3] = (float) py;
+            d[at + 26 + k * 3] = (float) pz;
+        }
+
+        d[at + 20] = Float.intBitsToFloat(light);
+        d[at + 21] = normal.x;
+        d[at + 22] = normal.y;
+        d[at + 23] = normal.z;
+
+        this.count++;
     }
 
     /** The four corners of one side of a box, wound so the side faces out: the first, the one down its V, the opposite, the one along its U */
-    private static void boxCorners(int dir, double minX, double maxX, double minY, double maxY, double minZ, double maxZ, double[][] c)
+    private static void boxCorners(Direction dir, double minX, double maxX, double minY, double maxY, double minZ, double maxZ, double[][] c)
     {
-        switch (Direction.values()[dir])
+        switch (dir)
         {
             case UP -> set(c, minX, maxY, minZ, minX, maxY, maxZ, maxX, maxY, maxZ, maxX, maxY, minZ);
             case DOWN -> set(c, minX, minY, maxZ, minX, minY, minZ, maxX, minY, minZ, maxX, minY, maxZ);
@@ -449,178 +610,174 @@ public class DecayFormRenderer extends FormRenderer<DecayForm>
         }
     }
 
-    /**
-     * One side cut into sixteenths and every cell that has anything to show added to the cache.
-     * {@code c} are the corners (see {@link #boxCorners}) in world blocks when {@code world}, else in the
-     * form's own space.
-     */
-    private void face(double[][] c, int dirIndex, int light, boolean world)
+    /* The GPU path */
+
+    private void drawShader(FormRenderingContext context, DecayPattern.Params p, ShaderProgram program, boolean patternIsLocal)
     {
-        Direction dir = Direction.values()[dirIndex];
-        double e1x = c[1][0] - c[0][0];
-        double e1y = c[1][1] - c[0][1];
-        double e1z = c[1][2] - c[0][2];
-        double e2x = c[3][0] - c[0][0];
-        double e2y = c[3][1] - c[0][1];
-        double e2z = c[3][2] - c[0][2];
-        double len1 = Math.sqrt(e1x * e1x + e1y * e1y + e1z * e1z);
-        double len2 = Math.sqrt(e2x * e2x + e2y * e2y + e2z * e2z);
-        int nu = MathHelper.clamp((int) Math.round(len2 * 16.0), 1, MAX_CELLS);
-        int nv = MathHelper.clamp((int) Math.round(len1 * 16.0), 1, MAX_CELLS);
-        float nx = dir.getOffsetX();
-        float ny = dir.getOffsetY();
-        float nz = dir.getOffsetZ();
-        Vector3d center = new Vector3d();
-        Vector3d local = new Vector3d();
-        Vector3d corner = new Vector3d();
-        DecayPattern.Params p = this.params;
+        boolean queue = FormTranslucentQueue.isActive();
+        VertexBuffer target = this.buffer;
+        boolean owned = false;
 
-        /* The normal the shader gets, in the form's space */
-        Vector3f normal = new Vector3f(nx, ny, nz);
-
-        if (world && this.localNormal != null)
+        if (this.bufferVersion != this.geometryVersion || target == null)
         {
-            normal.mul(this.localNormal).normalize();
-        }
+            /* A buffer queued earlier this frame must stay as it was until the flush draws it */
+            boolean inFlight = target != null && System.nanoTime() - this.bufferQueuedAt < 100_000_000L;
 
-        float[] quad = new float[STRIDE];
-
-        for (int i = 0; i < nu; i++)
-        {
-            double u0 = i / (double) nu;
-            double u1 = (i + 1) / (double) nu;
-
-            for (int j = 0; j < nv; j++)
+            if (inFlight)
             {
-                if (this.quads >= MAX_QUADS)
-                {
-                    return;
-                }
+                target = new VertexBuffer(VertexBuffer.Usage.STATIC);
+                owned = true;
+            }
+            else if (target == null)
+            {
+                target = this.buffer = new VertexBuffer(VertexBuffer.Usage.STATIC);
+            }
 
-                double v0 = j / (double) nv;
-                double v1 = (j + 1) / (double) nv;
-                double um = (u0 + u1) * 0.5;
-                double vm = (v0 + v1) * 0.5;
+            this.upload(target);
 
-                center.set(c[0][0] + e1x * vm + e2x * um, c[0][1] + e1y * vm + e2y * um, c[0][2] + e1z * vm + e2z * um);
-
-                if (world)
-                {
-                    this.invWorld.transformPosition(center, local);
-                }
-                else
-                {
-                    local.set(center);
-                }
-
-                float ly = (float) local.y - this.cy;
-
-                if (this.boxLimited && (Math.abs(local.x) > this.hx || Math.abs(ly) > this.hy || Math.abs(local.z) > this.hz))
-                {
-                    continue;
-                }
-
-                float rx = this.hx > 0F ? (float) local.x / this.hx : 0F;
-                float ry = this.hy > 0F ? ly / this.hy : 0F;
-                float rz = this.hz > 0F ? (float) local.z / this.hz : 0F;
-                float radial = Math.min(1F, (float) Math.sqrt(rx * rx + ry * ry + rz * rz) / 1.7320508F);
-                float y01 = MathHelper.clamp(ly / (2F * this.hy) + 0.5F, 0F, 1F);
-
-                DecayPattern.sample(p, center.x, center.y, center.z, y01, radial, this.out, this.scratch);
-
-                float alpha = Math.min(1F, this.out[3] * p.opacity) * this.colorA;
-
-                if (alpha < 0.012F)
-                {
-                    continue;
-                }
-
-                /* The four corners, lifted off the surface */
-                double[][] q = {{u0, v0}, {u0, v1}, {u1, v1}, {u1, v0}};
-
-                for (int k = 0; k < 4; k++)
-                {
-                    double cu = q[k][0];
-                    double cv = q[k][1];
-
-                    corner.set(c[0][0] + e1x * cv + e2x * cu + nx * LIFT, c[0][1] + e1y * cv + e2y * cu + ny * LIFT, c[0][2] + e1z * cv + e2z * cu + nz * LIFT);
-
-                    double px = corner.x;
-                    double py = corner.y;
-                    double pz = corner.z;
-
-                    if (world)
-                    {
-                        this.invWorld.transformPosition(corner);
-                    }
-
-                    quad[k * 3] = (float) corner.x;
-                    quad[k * 3 + 1] = (float) corner.y;
-                    quad[k * 3 + 2] = (float) corner.z;
-
-                    /* The texture follows the block: a corner's place inside the cell's block, by the side's two axes */
-                    double bx = Math.floor(center.x);
-                    double by = Math.floor(center.y);
-                    double bz = Math.floor(center.z);
-                    double tu;
-                    double tv;
-
-                    if (dir.getAxis() == Direction.Axis.Y)
-                    {
-                        tu = px - bx;
-                        tv = pz - bz;
-                    }
-                    else if (dir.getAxis() == Direction.Axis.Z)
-                    {
-                        tu = px - bx;
-                        tv = 1.0 - (py - by);
-                    }
-                    else
-                    {
-                        tu = pz - bz;
-                        tv = 1.0 - (py - by);
-                    }
-
-                    quad[16 + k * 2] = (float) tu;
-                    quad[16 + k * 2 + 1] = (float) tv;
-                }
-
-                quad[12] = MathHelper.clamp(this.out[0] * this.colorR, 0F, 1F);
-                quad[13] = MathHelper.clamp(this.out[1] * this.colorG, 0F, 1F);
-                quad[14] = MathHelper.clamp(this.out[2] * this.colorB, 0F, 1F);
-                quad[15] = alpha;
-                quad[24] = Float.intBitsToFloat(light);
-                quad[25] = normal.x;
-                quad[26] = normal.y;
-                quad[27] = normal.z;
-
-                this.store(quad);
+            if (!owned)
+            {
+                this.bufferVersion = this.geometryVersion;
             }
         }
-    }
 
-    private void store(float[] quad)
-    {
-        int at = this.quads * STRIDE;
-
-        if (at + STRIDE > this.cache.length)
-        {
-            this.cache = java.util.Arrays.copyOf(this.cache, this.cache.length * 2);
-        }
-
-        System.arraycopy(quad, 0, this.cache, at, STRIDE);
-
-        this.quads++;
-    }
-
-    /* Drawing */
-
-    private void draw(FormRenderingContext context)
-    {
         Link link = this.form.preset.get() == DecayForm.PRESET_CUSTOM ? this.form.texture.get() : null;
         Texture texture = BBSModClient.getTextures().getTexture(link == null ? new Link(Link.COLOR, "ffffffff") : link);
+        MatrixStack.Entry entry = context.stack.peek();
+        Matrix4f modelView = new Matrix4f(RenderSystem.getModelViewMatrix()).mul(entry.getPositionMatrix());
+        Matrix3f normalMat = new Matrix3f(entry.getNormalMatrix());
+        Matrix4f toPattern = patternIsLocal ? new Matrix4f() : new Matrix4f(this.patternMatrix);
+        Color tint = new Color(1F, 1F, 1F, 1F);
 
-        if (texture == null)
+        tint.mul(context.color);
+
+        float[] values = {
+            p.progress, p.softness, p.scale, p.depthInset,
+            this.hx, this.hy, this.hz, this.cy,
+            p.primary[0], p.primary[1], p.primary[2], p.opacity,
+            p.edge[0], p.edge[1], p.edge[2], patternIsLocal ? 0F : 1F,
+            tint.r, tint.g, tint.b, tint.a
+        };
+        int preset = p.preset;
+        int seed = p.seed;
+        Runnable uniforms = () ->
+        {
+            uniform(program, "DecayToLocal", new Matrix4f());
+            uniform(program, "DecayToPattern", toPattern);
+            uniform4(program, "DecayParams", values, 0);
+            uniform4(program, "DecayBox", values, 4);
+            uniform4(program, "DecayPrimary", values, 8);
+            uniform4(program, "DecayEdge", values, 12);
+            uniform4(program, "DecayTint", values, 16);
+
+            GlUniform u = program.getUniform("DecayPreset");
+
+            if (u != null) u.set(preset);
+
+            u = program.getUniform("DecaySeed");
+
+            if (u != null) u.set(seed);
+        };
+
+        GameRenderer gameRenderer = MinecraftClient.getInstance().gameRenderer;
+
+        gameRenderer.getLightmapTextureManager().enable();
+        gameRenderer.getOverlayTexture().setupOverlayColor();
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+
+        if (queue)
+        {
+            Vector3f origin = modelView.transformPosition(new Vector3f());
+
+            this.bufferQueuedAt = owned ? this.bufferQueuedAt : System.nanoTime();
+
+            FormTranslucentQueue.add(new FormTranslucentQueue.VertexBufferCommand(
+                target, owned, () -> program, FormTranslucentQueue.PASS_TRANSLUCENT, false, texture, modelView, normalMat, origin, null, true, uniforms, null
+            ));
+        }
+        else
+        {
+            if (texture != null)
+            {
+                BBSModClient.getTextures().bindTexture(texture);
+            }
+
+            uniforms.run();
+            uniform(program, "NormalMat", normalMat);
+
+            target.bind();
+            target.draw(modelView, RenderSystem.getProjectionMatrix(), program);
+            VertexBuffer.unbind();
+
+            if (owned)
+            {
+                target.close();
+            }
+        }
+
+        gameRenderer.getLightmapTextureManager().disable();
+        gameRenderer.getOverlayTexture().teardownOverlayColor();
+    }
+
+    private void upload(VertexBuffer target)
+    {
+        BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR_TEXTURE_OVERLAY_LIGHT_NORMAL);
+        float[] d = this.sides;
+
+        for (int n = 0; n < this.count; n++)
+        {
+            int at = n * STRIDE;
+            int light = Float.floatToRawIntBits(d[at + 20]);
+
+            for (int k : TRIANGLES)
+            {
+                builder.vertex(d[at + k * 3], d[at + k * 3 + 1], d[at + k * 3 + 2])
+                    .color(1F, 1F, 1F, 1F)
+                    .texture(d[at + 12 + k * 2], d[at + 13 + k * 2])
+                    .overlay(OverlayTexture.DEFAULT_UV)
+                    .light(light)
+                    .normal(d[at + 21], d[at + 22], d[at + 23])
+                    .next();
+            }
+        }
+
+        target.bind();
+        Bufs.upload(target, builder);
+        VertexBuffer.unbind();
+    }
+
+    private static void uniform(ShaderProgram program, String name, Matrix4f value)
+    {
+        GlUniform u = program.getUniform(name);
+
+        if (u != null) u.set(value);
+    }
+
+    private static void uniform(ShaderProgram program, String name, Matrix3f value)
+    {
+        GlUniform u = program.getUniform(name);
+
+        if (u != null) u.set(value);
+    }
+
+    private static void uniform4(ShaderProgram program, String name, float[] values, int at)
+    {
+        GlUniform u = program.getUniform(name);
+
+        if (u != null) u.set(values[at], values[at + 1], values[at + 2], values[at + 3]);
+    }
+
+    /* The atlas path, under a shader pack */
+
+    private void drawAtlas(FormRenderingContext context, DecayPattern.Params p)
+    {
+        int sides = Math.min(this.count, ATLAS_MAX_SIDES);
+
+        this.updateField(p, sides);
+        this.updateAtlas(p, sides);
+
+        if (this.atlas == null)
         {
             return;
         }
@@ -628,43 +785,61 @@ public class DecayFormRenderer extends FormRenderer<DecayForm>
         MatrixStack matrices = context.stack;
         Matrix4f matrix = matrices.peek().getPositionMatrix();
         Matrix3f normalMat = matrices.peek().getNormalMatrix();
-        VertexFormat format = VertexFormats.POSITION_COLOR_TEXTURE_OVERLAY_LIGHT_NORMAL;
-        Supplier<ShaderProgram> shader = GameRenderer::getRenderTypeEntityTranslucentProgram;
         GameRenderer gameRenderer = MinecraftClient.getInstance().gameRenderer;
+        int atlasId = this.atlas.getGlId();
+        Color tint = new Color(1F, 1F, 1F, 1F);
+
+        tint.mul(context.color);
 
         gameRenderer.getLightmapTextureManager().enable();
         gameRenderer.getOverlayTexture().setupOverlayColor();
+        RenderSystem.setShader(GameRenderer::getRenderTypeEntityTranslucentProgram);
+        RenderSystem.setShaderTexture(0, atlasId);
 
-        BBSModClient.getTextures().bindTexture(texture);
-        RenderSystem.setShader(shader);
+        BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR_TEXTURE_OVERLAY_LIGHT_NORMAL);
+        float[] d = this.sides;
+        float du = 1F / ATLAS_WIDTH;
+        float dv = 1F / this.atlasHeight;
+        float[][] corner = {{0F, 0F}, {0F, 1F}, {1F, 1F}, {1F, 0F}};
 
-        BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, format);
-        float[] d = this.cache;
-
-        for (int n = 0; n < this.quads; n++)
+        for (int n = 0; n < sides; n++)
         {
             int at = n * STRIDE;
-            int light = Float.floatToRawIntBits(d[at + 24]);
-            float r = d[at + 12];
-            float g = d[at + 13];
-            float b = d[at + 14];
-            float a = d[at + 15];
-            float nx = d[at + 25];
-            float ny = d[at + 26];
-            float nz = d[at + 27];
+            int light = Float.floatToRawIntBits(d[at + 20]);
+            float tx = (n % TILES_PER_ROW) * TILE;
+            float ty = (n / TILES_PER_ROW) * TILE;
 
             for (int k : TRIANGLES)
             {
-                this.vertex(builder, matrix, normalMat, d[at + k * 3], d[at + k * 3 + 1], d[at + k * 3 + 2], d[at + 16 + k * 2], d[at + 16 + k * 2 + 1], r, g, b, a, light, nx, ny, nz);
+                float u = (tx + corner[k][0] * TILE) * du;
+                float v = (ty + corner[k][1] * TILE) * dv;
+
+                VertexUtils.normal(builder.vertex(matrix, d[at + k * 3], d[at + k * 3 + 1], d[at + k * 3 + 2])
+                    .color(tint.r, tint.g, tint.b, tint.a)
+                    .texture(u, v)
+                    .overlay(OverlayTexture.DEFAULT_UV)
+                    .light(light), normalMat, d[at + 21], d[at + 22], d[at + 23]).next();
             }
         }
 
-        RenderSystem.defaultBlendFunc();
         RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
 
         if (FormTranslucentQueue.isActive())
         {
-            this.uploadTranslucent(builder, texture, matrix);
+            ShaderProgram finalShader = RenderSystem.getShader();
+            VertexBuffer vb = new VertexBuffer(VertexBuffer.Usage.STATIC);
+
+            vb.bind();
+            Bufs.upload(vb, builder);
+            VertexBuffer.unbind();
+
+            Matrix4f modelView = new Matrix4f(RenderSystem.getModelViewMatrix());
+            Vector3f origin = modelView.transformPosition(matrix.getTranslation(new Vector3f()));
+
+            FormTranslucentQueue.add(new FormTranslucentQueue.VertexBufferCommand(
+                vb, () -> finalShader, null, modelView, null, origin, null, true, () -> RenderSystem.setShaderTexture(0, atlasId), null
+            ));
         }
         else
         {
@@ -675,26 +850,264 @@ public class DecayFormRenderer extends FormRenderer<DecayForm>
         gameRenderer.getOverlayTexture().teardownOverlayColor();
     }
 
-    private void vertex(BufferBuilder builder, Matrix4f matrix, Matrix3f normal, float x, float y, float z, float u, float v, float r, float g, float b, float a, int light, float nx, float ny, float nz)
+    /** What every texel of every side is, kept until the sides, the preset, the seed or the scale change */
+    private void updateField(DecayPattern.Params p, int sides)
     {
-        VertexUtils.normal(builder.vertex(matrix, x, y, z).color(r, g, b, a).texture(u, v).overlay(OverlayTexture.DEFAULT_UV).light(light), normal, nx, ny, nz).next();
+        long h = ((long) this.geometryVersion << 32) ^ p.fieldSignature();
+
+        h = h * 31 + Float.floatToIntBits(this.hx) + Float.floatToIntBits(this.hy) * 7 + Float.floatToIntBits(this.hz) * 13 + Float.floatToIntBits(this.cy) * 17;
+
+        if (h == this.fieldSignature)
+        {
+            return;
+        }
+
+        this.fieldSignature = h;
+        this.composeSignature = Long.MIN_VALUE;
+        this.fieldSides = sides;
+
+        int needed = sides * TILE * TILE * 3;
+
+        if (this.field.length < needed)
+        {
+            this.field = new char[needed];
+        }
+
+        boolean clip = this.scanned != null;
+        float[] f = new float[4];
+        float[] scratch = new float[2];
+        float[] d = this.sides;
+        int w = 0;
+
+        for (int n = 0; n < sides; n++)
+        {
+            int at = n * STRIDE;
+
+            for (int j = 0; j < TILE; j++)
+            {
+                double v = (j + 0.5) / TILE;
+
+                for (int i = 0; i < TILE; i++, w += 3)
+                {
+                    double u = (i + 0.5) / TILE;
+
+                    /* The texel's centre in the form's space and where the pattern is read: corner 0, plus v down corner 1, plus u along corner 3 */
+                    float lx = (float) (d[at] + (d[at + 3] - d[at]) * v + (d[at + 9] - d[at]) * u);
+                    float ly = (float) (d[at + 1] + (d[at + 4] - d[at + 1]) * v + (d[at + 10] - d[at + 1]) * u) - this.cy;
+                    float lz = (float) (d[at + 2] + (d[at + 5] - d[at + 2]) * v + (d[at + 11] - d[at + 2]) * u);
+
+                    if (clip && (Math.abs(lx) > this.hx || Math.abs(ly) > this.hy || Math.abs(lz) > this.hz))
+                    {
+                        this.field[w] = OUTSIDE;
+
+                        continue;
+                    }
+
+                    double px = d[at + 24] + (d[at + 27] - d[at + 24]) * v + (d[at + 33] - d[at + 24]) * u;
+                    double py = d[at + 25] + (d[at + 28] - d[at + 25]) * v + (d[at + 34] - d[at + 25]) * u;
+                    double pz = d[at + 26] + (d[at + 29] - d[at + 26]) * v + (d[at + 35] - d[at + 26]) * u;
+                    float rx = lx / Math.max(this.hx, 1e-4F);
+                    float ry = ly / Math.max(this.hy, 1e-4F);
+                    float rz = lz / Math.max(this.hz, 1e-4F);
+                    float radial = Math.min(1F, (float) Math.sqrt(rx * rx + ry * ry + rz * rz) / 1.7320508F);
+                    float y01 = MathHelper.clamp(ly / (2F * Math.max(this.hy, 1e-4F)) + 0.5F, 0F, 1F);
+
+                    DecayPattern.field(p, px, py, pz, y01, radial, f, scratch);
+
+                    boolean cracks = p.preset == DecayForm.PRESET_CRACKS;
+
+                    this.field[w] = bin(f[0], 1F);
+                    this.field[w + 1] = bin(f[1], cracks ? 0.5F : 1F);
+                    this.field[w + 2] = bin(f[2], 0.5F);
+                }
+            }
+        }
     }
 
-    private void uploadTranslucent(BufferBuilder builder, Texture texture, Matrix4f matrix)
+    private static char bin(float value, float range)
     {
-        ShaderProgram finalShader = RenderSystem.getShader();
-        VertexBuffer buffer = new VertexBuffer(VertexBuffer.Usage.STATIC);
+        return (char) MathHelper.clamp((int) (value / range * BINS), 0, BINS - 1);
+    }
 
-        buffer.bind();
-        Bufs.upload(buffer, builder);
-        VertexBuffer.unbind();
+    /** The colours for the current progress, written into the atlas and uploaded; skipped while nothing they depend on changed */
+    private void updateAtlas(DecayPattern.Params p, int sides)
+    {
+        long h = this.fieldSignature * 31 + p.composeSignature();
 
-        Matrix4f modelView = new Matrix4f(RenderSystem.getModelViewMatrix());
-        Vector3f origin = modelView.transformPosition(matrix.getTranslation(new Vector3f()));
+        if (h == this.composeSignature && this.atlas != null)
+        {
+            return;
+        }
 
-        FormTranslucentQueue.add(new FormTranslucentQueue.VertexBufferCommand(
-            buffer, () -> finalShader, texture, modelView, null, origin, null, true, null, null
-        ));
+        this.composeSignature = h;
+
+        int rows = Math.max(1, (sides + TILES_PER_ROW - 1) / TILES_PER_ROW);
+        int height = MathHelper.smallestEncompassingPowerOfTwo(rows * TILE);
+
+        if (this.atlas == null || this.atlasHeight != height)
+        {
+            if (this.atlas != null)
+            {
+                this.atlas.close();
+            }
+
+            this.atlas = new NativeImageBackedTexture(ATLAS_WIDTH, height, true);
+            this.atlasHeight = height;
+        }
+
+        NativeImage image = this.atlas.getImage();
+
+        if (image == null)
+        {
+            return;
+        }
+
+        Composer composer = new Composer(p);
+        int r = 0;
+
+        for (int n = 0; n < this.fieldSides && n < sides; n++)
+        {
+            int tx = (n % TILES_PER_ROW) * TILE;
+            int ty = (n / TILES_PER_ROW) * TILE;
+
+            for (int j = 0; j < TILE; j++)
+            {
+                for (int i = 0; i < TILE; i++, r += 3)
+                {
+                    image.setColor(tx + i, ty + j, composer.abgr(this.field[r], this.field[r + 1], this.field[r + 2]));
+                }
+            }
+        }
+
+        this.atlas.upload();
+    }
+
+    /**
+     * {@link DecayPattern#compose} through tables: everything that depends only on the progress, the
+     * softness and the colours is worked out once per bin, so a texel is a handful of multiplications.
+     */
+    private static class Composer
+    {
+        private final boolean cracks;
+        private final boolean custom;
+        private final float[] primary;
+        private final float[] edge;
+        private final float opacity;
+        private final float dark;
+        private final float haloDark;
+
+        /* By the decay time */
+        private final float[] gate = new float[BINS];
+        private final float[] body = new float[BINS];
+        private final float[] branchGate = new float[BINS];
+        /* By the distance to a break, or a branch */
+        private final float[] core = new float[BINS];
+        private final float[] halo = new float[BINS];
+        private final float[] branch = new float[BINS];
+
+        public Composer(DecayPattern.Params p)
+        {
+            this.cracks = p.preset == DecayForm.PRESET_CRACKS;
+            this.custom = p.preset == DecayForm.PRESET_CUSTOM;
+            this.primary = p.primary;
+            this.edge = p.edge;
+            this.opacity = p.progress <= 0.0005F ? 0F : p.opacity;
+            this.dark = Math.max(0F, 1F - p.depthInset * 4F);
+            this.haloDark = Math.max(0.2F, 1F - p.depthInset * 2.5F);
+
+            float soft = p.softness;
+            float progress = p.progress;
+            float width = 0.03F + 0.03F * progress;
+            float haloWidth = width * (2.4F + p.depthInset * 18F);
+            float haloStrength = 0.32F + p.depthInset * 2F;
+
+            for (int b = 0; b < BINS; b++)
+            {
+                float t = (b + 0.5F) / BINS;
+                float dist = t * 0.5F;
+
+                if (this.cracks)
+                {
+                    this.gate[b] = smooth((progress * (1F + soft) - t) / soft);
+                    this.branchGate[b] = smoothstep(t * 0.5F + 0.3F, t * 0.5F + 0.5F, progress);
+                    this.core[b] = 1F - smoothstep(width * 0.5F, width, dist);
+                    this.halo[b] = (1F - smoothstep(width, haloWidth, dist)) * haloStrength;
+                    this.branch[b] = 1F - smoothstep(width * 0.25F, width * 0.55F, dist);
+                }
+                else
+                {
+                    float u = (progress * (1F + 2.2F * soft) - t) / soft;
+
+                    this.gate[b] = smooth(u);
+                    this.body[b] = smoothstep(0.3F, 2.2F, u);
+                }
+            }
+        }
+
+        private static float smooth(float t)
+        {
+            t = t < 0F ? 0F : (t > 1F ? 1F : t);
+
+            return t * t * (3F - 2F * t);
+        }
+
+        private static float smoothstep(float a, float b, float x)
+        {
+            return smooth((x - a) / (b - a));
+        }
+
+        public int abgr(char time, char a, char b)
+        {
+            if (time == OUTSIDE)
+            {
+                return 0;
+            }
+
+            float gate = this.gate[time];
+
+            if (gate <= 0.002F || this.opacity <= 0F)
+            {
+                return 0;
+            }
+
+            float r;
+            float g;
+            float bl;
+            float alpha;
+
+            if (this.cracks)
+            {
+                float core = Math.max(this.core[a] * gate, this.branch[b] * this.branchGate[time] * gate * 0.85F);
+                float halo = this.halo[a] * gate;
+
+                alpha = Math.min(1F, core + halo * (1F - core));
+
+                if (alpha <= 0.002F)
+                {
+                    return 0;
+                }
+
+                float hw = halo * (1F - core);
+
+                r = (this.primary[0] * this.dark * core + this.edge[0] * this.haloDark * hw) / alpha;
+                g = (this.primary[1] * this.dark * core + this.edge[1] * this.haloDark * hw) / alpha;
+                bl = (this.primary[2] * this.dark * core + this.edge[2] * this.haloDark * hw) / alpha;
+            }
+            else
+            {
+                float body = this.body[time];
+                float mottle = this.custom ? 1F : 0.8F + (a + 0.5F) / BINS * 0.4F;
+
+                alpha = gate;
+                r = (this.edge[0] + (this.primary[0] - this.edge[0]) * body) * mottle;
+                g = (this.edge[1] + (this.primary[1] - this.edge[1]) * body) * mottle;
+                bl = (this.edge[2] + (this.primary[2] - this.edge[2]) * body) * mottle;
+            }
+
+            int ia = MathHelper.clamp((int) (alpha * this.opacity * 255F), 0, 255);
+
+            return ia << 24 | channel(bl) << 16 | channel(g) << 8 | channel(r);
+        }
     }
 
     /* Guides */
@@ -731,6 +1144,7 @@ public class DecayFormRenderer extends FormRenderer<DecayForm>
 
         MatrixStack stack = context.stack;
         boolean objectMode = this.form.mode.get() == DecayForm.MODE_OBJECT;
+
         this.resolveBox(objectMode);
 
         float hx = this.hx;

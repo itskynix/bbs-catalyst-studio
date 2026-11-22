@@ -5,9 +5,18 @@ import mchorse.bbs_mod.forms.forms.DecayForm;
 /**
  * The maths of the decay: for a point in space, how much of it is decayed and in what colour.
  *
- * <p>Everything is a function of the point, the seed and the progress, so the same point always
- * answers the same and the pattern only grows as the progress climbs. It never allocates: the answer
- * goes into the caller's array.</p>
+ * <p>It works in two steps. {@link #field} is what the point is - when it decays and how its pattern
+ * runs - and depends only on the point, the preset, the seed and the scale. {@link #compose} turns that
+ * into a colour for the current progress, softness and colours, and is cheap. A cache can keep the
+ * field and only compose again while the progress is animated.</p>
+ *
+ * <p>The same maths runs on the GPU in {@code assets/bbs/shaders/core/decay.fsh}, with the same integer
+ * hash, so the shader and the CPU atlas used under a shader pack draw the same pattern. A change here
+ * has to be made there too.</p>
+ *
+ * <p>The spread is normalised: every point has a decay time {@code t} between 0 and 1, and the progress
+ * reaches it. At progress 0 nothing shows; at progress 1 the reach is past every {@code t} with the
+ * softness on top, so every point of the volume is covered whatever its noise and its distance.</p>
  */
 public class DecayPattern
 {
@@ -28,7 +37,7 @@ public class DecayPattern
         {
             this.preset = form.preset.get();
             this.seed = form.seed.get();
-            this.progress = form.decayProgress.get();
+            this.progress = Math.max(0F, Math.min(1F, form.decayProgress.get()));
             this.softness = Math.max(0.01F, form.edgeSoftness.get());
             this.scale = Math.max(0.2F, form.noiseScale.get());
             this.depthInset = form.depthInset.get();
@@ -47,14 +56,18 @@ public class DecayPattern
             out[2] = color.b;
         }
 
-        /** A signature, so a cached build knows when the values it was made from changed */
-        public int signature()
+        /** What the field depends on */
+        public int fieldSignature()
         {
-            int h = this.preset * 31 + this.seed;
+            return (this.preset * 31 + this.seed) * 31 + Float.floatToIntBits(this.scale);
+        }
 
-            h = h * 31 + Float.floatToIntBits(Math.round(this.progress * 400F) / 400F);
+        /** What the composed colour depends on, on top of the field */
+        public int composeSignature()
+        {
+            int h = Float.floatToIntBits(this.progress);
+
             h = h * 31 + Float.floatToIntBits(this.softness);
-            h = h * 31 + Float.floatToIntBits(this.scale);
             h = h * 31 + Float.floatToIntBits(this.depthInset);
             h = h * 31 + Float.floatToIntBits(this.opacity);
 
@@ -95,6 +108,11 @@ public class DecayPattern
         return smooth((x - a) / (b - a));
     }
 
+    private static float clamp01(float v)
+    {
+        return v < 0F ? 0F : (v > 1F ? 1F : v);
+    }
+
     /** Smooth value noise, 0 to 1 */
     public static float noise(double x, double y, double z, int seed)
     {
@@ -129,9 +147,7 @@ public class DecayPattern
     {
         float v = noise(x, y, z, seed) * 0.5F + noise(x * 2.03, y * 2.03, z * 2.03, seed + 17) * 0.3F + noise(x * 4.1, y * 4.1, z * 4.1, seed + 41) * 0.2F;
 
-        v = (v - 0.5F) * 1.7F + 0.5F;
-
-        return v < 0F ? 0F : (v > 1F ? 1F : v);
+        return clamp01((v - 0.5F) * 1.7F + 0.5F);
     }
 
     /** The two nearest feature distances of a 3D cellular noise, written into out[0] and out[1] */
@@ -152,12 +168,9 @@ public class DecayPattern
                     int cx = xi + dx;
                     int cy = yi + dy;
                     int cz = zi + dz;
-                    double px = cx + rnd(hash(cx, cy, cz, seed));
-                    double py = cy + rnd(hash(cx, cy, cz, seed + 101));
-                    double pz = cz + rnd(hash(cx, cy, cz, seed + 202));
-                    double ex = px - x;
-                    double ey = py - y;
-                    double ez = pz - z;
+                    double ex = cx + rnd(hash(cx, cy, cz, seed)) - x;
+                    double ey = cy + rnd(hash(cx, cy, cz, seed + 101)) - y;
+                    double ez = cz + rnd(hash(cx, cy, cz, seed + 202)) - z;
                     float d = (float) Math.sqrt(ex * ex + ey * ey + ez * ez);
 
                     if (d < f1)
@@ -178,32 +191,42 @@ public class DecayPattern
     }
 
     /**
-     * One point's decay. {@code x, y, z} is where the pattern is read (world blocks on a wall, the
-     * form's own space on an object, so it travels with the object); {@code y01} is how high up the
-     * box the point is, 0 to 1; {@code radial} how far from the centre, 0 at the middle and 1 at a
-     * corner. {@code out} gets the colour in 0 to 2 and the opacity, not yet times the form's own, in 3.
+     * What one point is, before any progress. {@code x, y, z} is where the pattern is read (world
+     * blocks on a wall, the form's own space on an object); {@code y01} is how high up the box the
+     * point is, 0 to 1; {@code radial} how far from the centre, 0 at the middle and 1 at a corner.
+     *
+     * <p>Cracks: f[0] the decay time, f[1] the distance to the nearest break in blocks, f[2] the
+     * distance to the nearest fine branch. Other presets: f[0] the decay time, f[1] a shade.</p>
      */
-    public static void sample(Params p, double x, double y, double z, float y01, float radial, float[] out, float[] scratch)
+    public static void field(Params p, double x, double y, double z, float y01, float radial, float[] f, float[] scratch)
     {
-        out[3] = 0F;
+        double s = p.scale;
 
-        float progress = p.progress;
-
-        if (progress <= 0.0005F)
-        {
-            return;
-        }
+        f[2] = 0F;
+        f[3] = 0F;
 
         if (p.preset == DecayForm.PRESET_CRACKS)
         {
-            sampleCracks(p, x, y, z, radial, out, scratch);
+            /* Warp the point, so the cell borders wander like a break and do not run straight */
+            double warp = 0.35 / s * 2.0;
+            double wx = x + (noise(x * s * 1.3, y * s * 1.3, z * s * 1.3, p.seed + 61) - 0.5) * warp;
+            double wy = y + (noise(x * s * 1.3, y * s * 1.3, z * s * 1.3, p.seed + 62) - 0.5) * warp;
+            double wz = z + (noise(x * s * 1.3, y * s * 1.3, z * s * 1.3, p.seed + 63) - 0.5) * warp;
+
+            voronoi(wx * s, wy * s, wz * s, p.seed, scratch);
+            f[1] = (scratch[1] - scratch[0]) / (float) s;
+
+            voronoi(wx * s * 2.6, wy * s * 2.6, wz * s * 2.6, p.seed + 313, scratch);
+            f[2] = (scratch[1] - scratch[0]) / (float) (s * 2.6);
+
+            /* Breaks reach outwards from the middle */
+            f[0] = clamp01(radial * 0.7F + fbm(x * s * 0.8, y * s * 0.8, z * s * 0.8, p.seed + 7) * 0.3F);
 
             return;
         }
 
-        double s = p.scale;
         float value;
-        float threshold;
+        float time;
         float shade;
 
         switch (p.preset)
@@ -211,7 +234,7 @@ public class DecayPattern
             case DecayForm.PRESET_RUST:
             {
                 value = fbm(x * s * 1.1, y * s * 1.1, z * s * 1.1, p.seed) * 0.78F + noise(x * s * 6.0, y * s * 6.0, z * s * 6.0, p.seed + 5) * 0.22F;
-                threshold = 1.02F - progress * 1.25F + radial * 0.25F;
+                time = (1F - value) * 0.7F + radial * 0.3F;
                 shade = noise(x * s * 9.0, y * s * 9.0, z * s * 9.0, p.seed + 9);
 
                 break;
@@ -220,16 +243,17 @@ public class DecayPattern
             {
                 value = fbm(x * s * 0.9, y * s * 0.9, z * s * 0.9, p.seed) * 0.65F + noise(x * s * 3.5, y * s * 3.5, z * s * 3.5, p.seed + 5) * 0.35F;
                 value += (rnd(hash((int) Math.floor(x * 16.0), (int) Math.floor(y * 16.0), (int) Math.floor(z * 16.0), p.seed + 3)) - 0.5F) * 0.14F;
-                threshold = 1F - progress * 1.25F + radial * 0.2F + y01 * 0.25F;
+                /* Moss climbs: the bottom first */
+                time = (1F - value) * 0.6F + radial * 0.2F + y01 * 0.2F;
                 shade = noise(x * s * 7.0, y * s * 7.0, z * s * 7.0, p.seed + 9);
 
                 break;
             }
             case DecayForm.PRESET_STAIN:
             {
-                /* Stretched downwards, so it reads as something that ran */
+                /* Stretched downwards, so it reads as something that ran, from the top */
                 value = fbm(x * s * 1.5, y * s * 0.32, z * s * 1.5, p.seed);
-                threshold = 1F - progress * 1.3F + radial * 0.15F + (1F - y01) * 0.2F;
+                time = (1F - value) * 0.65F + radial * 0.15F + (1F - y01) * 0.2F;
                 shade = noise(x * s * 4.0, y * s * 1.2, z * s * 4.0, p.seed + 9);
 
                 break;
@@ -237,24 +261,79 @@ public class DecayPattern
             default:
             {
                 value = fbm(x * s, y * s, z * s, p.seed);
-                threshold = 1.02F - progress * 1.25F + radial * 0.25F;
+                time = (1F - value) * 0.7F + radial * 0.3F;
                 shade = 0.5F;
 
                 break;
             }
         }
 
-        float u = (value - threshold) / p.softness;
-        float alpha = smoothstep(0F, 0.5F, u);
+        f[0] = clamp01(time);
+        f[1] = shade;
+    }
+
+    /** The colour of a point with the given field at the current progress: rgb in out[0..2], opacity times the form's in out[3] */
+    public static void compose(Params p, float[] f, float[] out)
+    {
+        out[3] = 0F;
+
+        float progress = p.progress;
+        float soft = p.softness;
+
+        if (progress <= 0.0005F)
+        {
+            return;
+        }
+
+        if (p.preset == DecayForm.PRESET_CRACKS)
+        {
+            float gate = smooth((progress * (1F + soft) - f[0]) / soft);
+
+            if (gate <= 0.002F)
+            {
+                return;
+            }
+
+            float width = 0.03F + 0.03F * progress;
+            float core = (1F - smoothstep(width * 0.5F, width, f[1])) * gate;
+            float branchGate = smoothstep(f[0] * 0.5F + 0.3F, f[0] * 0.5F + 0.5F, progress);
+            float branch = (1F - smoothstep(width * 0.25F, width * 0.55F, f[2])) * branchGate * gate;
+
+            core = Math.max(core, branch * 0.85F);
+
+            /* The worn rim of a break, and with the depth inset the dark that pools round it */
+            float haloWidth = width * (2.4F + p.depthInset * 18F);
+            float halo = (1F - smoothstep(width, haloWidth, f[1])) * gate * (0.32F + p.depthInset * 2F);
+            float alpha = Math.min(1F, core + halo * (1F - core));
+
+            if (alpha <= 0.002F)
+            {
+                return;
+            }
+
+            float dark = Math.max(0F, 1F - p.depthInset * 4F);
+            float haloDark = Math.max(0.2F, 1F - p.depthInset * 2.5F);
+
+            for (int i = 0; i < 3; i++)
+            {
+                out[i] = (p.primary[i] * dark * core + p.edge[i] * haloDark * halo * (1F - core)) / alpha;
+            }
+
+            out[3] = alpha * p.opacity;
+
+            return;
+        }
+
+        /* The reach passes every decay time at progress 1, the softness and the body's width included */
+        float u = (progress * (1F + 2.2F * soft) - f[0]) / soft;
+        float alpha = smooth(u);
 
         if (alpha <= 0.002F)
         {
             return;
         }
 
-        /* The rim wears the edge colour, the body the main one, a little mottled */
-        float body = smoothstep(0.2F, 1.2F, u);
-        float mottle = 0.8F + shade * 0.4F;
+        float body = smoothstep(0.3F, 2.2F, u);
 
         if (p.preset == DecayForm.PRESET_CUSTOM)
         {
@@ -264,70 +343,23 @@ public class DecayPattern
         }
         else
         {
+            float mottle = 0.8F + f[1] * 0.4F;
+
             for (int i = 0; i < 3; i++)
             {
                 out[i] = Math.min(2F, (p.edge[i] + (p.primary[i] - p.edge[i]) * body) * mottle);
             }
         }
 
-        out[3] = alpha;
+        out[3] = alpha * p.opacity;
     }
 
-    private static void sampleCracks(Params p, double x, double y, double z, float radial, float[] out, float[] scratch)
+    /** {@link #field} and {@link #compose} in one go, for one point */
+    public static void sample(Params p, double x, double y, double z, float y01, float radial, float[] out, float[] scratch)
     {
-        double s = p.scale;
-        float progress = p.progress;
+        float[] f = new float[4];
 
-        /* Warp the point, so the cell borders wander like a break and do not run straight */
-        double wx = x + (noise(x * s * 1.3, y * s * 1.3, z * s * 1.3, p.seed + 61) - 0.5) * 0.35 / s * 2.0;
-        double wy = y + (noise(x * s * 1.3, y * s * 1.3, z * s * 1.3, p.seed + 62) - 0.5) * 0.35 / s * 2.0;
-        double wz = z + (noise(x * s * 1.3, y * s * 1.3, z * s * 1.3, p.seed + 63) - 0.5) * 0.35 / s * 2.0;
-
-        voronoi(wx * s, wy * s, wz * s, p.seed, scratch);
-
-        /* Breaks reach outwards from the middle, later and thinner at the rim of the spread */
-        float arrival = radial * 0.7F + fbm(x * s * 0.8, y * s * 0.8, z * s * 0.8, p.seed + 7) * 0.3F;
-        float gate = smoothstep(0F, p.softness + 0.02F, progress * 1.15F - arrival);
-
-        if (gate <= 0.002F)
-        {
-            return;
-        }
-
-        float edgeBlocks = (scratch[1] - scratch[0]) / (float) s;
-        float width = 0.03F + 0.03F * progress;
-        float core = (1F - smoothstep(width * 0.5F, width, edgeBlocks)) * gate;
-
-        /* Fine branches: a tighter net that only turns up once the decay is well along */
-        voronoi(wx * s * 2.6, wy * s * 2.6, wz * s * 2.6, p.seed + 313, scratch);
-
-        float branchBlocks = (scratch[1] - scratch[0]) / (float) (s * 2.6);
-        float branchGate = smoothstep(0.35F, 0.9F, progress * 1.1F - arrival * 0.6F);
-        float branch = (1F - smoothstep(width * 0.25F, width * 0.55F, branchBlocks)) * branchGate * gate;
-
-        core = Math.max(core, branch * 0.85F);
-
-        /* The worn rim of a break, and with the depth inset the dark that pools round it */
-        float haloWidth = width * (2.4F + p.depthInset * 18F);
-        float halo = (1F - smoothstep(width, haloWidth, edgeBlocks)) * gate * (0.32F + p.depthInset * 2F);
-        float alpha = core + halo * (1F - core);
-
-        if (alpha <= 0.002F)
-        {
-            return;
-        }
-
-        float dark = Math.max(0F, 1F - p.depthInset * 4F);
-        float haloDark = Math.max(0.2F, 1F - p.depthInset * 2.5F);
-
-        for (int i = 0; i < 3; i++)
-        {
-            float coreColor = p.primary[i] * dark;
-            float haloColor = p.edge[i] * haloDark;
-
-            out[i] = (coreColor * core + haloColor * halo * (1F - core)) / alpha;
-        }
-
-        out[3] = Math.min(1F, alpha);
+        field(p, x, y, z, y01, radial, f, scratch);
+        compose(p, f, out);
     }
 }

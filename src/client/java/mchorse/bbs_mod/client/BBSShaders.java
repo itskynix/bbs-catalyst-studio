@@ -25,6 +25,7 @@ public class BBSShaders
     private static ShaderProgram pixelArtTextIntensity;
     private static ShaderProgram postFx;
     private static ShaderProgram postFxLibrary;
+    private static ShaderProgram decay;
 
     private static ShaderProgram pickerPreview;
     private static ShaderProgram pickerOutline;
@@ -147,6 +148,32 @@ public class BBSShaders
             System.err.println("[BBS] Shader 'postfx_lib' (assets/bbs/shaders/core/postfx_lib.fsh) failed to compile or link; the post-process effect library draws nothing until it is fixed. Reason: " + e.getMessage());
             e.printStackTrace();
         }
+
+        /* The decay form's per-pixel pattern: on its own too, a driver that will not build it only
+         * sends the decay to its CPU atlas, the path a shader pack uses anyway */
+        if (decay != null) decay.close();
+
+        decay = null;
+
+        try
+        {
+            decay = new ShaderProgram(new ProxyResourceFactory(MinecraftClient.getInstance().getResourceManager()), "decay", VertexFormats.POSITION_COLOR_TEXTURE_OVERLAY_LIGHT_NORMAL);
+        }
+        catch (Throwable e)
+        {
+            if (decay != null) decay.close();
+
+            decay = null;
+
+            System.err.println("[BBS] Shader 'decay' (assets/bbs/shaders/core/decay.fsh) failed to compile or link; decay forms fall back to their CPU atlas. Reason: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /** The decay form's per-pixel pattern; null when it could not be built, and then the form draws through its CPU atlas. */
+    public static ShaderProgram getDecayProgram()
+    {
+        return decay;
     }
 
     /** The post-process effect library's pass; null when it could not be built, which draws nothing. */
