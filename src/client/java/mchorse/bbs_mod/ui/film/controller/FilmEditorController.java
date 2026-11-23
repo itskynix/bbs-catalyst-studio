@@ -98,6 +98,7 @@ public class FilmEditorController extends BaseFilmController
         if (entity == this.controller.getControlled() && this.controller.isRecording() && this.controller.panel.getRunner().isRunning())
         {
             replay.keyframes.record(this.controller.panel.getCursor(), entity, groups);
+            this.controller.recorder.recordSaccade(this.controller.panel.getCursor(), entity.getYaw(), entity.getPitch());
         }
 
         ticks = this.getTick() + (this.controller.panel.getRunner().isRunning() ? 1 : 0);

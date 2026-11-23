@@ -25,6 +25,12 @@ public class EyeClip extends FxClip
     public final ValueFloat offsetX = new ValueFloat("offset_x", 0F);
     public final ValueFloat offsetY = new ValueFloat("offset_y", 0F);
 
+    /** How hard a saccade closes the lids: the blink is pulled down by this much at the pulse's peak. */
+    public final ValueFloat saccadeIntensity = new ValueFloat("saccade_intensity", 0.65F, 0F, 2F);
+
+    /** How long the pulse takes to die away from its peak, in ticks. The recorder writes its keys with it. */
+    public final ValueInt saccadeDuration = new ValueInt("saccade_duration", 4, 1, 15);
+
     public final Channel colorR = this.channel("eyeR", 0D);
     public final Channel colorG = this.channel("eyeG", 0D);
     public final Channel colorB = this.channel("eyeB", 0D);
@@ -34,6 +40,9 @@ public class EyeClip extends FxClip
     public final Channel smoothness = this.channel("smoothness", 0.15D);
     public final Channel rotation = this.channel("rotation", 0D);
     public final Channel size = this.channel("size", 1D);
+
+    /** The saccadic pulse, 0 - 1: 0 at rest, 1 at the peak of the jump. Only keys on this channel make a saccade. */
+    public final Channel saccade = this.channel("saccade", 0D);
 
     public EyeClip()
     {
@@ -47,6 +56,8 @@ public class EyeClip extends FxClip
         this.add(this.tiltFeather);
         this.add(this.offsetX);
         this.add(this.offsetY);
+        this.add(this.saccadeIntensity);
+        this.add(this.saccadeDuration);
     }
 
     @Override
@@ -64,7 +75,10 @@ public class EyeClip extends FxClip
 
         overlay.set(3, opacity / 100D * factor);
         overlay.set(4, this.width.get(t) * this.tiltAspect.get());
-        overlay.set(5, this.blink.get(t));
+        /* The saccade only ever pulls the lids down, from keys on the timeline and nothing else */
+        double pulse = this.saccade.channel.isEmpty() ? 0D : Math.max(0D, Math.min(1D, this.saccade.get(t)));
+
+        overlay.set(5, Math.max(0D, Math.min(1D, this.blink.get(t) - this.saccadeIntensity.get() * pulse)));
         overlay.set(6, this.smoothness.get(t) + this.tiltFeather.get());
         overlay.set(7, this.rotation.get(t) + this.tiltAngle.get());
         overlay.set(8, this.size.get(t));

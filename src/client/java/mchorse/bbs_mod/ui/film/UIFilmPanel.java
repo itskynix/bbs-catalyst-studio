@@ -2596,6 +2596,11 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
 
     public void applyRecordedKeyframes(Recorder recorder, Film film)
     {
+        if (!recorder.saccades.isEmpty())
+        {
+            BaseValue.edit(film, (f) -> recorder.saccades.commitTo(f));
+        }
+
         if (recorder instanceof MultiTrackRecorder multiTrack)
         {
             BaseValue.edit(film, (f) ->

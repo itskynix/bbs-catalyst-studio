@@ -46,10 +46,16 @@ public class FilmRecordingController
     private int recordingCountdown;
     private List<String> recordingGroups;
     private BaseType recordingOld;
+    private final mchorse.bbs_mod.film.SaccadeRecorder saccades = new mchorse.bbs_mod.film.SaccadeRecorder();
 
     public FilmRecordingController(UIFilmController controller)
     {
         this.controller = controller;
+    }
+
+    public void recordSaccade(int tick, float yaw, float pitch)
+    {
+        this.saccades.record(tick, yaw, pitch, 0F);
     }
 
     public boolean isRecording()
@@ -114,6 +120,7 @@ public class FilmRecordingController
         this.recordingGroups = groups;
 
         this.recordingOld = this.controller.getReplay().keyframes.toData();
+        this.saccades.clear();
 
         if (groups != null)
         {
@@ -197,6 +204,13 @@ public class FilmRecordingController
         }
 
         Replay replay = this.controller.getReplay();
+
+        if (!this.saccades.isEmpty() && this.controller.panel.getData() != null)
+        {
+            mchorse.bbs_mod.film.Film film = this.controller.panel.getData();
+
+            mchorse.bbs_mod.settings.values.base.BaseValue.edit(film, (f) -> this.saccades.commitTo(f));
+        }
 
         if (replay != null && this.recordingOld != null)
         {

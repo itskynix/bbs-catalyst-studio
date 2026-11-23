@@ -222,6 +222,9 @@ public class BBSSettings {
 	public static ValueInt recordingTransformOverlays;
 	public static ValueBoolean recordingCameraPreview;
 	public static ValueBoolean recordingTeleport;
+	public static ValueBoolean autoSaccadicMask;
+	public static ValueFloat saccadicAngleThreshold;
+	public static ValueInt saccadicCooldown;
 
 	public static ValueBoolean renderAllModelBlocks;
 	public static ValueBoolean clickModelBlocks;
@@ -946,6 +949,9 @@ public class BBSSettings {
 		recordingTransformOverlays = builder.getInt("transform_overlays", 0, 0, 42);
 		recordingCameraPreview = builder.getBoolean("camera_preview", true);
 		recordingTeleport = builder.getBoolean("teleport", true);
+		autoSaccadicMask = builder.getBoolean("auto_saccadic_mask", true);
+		saccadicAngleThreshold = builder.getFloat("saccadic_angle_threshold", 35F, 1F, 180F);
+		saccadicCooldown = builder.getInt("saccadic_cooldown", 4, 0, 60);
 
 		/* Output */
 		/* Ordered by how often it gets touched: the resolution first, then the

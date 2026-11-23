@@ -382,6 +382,8 @@ public class UIFxClips
         public UITrackpad feather;
         public UITrackpad offsetX;
         public UITrackpad offsetY;
+        public UITrackpad saccadeIntensity;
+        public UITrackpad saccadeDuration;
 
         public UIEyeClip(EyeClip clip, IUIClipsDelegate editor)
         {
@@ -408,6 +410,10 @@ public class UIFxClips
             this.offsetX.tooltip(key("offset_x"));
             this.offsetY = this.trackpad(this.clip.offsetY);
             this.offsetY.tooltip(key("offset_y"));
+            this.saccadeIntensity = this.trackpad(this.clip.saccadeIntensity);
+            this.saccadeIntensity.tooltip(key("saccade_intensity"));
+            this.saccadeDuration = this.trackpad(this.clip.saccadeDuration);
+            this.saccadeDuration.tooltip(key("saccade_duration"));
         }
 
         @Override
@@ -416,6 +422,7 @@ public class UIFxClips
             this.panels.add(this.section(key("eye_color"), this.color, this.opacity));
             this.panels.add(this.section(key("tilt"), UI.row(this.angle, this.aspect), UI.row(this.thickness, this.feather)));
             this.panels.add(this.section(key("offset"), UI.row(this.offsetX, this.offsetY)));
+            this.panels.add(this.section(key("saccade"), UI.row(this.saccadeIntensity, this.saccadeDuration)));
         }
     }
 

@@ -57,6 +57,8 @@ public class Recorder extends WorldFilmController
     public final mchorse.bbs_mod.film.eye.PovRecorder pov = new mchorse.bbs_mod.film.eye.PovRecorder();
     /** Automatic MTR world timeline event tracker for door, motion and horn events */
     public final MtrEventTracker mtrTracker = new MtrEventTracker();
+    /** Sudden turns of the view, written as saccadic pulses on the eye clips when the take is applied */
+    public final SaccadeRecorder saccades = new SaccadeRecorder();
 
     /**
      * Mobs captured within {@link Film#mobRecordingRadius} when recording started.
@@ -253,6 +255,7 @@ public class Recorder extends WorldFilmController
             this.mtrTracker.update(this.film, this.tick);
             this.recordMobs();
             this.pov.record(this.tick, player);
+            this.saccades.record(this.tick, player.getYaw(), player.getPitch(), 0F);
         }
 
         super.update();
