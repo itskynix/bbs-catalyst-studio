@@ -33,6 +33,7 @@ public class UIThirdPersonClip extends UIClip<ThirdPersonClientClip>
     public UIToggle positionLag;
     public UIToggle rotationLag;
     public UIToggle collisionTest;
+    public UIToggle fadeThinObstacles;
     public UIKeyframeEditor keyframes;
     public UIButton edit;
 
@@ -70,6 +71,8 @@ public class UIThirdPersonClip extends UIClip<ThirdPersonClientClip>
         this.rotationLag.tooltip(UIKeys.THIRD_PERSON_ROTATION_LAG_TOOLTIP);
         this.collisionTest = this.toggle(UIKeys.THIRD_PERSON_COLLISION, this.clip.collisionTest);
         this.collisionTest.tooltip(UIKeys.THIRD_PERSON_COLLISION_TOOLTIP);
+        this.fadeThinObstacles = this.toggle(UIKeys.THIRD_PERSON_FADE_THIN, this.clip.fadeThinObstacles);
+        this.fadeThinObstacles.tooltip(UIKeys.THIRD_PERSON_FADE_THIN_TOOLTIP);
 
         this.keyframes = new UIKeyframeEditor((consumer) -> new UIFilmKeyframes(this.editor, consumer));
         this.keyframes.view.rulerRenderer((context) ->
@@ -94,7 +97,7 @@ public class UIThirdPersonClip extends UIClip<ThirdPersonClientClip>
         super.registerPanels();
 
         this.panels.add(this.section(UIKeys.CAMERA_PANELS_TARGET, this.selector, this.group));
-        this.panels.add(this.section(UIKeys.THIRD_PERSON_ARM, this.followTargetYaw, this.positionLag, this.rotationLag, this.collisionTest));
+        this.panels.add(this.section(UIKeys.THIRD_PERSON_ARM, this.followTargetYaw, this.positionLag, this.rotationLag, this.collisionTest, this.fadeThinObstacles));
         this.panels.add(this.section(UIKeys.CAMERA_PANELS_KEYFRAMES, this.edit));
     }
 

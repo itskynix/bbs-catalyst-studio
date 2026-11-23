@@ -446,6 +446,8 @@
     "bbs.ui.camera.third_person.rotation_lag-tooltip": "Kolun dönüşleri aniden değil süzülerek olur. Film durdurulmuşken ya da zaman çizelgesinde gezilirken gecikme kapanır, böylece anahtarladığın şey ne görüyorsan odur.",
     "bbs.ui.camera.third_person.collision": "Çarpışma Testi",
     "bbs.ui.camera.third_person.collision-tooltip": "Hedefle kamera arasında duvar ya da tavan varsa kamera onun önüne çekilir; yol açılınca kol yumuşakça eski uzunluğuna döner.",
+    "bbs.ui.camera.third_person.fade_thin": "Ince Engelleri Saydamlaştır",
+    "bbs.ui.camera.third_person.fade_thin-tooltip": "Kamerayla hedef arasındaki yaprak, çit, duvar, parmaklık, cam bölme ve direkler, kamerayı öne itmek yerine yoldayken gizlenir. Kapalıyken ancak görüşü 0.2 saniye kesintisiz kapatırsa kolu kısaltırlar.",
     "bbs.ui.camera.third_person.channel.target_x": "Hedef Kaydırma X",
     "bbs.ui.camera.third_person.channel.target_y": "Hedef Kaydırma Y",
     "bbs.ui.camera.third_person.channel.target_z": "Hedef Kaydırma Z",

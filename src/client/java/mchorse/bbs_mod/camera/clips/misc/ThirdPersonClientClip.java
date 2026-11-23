@@ -9,14 +9,29 @@ import mchorse.bbs_mod.forms.entities.IEntity;
 import mchorse.bbs_mod.utils.RayTracing;
 import mchorse.bbs_mod.utils.clips.Clip;
 import mchorse.bbs_mod.utils.clips.ClipContext;
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
+import net.minecraft.block.ChainBlock;
+import net.minecraft.block.LanternBlock;
+import net.minecraft.block.PaneBlock;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.registry.tag.BlockTags;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.util.shape.VoxelShape;
 import net.minecraft.world.World;
 import org.joml.Matrix4f;
 import org.joml.Vector3d;
 import org.joml.Vector3f;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Places the camera at the end of a spring arm hung on a replay: the arm's pivot is the replay (or
@@ -38,12 +53,18 @@ public class ThirdPersonClientClip extends ThirdPersonClip
     /** How fast the arm grows back to its length once the wall is out of the way, per second. */
     private static final double RECOVER_SPEED = 6D;
 
+    /** A thin obstacle has to hold the view this long, 4 ticks, before it pulls the arm in. */
+    private static final double THIN_DELAY = 4D / 20D;
+
     /* The damped state, carried from one applied tick to the next */
     private final Vector3d lagPivot = new Vector3d();
     private double lagYaw;
     private double lagPitch;
     private double reach = 1D;
     private double lastTime = Double.NaN;
+
+    /** How long a thin obstacle has been in the way without a break, in seconds. */
+    private double thinTime;
 
     @Override
     protected void applyClip(ClipContext context, Position position)
@@ -145,14 +166,37 @@ public class ThirdPersonClientClip extends ThirdPersonClip
             .add(new Vector3d(up).mul(this.socketY.get(tick)))
             .add(new Vector3d(forward).mul(this.socketZ.get(tick)));
 
-        /* The wall: the arm is cut short in front of what it would end up behind, and grows back
-         * smoothly. Shrinking is instant, a camera inside a wall is never worth showing */
+        /* The wall. A solid block pulls the camera in front of it on the very frame, a thin one
+         * (leaves, fences, bars) only after it has held the view for 0.2 seconds, or not at all while
+         * it is faded out of the way. Shrinking is instant, growing back is a damped spring */
         double length = arm.length();
         double goal = 1D;
+        double radius = Math.max(0D, this.probeRadius.get(tick));
+        boolean collide = this.collisionTest.get() && length > 1E-4D;
+        boolean fade = this.fadeThinObstacles.get();
+        Probe probe = collide ? this.probe(entity, arm, length, right, up, radius) : null;
 
-        if (this.collisionTest.get() && length > 1E-4D)
+        if (probe != null)
         {
-            goal = this.probe(entity, arm, length, this.probeRadius.get(tick));
+            goal = Math.max(0D, Math.min(1D, probe.solid / length));
+
+            if (!fade && probe.thin < Double.MAX_VALUE)
+            {
+                this.thinTime = snap ? 0D : this.thinTime + dt;
+
+                if (this.thinTime >= THIN_DELAY)
+                {
+                    goal = Math.min(goal, Math.max(0D, Math.min(1D, probe.thin / length)));
+                }
+            }
+            else
+            {
+                this.thinTime = 0D;
+            }
+        }
+        else
+        {
+            this.thinTime = 0D;
         }
 
         if (goal < this.reach || snap)
@@ -164,10 +208,28 @@ public class ThirdPersonClientClip extends ThirdPersonClip
             this.reach += (goal - this.reach) * (1D - Math.exp(-RECOVER_SPEED * dt));
         }
 
-        if (!this.collisionTest.get())
+        if (!collide)
         {
             this.reach = 1D;
         }
+
+        /* The thin blocks between the pivot and where the camera really ended up fade out of the way */
+        Set<Long> faded = new HashSet<>();
+
+        if (fade && probe != null)
+        {
+            double reachDistance = length * this.reach + radius;
+
+            for (Map.Entry<Long, Double> entry : probe.thinBlocks.entrySet())
+            {
+                if (entry.getValue() <= reachDistance)
+                {
+                    faded.add(entry.getKey());
+                }
+            }
+        }
+
+        ThirdPersonFade.submit(faded);
 
         position.point.x = this.lagPivot.x + arm.x * this.reach;
         position.point.y = this.lagPivot.y + arm.y * this.reach;
@@ -224,30 +286,177 @@ public class ThirdPersonClientClip extends ThirdPersonClip
         return previous + wrap(entity.getBodyYaw() - previous) * transition;
     }
 
+    /** What one sweep of the arm found, in blocks along the arm from the pivot. */
+    private static class Probe
+    {
+        /** The nearest solid stop, the sphere's radius already taken off. The arm's length when nothing is in the way. */
+        public double solid;
+
+        /** The nearest thin obstacle, as above. Double.MAX_VALUE when there is none. */
+        public double thin = Double.MAX_VALUE;
+
+        /** Every thin block the sweep went through, with its distance along the arm. */
+        public final Map<Long, Double> thinBlocks = new HashMap<>();
+    }
+
     /**
-     * How much of the arm is free: the share of it from the pivot to the first block in its way,
-     * less the probe's radius. 1 when nothing is in the way.
+     * Sweeps a sphere along the arm: the centre ray and eight more on the ring of the probe's radius
+     * round the pivot, in the camera's own right and up. A ring ray whose start is inside a solid block
+     * is dropped, a pivot hugging a wall is no reason to pull the camera onto the pivot. A ray at an
+     * offset of o touches the sphere sqrt(r^2 - o^2) before its own hit.
      */
-    private double probe(IEntity entity, Vector3d arm, double length, double radius)
+    private Probe probe(IEntity entity, Vector3d arm, double length, Vector3d right, Vector3d up, double radius)
     {
         World world = entity.getWorld() != null ? entity.getWorld() : MinecraftClient.getInstance().world;
 
         if (world == null)
         {
-            return 1D;
+            return null;
         }
 
-        Vec3d start = new Vec3d(this.lagPivot.x, this.lagPivot.y, this.lagPivot.z);
-        BlockHitResult hit = RayTracing.rayTrace(world, start, new Vec3d(arm.x, arm.y, arm.z), length);
+        Vec3d pivot = new Vec3d(this.lagPivot.x, this.lagPivot.y, this.lagPivot.z);
+        Vec3d direction = new Vec3d(arm.x / length, arm.y / length, arm.z / length);
+        Probe probe = new Probe();
+        int rays = radius > 1E-4D ? 9 : 1;
 
-        if (hit == null || hit.getType() != HitResult.Type.BLOCK)
+        probe.solid = length;
+
+        for (int i = 0; i < rays; i++)
         {
-            return 1D;
+            double ox = 0D;
+            double oy = 0D;
+
+            if (i > 0)
+            {
+                /* Right, up, left, down, then the four diagonals on the same ring */
+                double angle = i <= 4 ? (i - 1) * Math.PI / 2D : Math.PI / 4D + (i - 5) * Math.PI / 2D;
+
+                ox = Math.cos(angle) * radius;
+                oy = Math.sin(angle) * radius;
+            }
+
+            Vec3d start = pivot.add(right.x * ox + up.x * oy, right.y * ox + up.y * oy, right.z * ox + up.z * oy);
+
+            if (i > 0)
+            {
+                Vec3d to = start.subtract(pivot);
+                BlockHitResult out = RayTracing.rayTrace(world, pivot, to, to.length());
+
+                if (out != null && out.getType() == HitResult.Type.BLOCK && !isThin(world, out.getBlockPos()))
+                {
+                    continue;
+                }
+            }
+
+            double offset = Math.sqrt(ox * ox + oy * oy);
+            double sphere = Math.sqrt(Math.max(0D, radius * radius - offset * offset));
+
+            this.march(world, start, direction, length, sphere, probe);
         }
 
-        double free = start.distanceTo(hit.getPos()) - Math.max(0D, radius);
+        probe.solid = Math.max(0D, probe.solid);
 
-        return Math.max(0D, Math.min(1D, free / length));
+        if (probe.thin < Double.MAX_VALUE)
+        {
+            probe.thin = Math.max(0D, probe.thin);
+        }
+
+        return probe;
+    }
+
+    /** Walks one ray: thin blocks are noted and passed, the first solid one ends it. */
+    private void march(World world, Vec3d start, Vec3d direction, double length, double sphere, Probe probe)
+    {
+        Vec3d from = start;
+
+        for (int i = 0; i < 24; i++)
+        {
+            double left = length - start.distanceTo(from);
+
+            if (left <= 1E-4D)
+            {
+                return;
+            }
+
+            BlockHitResult hit = RayTracing.rayTrace(world, from, direction, left);
+
+            if (hit == null || hit.getType() != HitResult.Type.BLOCK)
+            {
+                return;
+            }
+
+            BlockPos pos = hit.getBlockPos();
+            Vec3d at = hit.getPos();
+            double distance = start.distanceTo(at);
+
+            if (!isThin(world, pos))
+            {
+                probe.solid = Math.min(probe.solid, distance - sphere);
+
+                return;
+            }
+
+            probe.thin = Math.min(probe.thin, distance - sphere);
+            probe.thinBlocks.merge(pos.asLong(), distance, Math::min);
+
+            /* Out of the thin block's cell, and on */
+            double exit = Math.min(axisExit(at.x, direction.x, pos.getX()), Math.min(axisExit(at.y, direction.y, pos.getY()), axisExit(at.z, direction.z, pos.getZ())));
+
+            from = at.add(direction.multiply(Math.max(0D, exit) + 0.002D));
+        }
+    }
+
+    private static double axisExit(double position, double direction, int cell)
+    {
+        if (direction > 1E-9D)
+        {
+            return (cell + 1D - position) / direction;
+        }
+
+        if (direction < -1E-9D)
+        {
+            return (cell - position) / direction;
+        }
+
+        return Double.MAX_VALUE;
+    }
+
+    /**
+     * Thin: leaves, fences, walls, gates, bars, chains, lanterns, panes, and anything whose collision
+     * box is under half a block across in two axes or more. A full block, or a box at least half a
+     * block wide in two axes, is a wall.
+     */
+    public static boolean isThin(World world, BlockPos pos)
+    {
+        BlockState state = world.getBlockState(pos);
+
+        if (state.isIn(BlockTags.LEAVES) || state.isIn(BlockTags.FENCES) || state.isIn(BlockTags.WALLS) || state.isIn(BlockTags.FENCE_GATES))
+        {
+            return true;
+        }
+
+        Block block = state.getBlock();
+
+        if (block instanceof PaneBlock || block instanceof ChainBlock || block instanceof LanternBlock || block == Blocks.IRON_BARS)
+        {
+            return true;
+        }
+
+        VoxelShape shape = state.getCollisionShape(world, pos);
+
+        if (shape.isEmpty())
+        {
+            return false;
+        }
+
+        Box box = shape.getBoundingBox();
+        int thin = 0;
+
+        thin += box.getLengthX() < 0.5D ? 1 : 0;
+        thin += box.getLengthY() < 0.5D ? 1 : 0;
+        thin += box.getLengthZ() < 0.5D ? 1 : 0;
+
+        return thin >= 2;
     }
 
     private static double wrap(double degrees)

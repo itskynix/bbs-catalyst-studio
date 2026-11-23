@@ -915,6 +915,8 @@ public class BBSModClient implements ClientModInitializer
         {
             MinecraftClient mc = MinecraftClient.getInstance();
 
+            mchorse.bbs_mod.camera.clips.misc.ThirdPersonFade.tick();
+
             if (mc.currentScreen instanceof UIScreen screen)
             {
                 screen.update();

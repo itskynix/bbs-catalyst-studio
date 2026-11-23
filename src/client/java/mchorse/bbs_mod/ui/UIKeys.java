@@ -270,6 +270,8 @@ public class UIKeys
     public static final IKey THIRD_PERSON_ROTATION_LAG_TOOLTIP = L10n.lang("bbs.ui.camera.third_person.rotation_lag-tooltip");
     public static final IKey THIRD_PERSON_COLLISION = L10n.lang("bbs.ui.camera.third_person.collision");
     public static final IKey THIRD_PERSON_COLLISION_TOOLTIP = L10n.lang("bbs.ui.camera.third_person.collision-tooltip");
+    public static final IKey THIRD_PERSON_FADE_THIN = L10n.lang("bbs.ui.camera.third_person.fade_thin");
+    public static final IKey THIRD_PERSON_FADE_THIN_TOOLTIP = L10n.lang("bbs.ui.camera.third_person.fade_thin-tooltip");
     public static final IKey CAMERA_PANELS_TICK = L10n.lang("bbs.ui.camera.panels.tick");
     public static final IKey CAMERA_PANELS_TITLE = L10n.lang("bbs.ui.camera.panels.title");
     public static final IKey CAMERA_PANELS_TITLE_TOOLTIP = L10n.lang("bbs.ui.camera.panels.title_tooltip");

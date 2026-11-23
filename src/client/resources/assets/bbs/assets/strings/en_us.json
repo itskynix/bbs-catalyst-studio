@@ -810,6 +810,8 @@
 	"bbs.ui.camera.third_person.rotation_lag-tooltip": "The arm's turns glide instead of snapping. While the film is paused or scrubbed, lag is off so what you key is what you see.",
 	"bbs.ui.camera.third_person.collision": "Collision Test",
 	"bbs.ui.camera.third_person.collision-tooltip": "A wall or ceiling between the target and the camera pulls the camera in front of it; the arm grows back smoothly when the way clears.",
+	"bbs.ui.camera.third_person.fade_thin": "Fade Thin Obstacles",
+	"bbs.ui.camera.third_person.fade_thin-tooltip": "Leaves, fences, walls, bars, panes and posts between the camera and the target are hidden while they are in the way, instead of pushing the camera in. Off, they pull the arm in only after they have blocked the view for 0.2 seconds.",
 	"bbs.ui.camera.third_person.channel.target_x": "Target Offset X",
 	"bbs.ui.camera.third_person.channel.target_y": "Target Offset Y",
 	"bbs.ui.camera.third_person.channel.target_z": "Target Offset Z",

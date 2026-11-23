@@ -57,6 +57,9 @@ public class ThirdPersonClip extends CameraClip
     public final ValueBoolean rotationLag = new ValueBoolean("rotation_lag", true);
     public final ValueBoolean collisionTest = new ValueBoolean("collision_test", true);
 
+    /** Thin obstacles (leaves, fences, bars) in the line of sight go see-through instead of pulling the arm in */
+    public final ValueBoolean fadeThinObstacles = new ValueBoolean("fade_thin_obstacles", true);
+
     /* Target */
     public final Channel targetX = this.channel("target_x", 0D);
     public final Channel targetY = this.channel("target_y", 1.4D);
@@ -88,6 +91,7 @@ public class ThirdPersonClip extends CameraClip
         this.add(this.positionLag);
         this.add(this.rotationLag);
         this.add(this.collisionTest);
+        this.add(this.fadeThinObstacles);
 
         for (Channel channel : this.spring)
         {
