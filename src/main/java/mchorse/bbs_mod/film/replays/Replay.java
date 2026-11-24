@@ -54,6 +54,9 @@ public class Replay extends ValueGroup
     public final ValueBoolean actor = new ValueBoolean("actor", false);
     /** Whether the actor's body sweeps up items it walks over. What it takes is given back when the film stops. */
     public final ValueBoolean actorPickup = new ValueBoolean("actor_pickup", true);
+
+    /** Whether recording this replay keys the view's sudden jumps onto the Eye clips as saccades */
+    public final ValueBoolean saccadicMovement = new ValueBoolean("saccadic_movement", true);
     public final ValueBoolean fp = new ValueBoolean("fp", false);
     public final ValueBoolean relative = new ValueBoolean("relative", false);
     public final ValuePoint relativeOffset = new ValuePoint("relativeOffset", new Point(0, 0, 0));
@@ -99,6 +102,7 @@ public class Replay extends ValueGroup
 
         this.add(this.actor);
         this.add(this.actorPickup);
+        this.add(this.saccadicMovement);
         this.add(this.fp);
         this.add(this.relative);
         this.add(this.relativeOffset);

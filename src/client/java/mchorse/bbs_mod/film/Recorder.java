@@ -255,7 +255,13 @@ public class Recorder extends WorldFilmController
             this.mtrTracker.update(this.film, this.tick);
             this.recordMobs();
             this.pov.record(this.tick, player);
-            this.saccades.record(this.tick, player.getYaw(), player.getPitch(), 0F);
+            mchorse.bbs_mod.film.replays.Replay saccadeReplay = mchorse.bbs_mod.utils.CollectionUtils.getSafe(this.film.replays.getList(), this.exception);
+
+            /* Only for a replay that has Saccadic Movement on */
+            if (saccadeReplay == null || saccadeReplay.saccadicMovement.get())
+            {
+                this.saccades.record(this.tick, player.getYaw(), player.getPitch(), 0F);
+            }
         }
 
         super.update();

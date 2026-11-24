@@ -83,7 +83,7 @@ public class SaccadeRecorder
     }
 
     /**
-     * Writes the pulses onto the film. Each goes on an eye clip that covers its tick; ticks no eye
+     * Writes the pulses onto the film. Each is keyed into the blink channel of an eye clip that covers its tick; ticks no eye
      * clip covers share one new clip, set so that it is fully open at rest.
      */
     public void commitTo(Film film)
@@ -147,20 +147,29 @@ public class SaccadeRecorder
         return null;
     }
 
-    /** Rest just before, peak on the tick, rest again when the decay is over. */
+    /**
+     * The saccade as a dip in the blink channel, the one lid channel: the blink the clip had a tick
+     * before, the same blink pulled down by the intensity on the tick, the blink it has when the
+     * decay is over. All three are read before any is written, so the user's own blink keys around
+     * the pulse keep their curve.
+     */
     private static void write(EyeClip clip, int tick)
     {
         float local = tick - clip.tick.get();
+        float before = Math.max(0F, local - 1F);
         float end = local + clip.saccadeDuration.get();
-        var channel = clip.saccade.channel;
+        double valueBefore = clip.blink.get(before);
+        double valuePeak = Math.max(0D, clip.blink.get(local) - clip.saccadeIntensity.get());
+        double valueEnd = clip.blink.get(end);
+        var channel = clip.blink.channel;
 
-        if (channel.isEmpty() || channel.interpolate(Math.max(0F, local - 1F)) < 0.001D)
+        if (before < local)
         {
-            line(channel.get(channel.insert(Math.max(0F, local - 1F), 0D)));
+            line(channel.get(channel.insert(before, valueBefore)));
         }
 
-        line(channel.get(channel.insert(local, 1D)));
-        line(channel.get(channel.insert(end, 0D)));
+        line(channel.get(channel.insert(local, valuePeak)));
+        line(channel.get(channel.insert(end, valueEnd)));
     }
 
     private static void line(Keyframe<Double> key)

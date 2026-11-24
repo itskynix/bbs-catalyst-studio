@@ -72,6 +72,7 @@ public class UIReplayPropertiesPanel extends UIElement
     public UITrackpad looping;
     public UIToggle actor;
     public UIToggle actorPickup;
+    public UIToggle saccadicMovement;
     public UIToggle fp;
     public UIToggle relative;
     public UITrackpad relativeOffsetX;
@@ -185,6 +186,9 @@ public class UIReplayPropertiesPanel extends UIElement
         this.actor.tooltip(UIKeys.FILM_REPLAY_ACTOR_TOOLTIP);
         this.actorPickup = this.bound(new UIToggle(UIKeys.FILM_REPLAY_ACTOR_PICKUP, (b) -> this.edit((replay) -> replay.actorPickup.set(b.getValue()))), (r) -> this.actorPickup.setValue(r.actorPickup.get()));
         this.actorPickup.tooltip(UIKeys.FILM_REPLAY_ACTOR_PICKUP_TOOLTIP);
+
+        this.saccadicMovement = this.bound(new UIToggle(UIKeys.FILM_REPLAY_SACCADIC, (b) -> this.edit((replay) -> replay.saccadicMovement.set(b.getValue()))), (r) -> this.saccadicMovement.setValue(r.saccadicMovement.get()));
+        this.saccadicMovement.tooltip(UIKeys.FILM_REPLAY_SACCADIC_TOOLTIP);
         this.bakeAi = new UIButton(UIKeys.FILM_REPLAY_BAKE_AI, (b) -> this.bakeAi());
         this.bakeAi.tooltip(UIKeys.FILM_REPLAY_BAKE_AI_TOOLTIP);
         this.fp = new UIToggle(UIKeys.FILM_REPLAY_FP, (b) ->
@@ -293,7 +297,7 @@ public class UIReplayPropertiesPanel extends UIElement
             this.looping, this.actor, this.actorPickup, this.fp,
             this.relative, UI.row(this.relativeOffsetX, this.relativeOffsetY, this.relativeOffsetZ),
             this.axesPreview, this.pickAxesPreviewBone,
-            this.bakeAi
+            this.bakeAi, this.saccadicMovement
         );
 
         lookAtSection.setExpanded(false);

@@ -424,6 +424,7 @@ public class UIFxClips
             this.panels.add(this.section(key("offset"), UI.row(this.offsetX, this.offsetY)));
             this.panels.add(this.section(key("saccade"), UI.row(this.saccadeIntensity, this.saccadeDuration)));
         }
+private static final mchorse.bbs_mod.ui.framework.elements.input.keyframes.UIKeyframeSheet.Section COLOR_SECTION = new mchorse.bbs_mod.ui.framework.elements.input.keyframes.UIKeyframeSheet.Section("eye_color", key("eye_section_color"), Icons.COLOR, 0xe0709a);        private static final mchorse.bbs_mod.ui.framework.elements.input.keyframes.UIKeyframeSheet.Section LID_SECTION = new mchorse.bbs_mod.ui.framework.elements.input.keyframes.UIKeyframeSheet.Section("eye_lid", key("eye_section_lid"), Icons.VISIBLE, 0x2fa8a0);        /** The lid channels in two folding sections: the colour of the cover, and the opening and its blink. */        @Override        protected void fillChannels(java.util.List<mchorse.bbs_mod.utils.keyframes.KeyframeChannel<?>> channels)        {            this.keyframes.setChannels(channels, (channel) -> mchorse.bbs_mod.l10n.L10n.lang("bbs.ui.camera.fx.channel." + channel.getId()), (channel) ->            {                String id = channel.getId();                return id.equals("eyeR") || id.equals("eyeG") || id.equals("eyeB") || id.equals("colorOpacity") ? COLOR_SECTION : LID_SECTION;            });        }
     }
 
     /** The graph editor is a later stage; the clip only holds its place and says so. */

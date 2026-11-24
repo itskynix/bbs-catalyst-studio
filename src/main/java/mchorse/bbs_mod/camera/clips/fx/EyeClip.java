@@ -41,7 +41,11 @@ public class EyeClip extends FxClip
     public final Channel rotation = this.channel("rotation", 0D);
     public final Channel size = this.channel("size", 1D);
 
-    /** The saccadic pulse, 0 - 1: 0 at rest, 1 at the peak of the jump. Only keys on this channel make a saccade. */
+    /**
+     * The pulse channel of the first saccade build, 0 - 1. No longer listed or written: a saccade is
+     * keyed straight into the blink channel now, one lid channel instead of two. It stays loaded and
+     * played so a film recorded with it looks the same.
+     */
     public final Channel saccade = this.channel("saccade", 0D);
 
     public EyeClip()
@@ -58,6 +62,8 @@ public class EyeClip extends FxClip
         this.add(this.offsetY);
         this.add(this.saccadeIntensity);
         this.add(this.saccadeDuration);
+
+        this.fxChannels.remove(this.saccade);
     }
 
     @Override
@@ -87,6 +93,14 @@ public class EyeClip extends FxClip
         overlay.set(11, this.tiltThickness.get());
 
         out.add(overlay);
+    }
+
+    @Override
+    protected void breakDownClip(Clip original, int offset)
+    {
+        super.breakDownClip(original, offset);
+
+        this.saccade.channel.moveX(-offset);
     }
 
     @Override

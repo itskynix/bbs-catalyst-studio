@@ -979,6 +979,8 @@ public class UIKeys
     public static final IKey FILM_REPLAY_LOOK_AT_NOTE = L10n.lang("bbs.ui.film.replay.look_at_note");
     public static final IKey FILM_REPLAY_LOOK_AT_FROM_LOOK = L10n.lang("bbs.ui.film.replay.look_at_from_look");
     public static final IKey FILM_REPLAY_SECTION_OTHER = L10n.lang("bbs.ui.film.replay.section_other");
+    public static final IKey FILM_REPLAY_SACCADIC = L10n.lang("bbs.ui.film.replay.saccadic_movement");
+    public static final IKey FILM_REPLAY_SACCADIC_TOOLTIP = L10n.lang("bbs.ui.film.replay.saccadic_movement-tooltip");
     public static final IKey FILM_REPLAY_SHADOW_SIZE = L10n.lang("bbs.ui.film.replay.shadow_size");
     public static final IKey FILM_REPLAY_SHADOW_FOLLOW = L10n.lang("bbs.ui.film.replay.shadow_follow");
     public static final IKey FILM_REPLAY_SHADOW_FOLLOW_TOOLTIP = L10n.lang("bbs.ui.film.replay.shadow_follow_tooltip");

@@ -82,6 +82,12 @@ public abstract class UIFxClip <T extends FxClip> extends UIClip<T>
         return this.openSubEditor(this.edit);
     }
 
+    /** Hands the channels to the keyframe editor; a clip that groups its rows overrides this. */
+    protected void fillChannels(List<KeyframeChannel<?>> channels)
+    {
+        this.keyframes.setChannels(channels, (channel) -> L10n.lang("bbs.ui.camera.fx.channel." + channel.getId()));
+    }
+
     @Override
     public void fillData()
     {
@@ -96,7 +102,7 @@ public abstract class UIFxClip <T extends FxClip> extends UIClip<T>
             channels.add(channel.channel);
         }
 
-        this.keyframes.setChannels(channels, (channel) -> L10n.lang("bbs.ui.camera.fx.channel." + channel.getId()));
+        this.fillChannels(channels);
     }
 
     @Override
