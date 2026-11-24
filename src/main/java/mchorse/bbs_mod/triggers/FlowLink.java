@@ -3,21 +3,29 @@ package mchorse.bbs_mod.triggers;
 import mchorse.bbs_mod.data.types.MapType;
 
 /**
- * A wire. An execution wire runs from an output pin to a node's execution input ({@link #EXEC});
- * a data wire runs from a data output to one of the node's data inputs, named by {@code toPin}.
+ * A wire, from a pin of one node to a pin of another. Both ends are named: {@code fromPin} is an
+ * execution output ("then", "true", "out0"...) or a data output ("result", "value"...), {@code toPin}
+ * an execution input ("exec", "exec:reset"...) or a data input ("in0", "entity"...). Whether it carries
+ * the run or a value is read off the input it goes into.
  */
 public record FlowLink(int from, String pin, int to, String toPin)
 {
-    public static final String EXEC = "exec";
+    public static final String EXEC = FlowNodeType.EXEC;
 
     public FlowLink(int from, String pin, int to)
     {
         this(from, pin, to, EXEC);
     }
 
+    /** The output pin the wire leaves from. */
+    public String fromPin()
+    {
+        return this.pin;
+    }
+
     public boolean isExec()
     {
-        return EXEC.equals(this.toPin);
+        return FlowNodeType.isExec(this.toPin);
     }
 
     public MapType toData()

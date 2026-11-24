@@ -8,9 +8,16 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Writes a flow out as Java: a class with a field per variable and a method per event, each node of
- * a chain one statement, a branch an if, a wait a scheduled lambda. It is the same logic the box runs,
- * shown as code; the class is not compiled or loaded.
+ * Writes a flow out as Java: a field per local variable, a method per event, and each chain as
+ * statements. Control flow becomes Java's own: If / Else an {@code if}, the loops {@code for}
+ * loops, the switches {@code switch} statements, Sequence its blocks one after another, the delays
+ * scheduled lambdas. A node that remembers something (a gate, a counter, a bag) becomes a call to
+ * a helper named after it, with the node's id, whose answer picks the way on: {@code switch
+ * (this.flipFlop(4)) { case "a" -> ... }}. Data pins become expressions where they are read.
+ *
+ * <p>It is the same logic the box runs, shown as code; the class is not compiled or loaded. Its
+ * helpers ({@code runCommand}, {@code teleportEntity}, {@code number}...) belong to the base class
+ * it names.</p>
  */
 public class FlowJavaGenerator
 {
@@ -55,7 +62,17 @@ public class FlowJavaGenerator
 
         for (FlowVariable variable : this.graph.variables)
         {
-            this.line(1, "private " + javaType(variable.type) + " " + identifier(variable.name) + " = " + literal(variable.type, variable.value, false) + ";");
+            String array = variable.isArray ? " /* list */" : "";
+
+            if (variable.scope.equals("local"))
+            {
+                this.line(1, "private " + javaType(variable.type) + " " + identifier(variable.name) + " = " + literal(variable.type, variable.value) + ";" + array);
+            }
+            else
+            {
+                this.line(1, "/* " + variable.name + ": " + variable.scope + " " + variable.type + ", kept by the world, starts as " + quote(variable.value) + array + " */");
+            }
+
             fields = true;
         }
 
@@ -106,9 +123,7 @@ public class FlowJavaGenerator
 
                 if (node.type.equals(FlowNodeTypes.ON_STAY))
                 {
-                    int interval = Math.max(1, (int) FlowValues.parse(node.param("interval"), 20));
-
-                    this.line(2, "if (ticksInside % " + interval + " == 0)");
+                    this.line(2, "if (ticksInside % " + Math.max(1, (int) FlowValues.parse(node.param("interval"), 20)) + " == 0)");
                     this.line(2, "{");
                     indent = 3;
                 }
@@ -134,98 +149,418 @@ public class FlowJavaGenerator
         return this.out.toString();
     }
 
-    private void chain(int from, String pin, int indent, Set<Integer> path)
+    /* Statements */
+
+    private void chain(int from, String pin, int indent, Set<String> path)
     {
-        FlowNode node = this.graph.next(from, pin);
+        FlowLink link = this.graph.execFrom(from, pin);
 
-        while (node != null)
+        if (link != null)
         {
-            if (!path.add(node.id))
-            {
-                this.line(indent, "/* Loops back to " + title(node) + " */");
-
-                return;
-            }
-
-            switch (node.type)
-            {
-                case FlowNodeTypes.RUN_COMMAND -> this.line(indent, "this.runCommand(entity, " + this.template(node.param("command")) + ");");
-                case FlowNodeTypes.SEND_MESSAGE -> this.line(indent, "this.sendMessage(entity, " + this.template(node.param("text")) + ");");
-                case FlowNodeTypes.LOG -> this.line(indent, "this.log(" + this.template(node.param("message")) + ");");
-                case FlowNodeTypes.SET_VARIABLE -> this.line(indent, this.assign(node.param("variable"), node.param("value")));
-                case FlowNodeTypes.ADD_VARIABLE -> this.line(indent, this.increment(node.param("variable"), node.param("amount")));
-                case FlowNodeTypes.BRANCH ->
-                {
-                    this.ifElse(node, this.condition(node.param("variable"), node.param("operator"), node.param("value")), indent, path);
-
-                    return;
-                }
-                case FlowNodeTypes.IF_ELSE ->
-                {
-                    this.ifElse(node, this.andOf(node, 0), indent, path);
-
-                    return;
-                }
-                case FlowNodeTypes.WAIT ->
-                {
-                    long ticks = Math.max(0, (long) FlowValues.parse(node.param("ticks"), 0));
-
-                    this.line(indent, "this.schedule(" + ticks + ", () ->");
-                    this.line(indent, "{");
-                    this.chain(node.id, "then", indent + 1, path);
-                    this.line(indent, "});");
-
-                    return;
-                }
-                default -> this.line(indent, "/* " + title(node) + " */");
-            }
-
-            node = this.graph.next(node.id, "then");
+            this.enter(this.graph.get(link.to()), link.toPin(), indent, path);
         }
     }
 
-    private void ifElse(FlowNode node, String condition, int indent, Set<Integer> path)
+    /** A block of its own: a fresh copy of the path, so sibling branches may reach the same node. */
+    private void block(int from, String pin, int indent, Set<String> path)
+    {
+        this.chain(from, pin, indent, new HashSet<>(path));
+    }
+
+    private void enter(FlowNode node, String in, int indent, Set<String> path)
+    {
+        if (node == null || node.getType() == null)
+        {
+            return;
+        }
+
+        if (!path.add(node.id + in))
+        {
+            this.line(indent, "/* Loops back to " + title(node) + " */");
+
+            return;
+        }
+
+        String id = String.valueOf(node.id);
+
+        switch (node.type)
+        {
+            case FlowNodeTypes.RUN_COMMAND -> this.then(node, "this.runCommand(entity, " + this.template(node.param("command")) + ");", indent, path);
+            case FlowNodeTypes.SET_VARIABLE -> this.then(node, this.assign(node), indent, path);
+            case FlowNodeTypes.ADD_VARIABLE -> this.then(node, this.increment(node), indent, path);
+            case FlowNodeTypes.IF_ELSE -> this.ifElse(node, this.logicOf("and", node, 0), "true", "false", indent, path);
+            case FlowNodeTypes.BRANCH -> this.ifElse(node, this.oldCondition(node), "true", "false", indent, path);
+            case "sequence" ->
+            {
+                for (String pin : node.execOutputs())
+                {
+                    this.line(indent, "/* " + pin + " */");
+                    this.block(node.id, pin, indent, path);
+                }
+            }
+            case FlowNodeTypes.WAIT, "retriggerable_delay" ->
+            {
+                String method = node.type.equals(FlowNodeTypes.WAIT) ? "schedule" : "scheduleOnce";
+                String key = node.type.equals(FlowNodeTypes.WAIT) ? "" : id + ", ";
+
+                this.line(indent, "this." + method + "(" + key + this.number(node, "ticks") + ", () ->");
+                this.line(indent, "{");
+                this.chain(node.id, "then", indent + 1, path);
+                this.line(indent, "});");
+            }
+            case "pulse" ->
+            {
+                if (in.equals("exec:stop"))
+                {
+                    this.line(indent, "this.pulseStop(" + id + ");");
+                }
+                else
+                {
+                    this.line(indent, "this.pulse(" + id + ", " + this.number(node, "interval") + ", () ->");
+                    this.line(indent, "{");
+                    this.chain(node.id, "tick", indent + 1, path);
+                    this.line(indent, "});");
+                }
+            }
+            case "for_loop", "for_loop_break" ->
+            {
+                if (in.equals("exec:break"))
+                {
+                    this.line(indent, "this.breakLoop(" + id + ");");
+
+                    return;
+                }
+
+                String i = "i" + id;
+
+                this.line(indent, "for (int " + i + " = (int) " + this.number(node, "first") + "; " + i + " <= " + this.number(node, "last") + "; " + i + "++)");
+                this.loopBody(node, i, indent, path, node.type.equals("for_loop_break"));
+            }
+            case "while_loop" ->
+            {
+                String n = "n" + id;
+                int max = Math.max(1, (int) FlowValues.parse(node.param("max_iterations"), 1000));
+
+                this.line(indent, "for (int " + n + " = 0; " + n + " < " + max + " && " + bool(this.input(node, "condition")) + "; " + n + "++)");
+                this.line(indent, "{");
+                this.block(node.id, "body", indent + 1, path);
+                this.line(indent, "}");
+                this.chain(node.id, "completed", indent, path);
+            }
+            case "for_each", "for_each_break", "reverse_for_each" ->
+            {
+                if (in.equals("exec:break"))
+                {
+                    this.line(indent, "this.breakLoop(" + id + ");");
+
+                    return;
+                }
+
+                String list = "this.list(" + this.input(node, "array").code() + ")";
+
+                if (node.type.equals("reverse_for_each"))
+                {
+                    list = "this.reversed(" + list + ")";
+                }
+
+                this.line(indent, "for (String element" + id + " : " + list + ")");
+                this.loopBody(node, "element" + id, indent, path, node.type.equals("for_each_break"));
+            }
+            case "switch_int" -> this.switchInt(node, indent, path);
+            case "switch_string", "switch_name", "switch_enum" -> this.switchString(node, indent, path);
+            case "counter" ->
+            {
+                if (in.equals("exec:reset"))
+                {
+                    this.line(indent, "this.counterReset(" + id + ");");
+
+                    return;
+                }
+
+                this.line(indent, "boolean reached" + id + " = this.counter(" + id + ", " + this.number(node, "step") + ", " + this.number(node, "target") + ");");
+                this.block(node.id, "then", indent, path);
+                this.line(indent, "if (reached" + id + ")");
+                this.line(indent, "{");
+                this.block(node.id, "target_reached", indent + 1, path);
+                this.line(indent, "}");
+            }
+            default -> this.generic(node, in, indent, path);
+        }
+    }
+
+    /** A plain step: one statement, then on along its "then" wire. */
+    private void then(FlowNode node, String statement, int indent, Set<String> path)
+    {
+        this.line(indent, statement);
+        this.chain(node.id, "then", indent, path);
+    }
+
+    private void loopBody(FlowNode node, String variable, int indent, Set<String> path, boolean breakable)
+    {
+        this.line(indent, "{");
+
+        if (breakable)
+        {
+            this.line(indent + 1, "if (this.isBroken(" + node.id + "))");
+            this.line(indent + 1, "{");
+            this.line(indent + 2, "break;");
+            this.line(indent + 1, "}");
+            this.line(0, "");
+        }
+
+        this.line(indent + 1, "this.store(" + node.id + ", \"" + (variable.startsWith("element") ? "element" : "index") + "\", " + variable + ");");
+        this.block(node.id, "body", indent + 1, path);
+        this.line(indent, "}");
+        this.line(0, "");
+        this.chain(node.id, "completed", indent, path);
+    }
+
+    private void ifElse(FlowNode node, String condition, String yes, String no, int indent, Set<String> path)
     {
         this.line(indent, "if (" + condition + ")");
         this.line(indent, "{");
-        this.chain(node.id, "true", indent + 1, new HashSet<>(path));
+        this.block(node.id, yes, indent + 1, path);
         this.line(indent, "}");
 
-        if (this.graph.next(node.id, "false") != null)
+        if (this.graph.execFrom(node.id, no) != null)
         {
             this.line(indent, "else");
             this.line(indent, "{");
-            this.chain(node.id, "false", indent + 1, new HashSet<>(path));
+            this.block(node.id, no, indent + 1, path);
             this.line(indent, "}");
         }
     }
 
-    /* Data: a pure node becomes an expression where it is read */
+    private void switchInt(FlowNode node, int indent, Set<String> path)
+    {
+        int start = (int) FlowValues.parse(node.param("start"), 0);
+
+        this.line(indent, "switch ((int) " + this.number(node, "selection") + ")");
+        this.line(indent, "{");
+
+        for (int i = 0; i < node.outputCount(); i++)
+        {
+            this.caseBlock("case " + (start + i) + " ->", node, "case" + i, indent + 1, path);
+        }
+
+        this.caseBlock("default ->", node, "default", indent + 1, path);
+        this.line(indent, "}");
+    }
+
+    private void switchString(FlowNode node, int indent, Set<String> path)
+    {
+        Set<String> seen = new HashSet<>();
+
+        this.line(indent, "switch (String.valueOf(" + this.input(node, "selection").code() + "))");
+        this.line(indent, "{");
+
+        for (int i = 0; i < node.outputCount(); i++)
+        {
+            String value = node.param("case" + i);
+
+            /* Two cases with the same value: only the first can ever be reached */
+            if (seen.add(value))
+            {
+                this.caseBlock("case " + quote(value) + " ->", node, "case" + i, indent + 1, path);
+            }
+        }
+
+        this.caseBlock("default ->", node, "default", indent + 1, path);
+        this.line(indent, "}");
+    }
+
+    private void caseBlock(String label, FlowNode node, String pin, int indent, Set<String> path)
+    {
+        this.line(indent, label);
+        this.line(indent, "{");
+        this.block(node.id, pin, indent + 1, path);
+        this.line(indent, "}");
+    }
+
+    /**
+     * Everything else: a call to a helper named after the node. A side input (Reset, Open, Pop...)
+     * calls the helper of that input. A node with one way on goes on when its helper says so, a node
+     * with several picks the way by the name its helper gives back.
+     */
+    private void generic(FlowNode node, String in, int indent, Set<String> path)
+    {
+        FlowNodeType type = node.getType();
+        List<String> args = new ArrayList<>();
+        boolean routed = !type.kind.equals(FlowNodeType.Kind.ACTION) && !type.kind.equals(FlowNodeType.Kind.CINEMATIC) && !type.kind.equals(FlowNodeType.Kind.DEBUG);
+        String method = camel(type.id);
+
+        if (!in.equals(FlowNodeType.EXEC))
+        {
+            method += capital(camel(in.substring(FlowNodeType.EXEC.length() + 1)));
+        }
+
+        if (routed)
+        {
+            args.add(String.valueOf(node.id));
+        }
+        else if (type.id.equals(FlowNodeTypes.SEND_MESSAGE))
+        {
+            args.add("entity");
+        }
+
+        for (String pin : node.dataInputs())
+        {
+            args.add(this.input(node, pin).code());
+        }
+
+        String call = "this." + method + "(" + String.join(", ", args) + ")";
+        List<String> outputs = node.execOutputs();
+
+        if (!in.equals(FlowNodeType.EXEC) && !node.type.equals("queue"))
+        {
+            this.line(indent, call + ";");
+
+            return;
+        }
+
+        if (!routed || outputs.size() <= 1 && outputs.contains("then"))
+        {
+            this.then(node, call + ";", indent, path);
+
+            return;
+        }
+
+        if (outputs.size() == 1)
+        {
+            this.line(indent, "if (\"" + outputs.get(0) + "\".equals(" + call + "))");
+            this.line(indent, "{");
+            this.block(node.id, outputs.get(0), indent + 1, path);
+            this.line(indent, "}");
+
+            return;
+        }
+
+        this.line(indent, "switch (String.valueOf(" + call + "))");
+        this.line(indent, "{");
+
+        for (String pin : outputs)
+        {
+            this.caseBlock("case " + quote(pin) + " ->", node, pin, indent + 1, path);
+        }
+
+        this.line(indent + 1, "default -> {}");
+        this.line(indent, "}");
+    }
+
+    private String assign(FlowNode node)
+    {
+        FlowVariable variable = this.graph.variableOf(node);
+
+        if (variable == null)
+        {
+            return "/* Set: its variable was deleted */";
+        }
+
+        Expr value = this.input(node, "value");
+        String code = variable.type.equals("string") && !value.type().equals("string") ? "String.valueOf(" + value.code() + ")" : value.code();
+
+        if (variable.type.equals("integer") && value.type().equals("number"))
+        {
+            code = "(int) " + code;
+        }
+        else if (variable.type.equals("float") && value.type().equals("number"))
+        {
+            code = "(float) " + code;
+        }
+
+        return switch (variable.scope)
+        {
+            case "global" -> "this.setGlobal(" + quote(variable.name) + ", " + code + ");";
+            case "entity" -> "this.setOnEntity(entity, " + quote(variable.name) + ", " + code + ");";
+            default -> "this." + identifier(variable.name) + " = " + code + ";";
+        };
+    }
+
+    private String increment(FlowNode node)
+    {
+        FlowVariable variable = this.graph.variableOf(node);
+
+        if (variable == null)
+        {
+            return "/* Add: its variable was deleted */";
+        }
+
+        String amount = this.number(node, "amount");
+
+        return switch (variable.scope)
+        {
+            case "global" -> "this.addGlobal(" + quote(variable.name) + ", " + amount + ");";
+            case "entity" -> "this.addOnEntity(entity, " + quote(variable.name) + ", " + amount + ");";
+            default -> "this." + identifier(variable.name) + " += " + (variable.type.equals("integer") ? "(int) " : "(float) ") + amount + ";";
+        };
+    }
+
+    private String oldCondition(FlowNode node)
+    {
+        FlowVariable variable = this.graph.variableOf(node);
+
+        if (variable == null)
+        {
+            return "false /* its variable was deleted */";
+        }
+
+        return "this.compare(" + this.readVariable(variable).code() + ", " + quote(node.param("operator")) + ", " + quote(node.param("value")) + ")";
+    }
+
+    /* Data */
 
     private record Expr(String code, String type) {}
 
-    private Expr operand(FlowNode node, int index, int depth)
+    private static String simple(String type)
     {
-        FlowLink link = this.graph.dataInto(node.id, FlowNodeType.input(index));
+        return switch (type)
+        {
+            case "integer", "float", "number" -> "number";
+            case "boolean" -> "boolean";
+            case "string" -> "string";
+            default -> "any";
+        };
+    }
+
+    /** A data input as an expression: the wire into it, or its typed-in value as a literal. */
+    private Expr input(FlowNode node, String pin)
+    {
+        return this.input(node, pin, 0);
+    }
+
+    private Expr input(FlowNode node, String pin, int depth)
+    {
+        FlowLink link = this.graph.dataInto(node.id, pin);
 
         if (link != null)
         {
             return this.expr(this.graph.get(link.from()), link.pin(), depth + 1);
         }
 
-        String raw = node.param(FlowNodeType.input(index));
+        String raw = node.param(pin);
+        String declared = node.declaredInputType(pin);
         String t = raw.trim();
+
+        if (declared.equals("entity") && (t.isEmpty() || t.equals("@entity")))
+        {
+            return new Expr("entity", "any");
+        }
 
         if (t.equals("true") || t.equals("false"))
         {
             return new Expr(t, "boolean");
         }
 
+        if (declared.equals("vec3") && !t.contains("~"))
+        {
+            double[] v = FlowValues.vec(t);
+
+            return new Expr("new Vec3d(" + v[0] + ", " + v[1] + ", " + v[2] + ")", "any");
+        }
+
         try
         {
-            double number = Double.parseDouble(t);
-
-            return new Expr(number == Math.rint(number) && Math.abs(number) < 1E15 ? String.valueOf((long) number) : String.valueOf(number), "number");
+            return new Expr(FlowValues.format(Double.parseDouble(t)), "number");
         }
         catch (NumberFormatException e)
         {
@@ -233,34 +568,114 @@ public class FlowJavaGenerator
         }
     }
 
+    private String number(FlowNode node, String pin)
+    {
+        Expr e = this.input(node, pin);
+
+        return e.type().equals("number") ? e.code() : "this.toNumber(" + e.code() + ")";
+    }
+
+    private Expr readVariable(FlowVariable variable)
+    {
+        String type = simple(variable.type);
+
+        return switch (variable.scope)
+        {
+            case "global" -> new Expr("this.getGlobal(" + quote(variable.name) + ")", "any");
+            case "entity" -> new Expr("this.getOnEntity(entity, " + quote(variable.name) + ")", "any");
+            default -> new Expr("this." + identifier(variable.name), type);
+        };
+    }
+
     private Expr expr(FlowNode node, String pin, int depth)
     {
-        if (node == null || depth > 32)
+        if (node == null || node.getType() == null || depth > 32)
         {
             return new Expr("null", "any");
         }
 
-        if (node.type.equals(FlowNodeTypes.GET_VARIABLE))
-        {
-            FlowVariable variable = this.graph.getVariable(node.param("variable"));
-
-            return variable == null ? new Expr("null", "any") : new Expr("this." + identifier(variable.name), switch (variable.type)
-            {
-                case "integer", "float" -> "number";
-                case "boolean" -> "boolean";
-                case "string" -> "string";
-                default -> "any";
-            });
-        }
-
+        FlowNodeType type = node.getType();
         String operator = FlowNodeTypes.OPERATOR_OF.get(node.type);
+        String logic = FlowNodeTypes.BOOLEAN_OF.get(node.type);
 
-        if (operator == null)
+        if (logic != null)
         {
-            return new Expr("null", "any");
+            return new Expr(this.logicOf(logic, node, depth), "boolean");
         }
 
-        return new Expr(operator.equals("&&") ? this.andOf(node, depth) : this.compareOf(node, operator, depth), "boolean");
+        if (operator != null)
+        {
+            return new Expr(this.compareOf(node, operator, depth), "boolean");
+        }
+
+        switch (node.type)
+        {
+            case FlowNodeTypes.GET_VARIABLE, FlowNodeTypes.SET_VARIABLE ->
+            {
+                FlowVariable variable = this.graph.variableOf(node);
+
+                return variable == null ? new Expr("null /* deleted variable */", "any") : this.readVariable(variable);
+            }
+            case "not" ->
+            {
+                return new Expr("!" + paren(bool(this.input(node, "in0", depth))), "boolean");
+            }
+            case "clamp" ->
+            {
+                return new Expr("Math.max(" + this.number(node, "min") + ", Math.min(" + this.number(node, "max") + ", " + this.number(node, "value") + "))", "number");
+            }
+            case "threshold" ->
+            {
+                return new Expr(this.number(node, "value") + " >= " + this.number(node, "threshold"), "boolean");
+            }
+            case "select" ->
+            {
+                List<String> args = new ArrayList<>();
+
+                args.add("(int) " + this.number(node, "index"));
+
+                for (int i = 0; i < node.inputCount(); i++)
+                {
+                    args.add(this.input(node, FlowNodeType.input(i), depth).code());
+                }
+
+                return new Expr("this.select(" + String.join(", ", args) + ")", "any");
+            }
+            default -> {}
+        }
+
+        /* A node with execution pins only remembers its values: a loop's index, a counter's count */
+        String outputType = simple(this.graph.outputType(node, pin));
+
+        if (!type.pure())
+        {
+            String getter = switch (outputType)
+            {
+                case "number" -> "number";
+                case "boolean" -> "bool";
+                case "string" -> "text";
+                default -> "value";
+            };
+
+            return new Expr("this." + getter + "(" + node.id + ", " + quote(pin) + ")", outputType);
+        }
+
+        /* A read of the world: a helper named after the node, and after the output when it has several */
+        List<String> args = new ArrayList<>();
+
+        for (String input : node.dataInputs())
+        {
+            args.add(this.input(node, input, depth).code());
+        }
+
+        if (node.type.equals("map_range"))
+        {
+            args.add(String.valueOf(FlowValues.truthy(node.param("clamp"))));
+        }
+
+        String method = camel(type.id) + (type.dataOutputs.size() > 1 ? capital(camel(pin)) : "");
+
+        return new Expr("this." + method + "(" + String.join(", ", args) + ")", outputType);
     }
 
     private static String bool(Expr e)
@@ -268,20 +683,35 @@ public class FlowJavaGenerator
         return e.type().equals("boolean") ? e.code() : "this.isTrue(" + e.code() + ")";
     }
 
-    /** Every input true: the condition of If / Else and of &&. */
-    private String andOf(FlowNode node, int depth)
+    private static String paren(String code)
+    {
+        return code.contains(" ") ? "(" + code + ")" : code;
+    }
+
+    /** A Boolean operator over the grown inputs. */
+    private String logicOf(String operator, FlowNode node, int depth)
     {
         List<String> parts = new ArrayList<>();
 
         for (int i = 0; i < node.inputCount(); i++)
         {
-            Expr e = this.operand(node, i, depth);
-            String code = bool(e);
-
-            parts.add(node.inputCount() > 1 && code.contains(" ") ? "(" + code + ")" : code);
+            parts.add(paren(bool(this.input(node, FlowNodeType.input(i), depth))));
         }
 
-        return parts.isEmpty() ? "true" : String.join(" && ", parts);
+        if (parts.isEmpty())
+        {
+            return "true";
+        }
+
+        return switch (operator)
+        {
+            case "or" -> String.join(" || ", parts);
+            case "nand" -> "!(" + String.join(" && ", parts) + ")";
+            case "nor" -> "!(" + String.join(" || ", parts) + ")";
+            case "xor" -> String.join(" ^ ", parts);
+            case "xnor" -> "!(" + String.join(" ^ ", parts) + ")";
+            default -> String.join(" && ", parts);
+        };
     }
 
     /** Each input against the next: a < b < c reads as a < b && b < c. */
@@ -292,7 +722,7 @@ public class FlowJavaGenerator
 
         for (int i = 0; i < node.inputCount(); i++)
         {
-            values.add(this.operand(node, i, depth));
+            values.add(this.input(node, FlowNodeType.input(i), depth));
         }
 
         for (int i = 1; i < values.size(); i++)
@@ -321,63 +751,6 @@ public class FlowJavaGenerator
         return pairs.isEmpty() ? "true" : String.join(" && ", pairs);
     }
 
-    private String assign(String name, String value)
-    {
-        FlowVariable variable = this.graph.getVariable(name);
-
-        if (variable == null)
-        {
-            return "/* Set: no variable named \"" + name + "\" */";
-        }
-
-        String expression = value.trim().equals("@entity") && variable.type.equals("entity") ? "entity" : this.typed(variable.type, value);
-
-        return "this." + identifier(name) + " = " + expression + ";";
-    }
-
-    private String increment(String name, String amount)
-    {
-        FlowVariable variable = this.graph.getVariable(name);
-
-        if (variable == null)
-        {
-            return "/* Add: no variable named \"" + name + "\" */";
-        }
-
-        String type = variable.type.equals("float") ? "float" : "integer";
-
-        return "this." + identifier(name) + " += " + literal(type, amount, false) + ";";
-    }
-
-    private String condition(String name, String operator, String value)
-    {
-        FlowVariable variable = this.graph.getVariable(name);
-
-        if (variable == null)
-        {
-            return "false /* no variable named \"" + name + "\" */";
-        }
-
-        String field = "this." + identifier(name);
-        String other = this.typed(variable.type, value);
-
-        return switch (variable.type)
-        {
-            case "integer", "float" -> field + " " + operator + " " + other;
-            case "boolean" -> operator.equals("!=") ? field + " != " + other : field + " == " + other;
-            case "string" -> operator.equals("==") ? field + ".equals(" + other + ")"
-                : operator.equals("!=") ? "!" + field + ".equals(" + other + ")"
-                : field + ".compareTo(" + other + ") " + operator + " 0";
-            default -> operator.equals("!=") ? "!java.util.Objects.equals(" + field + ", " + other + ")" : "java.util.Objects.equals(" + field + ", " + other + ")";
-        };
-    }
-
-    /** A value for a variable of the type: a plain literal, or text with {variables} when it is a string. */
-    private String typed(String type, String value)
-    {
-        return type.equals("string") ? this.template(value) : literal(type, value, true);
-    }
-
     /** Text with {name} placeholders as a Java string expression. */
     private String template(String raw)
     {
@@ -402,6 +775,7 @@ public class FlowJavaGenerator
             }
 
             String key = raw.substring(open + 1, close);
+            FlowVariable variable = this.graph.getVariable(key);
 
             parts.add(switch (key)
             {
@@ -410,7 +784,7 @@ public class FlowJavaGenerator
                 case "x" -> "entity.getX()";
                 case "y" -> "entity.getY()";
                 case "z" -> "entity.getZ()";
-                default -> this.graph.getVariable(key) != null ? "this." + identifier(key) : quote("{" + key + "}");
+                default -> variable != null ? this.readVariable(variable).code() : quote("{" + key + "}");
             });
 
             i = close + 1;
@@ -429,6 +803,8 @@ public class FlowJavaGenerator
         return String.join(" + ", parts);
     }
 
+    /* Names and literals */
+
     private static String javaType(String type)
     {
         return switch (type)
@@ -442,7 +818,7 @@ public class FlowJavaGenerator
         };
     }
 
-    private static String literal(String type, String value, boolean inBody)
+    private static String literal(String type, String value)
     {
         String v = value == null ? "" : value.trim();
 
@@ -453,12 +829,9 @@ public class FlowJavaGenerator
             case "float" -> FlowValues.parse(v, 0) + "F";
             case "vec3" ->
             {
-                String[] split = v.split("[\\s,]+");
-                double x = split.length > 0 ? FlowValues.parse(split[0], 0) : 0;
-                double y = split.length > 1 ? FlowValues.parse(split[1], 0) : 0;
-                double z = split.length > 2 ? FlowValues.parse(split[2], 0) : 0;
+                double[] xyz = FlowValues.vec(v);
 
-                yield "new Vec3d(" + x + ", " + y + ", " + z + ")";
+                yield "new Vec3d(" + xyz[0] + ", " + xyz[1] + ", " + xyz[2] + ")";
             }
             case "entity" -> "null";
             default -> quote(v);
@@ -468,6 +841,33 @@ public class FlowJavaGenerator
     private static String quote(String text)
     {
         return "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+    }
+
+    /** snake_case to camelCase: teleport_entity, teleportEntity. */
+    public static String camel(String id)
+    {
+        StringBuilder builder = new StringBuilder();
+        boolean up = false;
+
+        for (char c : id.toCharArray())
+        {
+            if (c == '_' || c == ':')
+            {
+                up = true;
+            }
+            else
+            {
+                builder.append(up ? Character.toUpperCase(c) : c);
+                up = false;
+            }
+        }
+
+        return builder.toString();
+    }
+
+    private static String capital(String text)
+    {
+        return text.isEmpty() ? text : Character.toUpperCase(text.charAt(0)) + text.substring(1);
     }
 
     /** A variable name as a Java field name: letters, digits and underscores, never starting with a digit. */

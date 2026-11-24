@@ -1,21 +1,36 @@
 package mchorse.bbs_mod.triggers;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * What a kind of flow node is: its family, its execution pins, its data pins and the fields it is
- * set up with.
+ * What a kind of flow node is, all in one place, so the runtime, the Java writer and the editor read
+ * the same description: its family, its execution pins, its data pins and its settings.
  *
- * <p>Execution pins carry the run: an event has only an output, every other node that is not pure
- * has one input and at least one output. Data pins carry values: a pure node (a comparison, a
- * variable read) has no execution pins at all and is worked out when a node downstream asks for its
- * value. A growable node starts with {@link #minInputs} data inputs and takes more with its + button.</p>
+ * <p>Execution inputs are named {@code exec} (the main one) or {@code exec:<name>} (Reset, Open...),
+ * execution outputs by plain names. A node with no execution pins at all is pure: it is worked out
+ * when something downstream asks for one of its values. Growable nodes add inputs ({@code in0},
+ * {@code in1}...) or outputs ({@code <prefix>0}, {@code <prefix>1}...) with + and - buttons; an
+ * output may carry a setting of its own, such as a weight or a case value.</p>
  */
 public class FlowNodeType
 {
+    public static final String EXEC = "exec";
+
     public enum Kind
     {
-        EVENT(0xffc2453d), LOGIC(0xff8a4fc4), VARIABLE(0xff2f9e5c), ACTION(0xff2f7fd0), DEBUG(0xff6d7a86);
+        EVENT(0xffc2453d),
+        FLOW(0xff9b59d0),
+        LOGIC(0xff7a5cc9),
+        TIME(0xffd08a2f),
+        STATE(0xffc96f9e),
+        RANDOM(0xffd0b12f),
+        MATH(0xff4fa3a8),
+        VARIABLE(0xff2f9e5c),
+        WORLD(0xff3f8fd0),
+        ACTION(0xff2f6fc0),
+        CINEMATIC(0xffe0663a),
+        DEBUG(0xff6d7a86);
 
         public final int color;
 
@@ -25,53 +40,107 @@ public class FlowNodeType
         }
     }
 
-    /** A field of the node, with what a fresh node holds in it. */
+    /** A setting of the node, edited in Details and never wired. */
     public record Param(String id, String fallback) {}
 
-    /** A data output: its name and type; "variable" takes the type of the variable the node reads. */
-    public record DataPin(String id, String type) {}
+    /** A data pin: its name, its type ("any", "boolean", "integer", "float", "number", "string", "vec3", "entity", or "variable" for the read variable's type) and, for an input, what it reads while nothing is wired in. */
+    public record DataPin(String id, String type, String fallback) {}
 
     public final String id;
     public final Kind kind;
-    public final List<String> outputs;
-    public final List<Param> params;
 
-    public boolean pure;
-    public List<DataPin> dataOutputs = List.of();
+    public final List<String> execInputs = new ArrayList<>();
+    public final List<String> execOutputs = new ArrayList<>();
+    public final List<DataPin> dataInputs = new ArrayList<>();
+    public final List<DataPin> dataOutputs = new ArrayList<>();
+    public final List<Param> params = new ArrayList<>();
+
+    /* Growable data inputs: in0, in1... */
     public int minInputs;
-    public boolean growable;
-    /** What the data inputs expect: "any", or "boolean" for conditions. */
-    public String inputType = "any";
-    /** Kept so old flows still load and run, but no longer offered in the add menu. */
+    public String growInputType = "any";
+    public String growInputFallback = "0";
+
+    /* Growable execution outputs: prefix0, prefix1... */
+    public String growOutputPrefix;
+    public int minOutputs;
+    /** The setting each growable output carries (its weight, its case), or null. */
+    public String outputParam;
+    public String outputParamFallback = "";
+
+    /** A command run for this node, with {pin} for a data input's value; null when the node is coded by hand. */
+    public String command;
+
+    /** Kept so old flows still load and run, but not offered in the add menu. */
     public boolean hidden;
 
-    public FlowNodeType(String id, Kind kind, List<String> outputs, List<Param> params)
+    public FlowNodeType(String id, Kind kind)
     {
         this.id = id;
         this.kind = kind;
-        this.outputs = outputs;
-        this.params = params;
     }
 
-    public FlowNodeType pure()
+    /* Building */
+
+    public FlowNodeType in(String... names)
     {
-        this.pure = true;
+        for (String name : names)
+        {
+            this.execInputs.add(name.equals(EXEC) ? EXEC : EXEC + ":" + name);
+        }
 
         return this;
     }
 
-    public FlowNodeType data(DataPin... outputs)
+    public FlowNodeType out(String... names)
     {
-        this.dataOutputs = List.of(outputs);
+        this.execOutputs.addAll(List.of(names));
 
         return this;
     }
 
-    public FlowNodeType inputs(int min, boolean growable, String type)
+    public FlowNodeType data(String id, String type, String fallback)
+    {
+        this.dataInputs.add(new DataPin(id, type, fallback));
+
+        return this;
+    }
+
+    public FlowNodeType value(String id, String type)
+    {
+        this.dataOutputs.add(new DataPin(id, type, ""));
+
+        return this;
+    }
+
+    public FlowNodeType param(String id, String fallback)
+    {
+        this.params.add(new Param(id, fallback));
+
+        return this;
+    }
+
+    public FlowNodeType grow(int min, String type, String fallback)
     {
         this.minInputs = min;
-        this.growable = growable;
-        this.inputType = type;
+        this.growInputType = type;
+        this.growInputFallback = fallback;
+
+        return this;
+    }
+
+    public FlowNodeType growOut(String prefix, int min, String param, String paramFallback)
+    {
+        this.growOutputPrefix = prefix;
+        this.minOutputs = min;
+        this.outputParam = param;
+        this.outputParamFallback = paramFallback;
+
+        return this;
+    }
+
+    public FlowNodeType command(String command)
+    {
+        this.command = command;
 
         return this;
     }
@@ -83,14 +152,49 @@ public class FlowNodeType
         return this;
     }
 
-    public boolean hasInput()
+    /* Reading */
+
+    public boolean pure()
     {
-        return this.kind != Kind.EVENT && !this.pure;
+        return this.execInputs.isEmpty() && this.kind != Kind.EVENT;
     }
 
-    /** The name of the {@code i}th data input. */
+    public boolean hasInput()
+    {
+        return this.execInputs.contains(EXEC);
+    }
+
+    public boolean growable()
+    {
+        return this.minInputs > 0;
+    }
+
+    public boolean growableOutputs()
+    {
+        return this.growOutputPrefix != null;
+    }
+
+    public DataPin dataInput(String id)
+    {
+        for (DataPin pin : this.dataInputs)
+        {
+            if (pin.id().equals(id))
+            {
+                return pin;
+            }
+        }
+
+        return null;
+    }
+
+    /** The name of the {@code i}th growable data input. */
     public static String input(int i)
     {
         return "in" + i;
+    }
+
+    public static boolean isExec(String pin)
+    {
+        return pin.equals(EXEC) || pin.startsWith(EXEC + ":");
     }
 }

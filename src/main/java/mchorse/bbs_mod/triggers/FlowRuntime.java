@@ -1,7 +1,16 @@
 package mchorse.bbs_mod.triggers;
 
 import mchorse.bbs_mod.BBSMod;
+import mchorse.bbs_mod.forms.FormUtils;
+import mchorse.bbs_mod.forms.forms.Form;
+import mchorse.bbs_mod.morphing.Morph;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.registry.Registries;
+import net.minecraft.scoreboard.ReadableScoreboardScore;
+import net.minecraft.scoreboard.Scoreboard;
+import net.minecraft.scoreboard.ScoreboardObjective;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -11,25 +20,49 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Random;
 import java.util.UUID;
 
 /**
- * Runs a trigger box's flow on the server. An event walks the wires from its node; a wait parks the
- * rest of the chain until the world's game time reaches it, so delays follow the game clock and
- * nothing else. Variables live here as text, seeded from the flow's own defaults.
+ * Runs a trigger box's flow on the server.
+ *
+ * <p>An event walks the execution wires from its node. Every node that remembers something (a
+ * gate, a counter, a shuffle bag, a pulse) keeps it in {@link #state} under its id. Waits and pulses
+ * park on the world's game time and resume in {@link #tick}; chance draws are seeded by the game time,
+ * the node and the box, so a replayed take rolls the same. Data pins are worked out when asked, from
+ * the current variables. A run may take at most {@link #MAX_STEPS} steps and a loop at most
+ * {@link #MAX_LOOP} turns, so a wired loop can never hang the server.</p>
  */
 public class FlowRuntime
 {
-    /** How many nodes a single run may step through before it is cut, so a wired loop cannot hang the server. */
-    private static final int MAX_STEPS = 512;
+    public static final int MAX_STEPS = 20000;
+    public static final int MAX_LOOP = 10000;
 
     private record Pending(int node, String pin, UUID entity, long due) {}
 
+    /** One run: the world, the entity that set it off, and its step budget. */
+    private static class Run
+    {
+        final ServerWorld world;
+        final Entity entity;
+        int steps;
+
+        Run(ServerWorld world, Entity entity)
+        {
+            this.world = world;
+            this.entity = entity;
+        }
+    }
+
+    /** Local variables by id, as text. */
     public final Map<String, String> values = new HashMap<>();
+    private final Map<Integer, Map<String, Object>> state = new HashMap<>();
     private final List<Pending> pending = new ArrayList<>();
 
     private FlowGraph graph;
@@ -40,11 +73,12 @@ public class FlowRuntime
         this.graph = graph;
         this.pos = pos;
         this.values.clear();
+        this.state.clear();
         this.pending.clear();
 
         for (FlowVariable variable : graph.variables)
         {
-            this.values.put(variable.name, variable.value);
+            this.values.put(variable.id, variable.value);
         }
     }
 
@@ -91,136 +125,949 @@ public class FlowRuntime
                 }
             }
 
-            this.run(world, node.id, "then", entity);
+            this.out(new Run(world, entity), node, "then");
         }
     }
 
-    /** Resumes the chains whose wait is over, on the world's game time. */
+    /** Resumes waits whose time has come and ticks the running pulses, on the world's game time. */
     public void tick(ServerWorld world)
     {
-        if (this.pending.isEmpty())
+        if (this.graph == null)
         {
             return;
         }
 
         long time = world.getTime();
-        List<Pending> due = new ArrayList<>();
 
-        for (Iterator<Pending> it = this.pending.iterator(); it.hasNext(); )
+        if (!this.pending.isEmpty())
         {
-            Pending p = it.next();
+            List<Pending> due = new ArrayList<>();
 
-            if (p.due <= time)
+            this.pending.removeIf((p) ->
             {
-                due.add(p);
-                it.remove();
+                if (p.due <= time)
+                {
+                    due.add(p);
+
+                    return true;
+                }
+
+                return false;
+            });
+
+            for (Pending p : due)
+            {
+                FlowNode node = this.graph.get(p.node);
+
+                if (node != null)
+                {
+                    this.out(new Run(world, p.entity == null ? null : world.getEntity(p.entity)), node, p.pin);
+                }
             }
         }
 
-        for (Pending p : due)
+        for (Map.Entry<Integer, Map<String, Object>> entry : new ArrayList<>(this.state.entrySet()))
         {
-            Entity entity = p.entity == null ? null : world.getEntity(p.entity);
+            Map<String, Object> s = entry.getValue();
 
-            this.run(world, p.node, p.pin, entity);
+            if (!Boolean.TRUE.equals(s.get("running")))
+            {
+                continue;
+            }
+
+            long next = (Long) s.get("next");
+
+            if (time < next)
+            {
+                continue;
+            }
+
+            FlowNode node = this.graph.get(entry.getKey());
+
+            if (node == null)
+            {
+                s.put("running", false);
+
+                continue;
+            }
+
+            UUID uuid = (UUID) s.get("entity");
+
+            s.put("next", next + Math.max(1L, (Long) s.get("interval")));
+            s.put("count", (Integer) s.getOrDefault("count", 0) + 1);
+            this.out(new Run(world, uuid == null ? null : world.getEntity(uuid)), node, "tick");
         }
     }
 
-    private void run(ServerWorld world, int from, String pin, Entity entity)
+    /* Walking the wires */
+
+    private void out(Run run, FlowNode node, String pin)
     {
-        FlowNode node = this.graph.next(from, pin);
-        int steps = 0;
+        FlowLink link = this.graph.execFrom(node.id, pin);
 
-        while (node != null && steps++ < MAX_STEPS)
+        if (link != null)
         {
-            String out = "then";
+            this.enter(run, this.graph.get(link.to()), link.toPin());
+        }
+    }
 
-            switch (node.type)
+    private Map<String, Object> state(FlowNode node)
+    {
+        return this.state.computeIfAbsent(node.id, (id) -> new HashMap<>());
+    }
+
+    private void enter(Run run, FlowNode node, String in)
+    {
+        if (node == null || ++run.steps > MAX_STEPS)
+        {
+            return;
+        }
+
+        FlowNodeType type = node.getType();
+
+        if (type == null)
+        {
+            return;
+        }
+
+        Map<String, Object> s = this.state(node);
+        long now = run.world.getTime();
+
+        switch (node.type)
+        {
+            case FlowNodeTypes.RUN_COMMAND ->
             {
-                case FlowNodeTypes.RUN_COMMAND -> this.command(world, entity, this.text(node.param("command"), entity));
-                case FlowNodeTypes.SEND_MESSAGE ->
+                this.command(run, this.text(node.param("command"), run.entity));
+                this.out(run, node, "then");
+            }
+            case FlowNodeTypes.SEND_MESSAGE ->
+            {
+                if (run.entity instanceof ServerPlayerEntity player)
                 {
-                    if (entity instanceof ServerPlayerEntity player)
+                    player.sendMessage(Text.literal(this.input(run, node, "text", 0)));
+                }
+
+                this.out(run, node, "then");
+            }
+            case FlowNodeTypes.LOG ->
+            {
+                BBSMod.LOGGER.info("[Trigger box {}] {}", this.pos.toShortString(), this.input(run, node, "message", 0));
+                this.out(run, node, "then");
+            }
+            case FlowNodeTypes.SET_VARIABLE ->
+            {
+                FlowVariable variable = this.graph.variableOf(node);
+                String value = this.asValue(run, this.input(run, node, "value", 0), variable == null ? "string" : variable.type);
+
+                if (variable != null)
+                {
+                    this.write(run, variable, value);
+                }
+
+                s.put("value", value);
+                this.out(run, node, "then");
+            }
+            case FlowNodeTypes.ADD_VARIABLE ->
+            {
+                FlowVariable variable = this.graph.variableOf(node);
+
+                if (variable != null)
+                {
+                    double sum = parse(this.read(run, variable), 0) + parse(this.input(run, node, "amount", 0), 0);
+
+                    this.write(run, variable, variable.type.equals("integer") ? String.valueOf((long) sum) : String.valueOf(sum));
+                }
+
+                this.out(run, node, "then");
+            }
+            case FlowNodeTypes.IF_ELSE -> this.out(run, node, FlowValues.logic("and", this.grown(run, node, 0)) ? "true" : "false");
+            case FlowNodeTypes.BRANCH ->
+            {
+                FlowVariable variable = this.graph.variableOf(node);
+                String value = variable == null ? "" : this.read(run, variable);
+
+                this.out(run, node, FlowValues.compare(value, node.param("operator"), this.text(node.param("value"), run.entity)) ? "true" : "false");
+            }
+            case "sequence" ->
+            {
+                for (String pin : node.execOutputs())
+                {
+                    this.out(run, node, pin);
+                }
+            }
+            case "flip_flop" ->
+            {
+                boolean a = !Boolean.TRUE.equals(s.get("is_a"));
+
+                s.put("is_a", a);
+                this.out(run, node, a ? "a" : "b");
+            }
+            case "do_once" ->
+            {
+                boolean closed = (Boolean) s.computeIfAbsent("closed", (k) -> FlowValues.truthy(node.param("start_closed")));
+
+                if (in.equals("exec:reset"))
+                {
+                    s.put("closed", false);
+                }
+                else if (!closed)
+                {
+                    s.put("closed", true);
+                    this.out(run, node, "completed");
+                }
+            }
+            case "do_n" ->
+            {
+                int counter = (Integer) s.getOrDefault("counter", 0);
+
+                if (in.equals("exec:reset"))
+                {
+                    s.put("counter", 0);
+                }
+                else if (counter < (int) parse(this.input(run, node, "n", 0), 0))
+                {
+                    s.put("counter", counter + 1);
+                    this.out(run, node, "exit");
+                }
+            }
+            case "gate" ->
+            {
+                boolean open = (Boolean) s.computeIfAbsent("open", (k) -> FlowValues.truthy(node.param("start_open")));
+
+                switch (in)
+                {
+                    case "exec:open" -> s.put("open", true);
+                    case "exec:close" -> s.put("open", false);
+                    case "exec:toggle" -> s.put("open", !open);
+                    default ->
                     {
-                        player.sendMessage(Text.literal(this.text(node.param("text"), entity)));
+                        if (open)
+                        {
+                            this.out(run, node, "exit");
+                        }
                     }
                 }
-                case FlowNodeTypes.LOG -> BBSMod.LOGGER.info("[Trigger box {}] {}", this.pos.toShortString(), this.text(node.param("message"), entity));
-                case FlowNodeTypes.SET_VARIABLE -> this.set(node.param("variable"), this.value(node.param("value"), entity));
-                case FlowNodeTypes.ADD_VARIABLE ->
+            }
+            case "multi_gate" -> this.multiGate(run, node, s, in);
+            case "for_loop", "for_loop_break" ->
+            {
+                if (in.equals("exec:break"))
                 {
-                    String name = node.param("variable");
-                    double sum = parse(this.values.get(name), 0) + parse(this.text(node.param("amount"), entity), 0);
-                    FlowVariable variable = this.graph.getVariable(name);
-
-                    this.set(name, variable != null && variable.type.equals("integer") ? String.valueOf((long) sum) : String.valueOf(sum));
-                }
-                case FlowNodeTypes.IF_ELSE -> out = FlowValues.check("&&", this.inputs(node, entity, 0)) ? "true" : "false";
-                case FlowNodeTypes.BRANCH -> out =compare(this.values.getOrDefault(node.param("variable"), ""), node.param("operator"), this.value(node.param("value"), entity)) ? "true" : "false";
-                case FlowNodeTypes.WAIT ->
-                {
-                    long ticks = Math.max(0, (long) parse(this.text(node.param("ticks"), entity), 0));
-
-                    this.pending.add(new Pending(node.id, "then", entity == null ? null : entity.getUuid(), world.getTime() + ticks));
+                    s.put("broken", true);
 
                     return;
                 }
-                default -> {}
-            }
 
-            node = this.graph.next(node.id, out);
+                int first = (int) parse(this.input(run, node, "first", 0), 0);
+                int last = (int) parse(this.input(run, node, "last", 0), 0);
+
+                s.put("broken", false);
+
+                for (int i = first, n = 0; i <= last && n < MAX_LOOP && !Boolean.TRUE.equals(s.get("broken")); i++, n++)
+                {
+                    s.put("index", i);
+                    this.out(run, node, "body");
+                }
+
+                this.out(run, node, "completed");
+            }
+            case "while_loop" ->
+            {
+                int max = Math.max(1, Math.min(MAX_LOOP, (int) parse(node.param("max_iterations"), 1000)));
+
+                for (int n = 0; n < max && run.steps < MAX_STEPS && FlowValues.truthy(this.input(run, node, "condition", 0)); n++)
+                {
+                    this.out(run, node, "body");
+                }
+
+                this.out(run, node, "completed");
+            }
+            case "for_each", "for_each_break", "reverse_for_each" ->
+            {
+                if (in.equals("exec:break"))
+                {
+                    s.put("broken", true);
+
+                    return;
+                }
+
+                List<String> items = FlowValues.list(this.input(run, node, "array", 0));
+                boolean reverse = node.type.equals("reverse_for_each");
+
+                s.put("broken", false);
+
+                for (int n = 0; n < items.size() && n < MAX_LOOP && !Boolean.TRUE.equals(s.get("broken")); n++)
+                {
+                    int i = reverse ? items.size() - 1 - n : n;
+
+                    s.put("index", i);
+                    s.put("element", items.get(i));
+                    this.out(run, node, "body");
+                }
+
+                this.out(run, node, "completed");
+            }
+            case "switch_int" ->
+            {
+                int index = (int) parse(this.input(run, node, "selection", 0), 0) - (int) parse(node.param("start"), 0);
+
+                this.out(run, node, index >= 0 && index < node.outputCount() ? "case" + index : "default");
+            }
+            case "switch_string", "switch_name", "switch_enum" ->
+            {
+                String selection = this.input(run, node, "selection", 0);
+                String pin = "default";
+
+                for (int i = 0; i < node.outputCount(); i++)
+                {
+                    if (node.param("case" + i).equals(selection))
+                    {
+                        pin = "case" + i;
+
+                        break;
+                    }
+                }
+
+                this.out(run, node, pin);
+            }
+            case FlowNodeTypes.WAIT -> this.pending.add(new Pending(node.id, "then", this.uuid(run), now + Math.max(0L, (long) parse(this.input(run, node, "ticks", 0), 0))));
+            case "retriggerable_delay" ->
+            {
+                this.pending.removeIf((p) -> p.node == node.id);
+                this.pending.add(new Pending(node.id, "then", this.uuid(run), now + Math.max(0L, (long) parse(this.input(run, node, "ticks", 0), 0))));
+            }
+            case "cooldown" ->
+            {
+                long last = (Long) s.getOrDefault("last", Long.MIN_VALUE / 2);
+
+                if (now - last >= (long) parse(this.input(run, node, "ticks", 0), 0))
+                {
+                    s.put("last", now);
+                    this.out(run, node, "then");
+                }
+                else
+                {
+                    this.out(run, node, "blocked");
+                }
+            }
+            case "debounce" ->
+            {
+                long last = (Long) s.getOrDefault("last", Long.MIN_VALUE / 2);
+
+                s.put("last", now);
+
+                if (now - last >= (long) parse(this.input(run, node, "ticks", 0), 0))
+                {
+                    this.out(run, node, "then");
+                }
+            }
+            case "pulse" ->
+            {
+                if (in.equals("exec:stop"))
+                {
+                    s.put("running", false);
+                }
+                else
+                {
+                    long interval = Math.max(1L, (long) parse(this.input(run, node, "interval", 0), 20));
+
+                    s.put("running", true);
+                    s.put("interval", interval);
+                    s.put("next", now + interval);
+                    s.put("count", 0);
+                    s.put("entity", this.uuid(run));
+                }
+            }
+            case "schmitt_trigger" ->
+            {
+                double value = parse(this.input(run, node, "value", 0), 0);
+                boolean on = Boolean.TRUE.equals(s.get("state"));
+
+                if (!on && value >= parse(this.input(run, node, "high", 0), 0))
+                {
+                    s.put("state", true);
+                    this.out(run, node, "on");
+                }
+                else if (on && value <= parse(this.input(run, node, "low", 0), 0))
+                {
+                    s.put("state", false);
+                    this.out(run, node, "off");
+                }
+            }
+            case "edge_detector" ->
+            {
+                boolean value = FlowValues.truthy(this.input(run, node, "value", 0));
+                boolean before = Boolean.TRUE.equals(s.get("last"));
+
+                s.put("last", value);
+
+                if (value && !before)
+                {
+                    this.out(run, node, "rising");
+                }
+                else if (!value && before)
+                {
+                    this.out(run, node, "falling");
+                }
+            }
+            case "state_machine" ->
+            {
+                int target = (int) parse(this.input(run, node, "target", 0), 0);
+                int current = (Integer) s.getOrDefault("current", -1);
+
+                if (target != current && target >= 0 && target < node.outputCount())
+                {
+                    s.put("current", target);
+                    this.out(run, node, "state" + target);
+                }
+            }
+            case "queue" -> this.queue(run, node, s, in);
+            case "chance" -> this.out(run, node, this.random(run, node, s).nextDouble() * 100D < parse(this.input(run, node, "percent", 0), 0) ? "pass" : "fail");
+            case "weighted_random" -> this.weighted(run, node, s);
+            case "shuffle_bag" ->
+            {
+                @SuppressWarnings("unchecked")
+                List<Integer> bag = (List<Integer>) s.computeIfAbsent("bag", (k) -> new ArrayList<Integer>());
+
+                if (bag.isEmpty())
+                {
+                    for (int i = 0; i < node.outputCount(); i++)
+                    {
+                        bag.add(i);
+                    }
+
+                    Collections.shuffle(bag, this.random(run, node, s));
+                }
+
+                if (!bag.isEmpty())
+                {
+                    this.out(run, node, "out" + bag.remove(0));
+                }
+            }
+            case "counter" ->
+            {
+                if (in.equals("exec:reset"))
+                {
+                    s.put("count", 0);
+
+                    return;
+                }
+
+                int before = (Integer) s.getOrDefault("count", 0);
+                int count = before + (int) parse(this.input(run, node, "step", 0), 1);
+                int target = (int) parse(this.input(run, node, "target", 0), 0);
+
+                s.put("count", count);
+                this.out(run, node, "then");
+
+                if (before < target && count >= target)
+                {
+                    this.out(run, node, "target_reached");
+                }
+            }
+            case "damage_entity", "heal_entity" ->
+            {
+                if (this.entity(run, this.input(run, node, "entity", 0)) instanceof LivingEntity living)
+                {
+                    float amount = (float) parse(this.input(run, node, "amount", 0), 0);
+
+                    if (node.type.equals("heal_entity"))
+                    {
+                        living.heal(amount);
+                    }
+                    else
+                    {
+                        living.damage(run.world.getDamageSources().generic(), amount);
+                    }
+                }
+
+                this.out(run, node, "then");
+            }
+            case "launch_entity" ->
+            {
+                Entity target = this.entity(run, this.input(run, node, "entity", 0));
+                double[] v = FlowValues.vec(this.input(run, node, "velocity", 0));
+
+                if (target != null)
+                {
+                    target.addVelocity(v[0], v[1], v[2]);
+                    target.velocityModified = true;
+                }
+
+                this.out(run, node, "then");
+            }
+            default ->
+            {
+                if (type.command != null)
+                {
+                    this.command(run, this.fillCommand(run, node, type.command));
+                }
+
+                if (type.execOutputs.contains("then"))
+                {
+                    this.out(run, node, "then");
+                }
+            }
         }
     }
 
-    /** The values on a node's data inputs: what is wired in, worked out now, or the typed-in value. */
-    private List<String> inputs(FlowNode node, Entity entity, int depth)
+    private void multiGate(Run run, FlowNode node, Map<String, Object> s, String in)
+    {
+        int count = node.outputCount();
+        boolean[] used = (boolean[]) s.get("used");
+
+        if (used == null || used.length != count || in.equals("exec:reset"))
+        {
+            used = new boolean[count];
+            s.put("used", used);
+            s.put("next", 0);
+
+            if (in.equals("exec:reset"))
+            {
+                return;
+            }
+        }
+
+        List<Integer> open = new ArrayList<>();
+
+        for (int i = 0; i < count; i++)
+        {
+            if (!used[i]) open.add(i);
+        }
+
+        if (open.isEmpty())
+        {
+            if (!FlowValues.truthy(node.param("loop")))
+            {
+                return;
+            }
+
+            used = new boolean[count];
+            s.put("used", used);
+
+            for (int i = 0; i < count; i++) open.add(i);
+        }
+
+        int pick;
+
+        if (FlowValues.truthy(node.param("random")))
+        {
+            pick = open.get(this.random(run, node, s).nextInt(open.size()));
+        }
+        else
+        {
+            int next = (Integer) s.getOrDefault("next", 0);
+
+            pick = open.contains(next) ? next : open.get(0);
+        }
+
+        s.put("next", pick + 1);
+        used[pick] = true;
+        this.out(run, node, "out" + pick);
+    }
+
+    private void queue(Run run, FlowNode node, Map<String, Object> s, String in)
+    {
+        @SuppressWarnings("unchecked")
+        LinkedList<String> queue = (LinkedList<String>) s.computeIfAbsent("queue", (k) -> new LinkedList<String>());
+
+        if (in.equals("exec:pop"))
+        {
+            if (queue.isEmpty())
+            {
+                this.out(run, node, "empty");
+            }
+            else
+            {
+                s.put("value", queue.poll());
+                s.put("size", queue.size());
+                this.out(run, node, "popped");
+            }
+
+            return;
+        }
+
+        if (queue.size() < 1024)
+        {
+            queue.add(this.input(run, node, "value", 0));
+        }
+
+        s.put("size", queue.size());
+        this.out(run, node, "then");
+    }
+
+    private void weighted(Run run, FlowNode node, Map<String, Object> s)
+    {
+        int count = node.outputCount();
+        double total = 0;
+
+        for (int i = 0; i < count; i++)
+        {
+            total += Math.max(0D, parse(node.param("weight" + i), 0));
+        }
+
+        if (total <= 0)
+        {
+            return;
+        }
+
+        double roll = this.random(run, node, s).nextDouble() * total;
+
+        for (int i = 0; i < count; i++)
+        {
+            roll -= Math.max(0D, parse(node.param("weight" + i), 0));
+
+            if (roll < 0)
+            {
+                this.out(run, node, "out" + i);
+
+                return;
+            }
+        }
+    }
+
+    /** A draw that comes out the same for the same game tick, node, box and call. */
+    private Random random(Run run, FlowNode node, Map<String, Object> s)
+    {
+        long draws = (Long) s.getOrDefault("draws", 0L);
+
+        s.put("draws", draws + 1);
+
+        return new Random(run.world.getTime() * 6364136223846793005L + node.id * 1442695040888963407L + draws * 31L + this.pos.asLong());
+    }
+
+    /* Data */
+
+    /** A data input's value: the wire into it, worked out now, or the value typed into it. */
+    private String input(Run run, FlowNode node, String pin, int depth)
+    {
+        FlowLink link = this.graph.dataInto(node.id, pin);
+
+        if (link != null)
+        {
+            return this.evaluate(run, this.graph.get(link.from()), link.pin(), depth + 1);
+        }
+
+        return this.text(node.param(pin), run.entity);
+    }
+
+    private List<String> grown(Run run, FlowNode node, int depth)
     {
         List<String> values = new ArrayList<>();
 
         for (int i = 0; i < node.inputCount(); i++)
         {
-            String pin = FlowNodeType.input(i);
-            FlowLink link = this.graph.dataInto(node.id, pin);
-
-            values.add(link == null ? this.text(node.param(pin), entity) : this.evaluate(this.graph.get(link.from()), link.pin(), entity, depth + 1));
+            values.add(this.input(run, node, FlowNodeType.input(i), depth));
         }
 
         return values;
     }
 
-    /** A data output's value. Pure nodes are worked out each time they are asked, so they always read the current variables. */
-    private String evaluate(FlowNode node, String pin, Entity entity, int depth)
+    private String evaluate(Run run, FlowNode node, String pin, int depth)
     {
         if (node == null || depth > 64)
         {
             return "";
         }
 
-        if (node.type.equals(FlowNodeTypes.GET_VARIABLE))
+        String logic = FlowNodeTypes.BOOLEAN_OF.get(node.type);
+
+        if (logic != null)
         {
-            return this.values.getOrDefault(node.param("variable"), "");
+            return String.valueOf(FlowValues.logic(logic, this.grown(run, node, depth)));
         }
 
         String operator = FlowNodeTypes.OPERATOR_OF.get(node.type);
 
         if (operator != null)
         {
-            return String.valueOf(FlowValues.check(operator, this.inputs(node, entity, depth)));
+            return String.valueOf(FlowValues.check(operator, this.grown(run, node, depth)));
         }
 
-        return "";
-    }
-
-    private void set(String name, String value)
-    {
-        if (!name.isEmpty())
+        return switch (node.type)
         {
-            this.values.put(name, value);
+            case FlowNodeTypes.GET_VARIABLE ->
+            {
+                FlowVariable variable = this.graph.variableOf(node);
+
+                yield variable == null ? "" : this.read(run, variable);
+            }
+            case FlowNodeTypes.SET_VARIABLE ->
+            {
+                Object value = this.state(node).get("value");
+                FlowVariable variable = this.graph.variableOf(node);
+
+                yield value != null ? value.toString() : variable == null ? "" : this.read(run, variable);
+            }
+            case "not" -> String.valueOf(!FlowValues.truthy(this.input(run, node, "in0", depth)));
+            case "select" ->
+            {
+                int index = (int) parse(this.input(run, node, "index", depth), 0);
+
+                yield index >= 0 && index < node.inputCount() ? this.input(run, node, FlowNodeType.input(index), depth) : "";
+            }
+            case "is_valid" -> this.valid(run, this.input(run, node, "value", depth));
+            case "clamp" -> FlowValues.format(Math.max(this.number(run, node, "min", depth), Math.min(this.number(run, node, "max", depth), this.number(run, node, "value", depth))));
+            case "map_range" -> this.mapRange(run, node, depth);
+            case "threshold" -> String.valueOf(this.number(run, node, "value", depth) >= this.number(run, node, "threshold", depth));
+            default -> this.world(run, node, pin, depth);
+        };
+    }
+
+    private double number(Run run, FlowNode node, String pin, int depth)
+    {
+        return parse(this.input(run, node, pin, depth), 0);
+    }
+
+    private String valid(Run run, String value)
+    {
+        String v = value.trim();
+
+        if (v.isEmpty())
+        {
+            return "false";
+        }
+
+        try
+        {
+            return String.valueOf(run.world.getEntity(UUID.fromString(v)) != null);
+        }
+        catch (IllegalArgumentException e)
+        {
+            return "true";
         }
     }
 
-    private void command(ServerWorld world, Entity entity, String command)
+    private String mapRange(Run run, FlowNode node, int depth)
     {
-        MinecraftServer server = world.getServer();
+        double value = this.number(run, node, "value", depth);
+        double inMin = this.number(run, node, "in_min", depth);
+        double inMax = this.number(run, node, "in_max", depth);
+        double outMin = this.number(run, node, "out_min", depth);
+        double outMax = this.number(run, node, "out_max", depth);
+        double t = inMax == inMin ? 0 : (value - inMin) / (inMax - inMin);
+
+        if (FlowValues.truthy(node.param("clamp")))
+        {
+            t = Math.max(0, Math.min(1, t));
+        }
+
+        return FlowValues.format(outMin + (outMax - outMin) * t);
+    }
+
+    /** The world and entity reads, and what an impure node remembers (a loop's index, a counter's count). */
+    private String world(Run run, FlowNode node, String pin, int depth)
+    {
+        Entity entity = node.getType() != null && node.getType().dataInput("entity") != null ? this.entity(run, this.input(run, node, "entity", depth)) : null;
+
+        switch (node.type)
+        {
+            case "entity_health": return entity instanceof LivingEntity living ? FlowValues.format(living.getHealth()) : "0";
+            case "entity_position": return entity == null ? "0 0 0" : vec(entity.getPos());
+            case "entity_velocity": return entity == null ? "0 0 0" : vec(entity.getVelocity());
+            case "entity_name": return entity == null ? "" : entity.getName().getString();
+            case "is_player": return String.valueOf(entity instanceof PlayerEntity);
+            case "has_tag": return String.valueOf(entity != null && entity.getCommandTags().contains(this.input(run, node, "tag", depth)));
+            case "scoreboard":
+            {
+                Scoreboard scoreboard = run.world.getScoreboard();
+                ScoreboardObjective objective = scoreboard.getNullableObjective(this.input(run, node, "objective", depth));
+
+                if (entity == null || objective == null)
+                {
+                    return "0";
+                }
+
+                ReadableScoreboardScore score = scoreboard.getScore(entity, objective);
+
+                return String.valueOf(score == null ? 0 : score.getScore());
+            }
+            case "world_time": return String.valueOf(run.world.getTimeOfDay() % 24000L);
+            case "is_raining": return String.valueOf(run.world.isRaining());
+            case "block_at":
+            {
+                Vec3d p = this.position(run, this.input(run, node, "position", depth));
+
+                return Registries.BLOCK.getId(run.world.getBlockState(BlockPos.ofFloored(p)).getBlock()).toString();
+            }
+            case "players_in_radius":
+            {
+                Vec3d center = this.position(run, this.input(run, node, "position", depth));
+                double radius = this.number(run, node, "radius", depth);
+                List<String> names = new ArrayList<>();
+
+                for (ServerPlayerEntity player : run.world.getPlayers())
+                {
+                    if (player.getPos().squaredDistanceTo(center) <= radius * radius)
+                    {
+                        names.add(player.getName().getString());
+                    }
+                }
+
+                return pin.equals("count") ? String.valueOf(names.size()) : String.join(",", names);
+            }
+            case "get_form":
+            {
+                Morph morph = entity == null ? null : Morph.getMorph(entity);
+                Form form = morph == null ? null : morph.getForm();
+
+                if (form == null)
+                {
+                    return "";
+                }
+
+                return pin.equals("form_id") ? form.getFormId() : mchorse.bbs_mod.data.DataToString.toString(FormUtils.toData(form));
+            }
+            default:
+            {
+                Object value = this.state(node).get(pin);
+
+                return value == null ? "" : value.toString();
+            }
+        }
+    }
+
+    private static String vec(Vec3d v)
+    {
+        return String.format(Locale.ROOT, "%.3f %.3f %.3f", v.x, v.y, v.z);
+    }
+
+    /** A position: three numbers, any of them ~ or ~n around the entity (or the box). */
+    private Vec3d position(Run run, String value)
+    {
+        Vec3d base = run.entity != null ? run.entity.getPos() : Vec3d.ofCenter(this.pos);
+        String[] split = value.trim().split("[ ,]+");
+        double[] xyz = {base.x, base.y, base.z};
+
+        for (int i = 0; i < 3 && i < split.length; i++)
+        {
+            String part = split[i];
+
+            xyz[i] = part.startsWith("~") ? xyz[i] + parse(part.substring(1), 0) : parse(part, xyz[i]);
+        }
+
+        return new Vec3d(xyz[0], xyz[1], xyz[2]);
+    }
+
+    /** "@entity" (or nothing) is the entity that set the flow off; otherwise a UUID or a player's name. */
+    private Entity entity(Run run, String value)
+    {
+        String v = value == null ? "" : value.trim();
+
+        if (v.isEmpty() || v.equals("@entity") || v.equals("@s"))
+        {
+            return run.entity;
+        }
+
+        try
+        {
+            return run.world.getEntity(UUID.fromString(v));
+        }
+        catch (IllegalArgumentException e)
+        {
+            return run.world.getServer().getPlayerManager().getPlayer(v);
+        }
+    }
+
+    private UUID uuid(Run run)
+    {
+        return run.entity == null ? null : run.entity.getUuid();
+    }
+
+    /** A value about to be stored in a variable of the type: an entity variable keeps a UUID. */
+    private String asValue(Run run, String value, String type)
+    {
+        if (type.equals("entity"))
+        {
+            Entity entity = this.entity(run, value);
+
+            return entity == null ? value : entity.getUuidAsString();
+        }
+
+        return value;
+    }
+
+    /* Variables, by scope */
+
+    private String read(Run run, FlowVariable variable)
+    {
+        String value = switch (variable.scope)
+        {
+            case "global" -> FlowGlobals.get(run.world.getServer()).getGlobal(variable.name);
+            case "entity" -> run.entity == null ? null : FlowGlobals.get(run.world.getServer()).getEntity(run.entity.getUuid(), variable.name);
+            default -> this.values.get(variable.id);
+        };
+
+        return value == null ? variable.value : value;
+    }
+
+    private void write(Run run, FlowVariable variable, String value)
+    {
+        switch (variable.scope)
+        {
+            case "global" -> FlowGlobals.get(run.world.getServer()).setGlobal(variable.name, value);
+            case "entity" ->
+            {
+                if (run.entity != null)
+                {
+                    FlowGlobals.get(run.world.getServer()).setEntity(run.entity.getUuid(), variable.name, value);
+                }
+            }
+            default -> this.values.put(variable.id, value);
+        }
+    }
+
+    /* Commands */
+
+    /** Fills a node's command: {pin} with the pin's value, {pin:q} quoted for a command string, {pin:json} as JSON text. */
+    private String fillCommand(Run run, FlowNode node, String template)
+    {
+        StringBuilder builder = new StringBuilder();
+        int i = 0;
+
+        while (i < template.length())
+        {
+            int open = template.indexOf('{', i);
+            int close = open < 0 ? -1 : template.indexOf('}', open);
+
+            if (open < 0 || close < 0)
+            {
+                builder.append(template, i, template.length());
+
+                break;
+            }
+
+            builder.append(template, i, open);
+
+            String key = template.substring(open + 1, close);
+            String mode = "";
+            int colon = key.indexOf(':');
+
+            if (colon >= 0)
+            {
+                mode = key.substring(colon + 1);
+                key = key.substring(0, colon);
+            }
+
+            String value = node.getType().dataInput(key) != null ? this.input(run, node, key, 0) : node.param(key);
+
+            if (node.declaredInputType(key).equals("entity"))
+            {
+                Entity entity = this.entity(run, value);
+
+                value = entity == null ? "@s" : entity.getUuidAsString();
+            }
+
+            builder.append(mode.equals("q") || mode.equals("json") ? "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"" : value);
+            i = close + 1;
+        }
+
+        return builder.toString();
+    }
+
+    private void command(Run run, String command)
+    {
+        MinecraftServer server = run.world.getServer();
 
         if (command.isBlank())
         {
@@ -233,14 +1080,14 @@ public class FlowRuntime
         }
 
         ServerCommandSource source = server.getCommandSource()
-            .withWorld(world)
+            .withWorld(run.world)
             .withPosition(Vec3d.ofCenter(this.pos))
             .withLevel(2)
             .withSilent();
 
-        if (entity != null)
+        if (run.entity != null)
         {
-            source = source.withEntity(entity).withPosition(entity.getPos());
+            source = source.withEntity(run.entity).withPosition(run.entity.getPos());
         }
 
         try
@@ -253,18 +1100,7 @@ public class FlowRuntime
         }
     }
 
-    /** A field read as a value: {@code @entity} is the triggering entity, the rest is text with its {variables} filled in. */
-    private String value(String raw, Entity entity)
-    {
-        if (raw.trim().equals("@entity"))
-        {
-            return entity == null ? "" : entity.getUuidAsString();
-        }
-
-        return this.text(raw, entity);
-    }
-
-    /** Fills in {name}: {entity}, {entity_uuid}, {x} {y} {z} of the entity, and the flow's variables. */
+    /** Fills in {name}: {entity}, {entity_uuid}, {x} {y} {z} of the entity, and the flow's local variables by name. */
     public String text(String raw, Entity entity)
     {
         if (raw == null || raw.indexOf('{') < 0)
@@ -290,14 +1126,15 @@ public class FlowRuntime
             builder.append(raw, i, open);
 
             String key = raw.substring(open + 1, close);
+            FlowVariable variable = this.graph == null ? null : this.graph.getVariable(key);
             String value = switch (key)
             {
                 case "entity" -> entity == null ? "" : entity.getName().getString();
                 case "entity_uuid" -> entity == null ? "" : entity.getUuidAsString();
-                case "x" -> entity == null ? "" : String.format("%.2f", entity.getX());
-                case "y" -> entity == null ? "" : String.format("%.2f", entity.getY());
-                case "z" -> entity == null ? "" : String.format("%.2f", entity.getZ());
-                default -> this.values.get(key);
+                case "x" -> entity == null ? "" : String.format(Locale.ROOT, "%.2f", entity.getX());
+                case "y" -> entity == null ? "" : String.format(Locale.ROOT, "%.2f", entity.getY());
+                case "z" -> entity == null ? "" : String.format(Locale.ROOT, "%.2f", entity.getZ());
+                default -> variable == null ? null : this.values.getOrDefault(variable.id, variable.value);
             };
 
             builder.append(value == null ? raw.substring(open, close + 1) : value);

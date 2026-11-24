@@ -6,6 +6,9 @@ import mchorse.bbs_mod.triggers.FlowGraph;
 import mchorse.bbs_mod.triggers.FlowLink;
 import mchorse.bbs_mod.triggers.FlowNode;
 import mchorse.bbs_mod.triggers.FlowNodeType;
+import mchorse.bbs_mod.triggers.FlowNodeTypes;
+import mchorse.bbs_mod.triggers.FlowValues;
+import mchorse.bbs_mod.triggers.FlowVariable;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D;
@@ -25,22 +28,43 @@ import java.util.function.Consumer;
 
 /**
  * The flow board: a grid that pans and zooms with its origin axes drawn bold, round cornered node
- * cards in the colours of BBS's theme, and live execution wires that glow and pulse from an output
- * to the next node's input.
+ * cards in the colours of BBS's theme, and live wires that glow and pulse from an output to an input.
+ *
+ * <p>A card lays its pins out in two columns: execution inputs then data inputs on the left,
+ * execution outputs then data outputs on the right. A variable read is a small pill with no header,
+ * a variable write a card headed SET. Growable cards have a row of + and - buttons, for inputs on the
+ * left and for outputs on the right.</p>
  *
  * <p>Left click on a card picks it (Shift or Ctrl adds or takes it away) and dragging moves every
- * picked card. Left click on the empty board clears the picks; dragging there draws a selection box
- * and picks every card it touches. Dragging an output pin pulls a wire: dropped on a card it
- * connects, on the empty board it opens the add menu and wires the new node in; a wired input picks
- * its wire up again. The middle button, or Alt with the left, pans; the wheel zooms round the cursor;
- * right click opens the add menu; Delete removes the picked cards.</p>
+ * picked card. Left click on the empty board clears the picks, dragging there draws a selection box.
+ * Dragging an output pulls a wire: dropped on a card it goes into the pin under the cursor or the
+ * first fitting one, dropped on the empty board it opens the add menu and wires the new node in; a
+ * wired input picks its wire up again. Middle, or Alt with the left, pans; the wheel zooms round the
+ * cursor; right click opens the add menu; Delete removes the picked cards. A variable dragged in from
+ * the left panel becomes a Get or a Set node, see {@link #dropVariable}.</p>
  */
 public class UIFlowGraph extends UIElement
 {
-    public static final int NODE_W = 150;
+    public static final int NODE_W = 160;
+    public static final int PILL_W = 124;
     public static final int HEADER = 16;
     public static final int ROW = 12;
     private static final int GRID = 16;
+
+    /** Where a pin sits on a card: its name, whether it carries the run, and its row. */
+    public record Spot(String pin, boolean exec, int row) {}
+
+    /** A card's shape. */
+    public static class Layout
+    {
+        public final List<Spot> left = new ArrayList<>();
+        public final List<Spot> right = new ArrayList<>();
+        public int rows;
+        public boolean grow;
+        public int settings;
+        public float width = NODE_W;
+        public boolean pill;
+    }
 
     public FlowGraph graph;
     /** The card Details shows: the last one picked. */
@@ -65,7 +89,6 @@ public class UIFlowGraph extends UIElement
     private final Map<FlowNode, float[]> dragOffsets = new HashMap<>();
     private FlowNode wireFrom;
     private String wirePin;
-    /** Whether the wire being pulled carries a value rather than the run. */
     private boolean wireData;
     private float wireX;
     private float wireY;
@@ -98,7 +121,6 @@ public class UIFlowGraph extends UIElement
         this.select(null);
     }
 
-    /** Picks just this card, or nothing. */
     public void select(FlowNode node)
     {
         this.picked.clear();
@@ -117,79 +139,109 @@ public class UIFlowGraph extends UIElement
         this.onSelect.accept(node);
     }
 
-    /** Brings a card to the middle of the board and picks it. */
     public void focus(FlowNode node)
     {
-        this.panX = this.area.w / 2F - (node.x + NODE_W / 2F) * this.zoom;
+        Layout layout = layout(node);
+
+        this.panX = this.area.w / 2F - (node.x + layout.width / 2F) * this.zoom;
         this.panY = this.area.h / 2F - (node.y + height(node) / 2F) * this.zoom;
         this.select(node);
     }
 
-    /* Layout of a card */
+    /* Layout */
 
-    /** Rows of execution pins: none on a pure node. */
-    public static int execRows(FlowNode node)
+    public static Layout layout(FlowNode node)
     {
+        Layout layout = new Layout();
         FlowNodeType type = node.getType();
 
         if (type == null)
         {
-            return 1;
+            layout.rows = 1;
+
+            return layout;
         }
 
-        return type.pure ? 0 : Math.max(1, type.outputs.size());
-    }
+        if (node.type.equals(FlowNodeTypes.GET_VARIABLE))
+        {
+            layout.pill = true;
+            layout.width = PILL_W;
+            layout.right.add(new Spot("value", false, 0));
 
-    /** Rows of data pins: inputs on the left, outputs on the right, side by side. */
-    public static int dataRows(FlowNode node)
-    {
-        FlowNodeType type = node.getType();
+            return layout;
+        }
 
-        return type == null ? 0 : Math.max(node.inputCount(), type.dataOutputs.size());
-    }
+        int row = 0;
 
-    private static boolean growable(FlowNode node)
-    {
-        return node.getType() != null && node.getType().growable;
+        for (String pin : type.execInputs) layout.left.add(new Spot(pin, true, row++));
+        for (String pin : node.dataInputs()) layout.left.add(new Spot(pin, false, row++));
+
+        row = 0;
+
+        for (String pin : node.execOutputs()) layout.right.add(new Spot(pin, true, row++));
+        for (FlowNodeType.DataPin pin : type.dataOutputs) layout.right.add(new Spot(pin.id(), false, row++));
+
+        layout.rows = Math.max(1, Math.max(layout.left.size(), layout.right.size()));
+        layout.grow = type.growable() || type.growableOutputs();
+
+        for (FlowNodeType.Param param : type.params)
+        {
+            if (!param.id().equals("variable"))
+            {
+                layout.settings += 1;
+            }
+        }
+
+        return layout;
     }
 
     public static int height(FlowNode node)
     {
-        FlowNodeType type = node.getType();
-        int params = type == null ? 0 : type.params.size();
-        int rows = execRows(node) + dataRows(node) + (growable(node) ? 1 : 0);
+        Layout layout = layout(node);
 
-        return HEADER + 4 + rows * ROW + params * ROW + (params > 0 ? 6 : 4);
+        if (layout.pill)
+        {
+            return 18;
+        }
+
+        return HEADER + 4 + (layout.rows + (layout.grow ? 1 : 0) + layout.settings) * ROW + (layout.settings > 0 ? 6 : 4);
     }
 
     private static float rowY(FlowNode node, int row)
     {
+        if (layout(node).pill)
+        {
+            return node.y + 9;
+        }
+
         return node.y + HEADER + 4 + ROW / 2F + row * ROW;
     }
 
-    private static float inputY(FlowNode node)
+    private static Spot spot(List<Spot> spots, String pin)
     {
-        return rowY(node, 0);
+        for (Spot spot : spots)
+        {
+            if (spot.pin().equals(pin))
+            {
+                return spot;
+            }
+        }
+
+        return null;
     }
 
-    private static float outputY(FlowNode node, int index)
+    private static float outY(FlowNode node, String pin)
     {
-        return rowY(node, index);
+        Spot spot = spot(layout(node).right, pin);
+
+        return rowY(node, spot == null ? 0 : spot.row());
     }
 
-    private static float dataInY(FlowNode node, int index)
+    private static float inY(FlowNode node, String pin)
     {
-        return rowY(node, execRows(node) + index);
-    }
+        Spot spot = spot(layout(node).left, pin);
 
-    private static float dataOutY(FlowNode node, int index)
-    {
-        return rowY(node, execRows(node) + index);
-    }
-
-    private static float growY(FlowNode node)
-    {
-        return rowY(node, execRows(node) + dataRows(node));
+        return rowY(node, spot == null ? 0 : spot.row());
     }
 
     private float toGraphX(int mouseX)
@@ -208,7 +260,7 @@ public class UIFlowGraph extends UIElement
         {
             FlowNode node = this.graph.nodes.get(i);
 
-            if (gx >= node.x && gx <= node.x + NODE_W && gy >= node.y && gy <= node.y + height(node))
+            if (gx >= node.x && gx <= node.x + layout(node).width && gy >= node.y && gy <= node.y + height(node))
             {
                 return node;
             }
@@ -217,85 +269,54 @@ public class UIFlowGraph extends UIElement
         return null;
     }
 
-    private int outputAt(FlowNode node, float gx, float gy)
+    /** The pin under a point on a card's edge, or null. */
+    private Spot pinAt(FlowNode node, float gx, float gy, boolean right, float reach)
     {
-        FlowNodeType type = node.getType();
+        Layout layout = layout(node);
+        float x = right ? node.x + layout.width : node.x;
 
-        if (type == null)
+        if (Math.abs(gx - x) > reach)
         {
-            return -1;
+            return null;
         }
 
-        for (int i = 0; i < type.outputs.size(); i++)
+        for (Spot spot : right ? layout.right : layout.left)
         {
-            if (Math.abs(gx - (node.x + NODE_W)) <= 7 && Math.abs(gy - outputY(node, i)) <= 6)
+            if (Math.abs(gy - rowY(node, spot.row())) <= 6)
             {
-                return i;
+                return spot;
             }
         }
 
-        return -1;
+        return null;
     }
 
-    private int dataOutputAt(FlowNode node, float gx, float gy)
-    {
-        FlowNodeType type = node.getType();
-
-        if (type == null)
-        {
-            return -1;
-        }
-
-        for (int i = 0; i < type.dataOutputs.size(); i++)
-        {
-            if (Math.abs(gx - (node.x + NODE_W)) <= 7 && Math.abs(gy - dataOutY(node, i)) <= 6)
-            {
-                return i;
-            }
-        }
-
-        return -1;
-    }
-
-    private int dataInputAt(FlowNode node, float gx, float gy, float reach)
-    {
-        for (int i = 0; i < node.inputCount(); i++)
-        {
-            if (Math.abs(gx - node.x) <= reach && Math.abs(gy - dataInY(node, i)) <= 6)
-            {
-                return i;
-            }
-        }
-
-        return -1;
-    }
-
-    /** +1 on the node's + button, -1 on its - button, 0 elsewhere. */
+    /** -1 or +1 on an input grow button, -2 or +2 on an output one, 0 elsewhere. */
     private int growButtonAt(FlowNode node, float gx, float gy)
     {
-        if (!growable(node) || Math.abs(gy - growY(node)) > 5)
+        Layout layout = layout(node);
+        FlowNodeType type = node.getType();
+
+        if (!layout.grow || type == null || Math.abs(gy - rowY(node, layout.rows)) > 5)
         {
             return 0;
         }
 
-        if (gx >= node.x + 6 && gx <= node.x + 18)
+        if (type.growable())
         {
-            return 1;
+            if (gx >= node.x + 6 && gx <= node.x + 18) return 1;
+            if (gx >= node.x + 20 && gx <= node.x + 32) return -1;
         }
 
-        if (gx >= node.x + 20 && gx <= node.x + 32 && node.inputCount() > node.getType().minInputs)
+        if (type.growableOutputs())
         {
-            return -1;
+            float ex = node.x + layout.width;
+
+            if (gx >= ex - 32 && gx <= ex - 20) return 2;
+            if (gx >= ex - 18 && gx <= ex - 6) return -2;
         }
 
         return 0;
-    }
-
-    private boolean inputAt(FlowNode node, float gx, float gy)
-    {
-        FlowNodeType type = node.getType();
-
-        return type != null && type.hasInput() && Math.abs(gx - node.x) <= 7 && Math.abs(gy - inputY(node)) <= 6;
     }
 
     /* Add menu */
@@ -317,18 +338,89 @@ public class UIFlowGraph extends UIElement
         {
             FlowNode node = this.graph.add(type.id, this.addX, this.addY);
 
-            if (from != null && data && node.inputCount() > 0)
+            if (from != null && data && !node.dataInputs().isEmpty())
             {
-                this.graph.linkData(from.id, pin, node.id, FlowNodeType.input(0));
+                this.graph.linkData(from.id, pin, node.id, node.dataInputs().get(0));
             }
-            else if (from != null && !data && type.hasInput())
+            else if (from != null && !data && !type.execInputs.isEmpty())
             {
-                this.graph.link(from.id, pin, node.id);
+                this.graph.link(from.id, pin, node.id, type.execInputs.get(0));
             }
 
             this.select(node);
             this.onChange.run();
         });
+    }
+
+    /* Variables dragged in from the left panel */
+
+    /**
+     * A variable dropped on the board. On a data input it becomes a Get wired straight into it; with
+     * Ctrl a Get, with Alt a Set, right where it was dropped; otherwise a small menu asks which.
+     */
+    public void dropVariable(FlowVariable variable, int mouseX, int mouseY, boolean ctrl, boolean alt)
+    {
+        if (this.graph == null || !this.area.isInside(mouseX, mouseY))
+        {
+            return;
+        }
+
+        float gx = this.toGraphX(mouseX);
+        float gy = this.toGraphY(mouseY);
+
+        for (int i = this.graph.nodes.size() - 1; i >= 0; i--)
+        {
+            FlowNode target = this.graph.nodes.get(i);
+            Spot spot = this.pinAt(target, gx, gy, false, 10);
+
+            if (spot != null && !spot.exec())
+            {
+                FlowNode get = this.addVariableNode(variable, FlowNodeTypes.GET_VARIABLE, target.x - PILL_W - 30, rowY(target, spot.row()) - 9);
+
+                this.graph.linkData(get.id, "value", target.id, spot.pin());
+                this.onChange.run();
+
+                return;
+            }
+        }
+
+        if (ctrl || alt)
+        {
+            this.addVariableNode(variable, ctrl ? FlowNodeTypes.GET_VARIABLE : FlowNodeTypes.SET_VARIABLE, gx, gy);
+            this.onChange.run();
+
+            return;
+        }
+
+        this.getContext().replaceContextMenu((menu) ->
+        {
+            menu.action(Icons.DOWNLOAD, L10n.lang("bbs.ui.trigger_box.get_named").format(variable.name), () ->
+            {
+                this.addVariableNode(variable, FlowNodeTypes.GET_VARIABLE, gx, gy);
+                this.onChange.run();
+            });
+            menu.action(Icons.UPLOAD, L10n.lang("bbs.ui.trigger_box.set_named").format(variable.name), () ->
+            {
+                this.addVariableNode(variable, FlowNodeTypes.SET_VARIABLE, gx, gy);
+                this.onChange.run();
+            });
+        });
+    }
+
+    private FlowNode addVariableNode(FlowVariable variable, String type, float x, float y)
+    {
+        FlowNode node = this.graph.add(type, Math.round(x), Math.round(y));
+
+        node.params.put("variable", variable.id);
+
+        if (type.equals(FlowNodeTypes.SET_VARIABLE))
+        {
+            node.params.put("value", variable.value);
+        }
+
+        this.select(node);
+
+        return node;
     }
 
     /* Input */
@@ -393,84 +485,43 @@ public class UIFlowGraph extends UIElement
             return false;
         }
 
-        /* Pins first: they stick out past the card's edge */
+        /* Pins and grow buttons first: they sit on and past the card's edges */
         for (int i = this.graph.nodes.size() - 1; i >= 0; i--)
         {
             FlowNode candidate = this.graph.nodes.get(i);
-            int output = this.outputAt(candidate, gx, gy);
+            Spot out = this.pinAt(candidate, gx, gy, true, 7);
 
-            if (output >= 0)
+            if (out != null)
             {
-                this.wireFrom = candidate;
-                this.wirePin = candidate.getType().outputs.get(output);
-                this.wireData = false;
-                this.wireX = gx;
-                this.wireY = gy;
+                this.startWire(candidate, out.pin(), !out.exec(), gx, gy);
 
                 return true;
             }
 
-            int dataOutput = this.dataOutputAt(candidate, gx, gy);
+            Spot in = this.pinAt(candidate, gx, gy, false, 7);
 
-            if (dataOutput >= 0)
+            if (in != null && this.pickUp(candidate, in, gx, gy))
             {
-                this.wireFrom = candidate;
-                this.wirePin = candidate.getType().dataOutputs.get(dataOutput).id();
-                this.wireData = true;
-                this.wireX = gx;
-                this.wireY = gy;
-
                 return true;
-            }
-
-            int dataInput = this.dataInputAt(candidate, gx, gy, 7);
-
-            if (dataInput >= 0)
-            {
-                FlowLink link = this.graph.dataInto(candidate.id, FlowNodeType.input(dataInput));
-
-                if (link != null)
-                {
-                    this.wireFrom = this.graph.get(link.from());
-                    this.wirePin = link.pin();
-                    this.wireData = true;
-                    this.wireX = gx;
-                    this.wireY = gy;
-                    this.graph.unlinkData(candidate.id, link.toPin());
-                    this.onChange.run();
-
-                    return true;
-                }
             }
 
             int grow = this.growButtonAt(candidate, gx, gy);
 
             if (grow != 0)
             {
-                this.graph.setInputCount(candidate, candidate.inputCount() + grow);
+                if (Math.abs(grow) == 1)
+                {
+                    this.graph.setInputCount(candidate, candidate.inputCount() + grow);
+                }
+                else
+                {
+                    this.graph.setOutputCount(candidate, candidate.outputCount() + grow / 2);
+                }
+
                 this.select(candidate);
                 this.onChange.run();
 
                 return true;
-            }
-
-            if (this.inputAt(candidate, gx, gy))
-            {
-                for (FlowLink link : this.graph.links)
-                {
-                    if (link.isExec() && link.to() == candidate.id)
-                    {
-                        this.wireFrom = this.graph.get(link.from());
-                        this.wirePin = link.pin();
-                        this.wireData = false;
-                        this.wireX = gx;
-                        this.wireY = gy;
-                        this.graph.unlink(link.from(), link.pin());
-                        this.onChange.run();
-
-                        return true;
-                    }
-                }
             }
         }
 
@@ -499,7 +550,6 @@ public class UIFlowGraph extends UIElement
                 this.setPrimary(node);
             }
 
-            /* Every picked card moves with the one under the cursor */
             this.draggingNodes = true;
             this.dragOffsets.clear();
 
@@ -508,14 +558,12 @@ public class UIFlowGraph extends UIElement
                 this.dragOffsets.put(p, new float[] {gx - p.x, gy - p.y});
             }
 
-            /* The picked card is drawn last, on top */
             this.graph.nodes.remove(node);
             this.graph.nodes.add(node);
 
             return true;
         }
 
-        /* The empty board: clear, then a selection box from here */
         if (!additive)
         {
             this.select(null);
@@ -529,6 +577,35 @@ public class UIFlowGraph extends UIElement
         return true;
     }
 
+    private void startWire(FlowNode from, String pin, boolean data, float gx, float gy)
+    {
+        this.wireFrom = from;
+        this.wirePin = pin;
+        this.wireData = data;
+        this.wireX = gx;
+        this.wireY = gy;
+    }
+
+    /** A wired input picks its wire up again, to be dropped elsewhere. */
+    private boolean pickUp(FlowNode node, Spot in, float gx, float gy)
+    {
+        for (FlowLink link : this.graph.links)
+        {
+            if (link.to() == node.id && link.toPin().equals(in.pin()))
+            {
+                FlowNode from = this.graph.get(link.from());
+
+                this.graph.links.remove(link);
+                this.startWire(from, link.pin(), !in.exec(), gx, gy);
+                this.onChange.run();
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     @Override
     protected boolean subMouseReleased(UIContext context)
     {
@@ -538,17 +615,21 @@ public class UIFlowGraph extends UIElement
             float gy = this.toGraphY(context.mouseY);
             FlowNode target = this.nodeAt(gx, gy);
 
+            if (target == null)
+            {
+                /* Just past a card's left edge, on its pins, still counts */
+                for (FlowNode node : this.graph.nodes)
+                {
+                    if (this.pinAt(node, gx, gy, false, 10) != null)
+                    {
+                        target = node;
+                    }
+                }
+            }
+
             if (target != null && target != this.wireFrom)
             {
-                if (this.wireData)
-                {
-                    this.dropData(target, gx, gy);
-                }
-                else
-                {
-                    this.graph.link(this.wireFrom.id, this.wirePin, target.id);
-                }
-
+                this.drop(target, gx, gy);
                 this.onChange.run();
             }
             else if (target == null && this.area.isInside(context))
@@ -578,37 +659,55 @@ public class UIFlowGraph extends UIElement
         return super.subMouseReleased(context);
     }
 
-    /** A value wire dropped on a card: the input under the cursor, else the first free one, else the first. */
-    private void dropData(FlowNode target, float gx, float gy)
+    /** A wire dropped on a card: the fitting pin under the cursor, else the first fitting free one. */
+    private void drop(FlowNode target, float gx, float gy)
     {
-        int count = target.inputCount();
+        Spot under = this.pinAt(target, gx, gy, false, layout(target).width);
+        List<Spot> fitting = new ArrayList<>();
 
-        if (count <= 0)
+        for (Spot spot : layout(target).left)
+        {
+            if (spot.exec() != this.wireData)
+            {
+                fitting.add(spot);
+            }
+        }
+
+        if (fitting.isEmpty())
         {
             return;
         }
 
-        int index = this.dataInputAt(target, gx, gy, NODE_W);
+        Spot chosen = under != null && under.exec() != this.wireData ? under : null;
 
-        if (index < 0)
+        if (chosen == null)
         {
-            index = 0;
-
-            for (int i = 0; i < count; i++)
+            for (Spot spot : fitting)
             {
-                if (this.graph.dataInto(target.id, FlowNodeType.input(i)) == null)
+                if (this.wireData ? this.graph.dataInto(target.id, spot.pin()) == null : spot.pin().equals(FlowNodeType.EXEC))
                 {
-                    index = i;
+                    chosen = spot;
 
                     break;
                 }
             }
         }
 
-        this.graph.linkData(this.wireFrom.id, this.wirePin, target.id, FlowNodeType.input(index));
+        if (chosen == null)
+        {
+            chosen = fitting.get(0);
+        }
+
+        if (this.wireData)
+        {
+            this.graph.linkData(this.wireFrom.id, this.wirePin, target.id, chosen.pin());
+        }
+        else
+        {
+            this.graph.link(this.wireFrom.id, this.wirePin, target.id, chosen.pin());
+        }
     }
 
-    /** Picks every card the box touches, on top of the earlier picks when it was drawn with Shift or Ctrl. */
     private void pickInBox(float gx, float gy)
     {
         float x1 = Math.min(this.boxX, gx);
@@ -630,7 +729,7 @@ public class UIFlowGraph extends UIElement
 
         for (FlowNode node : this.graph.nodes)
         {
-            if (node.x <= x2 && node.x + NODE_W >= x1 && node.y <= y2 && node.y + height(node) >= y1)
+            if (node.x <= x2 && node.x + layout(node).width >= x1 && node.y <= y2 && node.y + height(node) >= y1)
             {
                 this.picked.add(node);
                 last = node;
@@ -689,6 +788,70 @@ public class UIFlowGraph extends UIElement
         copy.params.putAll(node.params);
         this.select(copy);
         this.onChange.run();
+    }
+
+    /* Labels */
+
+    /** What a pin is called on its card. */
+    private String pinLabel(FlowNode node, String pin, boolean exec)
+    {
+        FlowNodeType type = node.getType();
+
+        if (exec && pin.startsWith(FlowNodeType.EXEC + ":"))
+        {
+            return L10n.lang("bbs.ui.trigger_box.pin." + pin.substring(FlowNodeType.EXEC.length() + 1)).get();
+        }
+
+        if (type != null && type.growableOutputs() && pin.startsWith(type.growOutputPrefix) && pin.length() > type.growOutputPrefix.length() && Character.isDigit(pin.charAt(type.growOutputPrefix.length())))
+        {
+            int index = (int) FlowValues.parse(pin.substring(type.growOutputPrefix.length()), 0);
+
+            if (node.type.equals("switch_int"))
+            {
+                return "= " + ((int) FlowValues.parse(node.param("start"), 0) + index);
+            }
+
+            if (type.outputParam != null && type.outputParam.equals("case"))
+            {
+                return "= " + node.param("case" + index);
+            }
+
+            String label = L10n.lang("bbs.ui.trigger_box.pin." + type.growOutputPrefix).get() + " " + index;
+
+            return type.outputParam != null ? label + " (" + node.param(type.outputParam + index) + ")" : label;
+        }
+
+        if (!exec && pin.startsWith("in") && pin.length() > 2 && Character.isDigit(pin.charAt(2)) && type != null && type.dataInput(pin) == null)
+        {
+            return String.valueOf((char) ('A' + (int) FlowValues.parse(pin.substring(2), 0)));
+        }
+
+        return L10n.lang("bbs.ui.trigger_box.pin." + pin).get();
+    }
+
+    public String title(FlowNode node)
+    {
+        FlowNodeType type = node.getType();
+
+        if (type == null)
+        {
+            return node.type;
+        }
+
+        if (node.type.equals(FlowNodeTypes.GET_VARIABLE) || node.type.equals(FlowNodeTypes.SET_VARIABLE) || node.type.equals(FlowNodeTypes.ADD_VARIABLE))
+        {
+            FlowVariable variable = this.graph.variableOf(node);
+            String name = variable == null ? L10n.lang("bbs.ui.trigger_box.invalid_variable").get() : variable.name;
+
+            return switch (node.type)
+            {
+                case FlowNodeTypes.SET_VARIABLE -> "SET  " + name;
+                case FlowNodeTypes.ADD_VARIABLE -> "ADD  " + name;
+                default -> name;
+            };
+        }
+
+        return UIFlowSearch.name(type);
     }
 
     /* Drawing */
@@ -759,16 +922,12 @@ public class UIFlowGraph extends UIElement
 
         context.batcher.endBatch();
 
-        /* The wire being pulled, and the selection box, over the cards */
         if (this.wireFrom != null && this.wireFrom.getType() != null)
         {
             FlowLines lines = new FlowLines(context);
-            int accent = this.wireData ? FlowTheme.typeColor(this.graph.outputType(this.wireFrom, this.wirePin)) : FlowTheme.accent();
-            float startY = this.wireData
-                ? dataOutY(this.wireFrom, Math.max(0, indexOfData(this.wireFrom.getType(), this.wirePin)))
-                : outputY(this.wireFrom, Math.max(0, this.wireFrom.getType().outputs.indexOf(this.wirePin)));
+            int color = this.wireData ? FlowTheme.typeColor(this.graph.outputType(this.wireFrom, this.wirePin)) : FlowTheme.accent();
 
-            lines.liveWire(this.wireFrom.x + NODE_W + 4, startY, this.wireX, this.wireY, 2.2F, accent, accent, time);
+            lines.liveWire(this.wireFrom.x + layout(this.wireFrom).width + 4, outY(this.wireFrom, this.wirePin), this.wireX, this.wireY, 2.2F, color, color, time);
             lines.end();
         }
 
@@ -863,54 +1022,54 @@ public class UIFlowGraph extends UIElement
             }
 
             boolean hot = this.picked.contains(a) || this.picked.contains(b);
+            float x1 = a.x + layout(a).width + 4;
+            float y1 = outY(a, link.pin());
+            float x2 = b.x - 4;
+            float y2 = inY(b, link.toPin());
 
             if (!link.isExec())
             {
-                int out = Math.max(0, indexOfData(a.getType(), link.pin()));
-                int in = Math.max(0, (int) mchorse.bbs_mod.triggers.FlowValues.parse(link.toPin().substring(2), 0));
                 int color = FlowTheme.typeColor(this.graph.outputType(a, link.pin()));
 
-                lines.liveWire(a.x + NODE_W + 4, dataOutY(a, out), b.x - 4, dataInY(b, in), hot ? 2F : 1.5F, color, color, time);
-
-                continue;
+                lines.liveWire(x1, y1, x2, y2, hot ? 2F : 1.5F, color, color, time);
             }
-
-            int index = Math.max(0, a.getType().outputs.indexOf(link.pin()));
-
-            lines.liveWire(a.x + NODE_W + 4, outputY(a, index), b.x - 4, inputY(b), hot ? 2.4F : 1.8F, hot ? accent : wire, hot ? accent : a.getType().kind.color, time);
+            else
+            {
+                lines.liveWire(x1, y1, x2, y2, hot ? 2.4F : 1.8F, hot ? accent : wire, hot ? accent : a.getType().kind.color, time);
+            }
         }
 
         lines.end();
     }
 
-    private static int indexOfData(FlowNodeType type, String pin)
-    {
-        for (int i = 0; i < type.dataOutputs.size(); i++)
-        {
-            if (type.dataOutputs.get(i).id().equals(pin))
-            {
-                return i;
-            }
-        }
-
-        return -1;
-    }
-
     private void renderNode(UIContext context, FlowNode node)
     {
-        Batcher2D batcher = context.batcher;
         FlowNodeType type = node.getType();
+        Layout layout = layout(node);
+
+        if (layout.pill)
+        {
+            this.renderPill(context.batcher, node, layout);
+
+            return;
+        }
+
+        Batcher2D batcher = context.batcher;
         int color = type == null ? 0xff555555 : type.kind.color;
         int r = FlowTheme.radius();
         float x = node.x;
         float y = node.y;
-        int h = height(node);
-        float ex = x + NODE_W;
-        float ey = y + h;
+        float ex = x + layout.width;
+        float ey = y + height(node);
         boolean picked = this.picked.contains(node);
         int border = picked ? 2 : 1;
+        boolean invalid = this.invalid(node);
 
-        /* Card: a soft shadow, a rim (the accent when picked), the body, a header in the family colour */
+        if (invalid)
+        {
+            color = 0xffb03030;
+        }
+
         FlowTheme.rounded(batcher, x + 2, y + 3, ex + 2, ey + 3, r, 0x50000000, true, true);
         FlowTheme.rounded(batcher, x - border, y - border, ex + border, ey + border, r + border, picked ? FlowTheme.accent() : FlowTheme.border(), true, true);
         FlowTheme.rounded(batcher, x, y, ex, ey, r, FlowTheme.body(), true, true);
@@ -923,97 +1082,159 @@ public class UIFlowGraph extends UIElement
 
         batcher.box(x, y + HEADER, ex, y + HEADER + 1, 0x40000000);
 
-        String title = type == null ? node.type : UIFlowSearch.name(type);
-
-        batcher.textShadow(title, x + 6, y + 4, Colors.WHITE);
-
         if (type == null)
         {
+            batcher.textShadow(node.type, x + 6, y + 4, Colors.WHITE);
+
             return;
         }
 
-        /* The family as a small pill on the right of the header */
         String kind = UIFlowSearch.kindLabel(type.kind).get().toUpperCase();
         int kw = batcher.getFont().getWidth(kind);
+        String title = batcher.getFont().limitToWidth(this.title(node), (int) layout.width - kw - 22);
 
+        batcher.textShadow(title, x + 6, y + 4, Colors.WHITE);
         FlowTheme.rounded(batcher, ex - kw - 10, y + 3, ex - 3, y + HEADER - 3, 3, 0x40000000, true, true);
         batcher.text(kind, ex - kw - 6, y + 4, 0xd0ffffff);
 
-        /* Execution pins */
-        if (type.hasInput())
+        /* Left column: run inputs, then data inputs with what they read while unwired */
+        for (Spot spot : layout.left)
         {
-            this.renderPin(batcher, x, inputY(node), this.isInputWired(node), color);
+            float py = rowY(node, spot.row());
+
+            if (spot.exec())
+            {
+                this.renderPin(batcher, x, py, this.isWiredInto(node, spot.pin()), color);
+
+                if (!spot.pin().equals(FlowNodeType.EXEC))
+                {
+                    batcher.text(this.pinLabel(node, spot.pin(), true), x + 8, py - 4, FlowTheme.text());
+                }
+
+                continue;
+            }
+
+            boolean wired = this.graph.dataInto(node.id, spot.pin()) != null;
+            String label = this.pinLabel(node, spot.pin(), false);
+
+            if (!wired)
+            {
+                label += ": " + node.param(spot.pin());
+            }
+
+            this.renderDataPin(batcher, x, py, wired, FlowTheme.typeColor(this.graph.inputType(node, spot.pin())));
+            batcher.text(batcher.getFont().limitToWidth(label, (int) layout.width / 2 + 10), x + 8, py - 4, wired ? FlowTheme.text() : FlowTheme.dim());
         }
 
-        for (int i = 0; i < type.outputs.size(); i++)
+        /* Right column: run outputs, then data outputs */
+        for (Spot spot : layout.right)
         {
-            String pin = type.outputs.get(i);
-            float py = outputY(node, i);
+            float py = rowY(node, spot.row());
+            boolean single = layout.right.size() == 1 && spot.pin().equals("then");
 
-            this.renderPin(batcher, ex, py, this.graph.next(node.id, pin) != null, color);
-
-            if (type.outputs.size() > 1 || !pin.equals("then"))
+            if (spot.exec())
             {
-                String label = L10n.lang("bbs.ui.trigger_box.pin." + pin).get();
+                this.renderPin(batcher, ex, py, this.graph.execFrom(node.id, spot.pin()) != null, color);
+            }
+            else
+            {
+                this.renderDataPin(batcher, ex, py, this.isDataOutWired(node, spot.pin()), FlowTheme.typeColor(this.graph.outputType(node, spot.pin())));
+            }
+
+            if (!single)
+            {
+                String label = batcher.getFont().limitToWidth(this.pinLabel(node, spot.pin(), spot.exec()), (int) layout.width / 2);
 
                 batcher.text(label, ex - 9 - batcher.getFont().getWidth(label), py - 4, FlowTheme.text());
             }
         }
 
-        /* Data pins: inputs take on the type of what is wired in, outputs have theirs */
-        for (int i = 0; i < node.inputCount(); i++)
+        if (layout.grow)
         {
-            float py = dataInY(node, i);
-            String pin = FlowNodeType.input(i);
-            boolean wired = this.graph.dataInto(node.id, pin) != null;
-            int pinColor = FlowTheme.typeColor(this.graph.inputType(node, i));
+            float gy = rowY(node, layout.rows);
 
-            this.renderDataPin(batcher, x, py, wired, pinColor);
+            if (type.growable())
+            {
+                this.renderGrowButton(batcher, x + 6, gy, "+", true);
+                this.renderGrowButton(batcher, x + 20, gy, "-", node.inputCount() > type.minInputs);
+            }
 
-            String letter = String.valueOf((char) ('A' + i));
-            String label = wired ? letter : letter + ": " + node.param(pin);
-
-            batcher.text(batcher.getFont().limitToWidth(label, NODE_W / 2 - 4), x + 8, py - 4, wired ? FlowTheme.text() : FlowTheme.dim());
+            if (type.growableOutputs())
+            {
+                this.renderGrowButton(batcher, ex - 32, gy, "+", true);
+                this.renderGrowButton(batcher, ex - 18, gy, "-", node.outputCount() > type.minOutputs);
+            }
         }
 
-        for (int i = 0; i < type.dataOutputs.size(); i++)
+        /* Settings, read only on the card: they are edited in Details */
+        float py = y + HEADER + 4 + (layout.rows + (layout.grow ? 1 : 0)) * ROW;
+
+        if (layout.settings > 0)
         {
-            FlowNodeType.DataPin data = type.dataOutputs.get(i);
-            float py = dataOutY(node, i);
-            String label = L10n.lang("bbs.ui.trigger_box.pin." + data.id()).get();
-
-            this.renderDataPin(batcher, ex, py, this.isDataOutWired(node, data.id()), FlowTheme.typeColor(this.graph.outputType(node, data.id())));
-            batcher.text(label, ex - 9 - batcher.getFont().getWidth(label), py - 4, FlowTheme.text());
-        }
-
-        if (growable(node))
-        {
-            float gy = growY(node);
-
-            this.renderGrowButton(batcher, x + 6, gy, "+", true);
-            this.renderGrowButton(batcher, x + 20, gy, "-", node.inputCount() > type.minInputs);
-            batcher.text(L10n.lang("bbs.ui.trigger_box.add_input").get(), x + 36, gy - 4, FlowTheme.dim());
-        }
-
-        /* The node's fields, read only on the card: they are edited in Details */
-        float py = y + HEADER + 4 + (execRows(node) + dataRows(node) + (growable(node) ? 1 : 0)) * ROW;
-
-        if (!type.params.isEmpty())
-        {
-            FlowTheme.rounded(batcher, x + 4, py, ex - 4, py + type.params.size() * ROW + 2, Math.min(3, r), (FlowTheme.field() & 0xffffff) | 0xa0000000, true, true);
+            FlowTheme.rounded(batcher, x + 4, py, ex - 4, py + layout.settings * ROW + 2, Math.min(3, r), (FlowTheme.field() & 0xffffff) | 0xa0000000, true, true);
         }
 
         for (FlowNodeType.Param param : type.params)
         {
+            if (param.id().equals("variable"))
+            {
+                continue;
+            }
+
             String label = L10n.lang("bbs.ui.trigger_box.param." + param.id()).get() + ": ";
             String value = node.param(param.id());
             int labelW = batcher.getFont().getWidth(label);
-            String shown = batcher.getFont().limitToWidth(value.isEmpty() ? "-" : value, NODE_W - 16 - labelW);
 
             batcher.text(label, x + 8, py + 2, FlowTheme.dim());
-            batcher.text(shown, x + 8 + labelW, py + 2, FlowTheme.text());
+            batcher.text(batcher.getFont().limitToWidth(value.isEmpty() ? "-" : value, (int) layout.width - 16 - labelW), x + 8 + labelW, py + 2, FlowTheme.text());
             py += ROW;
         }
+    }
+
+    /** A variable read: a small pill, its variable's colour dot and name, a data pin of its type. */
+    private void renderPill(Batcher2D batcher, FlowNode node, Layout layout)
+    {
+        float x = node.x;
+        float y = node.y;
+        float ex = x + layout.width;
+        float ey = y + 18;
+        boolean picked = this.picked.contains(node);
+        boolean invalid = this.invalid(node);
+        FlowVariable variable = this.graph.variableOf(node);
+        int typeColor = invalid ? 0xffb03030 : FlowTheme.typeColor(variable.type);
+
+        FlowTheme.rounded(batcher, x + 2, y + 3, ex + 2, ey + 3, 9, 0x50000000, true, true);
+        FlowTheme.rounded(batcher, x - 1, y - 1, ex + 1, ey + 1, 10, picked ? FlowTheme.accent() : (typeColor & 0xffffff) | 0xc0000000, true, true);
+        FlowTheme.rounded(batcher, x, y, ex, ey, 9, FlowTheme.body(), true, true);
+
+        if (FlowTheme.gloss())
+        {
+            FlowTheme.rounded(batcher, x + 3, y + 1, ex - 3, y + 8, 6, 0x22ffffff, true, false);
+        }
+
+        FlowTheme.rounded(batcher, x + 6, y + 5, x + 14, y + 13, 4, typeColor, true, true);
+        batcher.text(batcher.getFont().limitToWidth(this.title(node), (int) layout.width - 34), x + 18, y + 5, invalid ? 0xffff7070 : FlowTheme.text());
+        this.renderDataPin(batcher, ex, y + 9, this.isDataOutWired(node, "value"), typeColor);
+    }
+
+    private boolean invalid(FlowNode node)
+    {
+        FlowNodeType type = node.getType();
+
+        return type != null && type.params.stream().anyMatch((p) -> p.id().equals("variable")) && this.graph.variableOf(node) == null;
+    }
+
+    private boolean isWiredInto(FlowNode node, String pin)
+    {
+        for (FlowLink link : this.graph.links)
+        {
+            if (link.to() == node.id && link.toPin().equals(pin))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private boolean isDataOutWired(FlowNode node, String pin)
@@ -1029,7 +1250,6 @@ public class UIFlowGraph extends UIElement
         return false;
     }
 
-    /** A data pin: a round socket in the colour of its type, filled when wired. */
     private void renderDataPin(Batcher2D batcher, float cx, float cy, boolean wired, int color)
     {
         FlowTheme.rounded(batcher, cx - 4, cy - 4, cx + 4, cy + 4, 4, color, true, true);
@@ -1046,20 +1266,7 @@ public class UIFlowGraph extends UIElement
         batcher.text(sign, x + 6 - batcher.getFont().getWidth(sign) / 2F, cy - 4, enabled ? Colors.WHITE : FlowTheme.dim());
     }
 
-    private boolean isInputWired(FlowNode node)
-    {
-        for (FlowLink link : this.graph.links)
-        {
-            if (link.isExec() && link.to() == node.id)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /** A pin: a round socket with an arrow head pointing the way the flow goes, lit when wired. */
+    /** A run pin: a round socket with an arrow head pointing the way the flow goes, lit when wired. */
     private void renderPin(Batcher2D batcher, float cx, float cy, boolean wired, int color)
     {
         int rim = FlowTheme.border();

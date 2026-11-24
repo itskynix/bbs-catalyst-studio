@@ -2,10 +2,16 @@ package mchorse.bbs_mod.triggers;
 
 import mchorse.bbs_mod.data.types.MapType;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
-/** One card of the flow: its type, where it sits on the board, and its fields. */
+/**
+ * One card of the flow: its type, where it sits on the board, and its values. {@link #params} holds
+ * the node's settings and, under each data input's name, the value that input reads while nothing
+ * is wired in; "inputs" and "outputs" hold how many growable pins it has.
+ */
 public class FlowNode
 {
     public int id;
@@ -30,37 +36,20 @@ public class FlowNode
                 this.params.put(param.id(), param.fallback());
             }
 
-            if (kind.minInputs > 0)
+            for (FlowNodeType.DataPin pin : kind.dataInputs)
+            {
+                this.params.put(pin.id(), pin.fallback());
+            }
+
+            if (kind.growable())
             {
                 this.setInputCount(kind.minInputs);
             }
-        }
-    }
 
-    /** How many data inputs the node has: at least its type's minimum, more once its + button was used. */
-    public int inputCount()
-    {
-        FlowNodeType type = this.getType();
-
-        if (type == null || type.minInputs <= 0)
-        {
-            return 0;
-        }
-
-        return Math.max(type.minInputs, (int) FlowValues.parse(this.params.get("inputs"), type.minInputs));
-    }
-
-    /** Sets the number of data inputs; a new input starts with a typed-in value standing in for a wire. */
-    public void setInputCount(int count)
-    {
-        FlowNodeType type = this.getType();
-        String fallback = type != null && type.inputType.equals("boolean") ? "true" : "0";
-
-        this.params.put("inputs", String.valueOf(count));
-
-        for (int i = 0; i < count; i++)
-        {
-            this.params.putIfAbsent(FlowNodeType.input(i), fallback);
+            if (kind.growableOutputs())
+            {
+                this.setOutputCount(kind.minOutputs);
+            }
         }
     }
 
@@ -72,6 +61,126 @@ public class FlowNode
     public String param(String id)
     {
         return this.params.getOrDefault(id, "");
+    }
+
+    /* Growable inputs */
+
+    public int inputCount()
+    {
+        FlowNodeType type = this.getType();
+
+        if (type == null || !type.growable())
+        {
+            return 0;
+        }
+
+        return Math.max(type.minInputs, (int) FlowValues.parse(this.params.get("inputs"), type.minInputs));
+    }
+
+    public void setInputCount(int count)
+    {
+        FlowNodeType type = this.getType();
+
+        this.params.put("inputs", String.valueOf(count));
+
+        for (int i = 0; i < count; i++)
+        {
+            this.params.putIfAbsent(FlowNodeType.input(i), type == null ? "0" : type.growInputFallback);
+        }
+    }
+
+    /* Growable outputs */
+
+    public int outputCount()
+    {
+        FlowNodeType type = this.getType();
+
+        if (type == null || !type.growableOutputs())
+        {
+            return 0;
+        }
+
+        return Math.max(type.minOutputs, (int) FlowValues.parse(this.params.get("outputs"), type.minOutputs));
+    }
+
+    public void setOutputCount(int count)
+    {
+        FlowNodeType type = this.getType();
+
+        this.params.put("outputs", String.valueOf(count));
+
+        if (type != null && type.outputParam != null)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                this.params.putIfAbsent(type.outputParam + i, type.outputParamFallback.isEmpty() ? String.valueOf(i) : type.outputParamFallback);
+            }
+        }
+    }
+
+    /* Pins as the card shows them */
+
+    /** Every execution output: the fixed ones, then the grown ones. */
+    public List<String> execOutputs()
+    {
+        FlowNodeType type = this.getType();
+        List<String> outputs = new ArrayList<>();
+
+        if (type == null)
+        {
+            return outputs;
+        }
+
+        if (type.growableOutputs())
+        {
+            for (int i = 0; i < this.outputCount(); i++)
+            {
+                outputs.add(type.growOutputPrefix + i);
+            }
+        }
+
+        outputs.addAll(type.execOutputs);
+
+        return outputs;
+    }
+
+    /** Every data input by name: the fixed ones, then the grown in0, in1... */
+    public List<String> dataInputs()
+    {
+        FlowNodeType type = this.getType();
+        List<String> inputs = new ArrayList<>();
+
+        if (type == null)
+        {
+            return inputs;
+        }
+
+        for (FlowNodeType.DataPin pin : type.dataInputs)
+        {
+            inputs.add(pin.id());
+        }
+
+        for (int i = 0; i < this.inputCount(); i++)
+        {
+            inputs.add(FlowNodeType.input(i));
+        }
+
+        return inputs;
+    }
+
+    /** What a data input expects, before anything is wired into it. */
+    public String declaredInputType(String pin)
+    {
+        FlowNodeType type = this.getType();
+
+        if (type == null)
+        {
+            return "any";
+        }
+
+        FlowNodeType.DataPin data = type.dataInput(pin);
+
+        return data != null ? data.type() : type.growInputType;
     }
 
     public MapType toData()

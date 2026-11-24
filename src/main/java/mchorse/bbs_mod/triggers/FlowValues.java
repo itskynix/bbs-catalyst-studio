@@ -108,4 +108,63 @@ public class FlowValues
 
         return true;
     }
+
+    /** A Boolean operator over its inputs: and, or, nand, nor, xor (an odd number true), xnor. */
+    public static boolean logic(String operator, java.util.List<String> values)
+    {
+        int count = 0;
+
+        for (String value : values)
+        {
+            count += truthy(value) ? 1 : 0;
+        }
+
+        return switch (operator)
+        {
+            case "or" -> count > 0;
+            case "nand" -> count < values.size();
+            case "nor" -> count == 0;
+            case "xor" -> count % 2 == 1;
+            case "xnor" -> count % 2 == 0;
+            default -> count == values.size();
+        };
+    }
+
+    /** Three numbers out of "x y z" (or "x, y, z"); a missing one is 0. */
+    public static double[] vec(String value)
+    {
+        String[] split = value == null ? new String[0] : value.trim().split("[ ,]+");
+        double[] xyz = new double[3];
+
+        for (int i = 0; i < 3 && i < split.length; i++)
+        {
+            xyz[i] = parse(split[i], 0);
+        }
+
+        return xyz;
+    }
+
+    /** A list out of text: comma separated, each item trimmed, empty text an empty list. */
+    public static java.util.List<String> list(String value)
+    {
+        java.util.List<String> list = new java.util.ArrayList<>();
+
+        if (value == null || value.isBlank())
+        {
+            return list;
+        }
+
+        for (String item : value.split(","))
+        {
+            list.add(item.trim());
+        }
+
+        return list;
+    }
+
+    /** Whole numbers without a trailing ".0", so a counter reads 3, not 3.0. */
+    public static String format(double value)
+    {
+        return value == Math.rint(value) && Math.abs(value) < 1E15 ? String.valueOf((long) value) : String.valueOf(value);
+    }
 }

@@ -10,6 +10,7 @@ import mchorse.bbs_mod.triggers.FlowJavaGenerator;
 import mchorse.bbs_mod.triggers.FlowNode;
 import mchorse.bbs_mod.triggers.FlowNodeType;
 import mchorse.bbs_mod.triggers.FlowNodeTypes;
+import mchorse.bbs_mod.triggers.FlowValues;
 import mchorse.bbs_mod.triggers.FlowVariable;
 import mchorse.bbs_mod.ui.framework.UIBaseMenu;
 import mchorse.bbs_mod.ui.framework.UIRenderingContext;
@@ -70,6 +71,9 @@ public class UITriggerBoxMenu extends UIBaseMenu
 
     private final List<Runnable> boxSync = new ArrayList<>();
     private boolean codeDirty = true;
+
+    /** The variable being dragged out of the left panel, or null. */
+    private FlowVariable dragging;
     private int viewportSync;
 
     private static IKey key(String id)
@@ -148,6 +152,33 @@ public class UITriggerBoxMenu extends UIBaseMenu
         this.main.add(this.uiOrbit);
         this.main.add(this.left, center, this.details, this.tabs, this.mode, save, close);
 
+        /* Over everything: the variable being dragged, as a pill under the cursor */
+        UIElement ghost = new UIElement()
+        {
+            @Override
+            public void render(mchorse.bbs_mod.ui.framework.UIContext context)
+            {
+                FlowVariable variable = UITriggerBoxMenu.this.dragging;
+
+                if (variable != null)
+                {
+                    String label = variable.name + "   " + key("drag_hint").get();
+                    int w = context.batcher.getFont().getWidth(label) + 22;
+                    int x = context.mouseX + 10;
+                    int y = context.mouseY + 6;
+
+                    FlowTheme.rounded(context.batcher, x, y, x + w, y + 16, 8, FlowTheme.body(), true, true);
+                    FlowTheme.rounded(context.batcher, x + 5, y + 4, x + 13, y + 12, 4, typeColor(variable.type), true, true);
+                    context.batcher.text(label, x + 17, y + 4, FlowTheme.text());
+                }
+
+                super.render(context);
+            }
+        };
+
+        ghost.full(this.viewport);
+        this.main.add(ghost);
+
         this.tabs.setValue(lastTab);
         this.mode.setValue(lastMode);
 
@@ -157,6 +188,28 @@ public class UITriggerBoxMenu extends UIBaseMenu
         this.applyVisibility();
         this.fillLeft();
         this.fillDetails(this.board.selected);
+    }
+
+    @Override
+    public boolean mouseReleased(int mouseX, int mouseY, int mouseButton)
+    {
+        FlowVariable variable = this.dragging;
+
+        if (variable != null)
+        {
+            this.dragging = null;
+
+            /* Dropped on the Flow board: Ctrl a Get, Alt a Set, on a data input a Get wired in, else a small menu */
+            if (this.board.isVisible() && this.board.area.isInside(mouseX, mouseY))
+            {
+                this.context.setMouse(mouseX, mouseY);
+                this.board.dropVariable(variable, mouseX, mouseY, Window.isCtrlPressed(), Window.isAltPressed());
+            }
+
+            return true;
+        }
+
+        return super.mouseReleased(mouseX, mouseY, mouseButton);
     }
 
     public TriggerBoxBlockEntity getBox()
@@ -466,7 +519,6 @@ public class UITriggerBoxMenu extends UIBaseMenu
     {
         UITextbox name = new UITextbox(64, (text) ->
         {
-            String old = variable.name;
             String fresh = text.trim();
 
             if (fresh.isEmpty() || (this.graph.getVariable(fresh) != null && this.graph.getVariable(fresh) != variable))
@@ -474,17 +526,8 @@ public class UITriggerBoxMenu extends UIBaseMenu
                 return;
             }
 
+            /* Nodes hold the variable's id, so the new name shows on every one of them at once */
             variable.name = fresh;
-
-            /* The nodes that read or write it follow the new name */
-            for (FlowNode node : this.graph.nodes)
-            {
-                if (old.equals(node.params.get("variable")))
-                {
-                    node.params.put("variable", fresh);
-                }
-            }
-
             this.codeDirty = true;
         });
 
@@ -511,9 +554,34 @@ public class UITriggerBoxMenu extends UIBaseMenu
         type.color(typeColor(variable.type));
         type.tooltip(key("variable_type"));
 
+        /* Where its value lives: this box, the whole world, or each entity */
+        UIButton scope = new UIButton(key("scope." + variable.scope), (b) -> this.context.replaceContextMenu((menu) ->
+        {
+            for (String sc : FlowVariable.SCOPES)
+            {
+                menu.action(Icons.GLOBE, key("scope." + sc), () ->
+                {
+                    variable.scope = sc;
+                    this.codeDirty = true;
+                    this.fillLeft();
+                });
+            }
+        }));
+
+        scope.tooltip(key("scope_tooltip"));
+
         UIIcon remove = new UIIcon(Icons.REMOVE, (b) ->
         {
+            int used = this.graph.usages(variable);
+
             this.graph.variables.remove(variable);
+
+            /* Its nodes keep the id and show as pointing at an invalid variable, never at another one */
+            if (used > 0)
+            {
+                this.context.notifyError(key("variable_in_use").format(variable.name, used));
+            }
+
             this.codeDirty = true;
             this.fillLeft();
             this.refreshDetails();
@@ -521,7 +589,45 @@ public class UITriggerBoxMenu extends UIBaseMenu
 
         remove.tooltip(key("remove_variable"));
 
-        UIElement column = UI.column(2, UI.row(2, name, type), this.pair(this.valueField(variable), remove));
+        /* The grip: drag it onto the board for a Get or a Set */
+        UIElement grip = new UIElement()
+        {
+            @Override
+            protected boolean subMouseClicked(mchorse.bbs_mod.ui.framework.UIContext context)
+            {
+                if (this.area.isInside(context) && context.mouseButton == 0)
+                {
+                    UITriggerBoxMenu.this.dragging = variable;
+
+                    return true;
+                }
+
+                return false;
+            }
+
+            @Override
+            public void render(mchorse.bbs_mod.ui.framework.UIContext context)
+            {
+                int color = typeColor(variable.type);
+
+                FlowTheme.rounded(context.batcher, this.area.x + 2, this.area.y + 4, this.area.ex() - 2, this.area.ey() - 4, 3, (color & 0xffffff) | (this.area.isInside(context) ? 0xff000000 : 0xa0000000), true, true);
+                context.batcher.icon(Icons.ALL_DIRECTIONS, Colors.WHITE, this.area.mx(), this.area.my(), 0.5F, 0.5F);
+
+                super.render(context);
+            }
+        };
+
+        grip.tooltip(key("drag_variable"));
+
+        UIElement top = new UIElement();
+
+        top.h(20);
+        grip.relative(top).w(16).h(20);
+        name.relative(top).x(18).w(0.55F, -18).h(20);
+        type.relative(top).x(0.55F, 2).w(0.45F, -2).h(20);
+        top.add(grip, name, type);
+
+        UIElement column = UI.column(2, top, this.pair(this.valueField(variable), remove), scope);
 
         column.marginTop(4);
 
@@ -687,67 +793,124 @@ public class UITriggerBoxMenu extends UIBaseMenu
         );
     }
 
+    private static final java.util.Set<String> SWITCH_PARAMS = java.util.Set.of("start_closed", "start_open", "random", "loop", "clamp", "camera");
+
     private void fillNodeDetails(FlowNode node)
     {
         FlowNodeType type = node.getType();
 
         this.details.add(this.header(key("details")));
-        this.details.add(UI.label(IKey.constant(UIFlowSearch.name(type) + "  #" + node.id)).color(type.kind.color));
+        this.details.add(UI.label(IKey.constant(this.board.title(node) + "  #" + node.id)).color(type.kind.color));
         this.details.add(new mchorse.bbs_mod.ui.framework.elements.utils.UIText(key("node_desc." + type.id)).color(FlowTheme.dim(), false));
 
-        /* Data inputs: a wired one says so, a free one takes a typed-in value; + and - change how many */
-        if (node.inputCount() > 0)
+        /* The variable a Get, Set or Add points at, picked from a drop down list by its id */
+        if (type.params.stream().anyMatch((p) -> p.id().equals("variable")))
+        {
+            this.details.add(UI.label(key("param.variable")));
+            this.details.add(this.variablePicker(node));
+        }
+
+        /* Data inputs: a wired one says so, a free one takes a typed-in value */
+        List<String> inputs = node.dataInputs();
+
+        if (!inputs.isEmpty())
         {
             this.details.add(this.header(key("inputs")));
 
-            for (int i = 0; i < node.inputCount(); i++)
+            for (String pin : inputs)
             {
-                String pin = FlowNodeType.input(i);
-                String letter = String.valueOf((char) ('A' + i));
-                UILabel label = UI.label(IKey.constant(letter)).color(FlowTheme.typeColor(this.graph.inputType(node, i)));
+                this.details.add(this.inputField(node, pin));
+            }
 
-                if (this.graph.dataInto(node.id, pin) != null)
+            if (type.growable())
+            {
+                UIButton more = new UIButton(key("add_input"), (b) ->
                 {
-                    this.details.add(this.pair(UI.label(key("input_wired")).color(FlowTheme.dim()), label));
-                }
-                else
+                    this.graph.setInputCount(node, node.inputCount() + 1);
+                    this.onGraphChanged();
+                });
+                UIButton fewer = new UIButton(key("remove_input"), (b) ->
                 {
-                    UITextbox literal = new UITextbox(256, (text) ->
+                    this.graph.setInputCount(node, node.inputCount() - 1);
+                    this.onGraphChanged();
+                });
+
+                fewer.setEnabled(node.inputCount() > type.minInputs);
+                this.details.add(UI.row(2, more, fewer));
+            }
+        }
+
+        /* Growable outputs, each with its own weight or case value when it has one */
+        if (type.growableOutputs())
+        {
+            this.details.add(this.header(key("outputs")));
+
+            if (type.outputParam != null)
+            {
+                for (int i = 0; i < node.outputCount(); i++)
+                {
+                    String id = type.outputParam + i;
+                    UITextbox field = new UITextbox(256, (text) ->
                     {
-                        node.params.put(pin, text);
+                        node.params.put(id, text);
                         this.codeDirty = true;
                     });
 
-                    literal.setText(node.param(pin));
-                    literal.tooltip(key("input_value"));
-                    this.details.add(this.pair(literal, label));
+                    field.setText(node.param(id));
+                    field.tooltip(key("param." + type.outputParam));
+                    this.details.add(this.pair(field, UI.label(IKey.constant(String.valueOf(i))).color(FlowTheme.dim())));
                 }
             }
 
-            UIButton more = new UIButton(key("add_input"), (b) ->
+            UIButton more = new UIButton(key("add_output"), (b) ->
             {
-                this.graph.setInputCount(node, node.inputCount() + 1);
+                this.graph.setOutputCount(node, node.outputCount() + 1);
                 this.onGraphChanged();
             });
-            UIButton fewer = new UIButton(key("remove_input"), (b) ->
+            UIButton fewer = new UIButton(key("remove_output"), (b) ->
             {
-                this.graph.setInputCount(node, node.inputCount() - 1);
+                this.graph.setOutputCount(node, node.outputCount() - 1);
                 this.onGraphChanged();
             });
 
-            fewer.setEnabled(node.inputCount() > type.minInputs);
+            fewer.setEnabled(node.outputCount() > type.minOutputs);
             this.details.add(UI.row(2, more, fewer));
         }
 
+        /* Settings */
+        boolean settings = false;
+
         for (FlowNodeType.Param param : type.params)
         {
-            this.details.add(UI.label(key("param." + param.id())));
-            this.details.add(this.paramField(node, param));
+            if (param.id().equals("variable"))
+            {
+                continue;
+            }
+
+            if (!settings)
+            {
+                this.details.add(this.header(key("settings")));
+                settings = true;
+            }
+
+            if (SWITCH_PARAMS.contains(param.id()))
+            {
+                this.details.add(new UIToggle(key("param." + param.id()), FlowValues.truthy(node.param(param.id())), (b) ->
+                {
+                    node.params.put(param.id(), String.valueOf(b.getValue()));
+                    this.codeDirty = true;
+                }));
+            }
+            else
+            {
+                this.details.add(UI.label(key("param." + param.id())));
+                this.details.add(this.paramField(node, param));
+            }
         }
 
-        if (type.params.stream().anyMatch((p) -> p.id().equals("command") || p.id().equals("text") || p.id().equals("message") || p.id().equals("value")))
+        if (inputs.stream().anyMatch((p) -> node.declaredInputType(p).equals("string")) || type.params.stream().anyMatch((p) -> p.id().equals("command")))
         {
-            this.details.add(UI.label(key("placeholders")).color(0xff7d8794));
+            this.details.add(new mchorse.bbs_mod.ui.framework.elements.utils.UIText(key("placeholders")).color(FlowTheme.dim(), false));
         }
 
         UIButton remove = new UIButton(key("delete_node"), (b) ->
@@ -762,52 +925,80 @@ public class UITriggerBoxMenu extends UIBaseMenu
         this.details.add(remove);
     }
 
-    private UIElement paramField(FlowNode node, FlowNodeType.Param param)
+    /** A data input's row: its name in the colour of its type, then "wired" or the value it reads. */
+    private UIElement inputField(FlowNode node, String pin)
     {
-        String id = param.id();
+        String declared = node.declaredInputType(pin);
+        boolean grown = node.getType().dataInput(pin) == null;
+        String name = grown ? String.valueOf((char) ('A' + (int) FlowValues.parse(pin.substring(2), 0))) : key("pin." + pin).get();
+        UILabel label = UI.label(IKey.constant(name)).color(FlowTheme.typeColor(this.graph.inputType(node, pin)));
+        UIElement field;
 
-        if (id.equals("variable"))
+        if (this.graph.dataInto(node.id, pin) != null)
         {
-            List<String> names = new ArrayList<>();
-
-            for (FlowVariable variable : this.graph.variables)
+            field = UI.label(key("input_wired")).color(FlowTheme.dim());
+        }
+        else if (declared.equals("boolean"))
+        {
+            field = new UIToggle(key("value_true"), FlowValues.truthy(node.param(pin)), (b) ->
             {
-                names.add(variable.name);
-            }
-
-            if (names.isEmpty())
+                node.params.put(pin, String.valueOf(b.getValue()));
+                this.codeDirty = true;
+            });
+        }
+        else
+        {
+            UITextbox textbox = new UITextbox(1000, (text) ->
             {
-                return UI.label(key("no_variables")).color(0xffff7070);
-            }
-
-            String current = node.param(id);
-
-            if (!current.isEmpty() && !names.contains(current))
-            {
-                names.add(current);
-            }
-
-            UICirculate circulate = new UICirculate((b) ->
-            {
-                node.params.put(id, names.get(b.getValue()));
+                node.params.put(pin, text);
                 this.codeDirty = true;
             });
 
-            for (String name : names)
-            {
-                circulate.addLabel(IKey.constant(name));
-            }
-
-            if (current.isEmpty())
-            {
-                node.params.put(id, names.get(0));
-                this.codeDirty = true;
-            }
-
-            circulate.setValue(Math.max(0, names.indexOf(node.param(id))));
-
-            return circulate;
+            textbox.setText(node.param(pin));
+            textbox.tooltip(key("input_value"));
+            field = textbox;
         }
+
+        UIElement row = new UIElement();
+
+        row.h(20);
+        label.relative(row).w(50).h(20);
+        label.labelAnchor(0F, 0.5F);
+        field.relative(row).x(52).w(1F, -52).h(20);
+        row.add(label, field);
+
+        return row;
+    }
+
+    /** The variable of a Get, Set or Add: a button that lists the flow's variables, by id. */
+    private UIElement variablePicker(FlowNode node)
+    {
+        if (this.graph.variables.isEmpty())
+        {
+            return UI.label(key("no_variables")).color(0xffff7070);
+        }
+
+        FlowVariable current = this.graph.variableOf(node);
+        UIButton button = new UIButton(current == null ? key("invalid_variable") : IKey.constant(current.name), (b) -> this.context.replaceContextMenu((menu) ->
+        {
+            for (FlowVariable variable : this.graph.variables)
+            {
+                menu.action(Icons.CONVERT, IKey.constant(variable.name + "  " + key("type." + variable.type).get()), typeColor(variable.type), () ->
+                {
+                    node.params.put("variable", variable.id);
+                    this.onGraphChanged();
+                });
+            }
+        }));
+
+        button.color(current == null ? Colors.NEGATIVE : typeColor(current.type));
+
+        return button;
+    }
+
+    private UIElement paramField(FlowNode node, FlowNodeType.Param param)
+    {
+        String id = param.id();
 
         if (id.equals("operator"))
         {
@@ -827,7 +1018,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
             return circulate;
         }
 
-        if (id.equals("ticks") || id.equals("interval"))
+        if (id.equals("interval") || id.equals("max_iterations") || id.equals("start"))
         {
             UITrackpad trackpad = new UITrackpad((v) ->
             {
@@ -835,8 +1026,8 @@ public class UITriggerBoxMenu extends UIBaseMenu
                 this.codeDirty = true;
             });
 
-            trackpad.limit(id.equals("interval") ? 1 : 0, 72000, true);
-            trackpad.setValue(mchorse.bbs_mod.triggers.FlowValues.parse(node.param(id), 20));
+            trackpad.limit(id.equals("start") ? -100000 : 1, id.equals("max_iterations") ? mchorse.bbs_mod.triggers.FlowRuntime.MAX_LOOP : 72000, true);
+            trackpad.setValue(FlowValues.parse(node.param(id), 0));
 
             return trackpad;
         }
