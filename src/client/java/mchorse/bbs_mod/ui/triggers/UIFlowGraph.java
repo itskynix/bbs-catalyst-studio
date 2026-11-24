@@ -150,7 +150,7 @@ public class UIFlowGraph extends UIElement
 
     /* Layout */
 
-    public static Layout layout(FlowNode node)
+    public Layout layout(FlowNode node)
     {
         Layout layout = new Layout();
         FlowNodeType type = node.getType();
@@ -167,6 +167,16 @@ public class UIFlowGraph extends UIElement
             layout.pill = true;
             layout.width = PILL_W;
             layout.right.add(new Spot("value", false, 0));
+
+            return layout;
+        }
+
+        if ((node.type.equals(FlowNodeTypes.SET_VARIABLE) || node.type.equals(FlowNodeTypes.ADD_VARIABLE)) && this.graph != null && this.graph.variableOf(node) == null)
+        {
+            layout.pill = true;
+            layout.width = PILL_W + 24;
+            layout.left.add(new Spot(FlowNodeType.EXEC, true, 0));
+            layout.right.add(new Spot("then", true, 0));
 
             return layout;
         }
@@ -195,7 +205,7 @@ public class UIFlowGraph extends UIElement
         return layout;
     }
 
-    public static int height(FlowNode node)
+    public int height(FlowNode node)
     {
         Layout layout = layout(node);
 
@@ -207,7 +217,7 @@ public class UIFlowGraph extends UIElement
         return HEADER + 4 + (layout.rows + (layout.grow ? 1 : 0) + layout.settings) * ROW + (layout.settings > 0 ? 6 : 4);
     }
 
-    private static float rowY(FlowNode node, int row)
+    private float rowY(FlowNode node, int row)
     {
         if (layout(node).pill)
         {
@@ -230,14 +240,14 @@ public class UIFlowGraph extends UIElement
         return null;
     }
 
-    private static float outY(FlowNode node, String pin)
+    private float outY(FlowNode node, String pin)
     {
         Spot spot = spot(layout(node).right, pin);
 
         return rowY(node, spot == null ? 0 : spot.row());
     }
 
-    private static float inY(FlowNode node, String pin)
+    private float inY(FlowNode node, String pin)
     {
         Spot spot = spot(layout(node).left, pin);
 
@@ -770,7 +780,50 @@ public class UIFlowGraph extends UIElement
         return false;
     }
 
-    private void deletePicked()
+    /** Copies the picked cards, with the wires that run between two of them, a little down and right; the copies are picked. */
+    public void duplicatePicked()
+    {
+        if (this.picked.isEmpty())
+        {
+            return;
+        }
+
+        Map<Integer, FlowNode> copies = new HashMap<>();
+
+        for (FlowNode node : this.picked)
+        {
+            FlowNode copy = this.graph.add(node.type, node.x + 30, node.y + 30);
+
+            copy.params.clear();
+            copy.params.putAll(node.params);
+            copies.put(node.id, copy);
+        }
+
+        for (FlowLink link : new ArrayList<>(this.graph.links))
+        {
+            FlowNode from = copies.get(link.from());
+            FlowNode to = copies.get(link.to());
+
+            if (from != null && to != null)
+            {
+                this.graph.links.add(new FlowLink(from.id, link.pin(), to.id, link.toPin()));
+            }
+        }
+
+        this.picked.clear();
+        this.picked.addAll(copies.values());
+        this.setPrimary(copies.values().iterator().next());
+        this.onChange.run();
+    }
+
+    public void selectAll()
+    {
+        this.picked.clear();
+        this.picked.addAll(this.graph.nodes);
+        this.setPrimary(this.graph.nodes.isEmpty() ? null : this.graph.nodes.get(this.graph.nodes.size() - 1));
+    }
+
+    public void deletePicked()
     {
         for (FlowNode node : new ArrayList<>(this.picked))
         {
@@ -783,11 +836,12 @@ public class UIFlowGraph extends UIElement
 
     private void duplicate(FlowNode node)
     {
-        FlowNode copy = this.graph.add(node.type, node.x + 20, node.y + 20);
+        if (!this.picked.contains(node))
+        {
+            this.select(node);
+        }
 
-        copy.params.putAll(node.params);
-        this.select(copy);
-        this.onChange.run();
+        this.duplicatePicked();
     }
 
     /* Labels */
@@ -845,8 +899,8 @@ public class UIFlowGraph extends UIElement
 
             return switch (node.type)
             {
-                case FlowNodeTypes.SET_VARIABLE -> "SET  " + name;
-                case FlowNodeTypes.ADD_VARIABLE -> "ADD  " + name;
+                case FlowNodeTypes.SET_VARIABLE -> L10n.lang("bbs.ui.trigger_box.set_title").get() + "  " + name;
+                case FlowNodeTypes.ADD_VARIABLE -> L10n.lang("bbs.ui.trigger_box.add_title").get() + "  " + name;
                 default -> name;
             };
         }
@@ -1201,7 +1255,7 @@ public class UIFlowGraph extends UIElement
         boolean picked = this.picked.contains(node);
         boolean invalid = this.invalid(node);
         FlowVariable variable = this.graph.variableOf(node);
-        int typeColor = invalid ? 0xffb03030 : FlowTheme.typeColor(variable.type);
+        int typeColor = invalid || variable == null ? 0xffb03030 : FlowTheme.typeColor(variable.type);
 
         FlowTheme.rounded(batcher, x + 2, y + 3, ex + 2, ey + 3, 9, 0x50000000, true, true);
         FlowTheme.rounded(batcher, x - 1, y - 1, ex + 1, ey + 1, 10, picked ? FlowTheme.accent() : (typeColor & 0xffffff) | 0xc0000000, true, true);
@@ -1212,9 +1266,27 @@ public class UIFlowGraph extends UIElement
             FlowTheme.rounded(batcher, x + 3, y + 1, ex - 3, y + 8, 6, 0x22ffffff, true, false);
         }
 
-        FlowTheme.rounded(batcher, x + 6, y + 5, x + 14, y + 13, 4, typeColor, true, true);
-        batcher.text(batcher.getFont().limitToWidth(this.title(node), (int) layout.width - 34), x + 18, y + 5, invalid ? 0xffff7070 : FlowTheme.text());
-        this.renderDataPin(batcher, ex, y + 9, this.isDataOutWired(node, "value"), typeColor);
+        float textX = layout.left.isEmpty() ? x + 18 : x + 24;
+
+        FlowTheme.rounded(batcher, textX - 12, y + 5, textX - 4, y + 13, 4, typeColor, true, true);
+        batcher.text(batcher.getFont().limitToWidth(this.title(node), (int) (ex - textX) - 14), textX, y + 5, invalid ? 0xffff7070 : FlowTheme.text());
+
+        for (Spot spot : layout.left)
+        {
+            this.renderPin(batcher, x, y + 9, this.isWiredInto(node, spot.pin()), typeColor);
+        }
+
+        for (Spot spot : layout.right)
+        {
+            if (spot.exec())
+            {
+                this.renderPin(batcher, ex, y + 9, this.graph.execFrom(node.id, spot.pin()) != null, typeColor);
+            }
+            else
+            {
+                this.renderDataPin(batcher, ex, y + 9, this.isDataOutWired(node, spot.pin()), typeColor);
+            }
+        }
     }
 
     private boolean invalid(FlowNode node)

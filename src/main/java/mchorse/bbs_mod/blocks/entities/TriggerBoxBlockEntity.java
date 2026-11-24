@@ -47,6 +47,9 @@ public class TriggerBoxBlockEntity extends BlockEntity
     public static final String TARGET_PLAYER_ONLY = "player_only";
     public static final String TARGET_ACTOR_ID = "actor_id";
 
+    public static final String ACTOR_PREFIX = "prefix";
+    public static final String ACTOR_FILM = "film";
+
     /** The boxes ticking on the server right now, for the events that come from elsewhere: a use, a break. */
     private static final Set<TriggerBoxBlockEntity> ACTIVE = Collections.newSetFromMap(new WeakHashMap<>());
 
@@ -59,7 +62,11 @@ public class TriggerBoxBlockEntity extends BlockEntity
     public boolean showOutline = true;
     public boolean showBox = true;
     public String target = TARGET_ALL_LIVING;
+    /** One Actor: by name or UUID prefix, or as an actor of a film (and replay) */
+    public String actorMode = ACTOR_PREFIX;
     public String actorId = "";
+    public String actorFilm = "";
+    public String actorReplay = "";
     public FlowGraph graph = FlowGraph.createDefault();
 
     /* Server state */
@@ -113,15 +120,34 @@ public class TriggerBoxBlockEntity extends BlockEntity
         return switch (this.target)
         {
             case TARGET_PLAYER_ONLY -> entity instanceof PlayerEntity;
-            case TARGET_ACTOR_ID ->
-            {
-                String id = this.actorId.trim();
-
-                yield !id.isEmpty() && (id.equals(entity.getUuidAsString()) || id.equals(entity.getName().getString())
-                    || (entity.getCustomName() != null && id.equals(entity.getCustomName().getString())));
-            }
+            case TARGET_ACTOR_ID -> this.actorMode.equals(ACTOR_FILM) ? this.acceptsFilmActor(entity) : this.acceptsPrefix(entity);
             default -> true;
         };
+    }
+
+    /** Prefix mode: the UUID itself, or a name or custom name that starts with the text. */
+    private boolean acceptsPrefix(Entity entity)
+    {
+        String prefix = this.actorId.trim();
+
+        if (prefix.isEmpty())
+        {
+            return false;
+        }
+
+        return prefix.equals(entity.getUuidAsString()) || entity.getName().getString().startsWith(prefix)
+            || (entity.getCustomName() != null && entity.getCustomName().getString().startsWith(prefix));
+    }
+
+    /** Film mode: a BBS actor of that film, and of that replay when one is picked. */
+    private boolean acceptsFilmActor(Entity entity)
+    {
+        if (!(entity instanceof mchorse.bbs_mod.entity.ActorEntity actor) || this.actorFilm.isEmpty())
+        {
+            return false;
+        }
+
+        return this.actorFilm.equals(actor.getFilmId()) && (this.actorReplay.isEmpty() || this.actorReplay.equals(actor.getReplayId()));
     }
 
     public static void serverTick(World world, BlockPos pos, BlockState state, TriggerBoxBlockEntity box)
@@ -237,6 +263,9 @@ public class TriggerBoxBlockEntity extends BlockEntity
         data.putBool("show_box", this.showBox);
         data.putString("target", this.target);
         data.putString("actor_id", this.actorId);
+        data.putString("actor_mode", this.actorMode);
+        data.putString("actor_film", this.actorFilm);
+        data.putString("actor_replay", this.actorReplay);
         data.put("flow", this.graph.toData());
 
         return data;
@@ -254,6 +283,9 @@ public class TriggerBoxBlockEntity extends BlockEntity
         this.showBox = data.getBool("show_box", true);
         this.target = data.getString("target", TARGET_ALL_LIVING);
         this.actorId = data.getString("actor_id", "");
+        this.actorMode = data.getString("actor_mode", ACTOR_PREFIX);
+        this.actorFilm = data.getString("actor_film", "");
+        this.actorReplay = data.getString("actor_replay", "");
 
         if (data.has("flow"))
         {

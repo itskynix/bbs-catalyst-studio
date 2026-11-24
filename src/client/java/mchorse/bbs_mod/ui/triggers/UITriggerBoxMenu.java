@@ -48,6 +48,9 @@ public class UITriggerBoxMenu extends UIBaseMenu
     private static final int TOP = 24;
     private static final int LEFT_W = 160;
     private static final int RIGHT_W = 180;
+    /** The menu bar, above the tab bar. */
+    private static final int BAR = 18;
+    private static final int HEAD = BAR + TOP;
 
     private static int lastTab = 1;
     private static int lastMode;
@@ -93,21 +96,24 @@ public class UITriggerBoxMenu extends UIBaseMenu
 
         /* Top bar: tabs over the middle column, the Node | Code switch in its right corner, save and close */
         this.tabs = new UIFlowSegment(List.of(key("tab.viewport"), key("tab.flow")), List.of(Icons.BLOCK, Icons.GRAPH), false, (i) -> this.setTab(i));
-        this.tabs.relative(this.viewport).x(LEFT_W).y(0).w(220).h(TOP);
+        this.tabs.relative(this.viewport).x(LEFT_W).y(BAR).w(220).h(TOP);
 
         this.mode = new UIFlowSegment(List.of(key("mode.node"), key("mode.code")), List.of(Icons.GRAPH, Icons.CODE), true, (i) -> this.setMode(i));
-        this.mode.relative(this.viewport).x(1F, -RIGHT_W - 156).y(3).w(148).h(18);
+        this.mode.relative(this.viewport).x(1F, -RIGHT_W - 156).y(BAR + 3).w(148).h(18);
 
         UIIcon save = new UIIcon(Icons.SAVED, (b) -> this.saveWithNotice());
         UIIcon close = new UIIcon(Icons.CLOSE, (b) -> this.closeThisMenu());
 
         save.tooltip(key("save"));
         close.tooltip(key("close"));
-        save.relative(this.viewport).x(1F, -44).y(2).wh(20, 20);
-        close.relative(this.viewport).x(1F, -22).y(2).wh(20, 20);
+        save.relative(this.viewport).x(1F, -44).y(BAR + 2).wh(20, 20);
+        close.relative(this.viewport).x(1F, -22).y(BAR + 2).wh(20, 20);
 
-        /* Ctrl + S saves, and says so */
+        /* Shortcuts: Ctrl + S saves and says so; Ctrl + Z and Ctrl + Y walk the history; Ctrl + D copies the picked cards */
         this.main.keys().register(mchorse.bbs_mod.ui.Keys.SAVE, this::saveWithNotice);
+        this.main.keys().register(mchorse.bbs_mod.ui.Keys.UNDO, this::undo);
+        this.main.keys().register(mchorse.bbs_mod.ui.Keys.REDO, this::redo);
+        this.main.keys().register(DUPLICATE, () -> this.board.duplicatePicked()).active(() -> this.board.isVisible());
 
         /* The orbit camera of the Viewport tab; it takes the mouse only where no panel does */
         this.orbit.setFovRoll(false);
@@ -117,16 +123,16 @@ public class UITriggerBoxMenu extends UIBaseMenu
 
         /* Left column */
         this.left = UI.scrollView(4, 6);
-        this.left.relative(this.viewport).x(0).y(TOP).w(LEFT_W).h(1F, -TOP);
+        this.left.relative(this.viewport).x(0).y(HEAD).w(LEFT_W).h(1F, -HEAD);
 
         /* Right column, before the board: picking a node (setGraph picks none) fills it */
         this.details = UI.scrollView(4, 6);
-        this.details.relative(this.viewport).x(1F, -RIGHT_W).y(TOP).w(RIGHT_W).h(1F, -TOP);
+        this.details.relative(this.viewport).x(1F, -RIGHT_W).y(HEAD).w(RIGHT_W).h(1F, -HEAD);
 
         /* Middle column */
         UIElement center = new UIElement();
 
-        center.relative(this.viewport).x(LEFT_W).y(TOP).w(1F, -LEFT_W - RIGHT_W).h(1F, -TOP);
+        center.relative(this.viewport).x(LEFT_W).y(HEAD).w(1F, -LEFT_W - RIGHT_W).h(1F, -HEAD);
 
         this.board = new UIFlowGraph().callbacks(this::onSelect, this::onGraphChanged);
         this.board.full(center);
@@ -150,7 +156,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
         center.add(this.viewportTab, this.board, this.code, this.copy);
 
         this.main.add(this.uiOrbit);
-        this.main.add(this.left, center, this.details, this.tabs, this.mode, save, close);
+        this.main.add(this.left, center, this.details, this.tabs, this.mode, save, close, this.createMenuBar());
 
         /* Over everything: the variable being dragged, as a pill under the cursor */
         UIElement ghost = new UIElement()
@@ -188,6 +194,213 @@ public class UITriggerBoxMenu extends UIBaseMenu
         this.applyVisibility();
         this.fillLeft();
         this.fillDetails(this.board.selected);
+        this.snapshot();
+    }
+
+    /* Menu bar */
+
+    private static final mchorse.bbs_mod.ui.utils.keys.KeyCombo DUPLICATE = new mchorse.bbs_mod.ui.utils.keys.KeyCombo("trigger_box_duplicate", key("duplicate"), org.lwjgl.glfw.GLFW.GLFW_KEY_D, org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT_CONTROL);
+
+    /** File, Edit and View, in the look of the dashboard's own menu bar. */
+    private UIElement createMenuBar()
+    {
+        UIElement bar = new UIElement()
+        {
+            @Override
+            public void render(mchorse.bbs_mod.ui.framework.UIContext context)
+            {
+                context.batcher.box(this.area.x, this.area.y, this.area.ex(), this.area.ey(), FlowTheme.chrome());
+                context.batcher.box(this.area.x, this.area.ey() - 1, this.area.ex(), this.area.ey(), FlowTheme.border());
+
+                super.render(context);
+            }
+        };
+
+        bar.relative(this.viewport).x(0).y(0).w(1F).h(BAR);
+
+        int x = 4;
+
+        for (Object[] entry : new Object[][] {{mchorse.bbs_mod.ui.UIKeys.MENU_FILE, (java.util.function.Consumer<mchorse.bbs_mod.ui.utils.context.ContextMenuManager>) this::fillFileMenu}, {mchorse.bbs_mod.ui.UIKeys.MENU_EDIT, (java.util.function.Consumer<mchorse.bbs_mod.ui.utils.context.ContextMenuManager>) this::fillEditMenu}, {key("menu.view"), (java.util.function.Consumer<mchorse.bbs_mod.ui.utils.context.ContextMenuManager>) this::fillViewMenu}})
+        {
+            IKey label = (IKey) entry[0];
+            @SuppressWarnings("unchecked")
+            java.util.function.Consumer<mchorse.bbs_mod.ui.utils.context.ContextMenuManager> filler = (java.util.function.Consumer<mchorse.bbs_mod.ui.utils.context.ContextMenuManager>) entry[1];
+            mchorse.bbs_mod.ui.dashboard.menu.UIMenuBarItem item = new mchorse.bbs_mod.ui.dashboard.menu.UIMenuBarItem(label, (b) -> this.context.replaceContextMenu(filler, b.area.x, b.area.ey() + 1));
+            int width = mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D.getDefaultTextRenderer().getWidth(label.get()) + 16;
+
+            item.relative(bar).x(x).y(0).wh(width, BAR);
+            bar.add(item);
+            x += width;
+        }
+
+        return bar;
+    }
+
+    private void fillFileMenu(mchorse.bbs_mod.ui.utils.context.ContextMenuManager menu)
+    {
+        menu.action(Icons.SAVED, key("menu.save"), this::saveWithNotice);
+        menu.action(Icons.COPY, key("menu.copy_flow"), () ->
+        {
+            Window.setClipboard(mchorse.bbs_mod.data.DataToString.toString(this.graph.toData(), true));
+            this.context.notifySuccess(key("menu.copied"));
+        });
+        menu.action(Icons.PASTE, key("menu.paste_flow"), this::pasteFlow);
+        menu.action(Icons.CODE, key("menu.copy_java"), () ->
+        {
+            this.refreshCode();
+            Window.setClipboard(this.code.getCode());
+            this.context.notifySuccess(key("menu.copied"));
+        });
+        menu.action(Icons.REFRESH, key("menu.reset_flow"), Colors.NEGATIVE, () ->
+        {
+            this.restore(FlowGraph.createDefault().toData());
+            this.snapshot();
+        });
+        menu.action(Icons.CLOSE, key("close"), this::closeThisMenu);
+    }
+
+    private void fillEditMenu(mchorse.bbs_mod.ui.utils.context.ContextMenuManager menu)
+    {
+        menu.action(Icons.UNDO, key("menu.undo"), this::undo);
+        menu.action(Icons.REDO, key("menu.redo"), this::redo);
+        menu.action(Icons.DUPE, key("menu.duplicate"), () -> this.board.duplicatePicked());
+        menu.action(Icons.ALL_DIRECTIONS, key("menu.select_all"), () -> this.board.selectAll());
+        menu.action(Icons.REMOVE, key("menu.delete_picked"), Colors.NEGATIVE, () -> this.board.deletePicked());
+    }
+
+    private void fillViewMenu(mchorse.bbs_mod.ui.utils.context.ContextMenuManager menu)
+    {
+        menu.action(Icons.BLOCK, key("tab.viewport"), () ->
+        {
+            this.tabs.setValue(0);
+            this.setTab(0);
+        });
+        menu.action(Icons.GRAPH, key("tab.flow"), () ->
+        {
+            this.tabs.setValue(1);
+            this.setTab(1);
+        });
+        menu.action(Icons.GRAPH, key("mode.node"), () ->
+        {
+            this.mode.setValue(0);
+            this.setMode(0);
+        });
+        menu.action(Icons.CODE, key("mode.code"), () ->
+        {
+            this.mode.setValue(1);
+            this.setMode(1);
+        });
+    }
+
+    /** A flow from the clipboard, as copied by File > Copy flow, replaces this one; a broken clipboard says so. */
+    private void pasteFlow()
+    {
+        mchorse.bbs_mod.data.types.MapType data = mchorse.bbs_mod.data.DataToString.mapFromString(Window.getClipboard());
+
+        if (data == null || !data.has("nodes"))
+        {
+            this.context.notifyError(key("menu.paste_failed"));
+
+            return;
+        }
+
+        this.restore(data);
+        this.snapshot();
+    }
+
+    /* History: whole flow snapshots, so any edit, wire or move can be walked back */
+
+    private final List<String> history = new ArrayList<>();
+    private int historyIndex = -1;
+    private boolean historyDirty;
+    private int quietTicks;
+
+    /** An edit was made: the code view is stale, and the history takes a snapshot once the typing settles. */
+    private void changed()
+    {
+        this.codeDirty = true;
+        this.historyDirty = true;
+        this.quietTicks = 0;
+    }
+
+    /** Puts the flow as it is now on the history, dropping whatever was undone past it. */
+    private void snapshot()
+    {
+        String now = mchorse.bbs_mod.data.DataToString.toString(this.graph.toData());
+
+        this.historyDirty = false;
+
+        if (this.historyIndex >= 0 && this.history.get(this.historyIndex).equals(now))
+        {
+            return;
+        }
+
+        while (this.history.size() > this.historyIndex + 1)
+        {
+            this.history.remove(this.history.size() - 1);
+        }
+
+        this.history.add(now);
+
+        if (this.history.size() > 100)
+        {
+            this.history.remove(0);
+        }
+
+        this.historyIndex = this.history.size() - 1;
+    }
+
+    private void undo()
+    {
+        if (this.historyDirty)
+        {
+            this.snapshot();
+        }
+
+        if (this.historyIndex > 0)
+        {
+            this.historyIndex -= 1;
+            this.restore(mchorse.bbs_mod.data.DataToString.mapFromString(this.history.get(this.historyIndex)));
+            this.context.notifyInfo(key("menu.undone"));
+        }
+    }
+
+    private void redo()
+    {
+        if (this.historyIndex < this.history.size() - 1)
+        {
+            this.historyIndex += 1;
+            this.restore(mchorse.bbs_mod.data.DataToString.mapFromString(this.history.get(this.historyIndex)));
+            this.context.notifyInfo(key("menu.redone"));
+        }
+    }
+
+    /** Loads a flow into this box's graph and rebuilds everything that shows it. */
+    private void restore(mchorse.bbs_mod.data.types.MapType data)
+    {
+        if (data == null)
+        {
+            return;
+        }
+
+        this.graph.fromData(data);
+        this.board.setGraph(this.graph);
+        this.codeDirty = true;
+        this.historyDirty = false;
+        this.fillLeft();
+        this.fillDetails(null);
+    }
+
+    @Override
+    public void update()
+    {
+        super.update();
+
+        /* Typing settles after half a second without a change: then it goes on the history as one step */
+        if (this.historyDirty && ++this.quietTicks >= 10)
+        {
+            this.snapshot();
+        }
     }
 
     @Override
@@ -340,6 +553,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
     private void onGraphChanged()
     {
         this.codeDirty = true;
+        this.snapshot();
         this.fillLeft();
         this.refreshDetails();
     }
@@ -460,7 +674,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
             }
 
             this.graph.variables.add(new FlowVariable(name, "integer", "0"));
-            this.codeDirty = true;
+            this.changed();
             this.fillLeft();
             this.refreshDetails();
         });
@@ -528,7 +742,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
 
             /* Nodes hold the variable's id, so the new name shows on every one of them at once */
             variable.name = fresh;
-            this.codeDirty = true;
+            this.changed();
         });
 
         name.setText(variable.name);
@@ -544,7 +758,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
                     {
                         variable.type = t;
                         variable.value = FlowVariable.defaultValue(t);
-                        this.codeDirty = true;
+                        this.changed();
                         this.fillLeft();
                     }
                 });
@@ -562,7 +776,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
                 menu.action(Icons.GLOBE, key("scope." + sc), () ->
                 {
                     variable.scope = sc;
-                    this.codeDirty = true;
+                    this.changed();
                     this.fillLeft();
                 });
             }
@@ -582,7 +796,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
                 this.context.notifyError(key("variable_in_use").format(variable.name, used));
             }
 
-            this.codeDirty = true;
+            this.changed();
             this.fillLeft();
             this.refreshDetails();
         });
@@ -637,7 +851,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
     /** The starting value's field, shaped by the type: a switch, a number, three numbers or text. */
     private UIElement valueField(FlowVariable variable)
     {
-        Runnable changed = () -> this.codeDirty = true;
+        Runnable changed = () -> this.changed();
 
         switch (variable.type)
         {
@@ -764,7 +978,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
         UICirculate target = new UICirculate((b) ->
         {
             this.box.target = targets.get(b.getValue());
-            actor.setEnabled(b.getValue() == 2);
+            this.fillDetails(null);
         });
 
         for (String t : targets)
@@ -774,9 +988,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
 
         target.setValue(Math.max(0, targets.indexOf(this.box.target)));
         actor.setText(this.box.actorId);
-        actor.placeholder(key("actor_id"));
-        actor.tooltip(key("actor_id_tooltip"));
-        actor.setEnabled(this.box.target.equals(TriggerBoxBlockEntity.TARGET_ACTOR_ID));
+        actor.placeholder(key("actor_prefix"));
 
         w.tooltip(key("box_width"));
         h.tooltip(key("box_height"));
@@ -787,10 +999,53 @@ public class UITriggerBoxMenu extends UIBaseMenu
         this.details.add(
             this.header(key("details")),
             UI.label(IKey.constant(key("component.volume").get() + "  " + pos)).color(0xffffb547),
-            UI.label(key("box_size")), UI.row(2, w, h, d),
-            UI.label(key("offset")), UI.row(2, ox, oy, oz),
-            UI.label(key("target")), target, actor
+            UI.label(key("box_size")), this.pair(UI.row(2, w, h, d), FlowFields.hintButton(key("hint.box_size"))),
+            UI.label(key("offset")), this.pair(UI.row(2, ox, oy, oz), FlowFields.hintButton(key("hint.box_offset"))),
+            UI.label(key("target")), this.pair(target, FlowFields.hintButton(key("hint.box_target")))
         );
+
+        if (!this.box.target.equals(TriggerBoxBlockEntity.TARGET_ACTOR_ID))
+        {
+            return;
+        }
+
+        /* One Actor: a name prefix, or an actor of a film, then of one of its replays */
+        List<String> modes = List.of(TriggerBoxBlockEntity.ACTOR_PREFIX, TriggerBoxBlockEntity.ACTOR_FILM);
+        UICirculate mode = new UICirculate((b) ->
+        {
+            this.box.actorMode = modes.get(b.getValue());
+            this.fillDetails(null);
+        });
+
+        for (String m : modes)
+        {
+            mode.addLabel(key("actor_mode." + m));
+        }
+
+        mode.setValue(Math.max(0, modes.indexOf(this.box.actorMode)));
+        this.details.add(this.pair(mode, FlowFields.hintButton(key("hint.actor_mode"))));
+
+        if (this.box.actorMode.equals(TriggerBoxBlockEntity.ACTOR_FILM))
+        {
+            this.details.add(UI.label(key("pin.film")));
+            this.details.add(this.pair(FlowFields.combo(this.box.actorFilm, (text) ->
+            {
+                boolean changedFilm = !text.equals(this.box.actorFilm);
+
+                this.box.actorFilm = text;
+
+                if (changedFilm)
+                {
+                    this.box.actorReplay = "";
+                }
+            }, FlowFields::films, key("film_placeholder")), FlowFields.hintButton(key("hint.actor_film"))));
+            this.details.add(UI.label(key("actor_replay")));
+            this.details.add(this.pair(FlowFields.combo(this.box.actorReplay, (text) -> this.box.actorReplay = text, (callback) -> FlowFields.replays(this.box.actorFilm, callback), key("option.any_replay")), FlowFields.hintButton(key("hint.actor_replay"))));
+        }
+        else
+        {
+            this.details.add(this.pair(actor, FlowFields.hintButton(key("hint.actor_prefix"))));
+        }
     }
 
     private static final java.util.Set<String> SWITCH_PARAMS = java.util.Set.of("start_closed", "start_open", "random", "loop", "clamp", "camera");
@@ -853,7 +1108,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
                     UITextbox field = new UITextbox(256, (text) ->
                     {
                         node.params.put(id, text);
-                        this.codeDirty = true;
+                        this.changed();
                     });
 
                     field.setText(node.param(id));
@@ -893,18 +1148,20 @@ public class UITriggerBoxMenu extends UIBaseMenu
                 settings = true;
             }
 
+            UIElement hint = FlowFields.hintButton(FlowFields.hint("param." + param.id(), "param"));
+
             if (SWITCH_PARAMS.contains(param.id()))
             {
-                this.details.add(new UIToggle(key("param." + param.id()), FlowValues.truthy(node.param(param.id())), (b) ->
+                this.details.add(this.pair(new UIToggle(key("param." + param.id()), FlowValues.truthy(node.param(param.id())), (b) ->
                 {
                     node.params.put(param.id(), String.valueOf(b.getValue()));
-                    this.codeDirty = true;
-                }));
+                    this.changed();
+                }), hint));
             }
             else
             {
                 this.details.add(UI.label(key("param." + param.id())));
-                this.details.add(this.paramField(node, param));
+                this.details.add(this.pair(this.paramField(node, param), hint));
             }
         }
 
@@ -943,15 +1200,31 @@ public class UITriggerBoxMenu extends UIBaseMenu
             field = new UIToggle(key("value_true"), FlowValues.truthy(node.param(pin)), (b) ->
             {
                 node.params.put(pin, String.valueOf(b.getValue()));
-                this.codeDirty = true;
+                this.changed();
             });
+        }
+        else if (declared.equals("entity"))
+        {
+            field = FlowFields.combo(node.param(pin), (text) ->
+            {
+                node.params.put(pin, text);
+                this.changed();
+            }, FlowFields::entities, key("entity_placeholder"));
+        }
+        else if (pin.equals("film"))
+        {
+            field = FlowFields.combo(node.param(pin), (text) ->
+            {
+                node.params.put(pin, text);
+                this.changed();
+            }, FlowFields::films, key("film_placeholder"));
         }
         else
         {
             UITextbox textbox = new UITextbox(1000, (text) ->
             {
                 node.params.put(pin, text);
-                this.codeDirty = true;
+                this.changed();
             });
 
             textbox.setText(node.param(pin));
@@ -961,11 +1234,14 @@ public class UITriggerBoxMenu extends UIBaseMenu
 
         UIElement row = new UIElement();
 
+        UIElement hint = FlowFields.hintButton(FlowFields.hint(grown ? "input_" + declared : pin, "type_" + declared));
+
         row.h(20);
         label.relative(row).w(50).h(20);
         label.labelAnchor(0F, 0.5F);
-        field.relative(row).x(52).w(1F, -52).h(20);
-        row.add(label, field);
+        field.relative(row).x(52).w(1F, -74).h(20);
+        hint.relative(row).x(1F, -20).wh(20, 20);
+        row.add(label, field, hint);
 
         return row;
     }
@@ -1005,7 +1281,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
             UICirculate circulate = new UICirculate((b) ->
             {
                 node.params.put(id, FlowNodeTypes.OPERATORS.get(b.getValue()));
-                this.codeDirty = true;
+                this.changed();
             });
 
             for (String op : FlowNodeTypes.OPERATORS)
@@ -1023,7 +1299,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
             UITrackpad trackpad = new UITrackpad((v) ->
             {
                 node.params.put(id, String.valueOf(v.intValue()));
-                this.codeDirty = true;
+                this.changed();
             });
 
             trackpad.limit(id.equals("start") ? -100000 : 1, id.equals("max_iterations") ? mchorse.bbs_mod.triggers.FlowRuntime.MAX_LOOP : 72000, true);
@@ -1035,7 +1311,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
         UITextbox textbox = new UITextbox(1000, (text) ->
         {
             node.params.put(id, text);
-            this.codeDirty = true;
+            this.changed();
         });
 
         textbox.setText(node.param(id));
@@ -1061,14 +1337,14 @@ public class UITriggerBoxMenu extends UIBaseMenu
         /* Top bar, side columns; the middle stays open on the Viewport tab so the world shows through */
         int divider = FlowTheme.border();
 
-        context.batcher.box(0, 0, w, TOP, FlowTheme.chrome());
-        context.batcher.box(0, TOP - 1, w, TOP, divider);
-        context.batcher.box(0, TOP, LEFT_W, h, FlowTheme.panel());
-        context.batcher.box(w - RIGHT_W, TOP, w, h, FlowTheme.panel());
-        context.batcher.box(LEFT_W - 1, TOP, LEFT_W, h, divider);
-        context.batcher.box(w - RIGHT_W, TOP, w - RIGHT_W + 1, h, divider);
+        context.batcher.box(0, BAR, w, HEAD, FlowTheme.chrome());
+        context.batcher.box(0, HEAD - 1, w, HEAD, divider);
+        context.batcher.box(0, HEAD, LEFT_W, h, FlowTheme.panel());
+        context.batcher.box(w - RIGHT_W, HEAD, w, h, FlowTheme.panel());
+        context.batcher.box(LEFT_W - 1, HEAD, LEFT_W, h, divider);
+        context.batcher.box(w - RIGHT_W, HEAD, w - RIGHT_W + 1, h, divider);
 
-        context.batcher.icon(Icons.BLOCK, FlowTheme.accent(), 4, 4);
-        context.batcher.textShadow(key("title").get(), 24, 8, FlowTheme.text());
+        context.batcher.icon(Icons.BLOCK, FlowTheme.accent(), 4, BAR + 4);
+        context.batcher.textShadow(key("title").get(), 24, BAR + 8, FlowTheme.text());
     }
 }
