@@ -23,13 +23,16 @@ import java.util.function.Consumer;
 public class UIFlowSearch extends UIElement
 {
     public static final int WIDTH = 180;
-    public static final int HEIGHT = 200;
+    public static final int HEIGHT = 240;
     private static final int ROW = 14;
     private static final int TOP = 24;
 
     public final UITextbox search;
 
-    private final List<FlowNodeType> filtered = new ArrayList<>();
+    /** A line of the menu: a family heading (type null) or a node under it. */
+    private record Row(FlowNodeType.Kind kind, FlowNodeType type) {}
+
+    private final List<Row> filtered = new ArrayList<>();
     private Consumer<FlowNodeType> callback;
     private int scroll;
     private boolean focusNext;
@@ -51,6 +54,11 @@ public class UIFlowSearch extends UIElement
     public static IKey kindLabel(FlowNodeType.Kind kind)
     {
         return L10n.lang("bbs.ui.trigger_box.kind." + kind.name().toLowerCase(Locale.ROOT));
+    }
+
+    public static IKey categoryLabel(FlowNodeType.Kind kind)
+    {
+        return L10n.lang("bbs.ui.trigger_box.category." + kind.name().toLowerCase(Locale.ROOT));
     }
 
     public void open(Consumer<FlowNodeType> callback)
@@ -80,11 +88,28 @@ public class UIFlowSearch extends UIElement
 
         this.filtered.clear();
 
-        for (FlowNodeType type : FlowNodeTypes.all())
+        /* Family by family, a heading over the matching nodes; a family with no match is left out */
+        for (FlowNodeType.Kind kind : FlowNodeType.Kind.values())
         {
-            if (query.isEmpty() || name(type).toLowerCase(Locale.ROOT).contains(query) || type.id.contains(query))
+            boolean heading = false;
+
+            for (FlowNodeType type : FlowNodeTypes.all())
             {
-                this.filtered.add(type);
+                if (type.kind != kind || type.hidden)
+                {
+                    continue;
+                }
+
+                if (query.isEmpty() || name(type).toLowerCase(Locale.ROOT).contains(query) || type.id.contains(query) || categoryLabel(kind).get().toLowerCase(Locale.ROOT).contains(query))
+                {
+                    if (!heading)
+                    {
+                        this.filtered.add(new Row(kind, null));
+                        heading = true;
+                    }
+
+                    this.filtered.add(new Row(kind, type));
+                }
             }
         }
 
@@ -132,9 +157,9 @@ public class UIFlowSearch extends UIElement
 
         int index = this.indexAt(context);
 
-        if (index >= 0 && context.mouseButton == 0)
+        if (index >= 0 && context.mouseButton == 0 && this.filtered.get(index).type() != null)
         {
-            this.pick(this.filtered.get(index));
+            this.pick(this.filtered.get(index).type());
         }
 
         return true;
@@ -167,7 +192,7 @@ public class UIFlowSearch extends UIElement
 
         if (context.isPressed(GLFW.GLFW_KEY_ENTER) || context.isPressed(GLFW.GLFW_KEY_KP_ENTER))
         {
-            this.pick(this.filtered.isEmpty() ? null : this.filtered.get(0));
+            this.pick(this.filtered.stream().map(Row::type).filter((t) -> t != null).findFirst().orElse(null));
 
             return true;
         }
@@ -200,20 +225,35 @@ public class UIFlowSearch extends UIElement
         for (int i = 0; i < rows && i + this.scroll < this.filtered.size(); i++)
         {
             int index = i + this.scroll;
-            FlowNodeType type = this.filtered.get(index);
+            Row row = this.filtered.get(index);
             int ry = top + i * ROW;
+
+            if (row.type() == null)
+            {
+                /* The family heading: its colour, its name, a rule to the edge */
+                String label = categoryLabel(row.kind()).get().toUpperCase(Locale.ROOT);
+                int w = context.batcher.getFont().getWidth(label);
+
+                context.batcher.text(label, x + 6, ry + 4, row.kind().color);
+                context.batcher.box(x + 10 + w, ry + 8, this.area.ex() - 6, ry + 9, (row.kind().color & 0xffffff) | 0x60000000);
+
+                continue;
+            }
 
             if (index == hover)
             {
-                context.batcher.box(x + 1, ry, this.area.ex() - 1, ry + ROW, 0x40ffffff);
+                context.batcher.box(x + 1, ry, this.area.ex() - 1, ry + ROW, (FlowTheme.accent() & 0xffffff) | 0x40000000);
             }
 
-            context.batcher.box(x + 4, ry + 3, x + 7, ry + ROW - 3, type.kind.color);
-            context.batcher.textShadow(name(type), x + 11, ry + 3, FlowTheme.text());
+            context.batcher.box(x + 10, ry + 3, x + 13, ry + ROW - 3, row.kind().color);
+            context.batcher.textShadow(name(row.type()), x + 17, ry + 3, FlowTheme.text());
 
-            String kind = kindLabel(type.kind).get();
+            String symbol = FlowNodeTypes.OPERATOR_OF.get(row.type().id);
 
-            context.batcher.text(kind, this.area.ex() - 6 - context.batcher.getFont().getWidth(kind), ry + 3, FlowTheme.dim());
+            if (symbol != null)
+            {
+                context.batcher.text(symbol, this.area.ex() - 8 - context.batcher.getFont().getWidth(symbol), ry + 3, FlowTheme.dim());
+            }
         }
 
         if (this.filtered.isEmpty())

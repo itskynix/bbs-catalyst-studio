@@ -66,20 +66,113 @@ public class FlowGraph
             return false;
         }
 
-        this.links.removeIf((link) -> link.from() == from && link.pin().equals(pin));
+        this.links.removeIf((link) -> link.isExec() && link.from() == from && link.pin().equals(pin));
         this.links.add(new FlowLink(from, pin, to));
+
+        return true;
+    }
+
+    /** Wires a data output to a data input. An input takes one wire, an output feeds as many as it likes. */
+    public boolean linkData(int from, String pin, int to, String toPin)
+    {
+        FlowNode a = this.get(from);
+        FlowNode b = this.get(to);
+
+        if (a == null || b == null || from == to || a.getType() == null || a.getType().dataOutputs.stream().noneMatch((p) -> p.id().equals(pin)))
+        {
+            return false;
+        }
+
+        this.unlinkData(to, toPin);
+        this.links.add(new FlowLink(from, pin, to, toPin));
 
         return true;
     }
 
     public void unlink(int from, String pin)
     {
-        this.links.removeIf((link) -> link.from() == from && link.pin().equals(pin));
+        this.links.removeIf((link) -> link.isExec() && link.from() == from && link.pin().equals(pin));
     }
 
-    public void unlinkInput(int to)
+    public void unlinkData(int to, String toPin)
     {
-        this.links.removeIf((link) -> link.to() == to);
+        this.links.removeIf((link) -> link.to() == to && link.toPin().equals(toPin));
+    }
+
+    /** The wire into a data input, or null when the input reads its typed-in value. */
+    public FlowLink dataInto(int to, String toPin)
+    {
+        for (FlowLink link : this.links)
+        {
+            if (link.to() == to && link.toPin().equals(toPin))
+            {
+                return link;
+            }
+        }
+
+        return null;
+    }
+
+    /** Sets how many data inputs a node has, dropping the wires of the inputs that went away. */
+    public void setInputCount(FlowNode node, int count)
+    {
+        FlowNodeType type = node.getType();
+
+        if (type == null || type.minInputs <= 0)
+        {
+            return;
+        }
+
+        count = Math.max(type.minInputs, Math.min(16, count));
+
+        for (int i = count; i < node.inputCount(); i++)
+        {
+            this.unlinkData(node.id, FlowNodeType.input(i));
+            node.params.remove(FlowNodeType.input(i));
+        }
+
+        node.setInputCount(count);
+    }
+
+    /** The type a data output gives: a comparison gives a boolean, a variable read the variable's type. */
+    public String outputType(FlowNode node, String pin)
+    {
+        FlowNodeType type = node == null ? null : node.getType();
+
+        if (type == null)
+        {
+            return "any";
+        }
+
+        for (FlowNodeType.DataPin data : type.dataOutputs)
+        {
+            if (data.id().equals(pin))
+            {
+                if (data.type().equals("variable"))
+                {
+                    FlowVariable variable = this.getVariable(node.param("variable"));
+
+                    return variable == null ? "any" : variable.type;
+                }
+
+                return data.type();
+            }
+        }
+
+        return "any";
+    }
+
+    /** The type a data input has taken on: that of the wire into it, or what it expects when it has none. */
+    public String inputType(FlowNode node, int index)
+    {
+        FlowLink link = this.dataInto(node.id, FlowNodeType.input(index));
+
+        if (link != null)
+        {
+            return this.outputType(this.get(link.from()), link.pin());
+        }
+
+        return node.getType() == null ? "any" : node.getType().inputType;
     }
 
     /** The node an output pin leads to, or null. */
@@ -87,7 +180,7 @@ public class FlowGraph
     {
         for (FlowLink link : this.links)
         {
-            if (link.from() == from && link.pin().equals(pin))
+            if (link.isExec() && link.from() == from && link.pin().equals(pin))
             {
                 return this.get(link.to());
             }

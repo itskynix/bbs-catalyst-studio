@@ -65,4 +65,47 @@ public class FlowValues
 
         return value == null ? fallback : value;
     }
+
+    /** Whether a value counts as true: "true", or a number other than zero. */
+    public static boolean truthy(String value)
+    {
+        if (value == null)
+        {
+            return false;
+        }
+
+        Double number = number(value);
+
+        return number != null ? number != 0D : value.trim().equalsIgnoreCase("true");
+    }
+
+    /**
+     * A comparison over any number of values: && is true when all are; the others hold between every
+     * value and the next, so {@code a < b < c} reads as it would on paper.
+     */
+    public static boolean check(String operator, java.util.List<String> values)
+    {
+        if (operator.equals("&&"))
+        {
+            for (String value : values)
+            {
+                if (!truthy(value))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        for (int i = 1; i < values.size(); i++)
+        {
+            if (!compare(values.get(i - 1), operator, values.get(i)))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }

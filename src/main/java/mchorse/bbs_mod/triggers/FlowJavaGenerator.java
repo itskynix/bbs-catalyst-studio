@@ -156,18 +156,13 @@ public class FlowJavaGenerator
                 case FlowNodeTypes.ADD_VARIABLE -> this.line(indent, this.increment(node.param("variable"), node.param("amount")));
                 case FlowNodeTypes.BRANCH ->
                 {
-                    this.line(indent, "if (" + this.condition(node.param("variable"), node.param("operator"), node.param("value")) + ")");
-                    this.line(indent, "{");
-                    this.chain(node.id, "true", indent + 1, new HashSet<>(path));
-                    this.line(indent, "}");
+                    this.ifElse(node, this.condition(node.param("variable"), node.param("operator"), node.param("value")), indent, path);
 
-                    if (this.graph.next(node.id, "false") != null)
-                    {
-                        this.line(indent, "else");
-                        this.line(indent, "{");
-                        this.chain(node.id, "false", indent + 1, new HashSet<>(path));
-                        this.line(indent, "}");
-                    }
+                    return;
+                }
+                case FlowNodeTypes.IF_ELSE ->
+                {
+                    this.ifElse(node, this.andOf(node, 0), indent, path);
 
                     return;
                 }
@@ -187,6 +182,143 @@ public class FlowJavaGenerator
 
             node = this.graph.next(node.id, "then");
         }
+    }
+
+    private void ifElse(FlowNode node, String condition, int indent, Set<Integer> path)
+    {
+        this.line(indent, "if (" + condition + ")");
+        this.line(indent, "{");
+        this.chain(node.id, "true", indent + 1, new HashSet<>(path));
+        this.line(indent, "}");
+
+        if (this.graph.next(node.id, "false") != null)
+        {
+            this.line(indent, "else");
+            this.line(indent, "{");
+            this.chain(node.id, "false", indent + 1, new HashSet<>(path));
+            this.line(indent, "}");
+        }
+    }
+
+    /* Data: a pure node becomes an expression where it is read */
+
+    private record Expr(String code, String type) {}
+
+    private Expr operand(FlowNode node, int index, int depth)
+    {
+        FlowLink link = this.graph.dataInto(node.id, FlowNodeType.input(index));
+
+        if (link != null)
+        {
+            return this.expr(this.graph.get(link.from()), link.pin(), depth + 1);
+        }
+
+        String raw = node.param(FlowNodeType.input(index));
+        String t = raw.trim();
+
+        if (t.equals("true") || t.equals("false"))
+        {
+            return new Expr(t, "boolean");
+        }
+
+        try
+        {
+            double number = Double.parseDouble(t);
+
+            return new Expr(number == Math.rint(number) && Math.abs(number) < 1E15 ? String.valueOf((long) number) : String.valueOf(number), "number");
+        }
+        catch (NumberFormatException e)
+        {
+            return new Expr(this.template(raw), "string");
+        }
+    }
+
+    private Expr expr(FlowNode node, String pin, int depth)
+    {
+        if (node == null || depth > 32)
+        {
+            return new Expr("null", "any");
+        }
+
+        if (node.type.equals(FlowNodeTypes.GET_VARIABLE))
+        {
+            FlowVariable variable = this.graph.getVariable(node.param("variable"));
+
+            return variable == null ? new Expr("null", "any") : new Expr("this." + identifier(variable.name), switch (variable.type)
+            {
+                case "integer", "float" -> "number";
+                case "boolean" -> "boolean";
+                case "string" -> "string";
+                default -> "any";
+            });
+        }
+
+        String operator = FlowNodeTypes.OPERATOR_OF.get(node.type);
+
+        if (operator == null)
+        {
+            return new Expr("null", "any");
+        }
+
+        return new Expr(operator.equals("&&") ? this.andOf(node, depth) : this.compareOf(node, operator, depth), "boolean");
+    }
+
+    private static String bool(Expr e)
+    {
+        return e.type().equals("boolean") ? e.code() : "this.isTrue(" + e.code() + ")";
+    }
+
+    /** Every input true: the condition of If / Else and of &&. */
+    private String andOf(FlowNode node, int depth)
+    {
+        List<String> parts = new ArrayList<>();
+
+        for (int i = 0; i < node.inputCount(); i++)
+        {
+            Expr e = this.operand(node, i, depth);
+            String code = bool(e);
+
+            parts.add(node.inputCount() > 1 && code.contains(" ") ? "(" + code + ")" : code);
+        }
+
+        return parts.isEmpty() ? "true" : String.join(" && ", parts);
+    }
+
+    /** Each input against the next: a < b < c reads as a < b && b < c. */
+    private String compareOf(FlowNode node, String operator, int depth)
+    {
+        List<Expr> values = new ArrayList<>();
+        List<String> pairs = new ArrayList<>();
+
+        for (int i = 0; i < node.inputCount(); i++)
+        {
+            values.add(this.operand(node, i, depth));
+        }
+
+        for (int i = 1; i < values.size(); i++)
+        {
+            Expr a = values.get(i - 1);
+            Expr b = values.get(i);
+            boolean equality = operator.equals("==") || operator.equals("!=");
+            String code;
+
+            if ((a.type().equals("number") && b.type().equals("number")) || (equality && a.type().equals("boolean") && b.type().equals("boolean")))
+            {
+                code = a.code() + " " + operator + " " + b.code();
+            }
+            else if (equality)
+            {
+                code = (operator.equals("!=") ? "!" : "") + "java.util.Objects.equals(" + a.code() + ", " + b.code() + ")";
+            }
+            else
+            {
+                code = "String.valueOf(" + a.code() + ").compareTo(String.valueOf(" + b.code() + ")) " + operator + " 0";
+            }
+
+            pairs.add(values.size() > 2 ? "(" + code + ")" : code);
+        }
+
+        return pairs.isEmpty() ? "true" : String.join(" && ", pairs);
     }
 
     private String assign(String name, String value)

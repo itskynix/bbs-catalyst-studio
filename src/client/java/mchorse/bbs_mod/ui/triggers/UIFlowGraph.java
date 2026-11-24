@@ -65,6 +65,8 @@ public class UIFlowGraph extends UIElement
     private final Map<FlowNode, float[]> dragOffsets = new HashMap<>();
     private FlowNode wireFrom;
     private String wirePin;
+    /** Whether the wire being pulled carries a value rather than the run. */
+    private boolean wireData;
     private float wireX;
     private float wireY;
     private boolean boxing;
@@ -125,29 +127,69 @@ public class UIFlowGraph extends UIElement
 
     /* Layout of a card */
 
+    /** Rows of execution pins: none on a pure node. */
     public static int execRows(FlowNode node)
     {
         FlowNodeType type = node.getType();
 
-        return type == null ? 1 : Math.max(1, type.outputs.size());
+        if (type == null)
+        {
+            return 1;
+        }
+
+        return type.pure ? 0 : Math.max(1, type.outputs.size());
+    }
+
+    /** Rows of data pins: inputs on the left, outputs on the right, side by side. */
+    public static int dataRows(FlowNode node)
+    {
+        FlowNodeType type = node.getType();
+
+        return type == null ? 0 : Math.max(node.inputCount(), type.dataOutputs.size());
+    }
+
+    private static boolean growable(FlowNode node)
+    {
+        return node.getType() != null && node.getType().growable;
     }
 
     public static int height(FlowNode node)
     {
         FlowNodeType type = node.getType();
         int params = type == null ? 0 : type.params.size();
+        int rows = execRows(node) + dataRows(node) + (growable(node) ? 1 : 0);
 
-        return HEADER + 4 + execRows(node) * ROW + params * ROW + (params > 0 ? 6 : 4);
+        return HEADER + 4 + rows * ROW + params * ROW + (params > 0 ? 6 : 4);
+    }
+
+    private static float rowY(FlowNode node, int row)
+    {
+        return node.y + HEADER + 4 + ROW / 2F + row * ROW;
     }
 
     private static float inputY(FlowNode node)
     {
-        return node.y + HEADER + 4 + ROW / 2F;
+        return rowY(node, 0);
     }
 
     private static float outputY(FlowNode node, int index)
     {
-        return node.y + HEADER + 4 + ROW / 2F + index * ROW;
+        return rowY(node, index);
+    }
+
+    private static float dataInY(FlowNode node, int index)
+    {
+        return rowY(node, execRows(node) + index);
+    }
+
+    private static float dataOutY(FlowNode node, int index)
+    {
+        return rowY(node, execRows(node) + index);
+    }
+
+    private static float growY(FlowNode node)
+    {
+        return rowY(node, execRows(node) + dataRows(node));
     }
 
     private float toGraphX(int mouseX)
@@ -195,6 +237,60 @@ public class UIFlowGraph extends UIElement
         return -1;
     }
 
+    private int dataOutputAt(FlowNode node, float gx, float gy)
+    {
+        FlowNodeType type = node.getType();
+
+        if (type == null)
+        {
+            return -1;
+        }
+
+        for (int i = 0; i < type.dataOutputs.size(); i++)
+        {
+            if (Math.abs(gx - (node.x + NODE_W)) <= 7 && Math.abs(gy - dataOutY(node, i)) <= 6)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private int dataInputAt(FlowNode node, float gx, float gy, float reach)
+    {
+        for (int i = 0; i < node.inputCount(); i++)
+        {
+            if (Math.abs(gx - node.x) <= reach && Math.abs(gy - dataInY(node, i)) <= 6)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    /** +1 on the node's + button, -1 on its - button, 0 elsewhere. */
+    private int growButtonAt(FlowNode node, float gx, float gy)
+    {
+        if (!growable(node) || Math.abs(gy - growY(node)) > 5)
+        {
+            return 0;
+        }
+
+        if (gx >= node.x + 6 && gx <= node.x + 18)
+        {
+            return 1;
+        }
+
+        if (gx >= node.x + 20 && gx <= node.x + 32 && node.inputCount() > node.getType().minInputs)
+        {
+            return -1;
+        }
+
+        return 0;
+    }
+
     private boolean inputAt(FlowNode node, float gx, float gy)
     {
         FlowNodeType type = node.getType();
@@ -213,6 +309,7 @@ public class UIFlowGraph extends UIElement
         int y = Math.max(0, Math.min(this.area.h - UIFlowSearch.HEIGHT, mouseY - this.area.y));
         FlowNode from = this.wireFrom;
         String pin = this.wirePin;
+        boolean data = this.wireData;
 
         this.search.relative(this).xy(x, y).wh(UIFlowSearch.WIDTH, UIFlowSearch.HEIGHT);
         this.search.resize();
@@ -220,7 +317,11 @@ public class UIFlowGraph extends UIElement
         {
             FlowNode node = this.graph.add(type.id, this.addX, this.addY);
 
-            if (from != null && type.hasInput())
+            if (from != null && data && node.inputCount() > 0)
+            {
+                this.graph.linkData(from.id, pin, node.id, FlowNodeType.input(0));
+            }
+            else if (from != null && !data && type.hasInput())
             {
                 this.graph.link(from.id, pin, node.id);
             }
@@ -302,8 +403,53 @@ public class UIFlowGraph extends UIElement
             {
                 this.wireFrom = candidate;
                 this.wirePin = candidate.getType().outputs.get(output);
+                this.wireData = false;
                 this.wireX = gx;
                 this.wireY = gy;
+
+                return true;
+            }
+
+            int dataOutput = this.dataOutputAt(candidate, gx, gy);
+
+            if (dataOutput >= 0)
+            {
+                this.wireFrom = candidate;
+                this.wirePin = candidate.getType().dataOutputs.get(dataOutput).id();
+                this.wireData = true;
+                this.wireX = gx;
+                this.wireY = gy;
+
+                return true;
+            }
+
+            int dataInput = this.dataInputAt(candidate, gx, gy, 7);
+
+            if (dataInput >= 0)
+            {
+                FlowLink link = this.graph.dataInto(candidate.id, FlowNodeType.input(dataInput));
+
+                if (link != null)
+                {
+                    this.wireFrom = this.graph.get(link.from());
+                    this.wirePin = link.pin();
+                    this.wireData = true;
+                    this.wireX = gx;
+                    this.wireY = gy;
+                    this.graph.unlinkData(candidate.id, link.toPin());
+                    this.onChange.run();
+
+                    return true;
+                }
+            }
+
+            int grow = this.growButtonAt(candidate, gx, gy);
+
+            if (grow != 0)
+            {
+                this.graph.setInputCount(candidate, candidate.inputCount() + grow);
+                this.select(candidate);
+                this.onChange.run();
 
                 return true;
             }
@@ -312,10 +458,11 @@ public class UIFlowGraph extends UIElement
             {
                 for (FlowLink link : this.graph.links)
                 {
-                    if (link.to() == candidate.id)
+                    if (link.isExec() && link.to() == candidate.id)
                     {
                         this.wireFrom = this.graph.get(link.from());
                         this.wirePin = link.pin();
+                        this.wireData = false;
                         this.wireX = gx;
                         this.wireY = gy;
                         this.graph.unlink(link.from(), link.pin());
@@ -393,7 +540,15 @@ public class UIFlowGraph extends UIElement
 
             if (target != null && target != this.wireFrom)
             {
-                this.graph.link(this.wireFrom.id, this.wirePin, target.id);
+                if (this.wireData)
+                {
+                    this.dropData(target, gx, gy);
+                }
+                else
+                {
+                    this.graph.link(this.wireFrom.id, this.wirePin, target.id);
+                }
+
                 this.onChange.run();
             }
             else if (target == null && this.area.isInside(context))
@@ -421,6 +576,36 @@ public class UIFlowGraph extends UIElement
         this.panning = false;
 
         return super.subMouseReleased(context);
+    }
+
+    /** A value wire dropped on a card: the input under the cursor, else the first free one, else the first. */
+    private void dropData(FlowNode target, float gx, float gy)
+    {
+        int count = target.inputCount();
+
+        if (count <= 0)
+        {
+            return;
+        }
+
+        int index = this.dataInputAt(target, gx, gy, NODE_W);
+
+        if (index < 0)
+        {
+            index = 0;
+
+            for (int i = 0; i < count; i++)
+            {
+                if (this.graph.dataInto(target.id, FlowNodeType.input(i)) == null)
+                {
+                    index = i;
+
+                    break;
+                }
+            }
+        }
+
+        this.graph.linkData(this.wireFrom.id, this.wirePin, target.id, FlowNodeType.input(index));
     }
 
     /** Picks every card the box touches, on top of the earlier picks when it was drawn with Shift or Ctrl. */
@@ -578,10 +763,12 @@ public class UIFlowGraph extends UIElement
         if (this.wireFrom != null && this.wireFrom.getType() != null)
         {
             FlowLines lines = new FlowLines(context);
-            int index = Math.max(0, this.wireFrom.getType().outputs.indexOf(this.wirePin));
-            int accent = FlowTheme.accent();
+            int accent = this.wireData ? FlowTheme.typeColor(this.graph.outputType(this.wireFrom, this.wirePin)) : FlowTheme.accent();
+            float startY = this.wireData
+                ? dataOutY(this.wireFrom, Math.max(0, indexOfData(this.wireFrom.getType(), this.wirePin)))
+                : outputY(this.wireFrom, Math.max(0, this.wireFrom.getType().outputs.indexOf(this.wirePin)));
 
-            lines.liveWire(this.wireFrom.x + NODE_W + 4, outputY(this.wireFrom, index), this.wireX, this.wireY, 2.2F, accent, accent, time);
+            lines.liveWire(this.wireFrom.x + NODE_W + 4, startY, this.wireX, this.wireY, 2.2F, accent, accent, time);
             lines.end();
         }
 
@@ -675,13 +862,38 @@ public class UIFlowGraph extends UIElement
                 continue;
             }
 
-            int index = Math.max(0, a.getType().outputs.indexOf(link.pin()));
             boolean hot = this.picked.contains(a) || this.picked.contains(b);
+
+            if (!link.isExec())
+            {
+                int out = Math.max(0, indexOfData(a.getType(), link.pin()));
+                int in = Math.max(0, (int) mchorse.bbs_mod.triggers.FlowValues.parse(link.toPin().substring(2), 0));
+                int color = FlowTheme.typeColor(this.graph.outputType(a, link.pin()));
+
+                lines.liveWire(a.x + NODE_W + 4, dataOutY(a, out), b.x - 4, dataInY(b, in), hot ? 2F : 1.5F, color, color, time);
+
+                continue;
+            }
+
+            int index = Math.max(0, a.getType().outputs.indexOf(link.pin()));
 
             lines.liveWire(a.x + NODE_W + 4, outputY(a, index), b.x - 4, inputY(b), hot ? 2.4F : 1.8F, hot ? accent : wire, hot ? accent : a.getType().kind.color, time);
         }
 
         lines.end();
+    }
+
+    private static int indexOfData(FlowNodeType type, String pin)
+    {
+        for (int i = 0; i < type.dataOutputs.size(); i++)
+        {
+            if (type.dataOutputs.get(i).id().equals(pin))
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     private void renderNode(UIContext context, FlowNode node)
@@ -748,8 +960,43 @@ public class UIFlowGraph extends UIElement
             }
         }
 
+        /* Data pins: inputs take on the type of what is wired in, outputs have theirs */
+        for (int i = 0; i < node.inputCount(); i++)
+        {
+            float py = dataInY(node, i);
+            String pin = FlowNodeType.input(i);
+            boolean wired = this.graph.dataInto(node.id, pin) != null;
+            int pinColor = FlowTheme.typeColor(this.graph.inputType(node, i));
+
+            this.renderDataPin(batcher, x, py, wired, pinColor);
+
+            String letter = String.valueOf((char) ('A' + i));
+            String label = wired ? letter : letter + ": " + node.param(pin);
+
+            batcher.text(batcher.getFont().limitToWidth(label, NODE_W / 2 - 4), x + 8, py - 4, wired ? FlowTheme.text() : FlowTheme.dim());
+        }
+
+        for (int i = 0; i < type.dataOutputs.size(); i++)
+        {
+            FlowNodeType.DataPin data = type.dataOutputs.get(i);
+            float py = dataOutY(node, i);
+            String label = L10n.lang("bbs.ui.trigger_box.pin." + data.id()).get();
+
+            this.renderDataPin(batcher, ex, py, this.isDataOutWired(node, data.id()), FlowTheme.typeColor(this.graph.outputType(node, data.id())));
+            batcher.text(label, ex - 9 - batcher.getFont().getWidth(label), py - 4, FlowTheme.text());
+        }
+
+        if (growable(node))
+        {
+            float gy = growY(node);
+
+            this.renderGrowButton(batcher, x + 6, gy, "+", true);
+            this.renderGrowButton(batcher, x + 20, gy, "-", node.inputCount() > type.minInputs);
+            batcher.text(L10n.lang("bbs.ui.trigger_box.add_input").get(), x + 36, gy - 4, FlowTheme.dim());
+        }
+
         /* The node's fields, read only on the card: they are edited in Details */
-        float py = y + HEADER + 4 + execRows(node) * ROW;
+        float py = y + HEADER + 4 + (execRows(node) + dataRows(node) + (growable(node) ? 1 : 0)) * ROW;
 
         if (!type.params.isEmpty())
         {
@@ -769,11 +1016,41 @@ public class UIFlowGraph extends UIElement
         }
     }
 
+    private boolean isDataOutWired(FlowNode node, String pin)
+    {
+        for (FlowLink link : this.graph.links)
+        {
+            if (!link.isExec() && link.from() == node.id && link.pin().equals(pin))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** A data pin: a round socket in the colour of its type, filled when wired. */
+    private void renderDataPin(Batcher2D batcher, float cx, float cy, boolean wired, int color)
+    {
+        FlowTheme.rounded(batcher, cx - 4, cy - 4, cx + 4, cy + 4, 4, color, true, true);
+
+        if (!wired)
+        {
+            FlowTheme.rounded(batcher, cx - 2.5F, cy - 2.5F, cx + 2.5F, cy + 2.5F, 2, FlowTheme.body(), true, true);
+        }
+    }
+
+    private void renderGrowButton(Batcher2D batcher, float x, float cy, String sign, boolean enabled)
+    {
+        FlowTheme.rounded(batcher, x, cy - 5, x + 12, cy + 5, 3, enabled ? (FlowTheme.accent() & 0xffffff) | 0xc0000000 : 0x30808080, true, true);
+        batcher.text(sign, x + 6 - batcher.getFont().getWidth(sign) / 2F, cy - 4, enabled ? Colors.WHITE : FlowTheme.dim());
+    }
+
     private boolean isInputWired(FlowNode node)
     {
         for (FlowLink link : this.graph.links)
         {
-            if (link.to() == node.id)
+            if (link.isExec() && link.to() == node.id)
             {
                 return true;
             }
@@ -801,6 +1078,5 @@ public class UIFlowGraph extends UIElement
         int dim = (FlowTheme.text() & 0xffffff) | 0x90000000;
 
         context.batcher.text(picked + zoom, this.area.ex() - 8 - context.batcher.getFont().getWidth(picked + zoom), this.area.ey() - 14, dim);
-        context.batcher.text(L10n.lang("bbs.ui.trigger_box.flow_hint").get(), this.area.x + 8, this.area.ey() - 14, dim);
     }
 }

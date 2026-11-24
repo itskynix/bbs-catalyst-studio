@@ -154,7 +154,8 @@ public class FlowRuntime
 
                     this.set(name, variable != null && variable.type.equals("integer") ? String.valueOf((long) sum) : String.valueOf(sum));
                 }
-                case FlowNodeTypes.BRANCH -> out = compare(this.values.getOrDefault(node.param("variable"), ""), node.param("operator"), this.value(node.param("value"), entity)) ? "true" : "false";
+                case FlowNodeTypes.IF_ELSE -> out = FlowValues.check("&&", this.inputs(node, entity, 0)) ? "true" : "false";
+                case FlowNodeTypes.BRANCH -> out =compare(this.values.getOrDefault(node.param("variable"), ""), node.param("operator"), this.value(node.param("value"), entity)) ? "true" : "false";
                 case FlowNodeTypes.WAIT ->
                 {
                     long ticks = Math.max(0, (long) parse(this.text(node.param("ticks"), entity), 0));
@@ -168,6 +169,45 @@ public class FlowRuntime
 
             node = this.graph.next(node.id, out);
         }
+    }
+
+    /** The values on a node's data inputs: what is wired in, worked out now, or the typed-in value. */
+    private List<String> inputs(FlowNode node, Entity entity, int depth)
+    {
+        List<String> values = new ArrayList<>();
+
+        for (int i = 0; i < node.inputCount(); i++)
+        {
+            String pin = FlowNodeType.input(i);
+            FlowLink link = this.graph.dataInto(node.id, pin);
+
+            values.add(link == null ? this.text(node.param(pin), entity) : this.evaluate(this.graph.get(link.from()), link.pin(), entity, depth + 1));
+        }
+
+        return values;
+    }
+
+    /** A data output's value. Pure nodes are worked out each time they are asked, so they always read the current variables. */
+    private String evaluate(FlowNode node, String pin, Entity entity, int depth)
+    {
+        if (node == null || depth > 64)
+        {
+            return "";
+        }
+
+        if (node.type.equals(FlowNodeTypes.GET_VARIABLE))
+        {
+            return this.values.getOrDefault(node.param("variable"), "");
+        }
+
+        String operator = FlowNodeTypes.OPERATOR_OF.get(node.type);
+
+        if (operator != null)
+        {
+            return String.valueOf(FlowValues.check(operator, this.inputs(node, entity, depth)));
+        }
+
+        return "";
     }
 
     private void set(String name, String value)

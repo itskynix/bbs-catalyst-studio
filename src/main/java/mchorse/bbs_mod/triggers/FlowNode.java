@@ -29,6 +29,38 @@ public class FlowNode
             {
                 this.params.put(param.id(), param.fallback());
             }
+
+            if (kind.minInputs > 0)
+            {
+                this.setInputCount(kind.minInputs);
+            }
+        }
+    }
+
+    /** How many data inputs the node has: at least its type's minimum, more once its + button was used. */
+    public int inputCount()
+    {
+        FlowNodeType type = this.getType();
+
+        if (type == null || type.minInputs <= 0)
+        {
+            return 0;
+        }
+
+        return Math.max(type.minInputs, (int) FlowValues.parse(this.params.get("inputs"), type.minInputs));
+    }
+
+    /** Sets the number of data inputs; a new input starts with a typed-in value standing in for a wire. */
+    public void setInputCount(int count)
+    {
+        FlowNodeType type = this.getType();
+        String fallback = type != null && type.inputType.equals("boolean") ? "true" : "0";
+
+        this.params.put("inputs", String.valueOf(count));
+
+        for (int i = 0; i < count; i++)
+        {
+            this.params.putIfAbsent(FlowNodeType.input(i), fallback);
         }
     }
 

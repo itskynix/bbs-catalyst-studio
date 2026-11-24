@@ -19,8 +19,8 @@ import net.minecraft.util.math.Box;
 /**
  * Draws a trigger box in the world only when someone is meant to see it. With the debug screen
  * (F3) open, its volume and its block get a solid outline, the way a model block's hitbox does;
- * while its editor is open, the volume gets a dashed outline. In plain play, and with the HUD hidden
- * (F1), nothing at all.
+ * while its editor is open, the volume gets a dashed outline, HUD or no HUD. In plain play, and with
+ * the HUD hidden (F1) outside the editor, nothing at all.
  */
 public class TriggerBoxRenderer implements BlockEntityRenderer<TriggerBoxBlockEntity>
 {
@@ -38,13 +38,20 @@ public class TriggerBoxRenderer implements BlockEntityRenderer<TriggerBoxBlockEn
     {
         MinecraftClient mc = MinecraftClient.getInstance();
 
-        if (mc.options.hudHidden || mc.player == null)
+        if (mc.player == null)
         {
             return;
         }
 
         BlockPos pos = box.getPos();
         boolean edited = pos.equals(editing);
+
+        /* F1 hides it, except in its own editor: BBS screens hide the HUD while they are open,
+         * and the editor's Viewport tab is exactly where the outline has to show */
+        if (mc.options.hudHidden && !edited)
+        {
+            return;
+        }
         //? if >=1.20.4 {
         boolean debug = mc.getDebugHud().shouldShowDebugHud();
         //?} else {

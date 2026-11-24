@@ -288,6 +288,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
     {
         this.codeDirty = true;
         this.fillLeft();
+        this.refreshDetails();
     }
 
     private void onSelect(FlowNode node)
@@ -300,45 +301,14 @@ public class UITriggerBoxMenu extends UIBaseMenu
     /**
      * The Viewport tab is the world itself: the middle stays open, an orbit camera circles the box
      * (drag to turn, wheel to zoom) and the box is drawn with a dashed outline only while this editor
-     * is open. A strip at the bottom holds its size and offset.
+     * is open. Its size and offset live in Details on the right, the one place they are edited.
      */
     private void createViewportTab()
     {
-        UITrackpad x = this.boxTrackpad(() -> this.box.boxWidth, (v) -> this.box.boxWidth = v, 0.1, 64);
-        UITrackpad y = this.boxTrackpad(() -> this.box.boxHeight, (v) -> this.box.boxHeight = v, 0.1, 64);
-        UITrackpad z = this.boxTrackpad(() -> this.box.boxDepth, (v) -> this.box.boxDepth = v, 0.1, 64);
-        UITrackpad ox = this.boxTrackpad(() -> this.box.offsetX, (v) -> this.box.offsetX = v, -64, 64);
-        UITrackpad oy = this.boxTrackpad(() -> this.box.offsetY, (v) -> this.box.offsetY = v, -64, 64);
-        UITrackpad oz = this.boxTrackpad(() -> this.box.offsetZ, (v) -> this.box.offsetZ = v, -64, 64);
-
-        x.tooltip(key("box_width"));
-        y.tooltip(key("box_height"));
-        z.tooltip(key("box_depth"));
-
-        UIElement strip = new UIElement()
-        {
-            @Override
-            public void render(mchorse.bbs_mod.ui.framework.UIContext context)
-            {
-                FlowTheme.rounded(context.batcher, this.area.x, this.area.y, this.area.ex(), this.area.ey(), FlowTheme.radius(), FlowTheme.panel(), true, true);
-
-                super.render(context);
-            }
-        };
-
-        UIElement controls = UI.column(4,
-            UI.row(4, UI.label(key("viewport.size")).labelAnchor(0F, 0.5F), x, y, z),
-            UI.row(4, UI.label(key("offset")).labelAnchor(0F, 0.5F), ox, oy, oz)
-        );
-
-        strip.relative(this.viewportTab).x(10).y(1F, -62).w(1F, -20).h(54);
-        controls.relative(strip).x(6).y(4).w(1F, -12).h(1F, -8);
-        strip.add(controls);
-
         UILabel hint = UI.label(key("viewport.hint")).color(Colors.WHITE).background(0x80000000);
 
         hint.relative(this.viewportTab).x(10).y(8).w(1F, -20).h(12);
-        this.viewportTab.add(hint, strip);
+        this.viewportTab.add(hint);
     }
 
     /** Points the orbit camera at the middle of the box, from a little above, far enough to see all of it. */
@@ -640,15 +610,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
 
     public static int typeColor(String type)
     {
-        return switch (type)
-        {
-            case "boolean" -> 0xffd2453f;
-            case "integer" -> 0xff2fc4a0;
-            case "float" -> 0xff8bd84a;
-            case "string" -> 0xffe85ad6;
-            case "vec3" -> 0xffeac241;
-            default -> 0xff3aa1e8;
-        };
+        return FlowTheme.typeColor(type);
     }
 
     /* Right column */
@@ -731,7 +693,51 @@ public class UITriggerBoxMenu extends UIBaseMenu
 
         this.details.add(this.header(key("details")));
         this.details.add(UI.label(IKey.constant(UIFlowSearch.name(type) + "  #" + node.id)).color(type.kind.color));
-        this.details.add(UI.label(key("node_desc." + type.id)).color(0xffa6aeb8));
+        this.details.add(new mchorse.bbs_mod.ui.framework.elements.utils.UIText(key("node_desc." + type.id)).color(FlowTheme.dim(), false));
+
+        /* Data inputs: a wired one says so, a free one takes a typed-in value; + and - change how many */
+        if (node.inputCount() > 0)
+        {
+            this.details.add(this.header(key("inputs")));
+
+            for (int i = 0; i < node.inputCount(); i++)
+            {
+                String pin = FlowNodeType.input(i);
+                String letter = String.valueOf((char) ('A' + i));
+                UILabel label = UI.label(IKey.constant(letter)).color(FlowTheme.typeColor(this.graph.inputType(node, i)));
+
+                if (this.graph.dataInto(node.id, pin) != null)
+                {
+                    this.details.add(this.pair(UI.label(key("input_wired")).color(FlowTheme.dim()), label));
+                }
+                else
+                {
+                    UITextbox literal = new UITextbox(256, (text) ->
+                    {
+                        node.params.put(pin, text);
+                        this.codeDirty = true;
+                    });
+
+                    literal.setText(node.param(pin));
+                    literal.tooltip(key("input_value"));
+                    this.details.add(this.pair(literal, label));
+                }
+            }
+
+            UIButton more = new UIButton(key("add_input"), (b) ->
+            {
+                this.graph.setInputCount(node, node.inputCount() + 1);
+                this.onGraphChanged();
+            });
+            UIButton fewer = new UIButton(key("remove_input"), (b) ->
+            {
+                this.graph.setInputCount(node, node.inputCount() - 1);
+                this.onGraphChanged();
+            });
+
+            fewer.setEnabled(node.inputCount() > type.minInputs);
+            this.details.add(UI.row(2, more, fewer));
+        }
 
         for (FlowNodeType.Param param : type.params)
         {

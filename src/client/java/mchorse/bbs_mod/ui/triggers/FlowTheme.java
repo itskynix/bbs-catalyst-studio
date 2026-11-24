@@ -140,4 +140,19 @@ public class FlowTheme
 
         batcher.gradientHBox(x1, y1 + r, x2, y2, left, right);
     }
+
+    /** The colour of a value type, on variables, data pins and data wires. */
+    public static int typeColor(String type)
+    {
+        return switch (type)
+        {
+            case "boolean" -> 0xffd2453f;
+            case "integer" -> 0xff2fc4a0;
+            case "float" -> 0xff8bd84a;
+            case "string" -> 0xffe85ad6;
+            case "vec3" -> 0xffeac241;
+            case "entity" -> 0xff3aa1e8;
+            default -> 0xff9aa3ad;
+        };
+    }
 }
