@@ -165,7 +165,50 @@ public class FlowNode
             inputs.add(FlowNodeType.input(i));
         }
 
+        if (type.templateInputs)
+        {
+            for (String name : templateNames(this.param("template")))
+            {
+                inputs.add(FlowNodeType.templatePin(name));
+            }
+        }
+
         return inputs;
+    }
+
+    /** The distinct {names} of a template, in order; a name is letters, digits, _ or -, up to 32 of them. */
+    public static List<String> templateNames(String template)
+    {
+        List<String> names = new ArrayList<>();
+        int i = 0;
+
+        while (template != null && i < template.length())
+        {
+            int open = template.indexOf('{', i);
+            int close = open < 0 ? -1 : template.indexOf('}', open);
+
+            if (open < 0 || close < 0)
+            {
+                break;
+            }
+
+            String name = template.substring(open + 1, close).trim();
+            boolean valid = !name.isEmpty() && name.length() <= 32;
+
+            for (char c : name.toCharArray())
+            {
+                valid &= Character.isLetterOrDigit(c) || c == '_' || c == '-';
+            }
+
+            if (valid && !names.contains(name))
+            {
+                names.add(name);
+            }
+
+            i = close + 1;
+        }
+
+        return names;
     }
 
     /** What a data input expects, before anything is wired into it. */

@@ -52,6 +52,7 @@ public class FlowJavaGenerator
         this.line(0, " * this is the same logic written out as Java, read only. */");
         this.line(0, "package bbs.triggers;");
         this.line(0, "");
+        this.line(0, "import mchorse.bbs_mod.triggers.FlowBBS;");
         this.line(0, "import net.minecraft.entity.Entity;");
         this.line(0, "import net.minecraft.util.math.Vec3d;");
         this.line(0, "");
@@ -64,7 +65,11 @@ public class FlowJavaGenerator
         {
             String array = variable.isArray ? " /* list */" : "";
 
-            if (variable.scope.equals("local"))
+            if (variable.scope.equals("local") && variable.isArray)
+            {
+                this.line(1, "private java.util.List<String> " + identifier(variable.name) + " = " + listLiteral(variable.value) + "; /* list of " + variable.type + " */");
+            }
+            else if (variable.scope.equals("local"))
             {
                 this.line(1, "private " + javaType(variable.type) + " " + identifier(variable.name) + " = " + literal(variable.type, variable.value) + ";" + array);
             }
@@ -408,6 +413,27 @@ public class FlowJavaGenerator
             args.add(this.input(node, pin).code());
         }
 
+        if (type.kind == FlowNodeType.Kind.CINEMATIC)
+        {
+            List<String> bbs = new ArrayList<>();
+
+            bbs.add("entity");
+
+            for (String pin : node.dataInputs())
+            {
+                bbs.add(this.input(node, pin).code());
+            }
+
+            if (type.id.equals("play_film"))
+            {
+                bbs.add(String.valueOf(FlowValues.truthy(node.param("camera"))));
+            }
+
+            this.then(node, "FlowBBS." + camel(type.id) + "(" + String.join(", ", bbs) + ");", indent, path);
+
+            return;
+        }
+
         String call = "this." + method + "(" + String.join(", ", args) + ")";
         List<String> outputs = node.execOutputs();
 
@@ -457,6 +483,12 @@ public class FlowJavaGenerator
         }
 
         Expr value = this.input(node, "value");
+
+        if (variable.isArray && variable.scope.equals("local"))
+        {
+            return "this." + identifier(variable.name) + " = new java.util.ArrayList<>(this.list(" + value.code() + "));";
+        }
+
         String code = variable.type.equals("string") && !value.type().equals("string") ? "String.valueOf(" + value.code() + ")" : value.code();
 
         if (variable.type.equals("integer") && value.type().equals("number"))
@@ -483,6 +515,11 @@ public class FlowJavaGenerator
         if (variable == null)
         {
             return "/* Add: its variable was deleted */";
+        }
+
+        if (variable.isArray && variable.scope.equals("local"))
+        {
+            return "this." + identifier(variable.name) + ".add(String.valueOf(" + this.input(node, "amount").code() + "));";
         }
 
         String amount = this.number(node, "amount");
@@ -517,7 +554,7 @@ public class FlowJavaGenerator
         {
             case "integer", "float", "number" -> "number";
             case "boolean" -> "boolean";
-            case "string" -> "string";
+            case "string", "block", "item", "sound", "color" -> "string";
             default -> "any";
         };
     }
@@ -583,7 +620,7 @@ public class FlowJavaGenerator
         {
             case "global" -> new Expr("this.getGlobal(" + quote(variable.name) + ")", "any");
             case "entity" -> new Expr("this.getOnEntity(entity, " + quote(variable.name) + ")", "any");
-            default -> new Expr("this." + identifier(variable.name), type);
+            default -> new Expr("this." + identifier(variable.name), variable.isArray ? "any" : type);
         };
     }
 
@@ -623,6 +660,25 @@ public class FlowJavaGenerator
             case "clamp" ->
             {
                 return new Expr("Math.max(" + this.number(node, "min") + ", Math.min(" + this.number(node, "max") + ", " + this.number(node, "value") + "))", "number");
+            }
+            case "append" ->
+            {
+                List<String> parts = new ArrayList<>();
+
+                for (int i = 0; i < node.inputCount(); i++)
+                {
+                    parts.add("String.valueOf(" + this.input(node, FlowNodeType.input(i), depth).code() + ")");
+                }
+
+                return new Expr(parts.isEmpty() ? "\"\"" : String.join(" + ", parts), "string");
+            }
+            case "format_text" ->
+            {
+                return new Expr(this.format(node, depth), "string");
+            }
+            case "get_form" ->
+            {
+                return new Expr("FlowBBS." + (pin.equals("form_id") ? "formId" : "formData") + "(entity, " + this.input(node, "entity", depth).code() + ")", "string");
             }
             case "threshold" ->
             {
@@ -676,6 +732,39 @@ public class FlowJavaGenerator
         String method = camel(type.id) + (type.dataOutputs.size() > 1 ? capital(camel(pin)) : "");
 
         return new Expr("this." + method + "(" + String.join(", ", args) + ")", outputType);
+    }
+
+    /** Format Text: the template as a string expression, each {name} the value of its pin. */
+    private String format(FlowNode node, int depth)
+    {
+        String template = node.param("template");
+        List<String> parts = new ArrayList<>();
+        int i = 0;
+
+        while (i < template.length())
+        {
+            int open = template.indexOf('{', i);
+            int close = open < 0 ? -1 : template.indexOf('}', open);
+
+            if (open < 0 || close < 0)
+            {
+                parts.add(quote(template.substring(i)));
+
+                break;
+            }
+
+            String name = template.substring(open + 1, close).trim();
+
+            if (open > i)
+            {
+                parts.add(quote(template.substring(i, open)));
+            }
+
+            parts.add(FlowNode.templateNames(template).contains(name) ? "String.valueOf(" + this.input(node, FlowNodeType.templatePin(name), depth).code() + ")" : quote("{" + name + "}"));
+            i = close + 1;
+        }
+
+        return parts.isEmpty() ? "\"\"" : String.join(" + ", parts);
     }
 
     private static String bool(Expr e)
@@ -836,6 +925,19 @@ public class FlowJavaGenerator
             case "entity" -> "null";
             default -> quote(v);
         };
+    }
+
+    /** A comma separated list as a Java list of text. */
+    private static String listLiteral(String value)
+    {
+        List<String> parts = new ArrayList<>();
+
+        for (String item : FlowValues.list(value))
+        {
+            parts.add(quote(item));
+        }
+
+        return "new java.util.ArrayList<>(java.util.List.of(" + String.join(", ", parts) + "))";
     }
 
     private static String quote(String text)

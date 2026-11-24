@@ -1,6 +1,11 @@
 package mchorse.bbs_mod.ui.triggers;
 
+import mchorse.bbs_mod.data.DataToString;
+import mchorse.bbs_mod.data.types.MapType;
 import mchorse.bbs_mod.film.Film;
+import mchorse.bbs_mod.forms.FormUtils;
+import mchorse.bbs_mod.forms.forms.Form;
+import mchorse.bbs_mod.ui.forms.UIFormPalette;
 import mchorse.bbs_mod.film.replays.Replay;
 import mchorse.bbs_mod.l10n.L10n;
 import mchorse.bbs_mod.l10n.keys.IKey;
@@ -53,58 +58,65 @@ public class FlowFields
         return icon;
     }
 
-    /**
-     * A combo box: a text field and, beside it, a button that lists suggestions. Picking one puts it
-     * in the field and hands it on, as typing would. The list is asked for when the button is
-     * clicked, so it is always current (and may arrive later, from a repository).
-     */
+    /** A drop down list of suggestions that are picked straight from it; its last entry lets a value be typed. */
     public static UIElement combo(String value, Consumer<String> setter, Consumer<Consumer<List<Option>>> options, IKey placeholder)
     {
-        UITextbox field = new UITextbox(1000, setter);
-        UIIcon open = new UIIcon(Icons.ARROW_DOWN, null);
-        UIElement row = new UIElement();
+        return new UIComboBox(value, setter, options, placeholder);
+    }
 
-        field.setText(value);
-
-        if (placeholder != null)
+    /**
+     * A form field: a drop down whose entries are the BBS form picker and clearing it. The form is kept
+     * as BBS form data, as the form editor copies it.
+     */
+    public static UIElement form(String value, Consumer<String> setter, UIElement palette)
+    {
+        UIComboBox box = new UIComboBox(formLabel(value), (v) -> { if (v.isEmpty()) setter.accept(""); }, (callback) ->
         {
-            field.placeholder(placeholder);
-        }
+            List<Option> list = new ArrayList<>();
 
-        open.callback = (b) -> options.accept((list) ->
+            list.add(new Option("", key("option.no_form").get()));
+            callback.accept(list);
+        }, key("form_placeholder"));
+
+        box.custom(key("pick_form"), (b) ->
         {
-            UIContext context = open.getContext();
+            Form current = null;
 
-            if (context == null)
+            try
             {
-                return;
+                MapType data = DataToString.mapFromString(value);
+
+                current = data == null ? null : FormUtils.fromData(data);
             }
+            catch (Exception e)
+            {}
 
-            context.replaceContextMenu((menu) ->
+            UIFormPalette.open(palette, false, current, (form) ->
             {
-                if (list.isEmpty())
-                {
-                    menu.action(Icons.EXCLAMATION, key("combo_empty"), () -> {});
-                }
+                String data = form == null ? "" : DataToString.toString(FormUtils.toData(form));
 
-                for (Option option : list)
-                {
-                    menu.action(Icons.CONVERT, IKey.constant(option.label()), () ->
-                    {
-                        field.setText(option.value());
-                        setter.accept(option.value());
-                    });
-                }
+                setter.accept(data);
+                b.pick(formLabel(data));
             });
         });
-        open.tooltip(key("combo_open"));
 
-        row.h(20);
-        field.relative(row).w(1F, -20).h(20);
-        open.relative(row).x(1F, -20).wh(20, 20);
-        row.add(field, open);
+        return box;
+    }
 
-        return row;
+    /** What a form field shows: the form's id, or nothing. */
+    private static String formLabel(String data)
+    {
+        try
+        {
+            MapType map = DataToString.mapFromString(data);
+            Form form = map == null ? null : FormUtils.fromData(map);
+
+            return form == null ? "" : form.getFormIdOrName();
+        }
+        catch (Exception e)
+        {
+            return data == null ? "" : data;
+        }
     }
 
     /* Lists */

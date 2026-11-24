@@ -26,6 +26,7 @@ public class FlowNodeType
         STATE(0xffc96f9e),
         RANDOM(0xffd0b12f),
         MATH(0xff4fa3a8),
+        TEXT(0xffd05ab8),
         VARIABLE(0xff2f9e5c),
         WORLD(0xff3f8fd0),
         ACTION(0xff2f6fc0),
@@ -72,6 +73,9 @@ public class FlowNodeType
 
     /** Kept so old flows still load and run, but not offered in the add menu. */
     public boolean hidden;
+
+    /** Data inputs named after the {placeholders} of the node's "template" setting, one per name. */
+    public boolean templateInputs;
 
     public FlowNodeType(String id, Kind kind)
     {
@@ -145,6 +149,13 @@ public class FlowNodeType
         return this;
     }
 
+    public FlowNodeType template()
+    {
+        this.templateInputs = true;
+
+        return this;
+    }
+
     public FlowNodeType hidden()
     {
         this.hidden = true;
@@ -191,6 +202,12 @@ public class FlowNodeType
     public static String input(int i)
     {
         return "in" + i;
+    }
+
+    /** The data input standing for a template's {name}. */
+    public static String templatePin(String name)
+    {
+        return "t_" + name;
     }
 
     public static boolean isExec(String pin)

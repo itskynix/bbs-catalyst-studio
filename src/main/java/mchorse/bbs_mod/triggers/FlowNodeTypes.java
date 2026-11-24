@@ -128,6 +128,10 @@ public class FlowNodeTypes
         add("clamp", Kind.MATH).data("value", "float", "0").data("min", "float", "0").data("max", "float", "1").value("result", "float");
         add("map_range", Kind.MATH).data("value", "float", "0.5").data("in_min", "float", "0").data("in_max", "float", "1").data("out_min", "float", "0").data("out_max", "float", "10").param("clamp", "true").value("result", "float");
         add("threshold", Kind.MATH).data("value", "float", "0").data("threshold", "float", "0.5").value("result", "boolean");
+        /* Text */
+        add("append", Kind.TEXT).grow(2, "any", "").value("result", "string");
+        add("format_text", Kind.TEXT).param("template", "{player} scored {points} points!").template().value("result", "string");
+
         add("counter", Kind.MATH).in("exec", "reset").out("then", "target_reached").data("step", "integer", "1").data("target", "integer", "10").value("count", "integer");
 
         /* Variables */
@@ -155,24 +159,24 @@ public class FlowNodeTypes
         add("damage_entity", Kind.ACTION).in("exec").out("then").data("entity", "entity", "@entity").data("amount", "float", "2");
         add("heal_entity", Kind.ACTION).in("exec").out("then").data("entity", "entity", "@entity").data("amount", "float", "2");
         add("launch_entity", Kind.ACTION).in("exec").out("then").data("entity", "entity", "@entity").data("velocity", "vec3", "0 1 0");
-        add("give_item", Kind.ACTION).in("exec").out("then").data("entity", "entity", "@entity").data("item", "string", "minecraft:diamond").data("count", "integer", "1").command("give {entity} {item} {count}");
-        add("remove_item", Kind.ACTION).in("exec").out("then").data("entity", "entity", "@entity").data("item", "string", "minecraft:diamond").data("count", "integer", "1").command("clear {entity} {item} {count}");
+        add("give_item", Kind.ACTION).in("exec").out("then").data("entity", "entity", "@entity").data("item", "item", "minecraft:diamond").data("count", "integer", "1").command("give {entity} {item} {count}");
+        add("remove_item", Kind.ACTION).in("exec").out("then").data("entity", "entity", "@entity").data("item", "item", "minecraft:diamond").data("count", "integer", "1").command("clear {entity} {item} {count}");
         add("add_effect", Kind.ACTION).in("exec").out("then").data("entity", "entity", "@entity").data("effect", "string", "minecraft:speed").data("seconds", "integer", "10").data("amplifier", "integer", "0").command("effect give {entity} {effect} {seconds} {amplifier}");
         add("remove_effect", Kind.ACTION).in("exec").out("then").data("entity", "entity", "@entity").data("effect", "string", "minecraft:speed").command("effect clear {entity} {effect}");
         add("spawn_entity", Kind.ACTION).in("exec").out("then").data("type", "string", "minecraft:pig").data("position", "vec3", "~ ~ ~").command("summon {type} {position}");
-        add("set_block", Kind.ACTION).in("exec").out("then").data("position", "vec3", "~ ~-1 ~").data("block", "string", "minecraft:gold_block").command("setblock {position} {block}");
-        add("play_sound", Kind.ACTION).in("exec").out("then").data("sound", "string", "minecraft:entity.experience_orb.pickup").data("position", "vec3", "~ ~ ~").data("volume", "float", "1").data("pitch", "float", "1").command("playsound {sound} master @a {position} {volume} {pitch}");
+        add("set_block", Kind.ACTION).in("exec").out("then").data("position", "vec3", "~ ~-1 ~").data("block", "block", "minecraft:gold_block").command("setblock {position} {block}");
+        add("play_sound", Kind.ACTION).in("exec").out("then").data("sound", "sound", "minecraft:entity.experience_orb.pickup").data("position", "vec3", "~ ~ ~").data("volume", "float", "1").data("pitch", "float", "1").command("playsound {sound} master @a {position} {volume} {pitch}");
         add("spawn_particle", Kind.ACTION).in("exec").out("then").data("particle", "string", "minecraft:happy_villager").data("position", "vec3", "~ ~1 ~").data("count", "integer", "10").command("particle {particle} {position} 0.3 0.3 0.3 0.05 {count}");
         add("show_title", Kind.ACTION).in("exec").out("then").data("entity", "entity", "@entity").data("text", "string", "Welcome").command("title {entity} title {text:json}");
         add("show_actionbar", Kind.ACTION).in("exec").out("then").data("entity", "entity", "@entity").data("text", "string", "You found it").command("title {entity} actionbar {text:json}");
 
         /* BBS: films, cameras, forms */
-        add("play_film", Kind.CINEMATIC).in("exec").out("then").data("player", "entity", "@entity").data("film", "string", "my_film").param("camera", "true").command("bbs films {player} play {film:q} {camera}");
-        add("stop_film", Kind.CINEMATIC).in("exec").out("then").data("player", "entity", "@entity").data("film", "string", "my_film").command("bbs films {player} stop {film:q}");
-        add("set_camera_clip", Kind.CINEMATIC).in("exec").out("then").data("player", "entity", "@entity").data("film", "string", "my_film").command("bbs films {player} play {film:q} true");
-        add("set_form", Kind.CINEMATIC).in("exec").out("then").data("player", "entity", "@entity").data("form", "string", "{id:\"bbs:model\",model:\"player/steve\"}").command("bbs morph {player} {form}");
-        add("clear_form", Kind.CINEMATIC).in("exec").out("then").data("player", "entity", "@entity").command("bbs morph {player}");
-        add("model_block_state", Kind.CINEMATIC).in("exec").out("then").data("position", "vec3", "0 0 0").data("state", "string", "idle").command("bbs model_block play_state {position} {state:q}");
+        add("play_film", Kind.CINEMATIC).in("exec").out("then").data("player", "entity", "@entity").data("film", "string", "my_film").param("camera", "true");
+        add("stop_film", Kind.CINEMATIC).in("exec").out("then").data("player", "entity", "@entity").data("film", "string", "my_film");
+        add("set_camera_clip", Kind.CINEMATIC).in("exec").out("then").data("player", "entity", "@entity").data("film", "string", "my_film");
+        add("set_form", Kind.CINEMATIC).in("exec").out("then").data("player", "entity", "@entity").data("form", "string", "{id:\"bbs:model\",model:\"player/steve\"}");
+        add("clear_form", Kind.CINEMATIC).in("exec").out("then").data("player", "entity", "@entity");
+        add("model_block_state", Kind.CINEMATIC).in("exec").out("then").data("position", "vec3", "0 0 0").data("state", "string", "idle");
         add("get_form", Kind.CINEMATIC).data("entity", "entity", "@entity").value("form_id", "string").value("form", "string");
 
         /* Debug */

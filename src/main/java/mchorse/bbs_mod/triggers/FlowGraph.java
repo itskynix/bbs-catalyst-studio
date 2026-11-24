@@ -147,6 +147,14 @@ public class FlowGraph
         return null;
     }
 
+    /** Drops the data wires into inputs the node no longer has, after its template changed. */
+    public void pruneLinks(FlowNode node)
+    {
+        List<String> inputs = node.dataInputs();
+
+        this.links.removeIf((link) -> link.to() == node.id && !link.isExec() && !inputs.contains(link.toPin()));
+    }
+
     /* Growing */
 
     public void setInputCount(FlowNode node, int count)

@@ -875,6 +875,11 @@ public class UIFlowGraph extends UIElement
             return type.outputParam != null ? label + " (" + node.param(type.outputParam + index) + ")" : label;
         }
 
+        if (!exec && type != null && type.templateInputs && pin.startsWith("t_"))
+        {
+            return pin.substring(2);
+        }
+
         if (!exec && pin.startsWith("in") && pin.length() > 2 && Character.isDigit(pin.charAt(2)) && type != null && type.dataInput(pin) == null)
         {
             return String.valueOf((char) ('A' + (int) FlowValues.parse(pin.substring(2), 0)));
@@ -1268,7 +1273,14 @@ public class UIFlowGraph extends UIElement
 
         float textX = layout.left.isEmpty() ? x + 18 : x + 24;
 
-        FlowTheme.rounded(batcher, textX - 12, y + 5, textX - 4, y + 13, 4, typeColor, true, true);
+        if (variable != null && !invalid)
+        {
+            FlowTheme.swatch(batcher, textX - 12, y + 5, textX - 4, y + 13, variable.type);
+        }
+        else
+        {
+            FlowTheme.rounded(batcher, textX - 12, y + 5, textX - 4, y + 13, 4, typeColor, true, true);
+        }
         batcher.text(batcher.getFont().limitToWidth(this.title(node), (int) (ex - textX) - 14), textX, y + 5, invalid ? 0xffff7070 : FlowTheme.text());
 
         for (Spot spot : layout.left)

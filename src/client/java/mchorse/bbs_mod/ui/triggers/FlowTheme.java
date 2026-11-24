@@ -100,6 +100,19 @@ public class FlowTheme
         return light() ? 0xff3c4652 : 0xffd8dde4;
     }
 
+    /** A swatch of a type: its colour, or for colours a small rainbow, the type that is every colour. */
+    public static void swatch(Batcher2D batcher, float x1, float y1, float x2, float y2, String type)
+    {
+        if (type.equals("color"))
+        {
+            batcher.box(x1, y1, x2 - x1, y2 - y1, 0xffff4d4d, 0xff4dff6a, 0xff4d8bff, 0xffffe14d);
+
+            return;
+        }
+
+        rounded(batcher, x1, y1, x2, y2, (int) ((x2 - x1) / 2F), typeColor(type), true, true);
+    }
+
     /* Shapes */
 
     /** How far row {@code i} of a corner of radius {@code r} is pulled in. */
@@ -150,8 +163,12 @@ public class FlowTheme
             case "integer" -> 0xff2fc4a0;
             case "float" -> 0xff8bd84a;
             case "string" -> 0xffe85ad6;
-            case "vec3" -> 0xffeac241;
+            case "vec3" -> 0xfff2ec8c;
             case "entity" -> 0xff3aa1e8;
+            case "block" -> 0xffe8892c;
+            case "item" -> 0xff57dbe6;
+            case "sound" -> 0xffd4a017;
+            case "color" -> 0xffd65ce0;
             default -> 0xff9aa3ad;
         };
     }

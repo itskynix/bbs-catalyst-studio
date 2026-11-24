@@ -223,6 +223,8 @@ public class FlowRuntime
             return;
         }
 
+        FlowBBS.use(run.world.getServer());
+
         FlowNodeType type = node.getType();
 
         if (type == null)
@@ -271,7 +273,15 @@ public class FlowRuntime
             {
                 FlowVariable variable = this.graph.variableOf(node);
 
-                if (variable != null)
+                if (variable != null && variable.isArray)
+                {
+                    /* On a list, Add puts the amount at its end, as a new item */
+                    String list = this.read(run, variable);
+                    String item = this.input(run, node, "amount", 0).replace(",", " ");
+
+                    this.write(run, variable, list.isBlank() ? item : list + "," + item);
+                }
+                else if (variable != null)
                 {
                     double sum = parse(this.read(run, variable), 0) + parse(this.input(run, node, "amount", 0), 0);
 
@@ -583,6 +593,36 @@ public class FlowRuntime
 
                 this.out(run, node, "then");
             }
+            case "play_film" ->
+            {
+                FlowBBS.playFilm(run.entity, this.input(run, node, "player", 0), this.input(run, node, "film", 0), node.param("camera"));
+                this.out(run, node, "then");
+            }
+            case "stop_film" ->
+            {
+                FlowBBS.stopFilm(run.entity, this.input(run, node, "player", 0), this.input(run, node, "film", 0));
+                this.out(run, node, "then");
+            }
+            case "set_camera_clip" ->
+            {
+                FlowBBS.setCameraClip(run.entity, this.input(run, node, "player", 0), this.input(run, node, "film", 0));
+                this.out(run, node, "then");
+            }
+            case "set_form" ->
+            {
+                FlowBBS.setForm(run.entity, this.input(run, node, "player", 0), this.input(run, node, "form", 0));
+                this.out(run, node, "then");
+            }
+            case "clear_form" ->
+            {
+                FlowBBS.clearForm(run.entity, this.input(run, node, "player", 0));
+                this.out(run, node, "then");
+            }
+            case "model_block_state" ->
+            {
+                FlowBBS.modelBlockState(run.entity, this.input(run, node, "position", 0), this.input(run, node, "state", 0));
+                this.out(run, node, "then");
+            }
             case "launch_entity" ->
             {
                 Entity target = this.entity(run, this.input(run, node, "entity", 0));
@@ -807,11 +847,27 @@ public class FlowRuntime
                 yield index >= 0 && index < node.inputCount() ? this.input(run, node, FlowNodeType.input(index), depth) : "";
             }
             case "is_valid" -> this.valid(run, this.input(run, node, "value", depth));
+            case "append" -> String.join("", this.grown(run, node, depth));
+            case "format_text" -> this.format(run, node, depth);
+            case "get_form" -> pin.equals("form_id") ? FlowBBS.formId(run.entity, this.input(run, node, "entity", depth)) : FlowBBS.formData(run.entity, this.input(run, node, "entity", depth));
             case "clamp" -> FlowValues.format(Math.max(this.number(run, node, "min", depth), Math.min(this.number(run, node, "max", depth), this.number(run, node, "value", depth))));
             case "map_range" -> this.mapRange(run, node, depth);
             case "threshold" -> String.valueOf(this.number(run, node, "value", depth) >= this.number(run, node, "threshold", depth));
             default -> this.world(run, node, pin, depth);
         };
+    }
+
+    /** Format Text: the template with each {name} replaced by what its pin reads. */
+    private String format(Run run, FlowNode node, int depth)
+    {
+        String template = node.param("template");
+
+        for (String name : FlowNode.templateNames(template))
+        {
+            template = template.replace("{" + name + "}", this.input(run, node, FlowNodeType.templatePin(name), depth));
+        }
+
+        return template;
     }
 
     private double number(Run run, FlowNode node, String pin, int depth)

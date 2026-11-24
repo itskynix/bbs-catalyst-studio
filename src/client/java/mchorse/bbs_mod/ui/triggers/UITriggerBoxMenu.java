@@ -748,7 +748,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
         name.setText(variable.name);
 
         /* The type, picked from a drop down list; a new type resets the value and swaps its field */
-        UIButton type = new UIButton(key("type." + variable.type), (b) -> this.context.replaceContextMenu((menu) ->
+        UIButton type = new UIButton(IKey.constant(key("type." + variable.type).get() + (variable.isArray ? "[]" : "")), (b) -> this.context.replaceContextMenu((menu) ->
         {
             for (String t : FlowVariable.TYPES)
             {
@@ -841,7 +841,17 @@ public class UITriggerBoxMenu extends UIBaseMenu
         type.relative(top).x(0.55F, 2).w(0.45F, -2).h(20);
         top.add(grip, name, type);
 
-        UIElement column = UI.column(2, top, this.pair(this.valueField(variable), remove), scope);
+        UIToggle array = new UIToggle(key("is_array"), variable.isArray, (b) ->
+        {
+            variable.isArray = b.getValue();
+            variable.value = b.getValue() ? "" : FlowVariable.defaultValue(variable.type);
+            this.changed();
+            this.fillLeft();
+        });
+
+        array.tooltip(key("hint.is_array"));
+
+        UIElement column = UI.column(2, top, this.pair(this.valueField(variable), remove), UI.row(2, scope, array));
 
         column.marginTop(4);
 
@@ -852,6 +862,34 @@ public class UITriggerBoxMenu extends UIBaseMenu
     private UIElement valueField(FlowVariable variable)
     {
         Runnable changed = () -> this.changed();
+
+        if (variable.isArray)
+        {
+            UITextbox list = new UITextbox(1000, (text) ->
+            {
+                variable.value = text;
+                changed.run();
+            });
+
+            list.setText(variable.value);
+            list.placeholder(key("list_placeholder"));
+            list.tooltip(key("hint.is_array"));
+
+            return list;
+        }
+
+        if (variable.type.equals("color"))
+        {
+            mchorse.bbs_mod.ui.framework.elements.input.UIColor color = new mchorse.bbs_mod.ui.framework.elements.input.UIColor((c) ->
+            {
+                variable.value = String.format("%06x", c & 0xffffff);
+                changed.run();
+            });
+
+            color.setColor(mchorse.bbs_mod.utils.colors.Colors.parse(variable.value, 0xffffff));
+
+            return color;
+        }
 
         switch (variable.type)
         {
@@ -1186,8 +1224,9 @@ public class UITriggerBoxMenu extends UIBaseMenu
     private UIElement inputField(FlowNode node, String pin)
     {
         String declared = node.declaredInputType(pin);
-        boolean grown = node.getType().dataInput(pin) == null;
-        String name = grown ? String.valueOf((char) ('A' + (int) FlowValues.parse(pin.substring(2), 0))) : key("pin." + pin).get();
+        boolean template = pin.startsWith("t_") && node.getType().templateInputs;
+        boolean grown = !template && node.getType().dataInput(pin) == null;
+        String name = template ? pin.substring(2) : grown ? String.valueOf((char) ('A' + (int) FlowValues.parse(pin.substring(2), 0))) : key("pin." + pin).get();
         UILabel label = UI.label(IKey.constant(name)).color(FlowTheme.typeColor(this.graph.inputType(node, pin)));
         UIElement field;
 
@@ -1210,6 +1249,14 @@ public class UITriggerBoxMenu extends UIBaseMenu
                 node.params.put(pin, text);
                 this.changed();
             }, FlowFields::entities, key("entity_placeholder"));
+        }
+        else if (pin.equals("form"))
+        {
+            field = FlowFields.form(node.param(pin), (text) ->
+            {
+                node.params.put(pin, text);
+                this.changed();
+            }, this.main);
         }
         else if (pin.equals("film"))
         {
@@ -1234,7 +1281,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
 
         UIElement row = new UIElement();
 
-        UIElement hint = FlowFields.hintButton(FlowFields.hint(grown ? "input_" + declared : pin, "type_" + declared));
+        UIElement hint = FlowFields.hintButton(FlowFields.hint(template ? "template_input" : grown ? "input_" + declared : pin, "type_" + declared));
 
         row.h(20);
         label.relative(row).w(50).h(20);
@@ -1306,6 +1353,22 @@ public class UITriggerBoxMenu extends UIBaseMenu
             trackpad.setValue(FlowValues.parse(node.param(id), 0));
 
             return trackpad;
+        }
+
+        if (id.equals("template"))
+        {
+            UITextbox template = new UITextbox(1000, (text) ->
+            {
+                node.params.put(id, text);
+                this.graph.pruneLinks(node);
+                this.onGraphChanged();
+            });
+
+            template.delayedInput();
+            template.setText(node.param(id));
+            template.tooltip(key("hint.param.template"));
+
+            return template;
         }
 
         UITextbox textbox = new UITextbox(1000, (text) ->

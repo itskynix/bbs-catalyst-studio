@@ -14,7 +14,7 @@ import java.util.UUID;
  */
 public class FlowVariable
 {
-    public static final List<String> TYPES = List.of("boolean", "integer", "float", "string", "vec3", "entity");
+    public static final List<String> TYPES = List.of("boolean", "integer", "float", "string", "vec3", "entity", "block", "item", "sound", "color");
     public static final List<String> SCOPES = List.of("local", "global", "entity");
 
     public String id;
@@ -51,6 +51,10 @@ public class FlowVariable
             case "integer" -> "0";
             case "float" -> "0.0";
             case "vec3" -> "0 0 0";
+            case "block" -> "minecraft:stone";
+            case "item" -> "minecraft:diamond";
+            case "sound" -> "minecraft:block.note_block.pling";
+            case "color" -> "ffffff";
             default -> "";
         };
     }
