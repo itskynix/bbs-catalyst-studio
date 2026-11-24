@@ -290,6 +290,20 @@ public class FlowRuntime
 
                 this.out(run, node, "then");
             }
+            case "set_array" ->
+            {
+                /* The list with the item replaced; a list read from a list variable is changed in place */
+                String list = FlowValues.setItem(this.input(run, node, "array", 0), (int) parse(this.input(run, node, "index", 0), 0), this.input(run, node, "value", 0), MAX_LOOP);
+                FlowVariable variable = this.graph.arrayVariableInto(node, "array");
+
+                if (variable != null)
+                {
+                    this.write(run, variable, list);
+                }
+
+                s.put("array", list);
+                this.out(run, node, "then");
+            }
             case FlowNodeTypes.IF_ELSE -> this.out(run, node, FlowValues.logic("and", this.grown(run, node, 0)) ? "true" : "false");
             case FlowNodeTypes.BRANCH ->
             {
@@ -848,6 +862,8 @@ public class FlowRuntime
             }
             case "is_valid" -> this.valid(run, this.input(run, node, "value", depth));
             case "append" -> String.join("", this.grown(run, node, depth));
+            case "make_array" -> FlowValues.join(this.grown(run, node, depth));
+            case "get_array" -> FlowValues.item(this.input(run, node, "array", depth), (int) parse(this.input(run, node, "index", depth), 0));
             case "format_text" -> this.format(run, node, depth);
             case "get_form" -> pin.equals("form_id") ? FlowBBS.formId(run.entity, this.input(run, node, "entity", depth)) : FlowBBS.formData(run.entity, this.input(run, node, "entity", depth));
             case "clamp" -> FlowValues.format(Math.max(this.number(run, node, "min", depth), Math.min(this.number(run, node, "max", depth), this.number(run, node, "value", depth))));

@@ -162,6 +162,47 @@ public class FlowValues
         return list;
     }
 
+    /** A list back into text: each item's own commas become spaces, so it stays one item. */
+    public static String join(java.util.List<String> items)
+    {
+        java.util.List<String> clean = new java.util.ArrayList<>();
+
+        for (String item : items)
+        {
+            clean.add(item == null ? "" : item.replace(",", " ").trim());
+        }
+
+        return String.join(",", clean);
+    }
+
+    /** The item at the index, or empty text past either end. */
+    public static String item(String list, int index)
+    {
+        java.util.List<String> items = list(list);
+
+        return index >= 0 && index < items.size() ? items.get(index) : "";
+    }
+
+    /** The list with the item at the index replaced; an index past the end grows the list with empty items up to it. */
+    public static String setItem(String list, int index, String value, int max)
+    {
+        java.util.List<String> items = list(list);
+
+        if (index < 0 || index >= max)
+        {
+            return join(items);
+        }
+
+        while (items.size() <= index)
+        {
+            items.add("");
+        }
+
+        items.set(index, value);
+
+        return join(items);
+    }
+
     /** Whole numbers without a trailing ".0", so a counter reads 3, not 3.0. */
     public static String format(double value)
     {

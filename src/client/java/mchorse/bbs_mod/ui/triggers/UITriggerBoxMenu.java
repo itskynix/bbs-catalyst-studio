@@ -77,6 +77,8 @@ public class UITriggerBoxMenu extends UIBaseMenu
 
     /** The variable being dragged out of the left panel, or null. */
     private FlowVariable dragging;
+    /** The variable open in Details, or null; a picked node takes Details over. */
+    private FlowVariable selectedVariable;
     private int viewportSync;
 
     private static IKey key(String id)
@@ -383,8 +385,11 @@ public class UITriggerBoxMenu extends UIBaseMenu
             return;
         }
 
+        String open = this.selectedVariable == null ? null : this.selectedVariable.id;
+
         this.graph.fromData(data);
         this.board.setGraph(this.graph);
+        this.selectedVariable = open == null ? null : this.graph.getVariableById(open);
         this.codeDirty = true;
         this.historyDirty = false;
         this.fillLeft();
@@ -560,6 +565,11 @@ public class UITriggerBoxMenu extends UIBaseMenu
 
     private void onSelect(FlowNode node)
     {
+        if (node != null)
+        {
+            this.selectedVariable = null;
+        }
+
         this.fillDetails(node);
     }
 
@@ -656,6 +666,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
         /* Components */
         UIButton volume = new UIButton(key("component.volume"), (b) ->
         {
+            this.selectedVariable = null;
             this.board.select(null);
             this.fillDetails(null);
         });
@@ -673,10 +684,12 @@ public class UITriggerBoxMenu extends UIBaseMenu
                 name = "var" + (++n);
             }
 
-            this.graph.variables.add(new FlowVariable(name, "integer", "0"));
+            FlowVariable fresh = new FlowVariable(name, "integer", "0");
+
+            this.graph.variables.add(fresh);
             this.changed();
             this.fillLeft();
-            this.refreshDetails();
+            this.selectVariable(fresh);
         });
 
         add.tooltip(key("add_variable"));
@@ -729,77 +742,13 @@ public class UITriggerBoxMenu extends UIBaseMenu
         this.left.resize();
     }
 
+    /**
+     * A variable in the left panel, one row: the grip to drag it onto the board, its name with its
+     * type and a [] for lists, and the remove button. Clicking the row opens it in Details.
+     */
     private UIElement variableRow(FlowVariable variable)
     {
-        UITextbox name = new UITextbox(64, (text) ->
-        {
-            String fresh = text.trim();
-
-            if (fresh.isEmpty() || (this.graph.getVariable(fresh) != null && this.graph.getVariable(fresh) != variable))
-            {
-                return;
-            }
-
-            /* Nodes hold the variable's id, so the new name shows on every one of them at once */
-            variable.name = fresh;
-            this.changed();
-        });
-
-        name.setText(variable.name);
-
-        /* The type, picked from a drop down list; a new type resets the value and swaps its field */
-        UIButton type = new UIButton(IKey.constant(key("type." + variable.type).get() + (variable.isArray ? "[]" : "")), (b) -> this.context.replaceContextMenu((menu) ->
-        {
-            for (String t : FlowVariable.TYPES)
-            {
-                menu.action(Icons.CONVERT, key("type." + t), typeColor(t), () ->
-                {
-                    if (!t.equals(variable.type))
-                    {
-                        variable.type = t;
-                        variable.value = FlowVariable.defaultValue(t);
-                        this.changed();
-                        this.fillLeft();
-                    }
-                });
-            }
-        }));
-
-        type.color(typeColor(variable.type));
-        type.tooltip(key("variable_type"));
-
-        /* Where its value lives: this box, the whole world, or each entity */
-        UIButton scope = new UIButton(key("scope." + variable.scope), (b) -> this.context.replaceContextMenu((menu) ->
-        {
-            for (String sc : FlowVariable.SCOPES)
-            {
-                menu.action(Icons.GLOBE, key("scope." + sc), () ->
-                {
-                    variable.scope = sc;
-                    this.changed();
-                    this.fillLeft();
-                });
-            }
-        }));
-
-        scope.tooltip(key("scope_tooltip"));
-
-        UIIcon remove = new UIIcon(Icons.REMOVE, (b) ->
-        {
-            int used = this.graph.usages(variable);
-
-            this.graph.variables.remove(variable);
-
-            /* Its nodes keep the id and show as pointing at an invalid variable, never at another one */
-            if (used > 0)
-            {
-                this.context.notifyError(key("variable_in_use").format(variable.name, used));
-            }
-
-            this.changed();
-            this.fillLeft();
-            this.refreshDetails();
-        });
+        UIIcon remove = new UIIcon(Icons.REMOVE, (b) -> this.removeVariable(variable));
 
         remove.tooltip(key("remove_variable"));
 
@@ -833,105 +782,322 @@ public class UITriggerBoxMenu extends UIBaseMenu
 
         grip.tooltip(key("drag_variable"));
 
-        UIElement top = new UIElement();
-
-        top.h(20);
-        grip.relative(top).w(16).h(20);
-        name.relative(top).x(18).w(0.55F, -18).h(20);
-        type.relative(top).x(0.55F, 2).w(0.45F, -2).h(20);
-        top.add(grip, name, type);
-
-        UIToggle array = new UIToggle(key("is_array"), variable.isArray, (b) ->
+        UIElement row = new UIElement()
         {
-            variable.isArray = b.getValue();
-            variable.value = b.getValue() ? "" : FlowVariable.defaultValue(variable.type);
+            @Override
+            protected boolean subMouseClicked(mchorse.bbs_mod.ui.framework.UIContext context)
+            {
+                if (this.area.isInside(context) && context.mouseButton == 0)
+                {
+                    UITriggerBoxMenu.this.selectVariable(variable);
+                    UIUtils.playClick();
+
+                    return true;
+                }
+
+                return false;
+            }
+
+            @Override
+            public void render(mchorse.bbs_mod.ui.framework.UIContext context)
+            {
+                boolean picked = UITriggerBoxMenu.this.selectedVariable == variable;
+                boolean hover = this.area.isInside(context);
+                int x1 = this.area.x + 18;
+                int x2 = this.area.ex() - 22;
+                int edge = picked ? FlowTheme.accent() : hover ? FlowTheme.typeColor(variable.type) : FlowTheme.border();
+
+                FlowTheme.rounded(context.batcher, x1, this.area.y, x2, this.area.ey(), 3, edge, true, true);
+                FlowTheme.rounded(context.batcher, x1 + 1, this.area.y + 1, x2 - 1, this.area.ey() - 1, 2, picked ? FlowTheme.body() : FlowTheme.field(), true, true);
+
+                String type = key("type." + variable.type).get() + (variable.isArray ? "[]" : "");
+                int typeW = context.batcher.getFont().getWidth(type);
+                String name = context.batcher.getFont().limitToWidth(variable.name, x2 - x1 - typeW - 14);
+
+                context.batcher.text(name, x1 + 5, this.area.my() - 4, FlowTheme.text());
+                context.batcher.text(type, x2 - 5 - typeW, this.area.my() - 4, typeColor(variable.type));
+
+                super.render(context);
+            }
+        };
+
+        row.h(20);
+        row.tooltip(key("hint.variable_row"));
+        grip.relative(row).w(16).h(20);
+        remove.relative(row).x(1F, -20).wh(20, 20);
+        row.add(grip, remove);
+        row.marginTop(2);
+
+        return row;
+    }
+
+    /** Opens the variable in Details, leaving the board with nothing picked. */
+    private void selectVariable(FlowVariable variable)
+    {
+        this.selectedVariable = variable;
+        this.board.select(null);
+        this.selectedVariable = variable;
+        this.fillDetails(null);
+    }
+
+    private void removeVariable(FlowVariable variable)
+    {
+        int used = this.graph.usages(variable);
+
+        this.graph.variables.remove(variable);
+
+        /* Its nodes keep the id and show as pointing at an invalid variable, never at another one */
+        if (used > 0)
+        {
+            this.context.notifyError(key("variable_in_use").format(variable.name, used));
+        }
+
+        if (this.selectedVariable == variable)
+        {
+            this.selectedVariable = null;
+        }
+
+        this.changed();
+        this.fillLeft();
+        this.refreshDetails();
+    }
+
+    /** Details of a variable: its name, type, scope, whether it is a list, and its starting value or items. */
+    private void fillVariableDetails(FlowVariable variable)
+    {
+        UITextbox name = new UITextbox(64, (text) ->
+        {
+            String fresh = text.trim();
+
+            if (fresh.isEmpty() || (this.graph.getVariable(fresh) != null && this.graph.getVariable(fresh) != variable))
+            {
+                return;
+            }
+
+            /* Nodes hold the variable's id, so the new name shows on every one of them at once */
+            variable.name = fresh;
             this.changed();
             this.fillLeft();
         });
 
-        array.tooltip(key("hint.is_array"));
+        name.setText(variable.name);
 
-        UIElement column = UI.column(2, top, this.pair(this.valueField(variable), remove), UI.row(2, scope, array));
+        /* The type, picked from a drop down list; a new type resets the value (or the items) */
+        UIComboBox type = new UIComboBox(key("type." + variable.type).get(), (t) -> {}, (callback) -> callback.accept(new ArrayList<>()), null)
+        {
+            @Override
+            protected boolean subMouseClicked(mchorse.bbs_mod.ui.framework.UIContext context)
+            {
+                if (!this.area.isInside(context) || context.mouseButton != 0)
+                {
+                    return false;
+                }
 
-        column.marginTop(4);
+                context.replaceContextMenu((menu) ->
+                {
+                    for (String t : FlowVariable.TYPES)
+                    {
+                        menu.action(t.equals(variable.type) ? Icons.CHECKMARK : Icons.CONVERT, key("type." + t), typeColor(t), () ->
+                        {
+                            if (!t.equals(variable.type))
+                            {
+                                variable.type = t;
+                                variable.value = variable.isArray ? "" : FlowVariable.defaultValue(t);
+                                UITriggerBoxMenu.this.changed();
+                                UITriggerBoxMenu.this.fillLeft();
+                                UITriggerBoxMenu.this.refreshDetails();
+                            }
+                        });
+                    }
+                }, this.area.x, this.area.ey());
 
-        return column;
-    }
+                return true;
+            }
+        };
 
-    /** The starting value's field, shaped by the type: a switch, a number, three numbers or text. */
-    private UIElement valueField(FlowVariable variable)
-    {
-        Runnable changed = () -> this.changed();
+        /* Where its value lives: this box, the whole world, or each entity */
+        UIComboBox scope = new UIComboBox(key("scope." + variable.scope).get(), (t) -> {}, (callback) -> callback.accept(new ArrayList<>()), null)
+        {
+            @Override
+            protected boolean subMouseClicked(mchorse.bbs_mod.ui.framework.UIContext context)
+            {
+                if (!this.area.isInside(context) || context.mouseButton != 0)
+                {
+                    return false;
+                }
+
+                context.replaceContextMenu((menu) ->
+                {
+                    for (String sc : FlowVariable.SCOPES)
+                    {
+                        menu.action(sc.equals(variable.scope) ? Icons.CHECKMARK : Icons.GLOBE, key("scope." + sc), () ->
+                        {
+                            variable.scope = sc;
+                            UITriggerBoxMenu.this.changed();
+                            UITriggerBoxMenu.this.refreshDetails();
+                        });
+                    }
+                }, this.area.x, this.area.ey());
+
+                return true;
+            }
+        };
+
+        UIToggle array = new UIToggle(key("is_array"), variable.isArray, (b) ->
+        {
+            /* Turning a value into a list keeps it as the first item; a list back into a value keeps its first item */
+            List<String> items = FlowValues.list(variable.value);
+
+            variable.isArray = b.getValue();
+            variable.value = b.getValue() ? FlowValues.join(List.of(variable.value)) : items.isEmpty() ? FlowVariable.defaultValue(variable.type) : items.get(0);
+            this.changed();
+            this.fillLeft();
+            this.refreshDetails();
+        });
+
+        UIButton delete = new UIButton(key("delete_variable"), (b) -> this.removeVariable(variable));
+
+        delete.color(Colors.NEGATIVE);
+        delete.marginTop(8);
+
+        int used = this.graph.usages(variable);
+
+        this.details.add(
+            this.header(key("variable_details")),
+            UI.label(IKey.constant(variable.name + "   " + key("type." + variable.type).get() + (variable.isArray ? "[]" : ""))).color(typeColor(variable.type)),
+            UI.label(key("variable_name")), this.pair(name, FlowFields.hintButton(key("hint.variable_name"))),
+            UI.label(key("variable_type")), this.pair(type, FlowFields.hintButton(key("hint.variable_type"))),
+            UI.label(key("variable_scope")), this.pair(scope, FlowFields.hintButton(key("scope_tooltip"))),
+            this.pair(array, FlowFields.hintButton(key("hint.is_array"))),
+            this.header(key("default_value"))
+        );
 
         if (variable.isArray)
         {
-            UITextbox list = new UITextbox(1000, (text) ->
+            this.fillListEditor(variable);
+        }
+        else
+        {
+            this.details.add(this.pair(this.valueEditor(variable.type, variable.value, (v) ->
             {
-                variable.value = text;
-                changed.run();
-            });
-
-            list.setText(variable.value);
-            list.placeholder(key("list_placeholder"));
-            list.tooltip(key("hint.is_array"));
-
-            return list;
+                variable.value = v;
+                this.changed();
+            }), FlowFields.hintButton(FlowFields.hint("type_" + variable.type, "type_any"))));
         }
 
-        if (variable.type.equals("color"))
+        this.details.add(UI.label(key("variable_usages").format(used)).color(FlowTheme.dim()).marginTop(6));
+        this.details.add(delete);
+    }
+
+    /** A list's items, [0], [1], [2]..., each in the field of its type with a remove button, and + for one more. */
+    private void fillListEditor(FlowVariable variable)
+    {
+        List<String> items = FlowValues.list(variable.value);
+
+        this.details.add(UI.label(key("item_count").format(items.size())).color(FlowTheme.dim()));
+
+        if (items.isEmpty())
         {
-            mchorse.bbs_mod.ui.framework.elements.input.UIColor color = new mchorse.bbs_mod.ui.framework.elements.input.UIColor((c) ->
-            {
-                variable.value = String.format("%06x", c & 0xffffff);
-                changed.run();
-            });
-
-            color.setColor(mchorse.bbs_mod.utils.colors.Colors.parse(variable.value, 0xffffff));
-
-            return color;
+            this.details.add(new mchorse.bbs_mod.ui.framework.elements.utils.UIText(key("list_empty")).color(FlowTheme.dim(), false));
         }
 
-        switch (variable.type)
+        for (int i = 0; i < items.size(); i++)
         {
+            int index = i;
+            UIElement editor = this.valueEditor(variable.type, items.get(i), (v) ->
+            {
+                List<String> now = FlowValues.list(variable.value);
+
+                if (index < now.size())
+                {
+                    now.set(index, v);
+                    variable.value = FlowValues.join(now);
+                    this.changed();
+                }
+            });
+            UIIcon remove = new UIIcon(Icons.REMOVE, (b) ->
+            {
+                List<String> now = FlowValues.list(variable.value);
+
+                if (index < now.size())
+                {
+                    now.remove(index);
+                    variable.value = FlowValues.join(now);
+                    this.changed();
+                    this.refreshDetails();
+                }
+            });
+
+            remove.tooltip(key("remove_item"));
+
+            UILabel label = UI.label(IKey.constant("[" + i + "]")).color(typeColor(variable.type));
+            UIElement row = new UIElement();
+
+            label.labelAnchor(0F, 0.5F);
+            row.h(20);
+            label.relative(row).w(24).h(20);
+            editor.relative(row).x(26).w(1F, -48).h(20);
+            remove.relative(row).x(1F, -20).wh(20, 20);
+            row.add(label, editor, remove);
+            this.details.add(row);
+        }
+
+        UIButton add = new UIButton(key("add_item"), (b) ->
+        {
+            List<String> now = FlowValues.list(variable.value);
+
+            now.add(FlowVariable.defaultValue(variable.type));
+            variable.value = FlowValues.join(now);
+            this.changed();
+            this.refreshDetails();
+        });
+
+        this.details.add(this.pair(add, FlowFields.hintButton(key("hint.add_item"))));
+    }
+
+    /** The field of one value of a type: a switch, a number, three numbers, a colour, a picker slot or text. */
+    private UIElement valueEditor(String type, String value, Consumer<String> setter)
+    {
+        if (UIFlowSlot.isSlot(type))
+        {
+            return new UIFlowSlot(type, value, setter);
+        }
+
+        switch (type)
+        {
+            case "color" ->
+            {
+                mchorse.bbs_mod.ui.framework.elements.input.UIColor color = new mchorse.bbs_mod.ui.framework.elements.input.UIColor((c) -> setter.accept(String.format("%06x", c & 0xffffff)));
+
+                color.setColor(Colors.parse(value, 0xffffff));
+
+                return color;
+            }
             case "boolean" ->
             {
-                boolean on = variable.value.trim().equals("true") || variable.value.trim().equals("1");
+                boolean on = value.trim().equals("true") || value.trim().equals("1");
 
-                return new UIToggle(key("value_true"), on, (b) ->
-                {
-                    variable.value = String.valueOf(b.getValue());
-                    changed.run();
-                });
+                return new UIToggle(key("value_true"), on, (b) -> setter.accept(String.valueOf(b.getValue())));
             }
             case "integer", "float" ->
             {
-                boolean integer = variable.type.equals("integer");
-                UITrackpad trackpad = new UITrackpad((v) ->
-                {
-                    variable.value = integer ? String.valueOf(v.longValue()) : String.valueOf(v.floatValue());
-                    changed.run();
-                });
+                boolean integer = type.equals("integer");
+                UITrackpad trackpad = new UITrackpad((v) -> setter.accept(integer ? String.valueOf(v.longValue()) : String.valueOf(v.floatValue())));
 
                 if (integer)
                 {
                     trackpad.limit(-1_000_000_000D, 1_000_000_000D, true);
                 }
 
-                trackpad.setValue(mchorse.bbs_mod.triggers.FlowValues.parse(variable.value, 0));
+                trackpad.setValue(FlowValues.parse(value, 0));
                 trackpad.tooltip(key("variable_value"));
 
                 return trackpad;
             }
             case "vec3" ->
             {
-                String[] split = variable.value.trim().split("[ ,]+");
-                double[] xyz = new double[3];
+                double[] xyz = FlowValues.vec(value);
                 List<UIElement> pads = new ArrayList<>();
-
-                for (int i = 0; i < 3; i++)
-                {
-                    xyz[i] = i < split.length ? mchorse.bbs_mod.triggers.FlowValues.parse(split[i], 0) : 0;
-                }
 
                 for (int i = 0; i < 3; i++)
                 {
@@ -939,8 +1105,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
                     UITrackpad trackpad = new UITrackpad((v) ->
                     {
                         xyz[axis] = v;
-                        variable.value = xyz[0] + " " + xyz[1] + " " + xyz[2];
-                        changed.run();
+                        setter.accept(FlowValues.format(xyz[0]) + " " + FlowValues.format(xyz[1]) + " " + FlowValues.format(xyz[2]));
                     });
 
                     trackpad.setValue(xyz[i]);
@@ -951,15 +1116,11 @@ public class UITriggerBoxMenu extends UIBaseMenu
             }
             default ->
             {
-                UITextbox textbox = new UITextbox(256, (text) ->
-                {
-                    variable.value = text;
-                    changed.run();
-                });
+                UITextbox textbox = new UITextbox(256, setter);
 
-                textbox.setText(variable.value);
-                textbox.placeholder(key(variable.type.equals("entity") ? "entity_placeholder" : "variable_value"));
-                textbox.tooltip(key(variable.type.equals("entity") ? "entity_tooltip" : "variable_value"));
+                textbox.setText(value);
+                textbox.placeholder(key(type.equals("entity") ? "entity_placeholder" : "variable_value"));
+                textbox.tooltip(key(type.equals("entity") ? "entity_tooltip" : "variable_value"));
 
                 return textbox;
             }
@@ -990,7 +1151,11 @@ public class UITriggerBoxMenu extends UIBaseMenu
         /* The Details fields of a previous fill are gone: only the Viewport tab's stay in sync */
         this.boxSync.subList(this.viewportSync, this.boxSync.size()).clear();
 
-        if (node == null || node.getType() == null)
+        if ((node == null || node.getType() == null) && this.selectedVariable != null && this.graph.variables.contains(this.selectedVariable))
+        {
+            this.fillVariableDetails(this.selectedVariable);
+        }
+        else if (node == null || node.getType() == null)
         {
             this.fillBoxDetails();
         }
@@ -1226,7 +1391,9 @@ public class UITriggerBoxMenu extends UIBaseMenu
         String declared = node.declaredInputType(pin);
         boolean template = pin.startsWith("t_") && node.getType().templateInputs;
         boolean grown = !template && node.getType().dataInput(pin) == null;
-        String name = template ? pin.substring(2) : grown ? String.valueOf((char) ('A' + (int) FlowValues.parse(pin.substring(2), 0))) : key("pin." + pin).get();
+        boolean indexed = grown && node.type.equals("make_array");
+        int at = grown ? (int) FlowValues.parse(pin.substring(2), 0) : 0;
+        String name = template ? pin.substring(2) : indexed ? "[" + at + "]" : grown ? String.valueOf((char) ('A' + at)) : key("pin." + pin).get();
         UILabel label = UI.label(IKey.constant(name)).color(FlowTheme.typeColor(this.graph.inputType(node, pin)));
         UIElement field;
 
@@ -1249,6 +1416,14 @@ public class UITriggerBoxMenu extends UIBaseMenu
                 node.params.put(pin, text);
                 this.changed();
             }, FlowFields::entities, key("entity_placeholder"));
+        }
+        else if (UIFlowSlot.isSlot(declared))
+        {
+            field = new UIFlowSlot(declared, node.param(pin), (text) ->
+            {
+                node.params.put(pin, text);
+                this.changed();
+            });
         }
         else if (pin.equals("form"))
         {
@@ -1281,7 +1456,9 @@ public class UITriggerBoxMenu extends UIBaseMenu
 
         UIElement row = new UIElement();
 
-        UIElement hint = FlowFields.hintButton(FlowFields.hint(template ? "template_input" : grown ? "input_" + declared : pin, "type_" + declared));
+        String hintId = template ? "template_input" : indexed ? "array_input" : grown ? "input_" + declared : pin;
+        IKey own = FlowFields.key("hint." + node.type + "." + pin);
+        UIElement hint = FlowFields.hintButton(own.get().equals("bbs.ui.trigger_box.hint." + node.type + "." + pin) ? FlowFields.hint(hintId, "type_" + declared) : own);
 
         row.h(20);
         label.relative(row).w(50).h(20);

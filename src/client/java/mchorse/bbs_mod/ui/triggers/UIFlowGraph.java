@@ -882,6 +882,11 @@ public class UIFlowGraph extends UIElement
 
         if (!exec && pin.startsWith("in") && pin.length() > 2 && Character.isDigit(pin.charAt(2)) && type != null && type.dataInput(pin) == null)
         {
+            if (node.type.equals("make_array"))
+            {
+                return "[" + (int) FlowValues.parse(pin.substring(2), 0) + "]";
+            }
+
             return String.valueOf((char) ('A' + (int) FlowValues.parse(pin.substring(2), 0)));
         }
 

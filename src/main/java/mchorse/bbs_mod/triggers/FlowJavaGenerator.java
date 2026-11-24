@@ -271,6 +271,7 @@ public class FlowJavaGenerator
                 this.line(indent, "for (String element" + id + " : " + list + ")");
                 this.loopBody(node, "element" + id, indent, path, node.type.equals("for_each_break"));
             }
+            case "set_array" -> this.then(node, this.setArray(node), indent, path);
             case "switch_int" -> this.switchInt(node, indent, path);
             case "switch_string", "switch_name", "switch_enum" -> this.switchString(node, indent, path);
             case "counter" ->
@@ -532,6 +533,25 @@ public class FlowJavaGenerator
         };
     }
 
+    /** Set Array: the list with one item replaced, put back into the list variable it was read from, or kept as the node's value. */
+    private String setArray(FlowNode node)
+    {
+        String changed = "this.withItem(" + this.input(node, "array").code() + ", (int) " + this.number(node, "index") + ", " + this.input(node, "value").code() + ")";
+        FlowVariable variable = this.graph.arrayVariableInto(node, "array");
+
+        if (variable == null)
+        {
+            return "this.store(" + node.id + ", \"array\", " + changed + ");";
+        }
+
+        return switch (variable.scope)
+        {
+            case "global" -> "this.setGlobal(" + quote(variable.name) + ", " + changed + ");";
+            case "entity" -> "this.setOnEntity(entity, " + quote(variable.name) + ", " + changed + ");";
+            default -> "this." + identifier(variable.name) + " = " + changed + ";";
+        };
+    }
+
     private String oldCondition(FlowNode node)
     {
         FlowVariable variable = this.graph.variableOf(node);
@@ -675,6 +695,21 @@ public class FlowJavaGenerator
             case "format_text" ->
             {
                 return new Expr(this.format(node, depth), "string");
+            }
+            case "make_array" ->
+            {
+                List<String> parts = new ArrayList<>();
+
+                for (int i = 0; i < node.inputCount(); i++)
+                {
+                    parts.add("String.valueOf(" + this.input(node, FlowNodeType.input(i), depth).code() + ")");
+                }
+
+                return new Expr("new java.util.ArrayList<>(java.util.List.of(" + String.join(", ", parts) + "))", "any");
+            }
+            case "get_array" ->
+            {
+                return new Expr("this.item(" + this.input(node, "array", depth).code() + ", (int) " + this.number(node, "index") + ")", "string");
             }
             case "get_form" ->
             {

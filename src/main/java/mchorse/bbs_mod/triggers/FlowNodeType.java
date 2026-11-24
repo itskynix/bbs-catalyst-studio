@@ -27,6 +27,7 @@ public class FlowNodeType
         RANDOM(0xffd0b12f),
         MATH(0xff4fa3a8),
         TEXT(0xffd05ab8),
+        ARRAY(0xff5f7fd6),
         VARIABLE(0xff2f9e5c),
         WORLD(0xff3f8fd0),
         ACTION(0xff2f6fc0),

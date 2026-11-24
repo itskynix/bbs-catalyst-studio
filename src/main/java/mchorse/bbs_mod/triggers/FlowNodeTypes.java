@@ -82,9 +82,9 @@ public class FlowNodeTypes
         add("for_loop", Kind.FLOW).in("exec").out("body", "completed").data("first", "integer", "0").data("last", "integer", "9").value("index", "integer");
         add("for_loop_break", Kind.FLOW).in("exec", "break").out("body", "completed").data("first", "integer", "0").data("last", "integer", "9").value("index", "integer");
         add("while_loop", Kind.FLOW).in("exec").out("body", "completed").data("condition", "boolean", "false").param("max_iterations", "1000");
-        add("for_each", Kind.FLOW).in("exec").out("body", "completed").data("array", "string", "a,b,c").value("element", "string").value("index", "integer");
-        add("for_each_break", Kind.FLOW).in("exec", "break").out("body", "completed").data("array", "string", "a,b,c").value("element", "string").value("index", "integer");
-        add("reverse_for_each", Kind.FLOW).in("exec").out("body", "completed").data("array", "string", "a,b,c").value("element", "string").value("index", "integer");
+        add("for_each", Kind.FLOW).in("exec").out("body", "completed").data("array", "array", "a,b,c").value("element", "string").value("index", "integer");
+        add("for_each_break", Kind.FLOW).in("exec", "break").out("body", "completed").data("array", "array", "a,b,c").value("element", "string").value("index", "integer");
+        add("reverse_for_each", Kind.FLOW).in("exec").out("body", "completed").data("array", "array", "a,b,c").value("element", "string").value("index", "integer");
         add(WAIT, Kind.TIME).in("exec").out("then").data("ticks", "integer", "20");
 
         /* Logic: Boolean operators, comparisons, choosing */
@@ -131,6 +131,11 @@ public class FlowNodeTypes
         /* Text */
         add("append", Kind.TEXT).grow(2, "any", "").value("result", "string");
         add("format_text", Kind.TEXT).param("template", "{player} scored {points} points!").template().value("result", "string");
+
+        /* Arrays: lists, kept as comma separated text */
+        add("make_array", Kind.ARRAY).grow(2, "any", "").value("array", "array");
+        add("get_array", Kind.ARRAY).data("array", "array", "a,b,c").data("index", "integer", "0").value("element", "any");
+        add("set_array", Kind.ARRAY).in("exec").out("then").data("array", "array", "a,b,c").data("index", "integer", "0").data("value", "any", "").value("array", "array");
 
         add("counter", Kind.MATH).in("exec", "reset").out("then", "target_reached").data("step", "integer", "1").data("target", "integer", "10").value("count", "integer");
 

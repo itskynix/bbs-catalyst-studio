@@ -52,12 +52,13 @@ public class FlowTheme
 
     public static int panel()
     {
-        return 0xe8000000 | (BBSSettings.baseSurface() & 0xffffff);
+        /* Solid: the side panels never show the world through them */
+        return opaque(BBSSettings.baseSurface());
     }
 
     public static int chrome()
     {
-        return 0xf4000000 | (BBSSettings.chromeSurface() & 0xffffff);
+        return opaque(BBSSettings.chromeSurface());
     }
 
     public static int body()
@@ -169,6 +170,7 @@ public class FlowTheme
             case "item" -> 0xff57dbe6;
             case "sound" -> 0xffd4a017;
             case "color" -> 0xffd65ce0;
+            case "array" -> 0xff7f9cf5;
             default -> 0xff9aa3ad;
         };
     }

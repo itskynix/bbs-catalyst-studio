@@ -221,7 +221,7 @@ public class FlowGraph
                 {
                     FlowVariable variable = this.variableOf(node);
 
-                    return variable == null ? "any" : variable.type;
+                    return variable == null ? "any" : variable.isArray ? "array" : variable.type;
                 }
 
                 if (type.id.equals("select"))
@@ -261,10 +261,26 @@ public class FlowGraph
         {
             FlowVariable variable = this.variableOf(node);
 
-            return variable == null ? "any" : variable.type;
+            return variable == null ? "any" : variable.isArray ? "array" : variable.type;
         }
 
         return declared;
+    }
+
+    /** The list variable a Get Variable wired into the pin reads, so Set Array can change it in place; null otherwise. */
+    public FlowVariable arrayVariableInto(FlowNode node, String pin)
+    {
+        FlowLink link = this.dataInto(node.id, pin);
+        FlowNode source = link == null ? null : this.get(link.from());
+
+        if (source == null || !source.type.equals(FlowNodeTypes.GET_VARIABLE))
+        {
+            return null;
+        }
+
+        FlowVariable variable = this.variableOf(source);
+
+        return variable != null && variable.isArray ? variable : null;
     }
 
     public String inputType(FlowNode node, int index)
