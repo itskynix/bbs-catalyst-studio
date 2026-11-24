@@ -102,6 +102,10 @@ public class UITriggerBoxMenu extends UIBaseMenu
         this.left = UI.scrollView(4, 6);
         this.left.relative(this.viewport).x(0).y(TOP).w(LEFT_W).h(1F, -TOP);
 
+        /* Right column, before the board: picking a node (setGraph picks none) fills it */
+        this.details = UI.scrollView(4, 6);
+        this.details.relative(this.viewport).x(1F, -RIGHT_W).y(TOP).w(RIGHT_W).h(1F, -TOP);
+
         /* Middle column */
         UIElement center = new UIElement();
 
@@ -109,7 +113,6 @@ public class UITriggerBoxMenu extends UIBaseMenu
 
         this.board = new UIFlowGraph().callbacks(this::onSelect, this::onGraphChanged);
         this.board.full(center);
-        this.board.setGraph(this.graph);
 
         this.code = new UIFlowCode();
         this.code.full(center);
@@ -129,17 +132,17 @@ public class UITriggerBoxMenu extends UIBaseMenu
 
         center.add(this.viewportTab, this.board, this.code, this.copy);
 
-        /* Right column */
-        this.details = UI.scrollView(4, 6);
-        this.details.relative(this.viewport).x(1F, -RIGHT_W).y(TOP).w(RIGHT_W).h(1F, -TOP);
-
         this.main.add(this.left, center, this.details, this.tabs, this.mode, save, close);
 
         this.tabs.setValue(lastTab);
         this.mode.setValue(lastMode);
+
+        /* Everything the selection callback touches exists by now: the graph goes in last, and
+         * its first (empty) pick fills Details with the box */
+        this.board.setGraph(this.graph);
         this.applyVisibility();
         this.fillLeft();
-        this.fillDetails(null);
+        this.fillDetails(this.board.selected);
     }
 
     public TriggerBoxBlockEntity getBox()
@@ -492,6 +495,12 @@ public class UITriggerBoxMenu extends UIBaseMenu
 
     private void fillDetails(FlowNode node)
     {
+        /* A selection made while the menu is still being built: the constructor fills Details at its end */
+        if (this.details == null)
+        {
+            return;
+        }
+
         this.details.removeAll();
         /* The Details fields of a previous fill are gone: only the Viewport tab's stay in sync */
         this.boxSync.subList(this.viewportSync, this.boxSync.size()).clear();
