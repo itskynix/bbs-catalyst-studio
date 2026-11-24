@@ -188,8 +188,8 @@ public class UIFlowSearch extends UIElement
         int y = this.area.y;
 
         context.batcher.dropShadow(x, y, this.area.ex(), this.area.ey(), 8, Colors.A50, 0);
-        context.batcher.box(x, y, this.area.ex(), this.area.ey(), 0xf0181b20);
-        context.batcher.outline(x, y, this.area.ex(), this.area.ey(), 0xff3a404a);
+        context.batcher.box(x, y, this.area.ex(), this.area.ey(), FlowTheme.body());
+        context.batcher.outline(x, y, this.area.ex(), this.area.ey(), FlowTheme.border());
 
         int hover = this.indexAt(context);
         int rows = this.rows();
@@ -209,21 +209,21 @@ public class UIFlowSearch extends UIElement
             }
 
             context.batcher.box(x + 4, ry + 3, x + 7, ry + ROW - 3, type.kind.color);
-            context.batcher.textShadow(name(type), x + 11, ry + 3, Colors.WHITE);
+            context.batcher.textShadow(name(type), x + 11, ry + 3, FlowTheme.text());
 
             String kind = kindLabel(type.kind).get();
 
-            context.batcher.text(kind, this.area.ex() - 6 - context.batcher.getFont().getWidth(kind), ry + 3, 0xff7d8794);
+            context.batcher.text(kind, this.area.ex() - 6 - context.batcher.getFont().getWidth(kind), ry + 3, FlowTheme.dim());
         }
 
         if (this.filtered.isEmpty())
         {
-            context.batcher.textShadow(L10n.lang("bbs.ui.trigger_box.search_empty").get(), x + 8, top + 4, 0xff7d8794);
+            context.batcher.textShadow(L10n.lang("bbs.ui.trigger_box.search_empty").get(), x + 8, top + 4, FlowTheme.dim());
         }
 
         context.batcher.unclip(context);
 
-        context.batcher.icon(Icons.SEARCH, 0xff7d8794, this.area.ex() - 20, y + 4);
+        context.batcher.icon(Icons.SEARCH, FlowTheme.dim(), this.area.ex() - 20, y + 4);
 
         super.render(context);
     }

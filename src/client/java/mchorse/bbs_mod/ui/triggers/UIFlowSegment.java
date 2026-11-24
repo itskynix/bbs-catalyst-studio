@@ -82,8 +82,8 @@ public class UIFlowSegment extends UIElement
 
         if (this.pill)
         {
-            context.batcher.box(x, y, this.area.ex(), this.area.ey(), 0xff121418);
-            context.batcher.outline(x, y, this.area.ex(), this.area.ey(), 0xff30353d);
+            context.batcher.box(x, y, this.area.ex(), this.area.ey(), FlowTheme.field());
+            context.batcher.outline(x, y, this.area.ex(), this.area.ey(), FlowTheme.border());
         }
 
         for (int i = 0; i < this.labels.size(); i++)
@@ -101,7 +101,7 @@ public class UIFlowSegment extends UIElement
             {
                 if (on)
                 {
-                    context.batcher.box(cx + 2, y + 2, cx + cell - 2, this.area.ey() - 2, 0xff3d6fd8);
+                    context.batcher.box(cx + 2, y + 2, cx + cell - 2, this.area.ey() - 2, FlowTheme.accent());
                 }
                 else if (hover)
                 {
@@ -112,8 +112,8 @@ public class UIFlowSegment extends UIElement
             {
                 if (on)
                 {
-                    context.batcher.box(cx, y, cx + cell, this.area.ey(), 0xff2a2e35);
-                    context.batcher.box(cx, this.area.ey() - 2, cx + cell, this.area.ey(), 0xffffb547);
+                    context.batcher.box(cx, y, cx + cell, this.area.ey(), FlowTheme.body());
+                    context.batcher.box(cx, this.area.ey() - 2, cx + cell, this.area.ey(), FlowTheme.accent());
                 }
                 else if (hover)
                 {
@@ -121,7 +121,7 @@ public class UIFlowSegment extends UIElement
                 }
             }
 
-            int color = on ? Colors.WHITE : 0xffa6aeb8;
+            int color = on ? (this.pill ? Colors.WHITE : FlowTheme.text()) : FlowTheme.dim();
 
             if (icon != null)
             {

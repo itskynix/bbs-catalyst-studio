@@ -1,27 +1,34 @@
 package mchorse.bbs_mod.client.renderer;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import mchorse.bbs_mod.blocks.entities.TriggerBoxBlockEntity;
+import mchorse.bbs_mod.graphics.Draw;
+import mchorse.bbs_mod.utils.Bufs;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.render.RenderLayer;
+import net.minecraft.client.render.BufferBuilder;
+import net.minecraft.client.render.GameRenderer;
 import net.minecraft.client.render.VertexConsumerProvider;
-import net.minecraft.client.render.WorldRenderer;
+import net.minecraft.client.render.VertexFormat;
+import net.minecraft.client.render.VertexFormats;
 import net.minecraft.client.render.block.entity.BlockEntityRenderer;
 import net.minecraft.client.render.block.entity.BlockEntityRendererFactory;
 import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 
 /**
- * Draws a trigger box in the world: the volume as a faint fill when Show Box is on, its outline when
- * Show Outline is on or the box is aimed at or being edited, and the block itself to creative players.
- * Nothing at all while the HUD is hidden, so F1 shots stay clean.
+ * Draws a trigger box in the world only when someone is meant to see it. With the debug screen
+ * (F3) open, its volume and its block get a solid outline, the way a model block's hitbox does;
+ * while its editor is open, the volume gets a dashed outline. In plain play, and with the HUD hidden
+ * (F1), nothing at all.
  */
 public class TriggerBoxRenderer implements BlockEntityRenderer<TriggerBoxBlockEntity>
 {
-    /** The box the editor has open, drawn bright. */
+    /** The box the editor has open. */
     public static BlockPos editing;
+
+    private static final float DASH = 0.3F;
+    private static final float GAP = 0.2F;
 
     public TriggerBoxRenderer(BlockEntityRendererFactory.Context context)
     {}
@@ -38,28 +45,75 @@ public class TriggerBoxRenderer implements BlockEntityRenderer<TriggerBoxBlockEn
 
         BlockPos pos = box.getPos();
         boolean edited = pos.equals(editing);
-        boolean aimed = mc.crosshairTarget instanceof BlockHitResult hit && hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(pos);
-        boolean creative = mc.player.isCreative();
+        //? if >=1.20.4 {
+        boolean debug = mc.getDebugHud().shouldShowDebugHud();
+        //?} else {
+        /*boolean debug = mc.options.debugEnabled;
+        *///?}
+
+        if (!edited && !debug)
+        {
+            return;
+        }
+
         Box volume = box.getWorldBox().offset(-pos.getX(), -pos.getY(), -pos.getZ());
 
-        if (box.showBox)
+        RenderSystem.disableDepthTest();
+
+        if (edited)
         {
-            WorldRenderer.renderFilledBox(matrices, consumers.getBuffer(RenderLayer.getDebugFilledBox()),
-                volume.minX, volume.minY, volume.minZ, volume.maxX, volume.maxY, volume.maxZ,
-                1F, 0.71F, 0.28F, edited ? 0.16F : 0.09F);
+            dashed(matrices, volume, 1F, 0.72F, 0.25F, 1F, 0.03F);
+            Draw.renderBox(matrices, 0.3D, 0.3D, 0.3D, 0.4D, 0.4D, 0.4D, 1F, 0.72F, 0.25F, 0.9F);
+        }
+        else
+        {
+            Draw.renderBox(matrices, volume.minX, volume.minY, volume.minZ, volume.getLengthX(), volume.getLengthY(), volume.getLengthZ(), 1F, 0.72F, 0.25F, 1F);
+            Draw.renderBox(matrices, 0D, 0D, 0D, 1D, 1D, 1D, 0F, 0.5F, 1F, 0.5F);
         }
 
-        if (box.showOutline || aimed || edited)
-        {
-            float bright = edited || aimed ? 1F : 0.8F;
+        RenderSystem.enableDepthTest();
+    }
 
-            WorldRenderer.drawBox(matrices, consumers.getBuffer(RenderLayer.getLines()), volume, bright, 0.71F * bright, 0.28F * bright, 1F);
+    /** The twelve edges of the box as dashes of thin bars, each edge's dashes spread to end on its corners. */
+    private static void dashed(MatrixStack matrices, Box b, float r, float g, float bl, float a, float t)
+    {
+        BufferBuilder builder = Bufs.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+        double[][] corners = new double[8][];
+
+        for (int i = 0; i < 8; i++)
+        {
+            corners[i] = new double[] {(i & 1) == 0 ? b.minX : b.maxX, (i & 2) == 0 ? b.minY : b.maxY, (i & 4) == 0 ? b.minZ : b.maxZ};
         }
 
-        if (creative)
+        int[][] edges = {{0, 1}, {2, 3}, {4, 5}, {6, 7}, {0, 2}, {1, 3}, {4, 6}, {5, 7}, {0, 4}, {1, 5}, {2, 6}, {3, 7}};
+
+        for (int[] e : edges)
         {
-            WorldRenderer.drawBox(matrices, consumers.getBuffer(RenderLayer.getLines()), new Box(0.3D, 0.3D, 0.3D, 0.7D, 0.7D, 0.7D), 1F, 0.85F, 0.4F, 0.9F);
+            double[] p = corners[e[0]];
+            double[] q = corners[e[1]];
+            double length = Math.sqrt((q[0] - p[0]) * (q[0] - p[0]) + (q[1] - p[1]) * (q[1] - p[1]) + (q[2] - p[2]) * (q[2] - p[2]));
+            int dashes = Math.max(1, (int) Math.round((length + GAP) / (DASH + GAP)));
+            double step = length / dashes;
+            double dash = step * DASH / (DASH + GAP);
+
+            for (int i = 0; i < dashes; i++)
+            {
+                double s0 = (i * step + (step - dash) / 2D) / length;
+                double s1 = s0 + dash / length;
+                float x0 = (float) (p[0] + (q[0] - p[0]) * s0);
+                float y0 = (float) (p[1] + (q[1] - p[1]) * s0);
+                float z0 = (float) (p[2] + (q[2] - p[2]) * s0);
+                float x1 = (float) (p[0] + (q[0] - p[0]) * s1);
+                float y1 = (float) (p[1] + (q[1] - p[1]) * s1);
+                float z1 = (float) (p[2] + (q[2] - p[2]) * s1);
+
+                Draw.fillBox(builder, matrices, Math.min(x0, x1) - t, Math.min(y0, y1) - t, Math.min(z0, z1) - t, Math.max(x0, x1) + t, Math.max(y0, y1) + t, Math.max(z0, z1) + t, r, g, bl, a);
+            }
         }
+
+        RenderSystem.setShader(GameRenderer::getPositionColorProgram);
+        RenderSystem.enableBlend();
+        Bufs.draw(builder);
     }
 
     @Override

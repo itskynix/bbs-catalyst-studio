@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.triggers;
 
+import mchorse.bbs_mod.graphics.window.Window;
 import mchorse.bbs_mod.l10n.L10n;
 import mchorse.bbs_mod.triggers.FlowGraph;
 import mchorse.bbs_mod.triggers.FlowLink;
@@ -7,21 +8,32 @@ import mchorse.bbs_mod.triggers.FlowNode;
 import mchorse.bbs_mod.triggers.FlowNodeType;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
+import mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.utils.colors.Colors;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.util.math.MatrixStack;
 import org.lwjgl.glfw.GLFW;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
- * The flow board: a grey grid that pans and zooms, node cards with a coloured header, and execution
- * wires drawn as S curves from an output pin to the next node's input.
+ * The flow board: a grid that pans and zooms with its origin axes drawn bold, round cornered node
+ * cards in the colours of BBS's theme, and live execution wires that glow and pulse from an output
+ * to the next node's input.
  *
- * <p>Left drag on a card moves it, on an output pin pulls a wire (dropped on a card it connects,
- * dropped on the empty board it opens the add menu and wires the new node in), on a wired input it
- * picks the wire up again. Left or middle drag on the board pans, the wheel zooms round the cursor,
- * right click opens the add menu, Delete removes the picked card.</p>
+ * <p>Left click on a card picks it (Shift or Ctrl adds or takes it away) and dragging moves every
+ * picked card. Left click on the empty board clears the picks; dragging there draws a selection box
+ * and picks every card it touches. Dragging an output pin pulls a wire: dropped on a card it
+ * connects, on the empty board it opens the add menu and wires the new node in; a wired input picks
+ * its wire up again. The middle button, or Alt with the left, pans; the wheel zooms round the cursor;
+ * right click opens the add menu; Delete removes the picked cards.</p>
  */
 public class UIFlowGraph extends UIElement
 {
@@ -31,28 +43,34 @@ public class UIFlowGraph extends UIElement
     private static final int GRID = 16;
 
     public FlowGraph graph;
+    /** The card Details shows: the last one picked. */
     public FlowNode selected;
+    /** Every picked card. */
+    public final Set<FlowNode> picked = new LinkedHashSet<>();
 
     public final UIFlowSearch search = new UIFlowSearch();
 
     private Consumer<FlowNode> onSelect = (n) -> {};
     private Runnable onChange = () -> {};
 
-    private float panX = 40;
-    private float panY = 40;
+    private float panX = 60;
+    private float panY = 60;
     private float zoom = 1F;
 
     /* Gestures */
     private boolean panning;
     private int lastMouseX;
     private int lastMouseY;
-    private FlowNode dragging;
-    private float dragOffsetX;
-    private float dragOffsetY;
+    private boolean draggingNodes;
+    private final Map<FlowNode, float[]> dragOffsets = new HashMap<>();
     private FlowNode wireFrom;
     private String wirePin;
     private float wireX;
     private float wireY;
+    private boolean boxing;
+    private boolean boxAdd;
+    private float boxX;
+    private float boxY;
     private float addX;
     private float addY;
 
@@ -74,16 +92,30 @@ public class UIFlowGraph extends UIElement
     public void setGraph(FlowGraph graph)
     {
         this.graph = graph;
+        this.picked.clear();
         this.select(null);
     }
 
+    /** Picks just this card, or nothing. */
     public void select(FlowNode node)
+    {
+        this.picked.clear();
+
+        if (node != null)
+        {
+            this.picked.add(node);
+        }
+
+        this.setPrimary(node);
+    }
+
+    private void setPrimary(FlowNode node)
     {
         this.selected = node;
         this.onSelect.accept(node);
     }
 
-    /** Brings a card to the middle of the board. */
+    /** Brings a card to the middle of the board and picks it. */
     public void focus(FlowNode node)
     {
         this.panX = this.area.w / 2F - (node.x + NODE_W / 2F) * this.zoom;
@@ -105,7 +137,7 @@ public class UIFlowGraph extends UIElement
         FlowNodeType type = node.getType();
         int params = type == null ? 0 : type.params.size();
 
-        return HEADER + 4 + execRows(node) * ROW + params * ROW + (params > 0 ? 4 : 2);
+        return HEADER + 4 + execRows(node) * ROW + params * ROW + (params > 0 ? 6 : 4);
     }
 
     private static float inputY(FlowNode node)
@@ -143,7 +175,6 @@ public class UIFlowGraph extends UIElement
         return null;
     }
 
-    /** The output pin under the point, as its index, or -1. */
     private int outputAt(FlowNode node, float gx, float gy)
     {
         FlowNodeType type = node.getType();
@@ -219,6 +250,7 @@ public class UIFlowGraph extends UIElement
         float gx = this.toGraphX(context.mouseX);
         float gy = this.toGraphY(context.mouseY);
         FlowNode node = this.nodeAt(gx, gy);
+        boolean additive = Window.isShiftPressed() || Window.isCtrlPressed();
 
         this.lastMouseX = context.mouseX;
         this.lastMouseY = context.mouseY;
@@ -229,11 +261,15 @@ public class UIFlowGraph extends UIElement
             {
                 FlowNode target = node;
 
-                this.select(node);
+                if (!this.picked.contains(node))
+                {
+                    this.select(node);
+                }
+
                 context.replaceContextMenu((menu) ->
                 {
                     menu.action(Icons.DUPE, L10n.lang("bbs.ui.trigger_box.duplicate"), () -> this.duplicate(target));
-                    menu.action(Icons.REMOVE, L10n.lang("bbs.ui.trigger_box.delete_node"), Colors.NEGATIVE, () -> this.delete(target));
+                    menu.action(Icons.REMOVE, L10n.lang("bbs.ui.trigger_box.delete_node"), Colors.NEGATIVE, this::deletePicked);
                 });
             }
             else
@@ -244,7 +280,7 @@ public class UIFlowGraph extends UIElement
             return true;
         }
 
-        if (context.mouseButton == 2)
+        if (context.mouseButton == 2 || (context.mouseButton == 0 && Window.isAltPressed()))
         {
             this.panning = true;
 
@@ -293,10 +329,37 @@ public class UIFlowGraph extends UIElement
 
         if (node != null)
         {
-            this.select(node);
-            this.dragging = node;
-            this.dragOffsetX = gx - node.x;
-            this.dragOffsetY = gy - node.y;
+            if (additive)
+            {
+                if (!this.picked.remove(node))
+                {
+                    this.picked.add(node);
+                    this.setPrimary(node);
+                }
+                else
+                {
+                    this.setPrimary(this.picked.isEmpty() ? null : this.picked.iterator().next());
+
+                    return true;
+                }
+            }
+            else if (!this.picked.contains(node))
+            {
+                this.select(node);
+            }
+            else
+            {
+                this.setPrimary(node);
+            }
+
+            /* Every picked card moves with the one under the cursor */
+            this.draggingNodes = true;
+            this.dragOffsets.clear();
+
+            for (FlowNode p : this.picked)
+            {
+                this.dragOffsets.put(p, new float[] {gx - p.x, gy - p.y});
+            }
 
             /* The picked card is drawn last, on top */
             this.graph.nodes.remove(node);
@@ -305,8 +368,16 @@ public class UIFlowGraph extends UIElement
             return true;
         }
 
-        this.select(null);
-        this.panning = true;
+        /* The empty board: clear, then a selection box from here */
+        if (!additive)
+        {
+            this.select(null);
+        }
+
+        this.boxing = true;
+        this.boxAdd = additive;
+        this.boxX = gx;
+        this.boxY = gy;
 
         return true;
     }
@@ -334,15 +405,54 @@ public class UIFlowGraph extends UIElement
             this.wirePin = null;
         }
 
-        if (this.dragging != null)
+        if (this.draggingNodes)
         {
-            this.dragging = null;
+            this.draggingNodes = false;
+            this.dragOffsets.clear();
             this.onChange.run();
+        }
+
+        if (this.boxing)
+        {
+            this.boxing = false;
+            this.pickInBox(this.toGraphX(context.mouseX), this.toGraphY(context.mouseY));
         }
 
         this.panning = false;
 
         return super.subMouseReleased(context);
+    }
+
+    /** Picks every card the box touches, on top of the earlier picks when it was drawn with Shift or Ctrl. */
+    private void pickInBox(float gx, float gy)
+    {
+        float x1 = Math.min(this.boxX, gx);
+        float y1 = Math.min(this.boxY, gy);
+        float x2 = Math.max(this.boxX, gx);
+        float y2 = Math.max(this.boxY, gy);
+
+        if (x2 - x1 < 2 && y2 - y1 < 2)
+        {
+            return;
+        }
+
+        if (!this.boxAdd)
+        {
+            this.picked.clear();
+        }
+
+        FlowNode last = this.selected;
+
+        for (FlowNode node : this.graph.nodes)
+        {
+            if (node.x <= x2 && node.x + NODE_W >= x1 && node.y <= y2 && node.y + height(node) >= y1)
+            {
+                this.picked.add(node);
+                last = node;
+            }
+        }
+
+        this.setPrimary(this.picked.isEmpty() ? null : last);
     }
 
     @Override
@@ -366,9 +476,9 @@ public class UIFlowGraph extends UIElement
     @Override
     protected boolean subKeyPressed(UIContext context)
     {
-        if (this.selected != null && !context.isFocused() && this.isVisible() && (context.isPressed(GLFW.GLFW_KEY_DELETE) || context.isPressed(GLFW.GLFW_KEY_BACKSPACE)))
+        if (!this.picked.isEmpty() && !context.isFocused() && this.isVisible() && (context.isPressed(GLFW.GLFW_KEY_DELETE) || context.isPressed(GLFW.GLFW_KEY_BACKSPACE)))
         {
-            this.delete(this.selected);
+            this.deletePicked();
 
             return true;
         }
@@ -376,9 +486,13 @@ public class UIFlowGraph extends UIElement
         return false;
     }
 
-    private void delete(FlowNode node)
+    private void deletePicked()
     {
-        this.graph.remove(node);
+        for (FlowNode node : new ArrayList<>(this.picked))
+        {
+            this.graph.remove(node);
+        }
+
         this.select(null);
         this.onChange.run();
     }
@@ -393,6 +507,14 @@ public class UIFlowGraph extends UIElement
     }
 
     /* Drawing */
+
+    /** The wires' clock: the world's game time plus the frame's share of the next tick. */
+    private static float time()
+    {
+        MinecraftClient mc = MinecraftClient.getInstance();
+
+        return mc.world == null ? 0F : (mc.world.getTime() % 1000000L) + mc.getTickDelta();
+    }
 
     @Override
     public void render(UIContext context)
@@ -412,16 +534,22 @@ public class UIFlowGraph extends UIElement
             this.lastMouseY = context.mouseY;
         }
 
-        if (this.dragging != null)
+        float mx = this.toGraphX(context.mouseX);
+        float my = this.toGraphY(context.mouseY);
+
+        if (this.draggingNodes)
         {
-            this.dragging.x = Math.round(this.toGraphX(context.mouseX) - this.dragOffsetX);
-            this.dragging.y = Math.round(this.toGraphY(context.mouseY) - this.dragOffsetY);
+            for (Map.Entry<FlowNode, float[]> entry : this.dragOffsets.entrySet())
+            {
+                entry.getKey().x = Math.round(mx - entry.getValue()[0]);
+                entry.getKey().y = Math.round(my - entry.getValue()[1]);
+            }
         }
 
         if (this.wireFrom != null)
         {
-            this.wireX = this.toGraphX(context.mouseX);
-            this.wireY = this.toGraphY(context.mouseY);
+            this.wireX = mx;
+            this.wireY = my;
         }
 
         context.batcher.clip(this.area, context);
@@ -433,11 +561,40 @@ public class UIFlowGraph extends UIElement
         matrices.translate(this.area.x + this.panX, this.area.y + this.panY, 0);
         matrices.scale(this.zoom, this.zoom, 1F);
 
-        this.renderWires(context);
+        float time = time();
+
+        this.renderWires(context, time);
+
+        context.batcher.beginBatch();
 
         for (FlowNode node : this.graph.nodes)
         {
             this.renderNode(context, node);
+        }
+
+        context.batcher.endBatch();
+
+        /* The wire being pulled, and the selection box, over the cards */
+        if (this.wireFrom != null && this.wireFrom.getType() != null)
+        {
+            FlowLines lines = new FlowLines(context);
+            int index = Math.max(0, this.wireFrom.getType().outputs.indexOf(this.wirePin));
+            int accent = FlowTheme.accent();
+
+            lines.liveWire(this.wireFrom.x + NODE_W + 4, outputY(this.wireFrom, index), this.wireX, this.wireY, 2.2F, accent, accent, time);
+            lines.end();
+        }
+
+        if (this.boxing)
+        {
+            float x1 = Math.min(this.boxX, mx);
+            float y1 = Math.min(this.boxY, my);
+            float x2 = Math.max(this.boxX, mx);
+            float y2 = Math.max(this.boxY, my);
+            int accent = FlowTheme.accent();
+
+            context.batcher.box(x1, y1, x2, y2, (accent & 0xffffff) | 0x30000000);
+            context.batcher.outline(x1, y1, x2, y2, (accent & 0xffffff) | 0xc0000000);
         }
 
         context.batcher.flush();
@@ -457,34 +614,56 @@ public class UIFlowGraph extends UIElement
         int y2 = this.area.ey();
         float step = GRID * this.zoom;
 
-        context.batcher.box(x1, y1, x2, y2, 0xff26282c);
+        context.batcher.box(x1, y1, x2, y2, FlowTheme.board());
 
-        if (step < 4)
+        if (step >= 4)
         {
-            return;
+            int minor = FlowTheme.gridMinor();
+            int major = FlowTheme.gridMajor();
+            int firstX = (int) Math.floor(-this.panX / step);
+            int firstY = (int) Math.floor(-this.panY / step);
+
+            context.batcher.beginBatch();
+
+            for (int i = firstX; x1 + this.panX + i * step <= x2; i++)
+            {
+                float x = x1 + this.panX + i * step;
+
+                context.batcher.box(x, y1, x + 1, y2, i % 8 == 0 ? major : minor);
+            }
+
+            for (int i = firstY; y1 + this.panY + i * step <= y2; i++)
+            {
+                float y = y1 + this.panY + i * step;
+
+                context.batcher.box(x1, y, x2, y + 1, i % 8 == 0 ? major : minor);
+            }
+
+            context.batcher.endBatch();
         }
 
-        int firstX = (int) Math.floor(-this.panX / step);
-        int firstY = (int) Math.floor(-this.panY / step);
+        /* The origin: X = 0 and Y = 0, bold, so (0, 0) is never lost */
+        int accent = (FlowTheme.accent() & 0xffffff) | 0xb0000000;
+        float ox = x1 + this.panX;
+        float oy = y1 + this.panY;
+        float t = Math.max(2F, 2F * this.zoom);
 
-        for (int i = firstX; x1 + this.panX + i * step <= x2; i++)
+        if (ox >= x1 - t && ox <= x2 + t)
         {
-            float x = x1 + this.panX + i * step;
-
-            context.batcher.box(x, y1, x + 1, y2, i % 8 == 0 ? 0xff17181b : 0xff2d3034);
+            context.batcher.box(ox - t / 2F, y1, ox + t / 2F, y2, accent);
         }
 
-        for (int i = firstY; y1 + this.panY + i * step <= y2; i++)
+        if (oy >= y1 - t && oy <= y2 + t)
         {
-            float y = y1 + this.panY + i * step;
-
-            context.batcher.box(x1, y, x2, y + 1, i % 8 == 0 ? 0xff17181b : 0xff2d3034);
+            context.batcher.box(x1, oy - t / 2F, x2, oy + t / 2F, accent);
         }
     }
 
-    private void renderWires(UIContext context)
+    private void renderWires(UIContext context, float time)
     {
         FlowLines lines = new FlowLines(context);
+        int wire = FlowTheme.wire();
+        int accent = FlowTheme.accent();
 
         for (FlowLink link : this.graph.links)
         {
@@ -497,16 +676,9 @@ public class UIFlowGraph extends UIElement
             }
 
             int index = Math.max(0, a.getType().outputs.indexOf(link.pin()));
-            boolean hot = a == this.selected || b == this.selected;
+            boolean hot = this.picked.contains(a) || this.picked.contains(b);
 
-            lines.wire(a.x + NODE_W + 4, outputY(a, index), b.x - 4, inputY(b), hot ? 2.5F : 2F, hot ? 0xffffd27a : 0xffd8dde4);
-        }
-
-        if (this.wireFrom != null && this.wireFrom.getType() != null)
-        {
-            int index = Math.max(0, this.wireFrom.getType().outputs.indexOf(this.wirePin));
-
-            lines.wire(this.wireFrom.x + NODE_W + 4, outputY(this.wireFrom, index), this.wireX, this.wireY, 2F, 0xffffd27a);
+            lines.liveWire(a.x + NODE_W + 4, outputY(a, index), b.x - 4, inputY(b), hot ? 2.4F : 1.8F, hot ? accent : wire, hot ? accent : a.getType().kind.color, time);
         }
 
         lines.end();
@@ -514,68 +686,86 @@ public class UIFlowGraph extends UIElement
 
     private void renderNode(UIContext context, FlowNode node)
     {
+        Batcher2D batcher = context.batcher;
         FlowNodeType type = node.getType();
         int color = type == null ? 0xff555555 : type.kind.color;
-        int x = (int) node.x;
-        int y = (int) node.y;
+        int r = FlowTheme.radius();
+        float x = node.x;
+        float y = node.y;
         int h = height(node);
-        int ex = x + NODE_W;
-        int ey = y + h;
-        boolean picked = node == this.selected;
+        float ex = x + NODE_W;
+        float ey = y + h;
+        boolean picked = this.picked.contains(node);
+        int border = picked ? 2 : 1;
 
-        /* Card: soft shadow, dark body, a header in the family colour fading to the right */
-        context.batcher.box(x + 3, y + 3, ex + 3, ey + 3, 0x66000000);
-        context.batcher.box(x, y, ex, ey, 0xf01c1f24);
-        context.batcher.gradientHBox(x, y, ex, y + HEADER, color, Colors.mulRGB(color, 0.35F) | 0xff000000);
-        context.batcher.box(x, y + HEADER, ex, y + HEADER + 1, 0x60000000);
-        context.batcher.box(x, y, x + 2, ey, color);
-        context.batcher.outline(x, y, ex, ey, picked ? 0xffffc35a : 0xff0d0f12, picked ? 2 : 1);
+        /* Card: a soft shadow, a rim (the accent when picked), the body, a header in the family colour */
+        FlowTheme.rounded(batcher, x + 2, y + 3, ex + 2, ey + 3, r, 0x50000000, true, true);
+        FlowTheme.rounded(batcher, x - border, y - border, ex + border, ey + border, r + border, picked ? FlowTheme.accent() : FlowTheme.border(), true, true);
+        FlowTheme.rounded(batcher, x, y, ex, ey, r, FlowTheme.body(), true, true);
+        FlowTheme.roundedHeader(batcher, x, y, ex, y + HEADER, r, color, Colors.mulRGB(color, 0.55F) | 0xff000000);
+
+        if (FlowTheme.gloss())
+        {
+            FlowTheme.roundedHeader(batcher, x + 1, y + 1, ex - 1, y + HEADER / 2F, Math.max(0, r - 1), 0x38ffffff, 0x10ffffff);
+        }
+
+        batcher.box(x, y + HEADER, ex, y + HEADER + 1, 0x40000000);
 
         String title = type == null ? node.type : UIFlowSearch.name(type);
 
-        context.batcher.textShadow(title, x + 6, y + 4, Colors.WHITE);
+        batcher.textShadow(title, x + 6, y + 4, Colors.WHITE);
 
-        if (type != null)
+        if (type == null)
         {
-            String kind = UIFlowSearch.kindLabel(type.kind).get().toUpperCase();
+            return;
+        }
 
-            context.batcher.text(kind, ex - 4 - context.batcher.getFont().getWidth(kind), y + 4, 0xb0ffffff);
+        /* The family as a small pill on the right of the header */
+        String kind = UIFlowSearch.kindLabel(type.kind).get().toUpperCase();
+        int kw = batcher.getFont().getWidth(kind);
 
-            /* Execution pins: a notched arrow in, one per output out */
-            if (type.hasInput())
+        FlowTheme.rounded(batcher, ex - kw - 10, y + 3, ex - 3, y + HEADER - 3, 3, 0x40000000, true, true);
+        batcher.text(kind, ex - kw - 6, y + 4, 0xd0ffffff);
+
+        /* Execution pins */
+        if (type.hasInput())
+        {
+            this.renderPin(batcher, x, inputY(node), this.isInputWired(node), color);
+        }
+
+        for (int i = 0; i < type.outputs.size(); i++)
+        {
+            String pin = type.outputs.get(i);
+            float py = outputY(node, i);
+
+            this.renderPin(batcher, ex, py, this.graph.next(node.id, pin) != null, color);
+
+            if (type.outputs.size() > 1 || !pin.equals("then"))
             {
-                this.renderPin(context, x, inputY(node), this.isInputWired(node));
+                String label = L10n.lang("bbs.ui.trigger_box.pin." + pin).get();
+
+                batcher.text(label, ex - 9 - batcher.getFont().getWidth(label), py - 4, FlowTheme.text());
             }
+        }
 
-            for (int i = 0; i < type.outputs.size(); i++)
-            {
-                String pin = type.outputs.get(i);
-                float py = outputY(node, i);
+        /* The node's fields, read only on the card: they are edited in Details */
+        float py = y + HEADER + 4 + execRows(node) * ROW;
 
-                this.renderPin(context, ex, py, this.graph.next(node.id, pin) != null);
+        if (!type.params.isEmpty())
+        {
+            FlowTheme.rounded(batcher, x + 4, py, ex - 4, py + type.params.size() * ROW + 2, Math.min(3, r), (FlowTheme.field() & 0xffffff) | 0xa0000000, true, true);
+        }
 
-                if (type.outputs.size() > 1 || !pin.equals("then"))
-                {
-                    String label = L10n.lang("bbs.ui.trigger_box.pin." + pin).get();
+        for (FlowNodeType.Param param : type.params)
+        {
+            String label = L10n.lang("bbs.ui.trigger_box.param." + param.id()).get() + ": ";
+            String value = node.param(param.id());
+            int labelW = batcher.getFont().getWidth(label);
+            String shown = batcher.getFont().limitToWidth(value.isEmpty() ? "-" : value, NODE_W - 16 - labelW);
 
-                    context.batcher.text(label, ex - 9 - context.batcher.getFont().getWidth(label), py - 4, 0xffc8ced6);
-                }
-            }
-
-            /* The node's fields, read only on the card: they are edited in Details */
-            int py = y + HEADER + 4 + execRows(node) * ROW;
-
-            for (FlowNodeType.Param param : type.params)
-            {
-                String label = L10n.lang("bbs.ui.trigger_box.param." + param.id()).get() + ": ";
-                String value = node.param(param.id());
-                int labelW = context.batcher.getFont().getWidth(label);
-                String shown = context.batcher.getFont().limitToWidth(value.isEmpty() ? "-" : value, NODE_W - 12 - labelW);
-
-                context.batcher.text(label, x + 6, py + 2, 0xff8a94a0);
-                context.batcher.text(shown, x + 6 + labelW, py + 2, 0xffe8ecf0);
-                py += ROW;
-            }
+            batcher.text(label, x + 8, py + 2, FlowTheme.dim());
+            batcher.text(shown, x + 8 + labelW, py + 2, FlowTheme.text());
+            py += ROW;
         }
     }
 
@@ -592,23 +782,25 @@ public class UIFlowGraph extends UIElement
         return false;
     }
 
-    /** A pin: an arrow head pointing the way the flow goes, filled when wired. */
-    private void renderPin(UIContext context, float cx, float cy, boolean wired)
+    /** A pin: a round socket with an arrow head pointing the way the flow goes, lit when wired. */
+    private void renderPin(Batcher2D batcher, float cx, float cy, boolean wired, int color)
     {
-        int x = (int) cx;
-        int y = (int) cy;
+        int rim = FlowTheme.border();
+        int fill = wired ? color : FlowTheme.body();
 
-        context.batcher.box(x - 4, y - 4, x + 2, y + 4, 0xff0d0f12);
-        context.batcher.box(x - 3, y - 3, x + 1, y + 3, wired ? 0xffffffff : 0xff1c1f24);
-        context.batcher.box(x + 1, y - 2, x + 3, y + 2, wired ? 0xffffffff : 0xffb8c0ca);
-        context.batcher.box(x + 3, y - 1, x + 4, y + 1, wired ? 0xffffffff : 0xffb8c0ca);
+        FlowTheme.rounded(batcher, cx - 5, cy - 5, cx + 5, cy + 5, 5, rim, true, true);
+        FlowTheme.rounded(batcher, cx - 4, cy - 4, cx + 4, cy + 4, 4, fill, true, true);
+        batcher.box(cx - 1, cy - 2, cx + 1, cy + 2, wired ? Colors.WHITE : FlowTheme.dim());
+        batcher.box(cx + 1, cy - 1, cx + 2, cy + 1, wired ? Colors.WHITE : FlowTheme.dim());
     }
 
     private void renderOverlay(UIContext context)
     {
         String zoom = Math.round(this.zoom * 100) + "%";
+        String picked = this.picked.size() > 1 ? L10n.lang("bbs.ui.trigger_box.picked").format(this.picked.size()).get() + "   " : "";
+        int dim = (FlowTheme.text() & 0xffffff) | 0x90000000;
 
-        context.batcher.text(zoom, this.area.ex() - 8 - context.batcher.getFont().getWidth(zoom), this.area.ey() - 14, 0x80ffffff);
-        context.batcher.text(L10n.lang("bbs.ui.trigger_box.flow_hint").get(), this.area.x + 8, this.area.ey() - 14, 0x80ffffff);
+        context.batcher.text(picked + zoom, this.area.ex() - 8 - context.batcher.getFont().getWidth(picked + zoom), this.area.ey() - 14, dim);
+        context.batcher.text(L10n.lang("bbs.ui.trigger_box.flow_hint").get(), this.area.x + 8, this.area.ey() - 14, dim);
     }
 }

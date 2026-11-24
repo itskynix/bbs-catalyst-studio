@@ -59,7 +59,11 @@ public class UITriggerBoxMenu extends UIBaseMenu
     private UIScrollView left;
     private UIScrollView details;
     private UIElement viewportTab;
-    private UIBoxPreview preview;
+    private final mchorse.bbs_mod.camera.OrbitDistanceCamera orbit = new mchorse.bbs_mod.camera.OrbitDistanceCamera();
+    private final mchorse.bbs_mod.ui.dashboard.utils.UIOrbitCamera uiOrbit = new mchorse.bbs_mod.ui.dashboard.utils.UIOrbitCamera();
+    private final mchorse.bbs_mod.camera.controller.OrbitCameraController orbitController = new mchorse.bbs_mod.camera.controller.OrbitCameraController(this.orbit);
+    private boolean orbiting;
+    private net.minecraft.client.option.Perspective perspective;
     private UIFlowGraph board;
     private UIFlowCode code;
     private UIIcon copy;
@@ -90,13 +94,22 @@ public class UITriggerBoxMenu extends UIBaseMenu
         this.mode = new UIFlowSegment(List.of(key("mode.node"), key("mode.code")), List.of(Icons.GRAPH, Icons.CODE), true, (i) -> this.setMode(i));
         this.mode.relative(this.viewport).x(1F, -RIGHT_W - 156).y(3).w(148).h(18);
 
-        UIIcon save = new UIIcon(Icons.SAVED, (b) -> this.send());
+        UIIcon save = new UIIcon(Icons.SAVED, (b) -> this.saveWithNotice());
         UIIcon close = new UIIcon(Icons.CLOSE, (b) -> this.closeThisMenu());
 
         save.tooltip(key("save"));
         close.tooltip(key("close"));
         save.relative(this.viewport).x(1F, -44).y(2).wh(20, 20);
         close.relative(this.viewport).x(1F, -22).y(2).wh(20, 20);
+
+        /* Ctrl + S saves, and says so */
+        this.main.keys().register(mchorse.bbs_mod.ui.Keys.SAVE, this::saveWithNotice);
+
+        /* The orbit camera of the Viewport tab; it takes the mouse only where no panel does */
+        this.orbit.setFovRoll(false);
+        this.uiOrbit.orbit = this.orbit;
+        this.uiOrbit.setControl(true);
+        this.uiOrbit.setEnabled(false);
 
         /* Left column */
         this.left = UI.scrollView(4, 6);
@@ -132,6 +145,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
 
         center.add(this.viewportTab, this.board, this.code, this.copy);
 
+        this.main.add(this.uiOrbit);
         this.main.add(this.left, center, this.details, this.tabs, this.mode, save, close);
 
         this.tabs.setValue(lastTab);
@@ -170,12 +184,52 @@ public class UITriggerBoxMenu extends UIBaseMenu
         super.onClose(nextMenu);
 
         TriggerBoxRenderer.editing = null;
+        this.setOrbiting(false);
         this.send();
     }
 
     private void send()
     {
         mchorse.bbs_mod.client.TriggerBoxClient.save(this.box);
+    }
+
+    /** Ctrl + S and the save button: sent to the server, with a notice on screen. */
+    private void saveWithNotice()
+    {
+        this.send();
+        this.context.notifySuccess(key("saved"));
+        UIUtils.playClick();
+    }
+
+    /** The orbit camera on or off: on, it circles the box and the player is seen from outside; off, the view is the player's again. */
+    private void setOrbiting(boolean orbiting)
+    {
+        if (this.orbiting == orbiting)
+        {
+            return;
+        }
+
+        this.orbiting = orbiting;
+        this.uiOrbit.setEnabled(orbiting);
+
+        net.minecraft.client.MinecraftClient mc = net.minecraft.client.MinecraftClient.getInstance();
+
+        if (orbiting)
+        {
+            this.aimOrbit();
+            this.perspective = mc.options.getPerspective();
+            mc.options.setPerspective(net.minecraft.client.option.Perspective.THIRD_PERSON_BACK);
+            mchorse.bbs_mod.BBSModClient.getCameraController().add(this.orbitController);
+        }
+        else
+        {
+            mchorse.bbs_mod.BBSModClient.getCameraController().remove(this.orbitController);
+
+            if (this.perspective != null)
+            {
+                mc.options.setPerspective(this.perspective);
+            }
+        }
     }
 
     /* Tabs and the switch */
@@ -206,6 +260,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
         boolean codeView = this.mode.getValue() == 1;
 
         this.viewportTab.setVisible(!flow);
+        this.setOrbiting(!flow && this.context != null);
         this.board.setVisible(flow && !codeView);
         this.code.setVisible(flow && codeView);
         this.copy.setVisible(flow && codeView);
@@ -242,29 +297,63 @@ public class UITriggerBoxMenu extends UIBaseMenu
 
     /* Viewport tab */
 
+    /**
+     * The Viewport tab is the world itself: the middle stays open, an orbit camera circles the box
+     * (drag to turn, wheel to zoom) and the box is drawn with a dashed outline only while this editor
+     * is open. A strip at the bottom holds its size and offset.
+     */
     private void createViewportTab()
     {
-        this.preview = new UIBoxPreview(this.box);
-        this.preview.relative(this.viewportTab).x(10).y(10).w(1F, -20).h(1F, -78);
-
-        UILabel title = UI.label(key("viewport.size")).background();
         UITrackpad x = this.boxTrackpad(() -> this.box.boxWidth, (v) -> this.box.boxWidth = v, 0.1, 64);
         UITrackpad y = this.boxTrackpad(() -> this.box.boxHeight, (v) -> this.box.boxHeight = v, 0.1, 64);
         UITrackpad z = this.boxTrackpad(() -> this.box.boxDepth, (v) -> this.box.boxDepth = v, 0.1, 64);
-        UIToggle outline = this.boxToggle(key("show_outline"), () -> this.box.showOutline, (v) -> this.box.showOutline = v);
-        UIToggle volume = this.boxToggle(key("show_box"), () -> this.box.showBox, (v) -> this.box.showBox = v);
+        UITrackpad ox = this.boxTrackpad(() -> this.box.offsetX, (v) -> this.box.offsetX = v, -64, 64);
+        UITrackpad oy = this.boxTrackpad(() -> this.box.offsetY, (v) -> this.box.offsetY = v, -64, 64);
+        UITrackpad oz = this.boxTrackpad(() -> this.box.offsetZ, (v) -> this.box.offsetZ = v, -64, 64);
 
         x.tooltip(key("box_width"));
         y.tooltip(key("box_height"));
         z.tooltip(key("box_depth"));
 
+        UIElement strip = new UIElement()
+        {
+            @Override
+            public void render(mchorse.bbs_mod.ui.framework.UIContext context)
+            {
+                FlowTheme.rounded(context.batcher, this.area.x, this.area.y, this.area.ex(), this.area.ey(), FlowTheme.radius(), FlowTheme.panel(), true, true);
+
+                super.render(context);
+            }
+        };
+
         UIElement controls = UI.column(4,
-            UI.row(4, title, outline, volume),
-            UI.row(4, UI.label(IKey.constant("X")).labelAnchor(1F, 0.5F), x, UI.label(IKey.constant("Y")).labelAnchor(1F, 0.5F), y, UI.label(IKey.constant("Z")).labelAnchor(1F, 0.5F), z)
+            UI.row(4, UI.label(key("viewport.size")).labelAnchor(0F, 0.5F), x, y, z),
+            UI.row(4, UI.label(key("offset")).labelAnchor(0F, 0.5F), ox, oy, oz)
         );
 
-        controls.relative(this.viewportTab).x(10).y(1F, -62).w(1F, -20).h(56);
-        this.viewportTab.add(this.preview, controls);
+        strip.relative(this.viewportTab).x(10).y(1F, -62).w(1F, -20).h(54);
+        controls.relative(strip).x(6).y(4).w(1F, -12).h(1F, -8);
+        strip.add(controls);
+
+        UILabel hint = UI.label(key("viewport.hint")).color(Colors.WHITE).background(0x80000000);
+
+        hint.relative(this.viewportTab).x(10).y(8).w(1F, -20).h(12);
+        this.viewportTab.add(hint, strip);
+    }
+
+    /** Points the orbit camera at the middle of the box, from a little above, far enough to see all of it. */
+    private void aimOrbit()
+    {
+        net.minecraft.util.math.Box volume = this.box.getWorldBox();
+        double size = Math.max(Math.max(volume.getLengthX(), volume.getLengthY()), volume.getLengthZ());
+        double distance = size * 1.6D + 3D;
+        mchorse.bbs_mod.camera.Camera camera = new mchorse.bbs_mod.camera.Camera();
+        net.minecraft.client.network.ClientPlayerEntity player = net.minecraft.client.MinecraftClient.getInstance().player;
+
+        camera.position.set(volume.getCenter().x, volume.getCenter().y, volume.getCenter().z);
+        camera.rotation.set(mchorse.bbs_mod.utils.MathUtils.toRad(25F), mchorse.bbs_mod.utils.MathUtils.toRad(player == null ? 0F : player.getYaw()), 0F);
+        this.orbit.setup(camera);
+        this.orbit.distance.setX((int) Math.round(Math.sqrt(distance * 50D)));
     }
 
     private UITrackpad boxTrackpad(java.util.function.Supplier<Float> getter, Consumer<Float> setter, double min, double max)
@@ -431,30 +520,26 @@ public class UITriggerBoxMenu extends UIBaseMenu
 
         name.setText(variable.name);
 
-        UITextbox value = new UITextbox(256, (text) ->
+        /* The type, picked from a drop down list; a new type resets the value and swaps its field */
+        UIButton type = new UIButton(key("type." + variable.type), (b) -> this.context.replaceContextMenu((menu) ->
         {
-            variable.value = text;
-            this.codeDirty = true;
-        });
+            for (String t : FlowVariable.TYPES)
+            {
+                menu.action(Icons.CONVERT, key("type." + t), typeColor(t), () ->
+                {
+                    if (!t.equals(variable.type))
+                    {
+                        variable.type = t;
+                        variable.value = FlowVariable.defaultValue(t);
+                        this.codeDirty = true;
+                        this.fillLeft();
+                    }
+                });
+            }
+        }));
 
-        value.setText(variable.value);
-        value.tooltip(key("variable_value"));
-
-        UICirculate type = new UICirculate((b) ->
-        {
-            variable.type = FlowVariable.TYPES.get(b.getValue());
-            variable.value = FlowVariable.defaultValue(variable.type);
-            value.setText(variable.value);
-            this.codeDirty = true;
-        });
-
-        for (String t : FlowVariable.TYPES)
-        {
-            type.addLabel(key("type." + t));
-        }
-
-        type.setValue(Math.max(0, FlowVariable.TYPES.indexOf(variable.type)));
         type.color(typeColor(variable.type));
+        type.tooltip(key("variable_type"));
 
         UIIcon remove = new UIIcon(Icons.REMOVE, (b) ->
         {
@@ -466,11 +551,91 @@ public class UITriggerBoxMenu extends UIBaseMenu
 
         remove.tooltip(key("remove_variable"));
 
-        UIElement column = UI.column(2, UI.row(2, name, type), this.pair(value, remove));
+        UIElement column = UI.column(2, UI.row(2, name, type), this.pair(this.valueField(variable), remove));
 
         column.marginTop(4);
 
         return column;
+    }
+
+    /** The starting value's field, shaped by the type: a switch, a number, three numbers or text. */
+    private UIElement valueField(FlowVariable variable)
+    {
+        Runnable changed = () -> this.codeDirty = true;
+
+        switch (variable.type)
+        {
+            case "boolean" ->
+            {
+                boolean on = variable.value.trim().equals("true") || variable.value.trim().equals("1");
+
+                return new UIToggle(key("value_true"), on, (b) ->
+                {
+                    variable.value = String.valueOf(b.getValue());
+                    changed.run();
+                });
+            }
+            case "integer", "float" ->
+            {
+                boolean integer = variable.type.equals("integer");
+                UITrackpad trackpad = new UITrackpad((v) ->
+                {
+                    variable.value = integer ? String.valueOf(v.longValue()) : String.valueOf(v.floatValue());
+                    changed.run();
+                });
+
+                if (integer)
+                {
+                    trackpad.limit(-1_000_000_000D, 1_000_000_000D, true);
+                }
+
+                trackpad.setValue(mchorse.bbs_mod.triggers.FlowValues.parse(variable.value, 0));
+                trackpad.tooltip(key("variable_value"));
+
+                return trackpad;
+            }
+            case "vec3" ->
+            {
+                String[] split = variable.value.trim().split("[ ,]+");
+                double[] xyz = new double[3];
+                List<UIElement> pads = new ArrayList<>();
+
+                for (int i = 0; i < 3; i++)
+                {
+                    xyz[i] = i < split.length ? mchorse.bbs_mod.triggers.FlowValues.parse(split[i], 0) : 0;
+                }
+
+                for (int i = 0; i < 3; i++)
+                {
+                    int axis = i;
+                    UITrackpad trackpad = new UITrackpad((v) ->
+                    {
+                        xyz[axis] = v;
+                        variable.value = xyz[0] + " " + xyz[1] + " " + xyz[2];
+                        changed.run();
+                    });
+
+                    trackpad.setValue(xyz[i]);
+                    pads.add(trackpad);
+                }
+
+                return UI.row(1, pads.toArray(new UIElement[0]));
+            }
+            default ->
+            {
+                UITextbox textbox = new UITextbox(256, (text) ->
+                {
+                    variable.value = text;
+                    changed.run();
+                });
+
+                textbox.setText(variable.value);
+                textbox.placeholder(key(variable.type.equals("entity") ? "entity_placeholder" : "variable_value"));
+                textbox.tooltip(key(variable.type.equals("entity") ? "entity_tooltip" : "variable_value"));
+
+                return textbox;
+            }
+        }
     }
 
     public static int typeColor(String type)
@@ -525,8 +690,6 @@ public class UITriggerBoxMenu extends UIBaseMenu
         UITrackpad ox = this.boxTrackpad(() -> this.box.offsetX, (v) -> this.box.offsetX = v, -64, 64);
         UITrackpad oy = this.boxTrackpad(() -> this.box.offsetY, (v) -> this.box.offsetY = v, -64, 64);
         UITrackpad oz = this.boxTrackpad(() -> this.box.offsetZ, (v) -> this.box.offsetZ = v, -64, 64);
-        UIToggle outline = this.boxToggle(key("show_outline"), () -> this.box.showOutline, (v) -> this.box.showOutline = v);
-        UIToggle volume = this.boxToggle(key("show_box"), () -> this.box.showBox, (v) -> this.box.showBox = v);
 
         List<String> targets = List.of(TriggerBoxBlockEntity.TARGET_ALL_LIVING, TriggerBoxBlockEntity.TARGET_PLAYER_ONLY, TriggerBoxBlockEntity.TARGET_ACTOR_ID);
         UITextbox actor = new UITextbox(128, (text) -> this.box.actorId = text);
@@ -558,7 +721,6 @@ public class UITriggerBoxMenu extends UIBaseMenu
             UI.label(IKey.constant(key("component.volume").get() + "  " + pos)).color(0xffffb547),
             UI.label(key("box_size")), UI.row(2, w, h, d),
             UI.label(key("offset")), UI.row(2, ox, oy, oz),
-            outline, volume,
             UI.label(key("target")), target, actor
         );
     }
@@ -700,14 +862,16 @@ public class UITriggerBoxMenu extends UIBaseMenu
         int h = this.height;
 
         /* Top bar, side columns; the middle stays open on the Viewport tab so the world shows through */
-        context.batcher.box(0, 0, w, TOP, 0xf0141619);
-        context.batcher.box(0, TOP - 1, w, TOP, 0xff2c3138);
-        context.batcher.box(0, TOP, LEFT_W, h, 0xe81b1e22);
-        context.batcher.box(w - RIGHT_W, TOP, w, h, 0xe81b1e22);
-        context.batcher.box(LEFT_W - 1, TOP, LEFT_W, h, 0xff2c3138);
-        context.batcher.box(w - RIGHT_W, TOP, w - RIGHT_W + 1, h, 0xff2c3138);
+        int divider = FlowTheme.border();
 
-        context.batcher.icon(Icons.BLOCK, 0xffffb547, 4, 4);
-        context.batcher.textShadow(key("title").get(), 24, 8, Colors.WHITE);
+        context.batcher.box(0, 0, w, TOP, FlowTheme.chrome());
+        context.batcher.box(0, TOP - 1, w, TOP, divider);
+        context.batcher.box(0, TOP, LEFT_W, h, FlowTheme.panel());
+        context.batcher.box(w - RIGHT_W, TOP, w, h, FlowTheme.panel());
+        context.batcher.box(LEFT_W - 1, TOP, LEFT_W, h, divider);
+        context.batcher.box(w - RIGHT_W, TOP, w - RIGHT_W + 1, h, divider);
+
+        context.batcher.icon(Icons.BLOCK, FlowTheme.accent(), 4, 4);
+        context.batcher.textShadow(key("title").get(), 24, 8, FlowTheme.text());
     }
 }

@@ -62,8 +62,8 @@ public class UIFlowCode extends UIElement
         int y = this.area.y;
         int gutter = 34;
 
-        context.batcher.box(x, y, this.area.ex(), this.area.ey(), 0xff1a1c20);
-        context.batcher.box(x, y, x + gutter, this.area.ey(), 0xff15171a);
+        context.batcher.box(x, y, this.area.ex(), this.area.ey(), FlowTheme.board());
+        context.batcher.box(x, y, x + gutter, this.area.ey(), FlowTheme.field());
         context.batcher.clip(this.area, context);
 
         int visible = (this.area.h - 12) / LINE + 1;
