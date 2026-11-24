@@ -1,5 +1,6 @@
 {
     "block.bbs.model": "Model Block",
+    "block.bbs.trigger_box": "Trigger Box",
     "block.bbs.chroma_red": "Red Chroma",
     "block.bbs.chroma_green": "Green Chroma",
     "block.bbs.chroma_blue": "Blue Chroma",

@@ -223,7 +223,17 @@ public class BBSMod implements ModInitializer
     public static final Block CHROMA_BLACK_BLOCK = createChromaBlock();
     public static final Block CHROMA_WHITE_BLOCK = createChromaBlock();
 
+    /** An invisible volume that runs a flow when something walks in, stays or leaves; see TriggerBoxBlockEntity */
+    public static final Block TRIGGER_BOX_BLOCK = new mchorse.bbs_mod.blocks.TriggerBoxBlock(FabricBlockSettings.create()
+        .noBlockBreakParticles()
+        .noCollision()
+        .nonOpaque()
+        .notSolid()
+        .strength(-1F, 3600000F)
+        .dropsNothing());
+
     public static final BlockItem MODEL_BLOCK_ITEM = new BlockItem(MODEL_BLOCK, new Item.Settings());
+    public static final BlockItem TRIGGER_BOX_ITEM = new BlockItem(TRIGGER_BOX_BLOCK, new Item.Settings());
     public static final GunItem GUN_ITEM = new GunItem(new Item.Settings().maxCount(1));
     /* Plain vanilla item on purpose: the region selection it drives lives entirely on the client,
      * so there is nothing for a custom Item subclass to hold (see StructureSelection). */
@@ -248,6 +258,11 @@ public class BBSMod implements ModInitializer
         Ids.of(MOD_ID, "model_block_entity"),
         FabricBlockEntityTypeBuilder.create(ModelBlockEntity::new, MODEL_BLOCK).build()
     );
+    public static final BlockEntityType<mchorse.bbs_mod.blocks.entities.TriggerBoxBlockEntity> TRIGGER_BOX_ENTITY = Registry.register(
+        Registries.BLOCK_ENTITY_TYPE,
+        Ids.of(MOD_ID, "trigger_box"),
+        FabricBlockEntityTypeBuilder.create(mchorse.bbs_mod.blocks.entities.TriggerBoxBlockEntity::new, TRIGGER_BOX_BLOCK).build()
+    );
 
     public static final ItemGroup ITEM_GROUP = FabricItemGroup.builder()
         .icon(() -> createModelBlockStack(Link.assets("textures/icon.png")))
@@ -266,6 +281,7 @@ public class BBSMod implements ModInitializer
             entries.add(new ItemStack(GUN_ITEM));
             entries.add(new ItemStack(STRUCTURE_WAND_ITEM));
             entries.add(new ItemStack(NAVIGATION_WAND_ITEM));
+            entries.add(new ItemStack(TRIGGER_BOX_ITEM));
             entries.add(new ItemStack(PHYSICS_GUN_ITEM));
             entries.add(new ItemStack(GRAVITY_GUN_ITEM));
         })
@@ -582,6 +598,22 @@ public class BBSMod implements ModInitializer
 
         /* Networking */
         ServerNetwork.setup();
+        mchorse.bbs_mod.network.TriggerBoxNetwork.setup();
+
+        /* Trigger boxes hear of uses and breaks inside them */
+        net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register((player, world, hand, hit) ->
+        {
+            if (!world.isClient() && hand == net.minecraft.util.Hand.MAIN_HAND)
+            {
+                mchorse.bbs_mod.blocks.entities.TriggerBoxBlockEntity.onWorldEvent(world, player, hit.getBlockPos(), mchorse.bbs_mod.triggers.FlowNodeTypes.ON_PLAYER_INTERACT);
+            }
+
+            return net.minecraft.util.ActionResult.PASS;
+        });
+        net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents.AFTER.register((world, player, pos, state, blockEntity) ->
+        {
+            mchorse.bbs_mod.blocks.entities.TriggerBoxBlockEntity.onWorldEvent(world, player, pos, mchorse.bbs_mod.triggers.FlowNodeTypes.ON_BLOCK_BREAK);
+        });
 
         /* Commands */
         CommandRegistrationCallback.EVENT.register(BBSCommands::register);
@@ -594,6 +626,7 @@ public class BBSMod implements ModInitializer
 
         /* Blocks */
         Registry.register(Registries.BLOCK, Ids.of(MOD_ID, "model"), MODEL_BLOCK);
+        Registry.register(Registries.BLOCK, Ids.of(MOD_ID, "trigger_box"), TRIGGER_BOX_BLOCK);
         Registry.register(Registries.BLOCK, Ids.of(MOD_ID, "chroma_red"), CHROMA_RED_BLOCK);
         Registry.register(Registries.BLOCK, Ids.of(MOD_ID, "chroma_green"), CHROMA_GREEN_BLOCK);
         Registry.register(Registries.BLOCK, Ids.of(MOD_ID, "chroma_blue"), CHROMA_BLUE_BLOCK);
@@ -604,6 +637,7 @@ public class BBSMod implements ModInitializer
         Registry.register(Registries.BLOCK, Ids.of(MOD_ID, "chroma_white"), CHROMA_WHITE_BLOCK);
 
         Registry.register(Registries.ITEM, Ids.of(MOD_ID, "model"), MODEL_BLOCK_ITEM);
+        Registry.register(Registries.ITEM, Ids.of(MOD_ID, "trigger_box"), TRIGGER_BOX_ITEM);
         Registry.register(Registries.ITEM, Ids.of(MOD_ID, "gun"), GUN_ITEM);
         Registry.register(Registries.ITEM, Ids.of(MOD_ID, "structure_wand"), STRUCTURE_WAND_ITEM);
         Registry.register(Registries.ITEM, Ids.of(MOD_ID, "navigation_wand"), NAVIGATION_WAND_ITEM);
