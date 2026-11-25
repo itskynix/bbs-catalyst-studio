@@ -9,9 +9,9 @@ import mchorse.bbs_mod.blocks.entities.ModelBody;
 import mchorse.bbs_mod.blocks.entities.ModelEquipment;
 import mchorse.bbs_mod.blocks.entities.ModelProperties;
 import mchorse.bbs_mod.camera.CameraUtils;
-import mchorse.bbs_mod.data.types.MapType;
 import mchorse.bbs_mod.graphics.window.Window;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIIcon;
+import mchorse.bbs_mod.ui.framework.elements.utils.UIUndoKeys;
 import mchorse.bbs_mod.ui.utils.keys.KeyCombo;
 import mchorse.bbs_mod.client.BBSRendering;
 import mchorse.bbs_mod.client.BBSShaders;
@@ -404,11 +404,12 @@ public class UIModelBlockPanel extends UIDashboardPanel implements GizmoViewport
             UIUtils.playClick();
         }).strict().active(() -> this.modelBlock != null);
 
-        this.keys().register(Keys.UNDO, this::undo).strict().active(this::canUseHistory);
-        this.keys().register(Keys.REDO, this::redo).active(this::canUseHistory);
-        this.keys().register(REDO_SHIFT, this::redo).active(this::canUseHistory);
-
         this.add(this.scrollView, this.draggable);
+
+        UIUndoKeys undoKeys = new UIUndoKeys(this::undo, this::redo);
+
+        undoKeys.keys().register(REDO_SHIFT, this::redo);
+        this.add(undoKeys.full(this));
 
         this.onOpen(this::refreshBlocks);
         this.onAppear(this::enterEditing);
@@ -484,42 +485,48 @@ public class UIModelBlockPanel extends UIDashboardPanel implements GizmoViewport
 
     private void undo()
     {
-        if (this.canUseHistory())
+        boolean global = this.canUseHistory() && this.modelBlock.getProperties().isGlobal();
+
+        if (this.canUseHistory() && this.history().undo(this.modelBlock.getProperties()))
         {
-            this.restore(this.history().undo(this.modelBlock.getProperties()), UIKeys.MODEL_BLOCKS_UNDONE);
+            this.restored(UIKeys.MODEL_BLOCKS_UNDONE, global);
         }
     }
 
     private void redo()
     {
-        if (this.canUseHistory())
+        boolean global = this.canUseHistory() && this.modelBlock.getProperties().isGlobal();
+
+        if (this.canUseHistory() && this.history().redo(this.modelBlock.getProperties()))
         {
-            this.restore(this.history().redo(this.modelBlock.getProperties()), UIKeys.MODEL_BLOCKS_REDONE);
+            this.restored(UIKeys.MODEL_BLOCKS_REDONE, global);
         }
     }
 
-    private void restore(MapType data, IKey notice)
+    /** The history put a state back into the block: the fields, the gizmo, the world and the server follow. */
+    private void restored(IKey notice, boolean wasGlobal)
     {
-        if (data == null)
-        {
-            return;
-        }
-
-        ModelProperties properties = this.modelBlock.getProperties();
-        boolean global = properties.isGlobal();
-
         this.gizmo.stop();
-        properties.fromData(data);
         this.fillData();
         this.save(this.modelBlock);
         this.toSave.add(this.modelBlock);
-
-        if (global != properties.isGlobal())
+        /* A global block is drawn from the world renderer's own list, which only a reload rebuilds */
+        if (wasGlobal != this.modelBlock.getProperties().isGlobal())
         {
             MinecraftClient.getInstance().worldRenderer.reload();
         }
 
+        this.updateHistoryButtons();
+        UIUtils.playClick();
         this.getContext().notifyInfo(notice);
+    }
+
+    private void updateHistoryButtons()
+    {
+        boolean usable = this.canUseHistory();
+
+        this.undoButton.setEnabled(usable && this.history().canUndo());
+        this.redoButton.setEnabled(usable && this.history().canRedo());
     }
 
     @Override
@@ -535,6 +542,8 @@ public class UIModelBlockPanel extends UIDashboardPanel implements GizmoViewport
 
             this.history().poll(this.modelBlock.getProperties(), busy);
         }
+
+        this.updateHistoryButtons();
     }
 
     private void teleport()
@@ -845,6 +854,8 @@ public class UIModelBlockPanel extends UIDashboardPanel implements GizmoViewport
             this.history();
             this.fillData();
         }
+
+        this.updateHistoryButtons();
 
         this.setEditorVisible(modelBlock != null);
 
