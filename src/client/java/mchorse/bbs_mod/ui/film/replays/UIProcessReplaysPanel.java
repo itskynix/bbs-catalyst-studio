@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.film.replays;
 
+import mchorse.bbs_mod.actions.ReplayActionRelocator;
 import mchorse.bbs_mod.film.Film;
 import mchorse.bbs_mod.film.replays.Replay;
 import mchorse.bbs_mod.film.replays.ReplayKeyframes;
@@ -259,6 +260,14 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
 
         PROCESS_STATE.advanced = isAdvanced;
 
+        /* Where every replay stands before the process, so its block and item actions can follow it */
+        List<ReplayActionRelocator> relocators = new ArrayList<>();
+
+        for (ReplayBatchProcessor.VisibleReplay replay : visible)
+        {
+            relocators.add(new ReplayActionRelocator(replay.replay));
+        }
+
         if (isAdvanced)
         {
             if (selectedProperties.isEmpty())
@@ -306,6 +315,11 @@ public class UIProcessReplaysPanel extends UIConfirmOverlayPanel
             {
                 return false;
             }
+        }
+
+        for (ReplayActionRelocator relocator : relocators)
+        {
+            relocator.apply();
         }
 
         this.filmPanel.getController().createEntities();

@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.actions.types.blocks;
 
+import mchorse.bbs_mod.actions.ActionRelocation;
 import mchorse.bbs_mod.actions.SuperFakePlayer;
 import mchorse.bbs_mod.film.Film;
 import mchorse.bbs_mod.film.replays.Replay;
@@ -35,6 +36,18 @@ public class PlaceBlockActionClip extends BlockActionClip
         else
         {
             player.getWorld().setBlockState(pos, this.state.get());
+        }
+    }
+
+    @Override
+    public void relocate(ActionRelocation relocation)
+    {
+        super.relocate(relocation);
+
+        /* Stairs, logs and the like face the way the replay now faces */
+        if (relocation.quarterTurns() != 0)
+        {
+            this.state.set(this.state.get().rotate(relocation.rotation()));
         }
     }
 

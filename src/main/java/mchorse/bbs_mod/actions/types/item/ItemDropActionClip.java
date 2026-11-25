@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.actions.types.item;
 
+import mchorse.bbs_mod.actions.ActionRelocation;
 import mchorse.bbs_mod.actions.SuperFakePlayer;
 import mchorse.bbs_mod.film.Film;
 import mchorse.bbs_mod.film.replays.Replay;
@@ -9,6 +10,7 @@ import mchorse.bbs_mod.settings.values.numeric.ValueFloat;
 import mchorse.bbs_mod.utils.clips.Clip;
 import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.util.math.Vec3d;
 
 public class ItemDropActionClip extends ItemActionClip
 {
@@ -33,11 +35,33 @@ public class ItemDropActionClip extends ItemActionClip
         this.add(this.relative);
     }
 
+    @Override
     public void shift(double dx, double dy, double dz)
     {
+        /* A relative drop is measured from the replay, which already moved */
+        if (this.relative.get())
+        {
+            return;
+        }
+
         this.posX.set(this.posX.get() + dx);
         this.posY.set(this.posY.get() + dy);
         this.posZ.set(this.posZ.get() + dz);
+    }
+
+    @Override
+    public void relocate(ActionRelocation relocation)
+    {
+        Vec3d pos = this.relative.get()
+            ? relocation.vector(this.posX.get(), this.posY.get(), this.posZ.get())
+            : relocation.point(this.posX.get(), this.posY.get(), this.posZ.get());
+        Vec3d velocity = relocation.vector(this.velocityX.get(), this.velocityY.get(), this.velocityZ.get());
+
+        this.posX.set(pos.x);
+        this.posY.set(pos.y);
+        this.posZ.set(pos.z);
+        this.velocityX.set((float) velocity.x);
+        this.velocityZ.set((float) velocity.z);
     }
 
     @Override

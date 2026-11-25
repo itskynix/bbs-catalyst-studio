@@ -2,6 +2,9 @@ package mchorse.bbs_mod.ui.forms.editors.panels;
 
 import mchorse.bbs_mod.fonts.FontManager;
 import mchorse.bbs_mod.forms.forms.LabelForm;
+import mchorse.bbs_mod.forms.forms.utils.LabelColorSpans;
+import mchorse.bbs_mod.ui.forms.editors.panels.widgets.UILabelTextarea;
+import mchorse.bbs_mod.ui.framework.elements.utils.UIText;
 import mchorse.bbs_mod.l10n.L10n;
 import mchorse.bbs_mod.settings.values.numeric.ValueInt;
 import mchorse.bbs_mod.l10n.keys.IKey;
@@ -30,6 +33,9 @@ public class UILabelFormPanel extends UIFormPanel<LabelForm>
     public UIColor shadowColor;
     public UIColor background;
     public UIColor outlineColor;
+    /* The text, and the colour of the part of it that is selected */
+    public UILabelTextarea text;
+    public UIColor partColor;
     public UICirculate animationMode;
     public UICirculate extrudeMode;
 
@@ -86,9 +92,37 @@ public class UILabelFormPanel extends UIFormPanel<LabelForm>
         this.shadowColor = UIValues.color(() -> this.form.shadowColor).withAlpha();
         this.background = UIValues.color(() -> this.form.background).withAlpha();
 
+        this.text = new UILabelTextarea((t) ->
+        {
+            /* The coloured parts move with what was typed around them */
+            String before = this.form.text.get();
+
+            if (!before.equals(t))
+            {
+                this.form.colorSpans.set(LabelColorSpans.write(LabelColorSpans.shift(LabelColorSpans.parse(this.form.colorSpans.get()), before, t)));
+                this.form.text.set(t);
+            }
+        });
+        this.text.h(80);
+        this.text.valueBinding(() ->
+        {
+            if (this.form != null && !this.text.isFocused() && !this.text.getText().equals(this.form.text.get()))
+            {
+                this.text.setText(this.form.text.get());
+            }
+        });
+
+        this.partColor = new UIColor((c) -> this.colorSelection(c & 0xffffff));
+        this.partColor.tooltip(key("part_color_tooltip"));
+
+        UIButton clearPart = new UIButton(key("part_clear"), (b) -> this.colorSelection(null));
+        clearPart.tooltip(key("part_clear_tooltip"));
+
         this.options.add(
             UI.label(UIKeys.FORMS_EDITORS_LABEL_LABEL),
-            UIValues.textbox(10000, () -> this.form.text),
+            this.text,
+            UI.labelRow(key("part_color"), this.partColor),
+            clearPart,
             UIValues.toggle(UIKeys.FORMS_EDITORS_BILLBOARD_TITLE, () -> this.form.billboard),
             UIValues.toggle(key("depth_occlusion"), () -> this.form.depthOcclusion).tooltip(key("depth_occlusion_tooltip")),
             this.color,
@@ -197,6 +231,37 @@ public class UILabelFormPanel extends UIFormPanel<LabelForm>
         }
     }
 
+    /** Colours the selected part of the text; with nothing selected, a clear takes every part's colour away. */
+    private void colorSelection(Integer rgb)
+    {
+        int start = this.text.getSelectionStart();
+        int end = this.text.getSelectionEnd();
+
+        if (end <= start)
+        {
+            if (rgb == null)
+            {
+                this.form.colorSpans.set("");
+            }
+            else
+            {
+                this.getContext().notifyInfo(key("part_none_selected"));
+            }
+
+            return;
+        }
+
+        this.form.colorSpans.set(LabelColorSpans.write(LabelColorSpans.apply(LabelColorSpans.parse(this.form.colorSpans.get()), start, end, rgb)));
+    }
+
+    @Override
+    public void startEdit(LabelForm form)
+    {
+        super.startEdit(form);
+
+        this.text.setText(form.text.get());
+    }
+
     @Override
     public void finishEdit()
     {
@@ -206,5 +271,6 @@ public class UILabelFormPanel extends UIFormPanel<LabelForm>
         this.shadowColor.picker.removeFromParent();
         this.background.picker.removeFromParent();
         this.outlineColor.picker.removeFromParent();
+        this.partColor.picker.removeFromParent();
     }
 }

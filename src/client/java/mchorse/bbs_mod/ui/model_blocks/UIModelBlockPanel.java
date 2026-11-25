@@ -9,6 +9,10 @@ import mchorse.bbs_mod.blocks.entities.ModelBody;
 import mchorse.bbs_mod.blocks.entities.ModelEquipment;
 import mchorse.bbs_mod.blocks.entities.ModelProperties;
 import mchorse.bbs_mod.camera.CameraUtils;
+import mchorse.bbs_mod.data.types.MapType;
+import mchorse.bbs_mod.graphics.window.Window;
+import mchorse.bbs_mod.ui.framework.elements.buttons.UIIcon;
+import mchorse.bbs_mod.ui.utils.keys.KeyCombo;
 import mchorse.bbs_mod.client.BBSRendering;
 import mchorse.bbs_mod.client.BBSShaders;
 import mchorse.bbs_mod.forms.forms.Form;
@@ -81,6 +85,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import org.lwjgl.glfw.GLFW;
 import java.util.Set;
 
 public class UIModelBlockPanel extends UIDashboardPanel implements GizmoViewport
@@ -144,6 +149,13 @@ public class UIModelBlockPanel extends UIDashboardPanel implements GizmoViewport
     private Vector3f mouseDirection = new Vector3f();
 
     private Set<ModelBlockEntity> toSave = new HashSet<>();
+
+    /** Undo and redo, one history per block that was selected while the panel lived. */
+    private final Map<ModelBlockEntity, ModelBlockHistory> histories = new HashMap<>();
+    private static final KeyCombo REDO_SHIFT = new KeyCombo("model_block_redo_shift", UIKeys.CAMERA_EDITOR_KEYS_EDITOR_REDO, GLFW.GLFW_KEY_Z, GLFW.GLFW_KEY_LEFT_CONTROL, GLFW.GLFW_KEY_LEFT_SHIFT);
+    private UIIcon undoButton;
+    private UIIcon redoButton;
+    private UIElement historyRow;
 
     private ImmersiveModelBlockCameraController cameraController;
 
@@ -359,7 +371,14 @@ public class UIModelBlockPanel extends UIDashboardPanel implements GizmoViewport
             UI.row(this.equipmentSlots.get(EquipmentSlot.MAINHAND), this.equipmentSlots.get(EquipmentSlot.OFFHAND))
         );
 
-        this.editor = UI.column(this.pickEdit, this.enabled, this.shadow, this.global, this.lookAt, this.transform);
+        this.undoButton = new UIIcon(Icons.UNDO, (b) -> this.undo());
+        this.undoButton.tooltip(UIKeys.MODEL_BLOCKS_UNDO);
+        this.redoButton = new UIIcon(Icons.REDO, (b) -> this.redo());
+        this.redoButton.tooltip(UIKeys.MODEL_BLOCKS_REDO);
+        this.historyRow = UI.row(this.undoButton, this.redoButton);
+        this.historyRow.h(20);
+
+        this.editor = UI.column(this.historyRow, this.pickEdit, this.enabled, this.shadow, this.global, this.lookAt, this.transform);
 
         this.scrollView = UI.scrollView(UIConstants.MARGIN, UIConstants.SCROLL_PADDING, this.modelBlocksSearch, this.editor, this.bodySection, this.equipmentSection);
         this.scrollView.scroll.cancelScrolling();
@@ -384,6 +403,10 @@ public class UIModelBlockPanel extends UIDashboardPanel implements GizmoViewport
             this.orbit.teleportPivotToSubject();
             UIUtils.playClick();
         }).strict().active(() -> this.modelBlock != null);
+
+        this.keys().register(Keys.UNDO, this::undo).strict().active(this::canUseHistory);
+        this.keys().register(Keys.REDO, this::redo).active(this::canUseHistory);
+        this.keys().register(REDO_SHIFT, this::redo).active(this::canUseHistory);
 
         this.add(this.scrollView, this.draggable);
 
@@ -443,6 +466,75 @@ public class UIModelBlockPanel extends UIDashboardPanel implements GizmoViewport
         }
 
         this.toSave.clear();
+        this.histories.clear();
+    }
+
+    /* History */
+
+    /** Not while the form editor is open: it has an undo of its own, and its session becomes one step. */
+    private boolean canUseHistory()
+    {
+        return this.modelBlock != null && this.canOrbit();
+    }
+
+    private ModelBlockHistory history()
+    {
+        return this.histories.computeIfAbsent(this.modelBlock, (b) -> new ModelBlockHistory(b.getProperties()));
+    }
+
+    private void undo()
+    {
+        if (this.canUseHistory())
+        {
+            this.restore(this.history().undo(this.modelBlock.getProperties()), UIKeys.MODEL_BLOCKS_UNDONE);
+        }
+    }
+
+    private void redo()
+    {
+        if (this.canUseHistory())
+        {
+            this.restore(this.history().redo(this.modelBlock.getProperties()), UIKeys.MODEL_BLOCKS_REDONE);
+        }
+    }
+
+    private void restore(MapType data, IKey notice)
+    {
+        if (data == null)
+        {
+            return;
+        }
+
+        ModelProperties properties = this.modelBlock.getProperties();
+        boolean global = properties.isGlobal();
+
+        this.gizmo.stop();
+        properties.fromData(data);
+        this.fillData();
+        this.save(this.modelBlock);
+        this.toSave.add(this.modelBlock);
+
+        if (global != properties.isGlobal())
+        {
+            MinecraftClient.getInstance().worldRenderer.reload();
+        }
+
+        this.getContext().notifyInfo(notice);
+    }
+
+    @Override
+    public void update()
+    {
+        super.update();
+
+        if (this.canUseHistory())
+        {
+            boolean busy = Window.isMouseButtonPressed(GLFW.GLFW_MOUSE_BUTTON_LEFT)
+                || Window.isMouseButtonPressed(GLFW.GLFW_MOUSE_BUTTON_RIGHT)
+                || this.transform.isUserEditing();
+
+            this.history().poll(this.modelBlock.getProperties(), busy);
+        }
     }
 
     private void teleport()
@@ -734,6 +826,11 @@ public class UIModelBlockPanel extends UIDashboardPanel implements GizmoViewport
 
         boolean switched = modelBlock != null && modelBlock != this.modelBlock;
 
+        if (this.modelBlock != null && this.modelBlock != modelBlock && !this.modelBlock.isRemoved() && this.histories.containsKey(this.modelBlock))
+        {
+            this.histories.get(this.modelBlock).commit(this.modelBlock.getProperties());
+        }
+
         this.modelBlock = modelBlock;
 
         /* Another block is another subject: the orbit goes to it instead of leaving the user
@@ -745,6 +842,7 @@ public class UIModelBlockPanel extends UIDashboardPanel implements GizmoViewport
 
         if (modelBlock != null)
         {
+            this.history();
             this.fillData();
         }
 

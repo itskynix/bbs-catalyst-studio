@@ -27,6 +27,8 @@ public class LabelForm extends Form
     /** Whether the world can stand in front of the text: on, blocks and actors hide it; off, it is always drawn on top. */
     public final ValueBoolean depthOcclusion = new ValueBoolean("depthOcclusion", true);
     public final ValueColor color = new ValueColor("color", Color.white());
+    /** Colours of parts of the text; see {@link mchorse.bbs_mod.forms.forms.utils.LabelColorSpans}. Empty: all in {@link #color}. */
+    public final ValueString colorSpans = new ValueString("colorSpans", "");
 
     public final ValueInt max = new ValueInt("max", -1);
     public final ValueFloat anchorX = new ValueFloat("anchorX", 0.5F);
@@ -102,6 +104,8 @@ public class LabelForm extends Form
         this.add(this.billboard);
         this.add(this.depthOcclusion);
         this.add(this.color);
+        this.add(this.colorSpans);
+        this.colorSpans.invisible();
         this.add(this.max);
         this.add(this.anchorX);
         this.add(this.anchorY);
@@ -134,7 +138,7 @@ public class LabelForm extends Form
     @Override
     public String getDefaultDisplayName()
     {
-        return this.text.get();
+        return this.text.get().replace('\n', ' ');
     }
 
     @Override

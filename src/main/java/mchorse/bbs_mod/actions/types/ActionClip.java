@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.actions.types;
 
+import mchorse.bbs_mod.actions.ActionRelocation;
 import mchorse.bbs_mod.actions.SuperFakePlayer;
 import mchorse.bbs_mod.film.Film;
 import mchorse.bbs_mod.film.replays.Replay;
@@ -19,6 +20,10 @@ public abstract class ActionClip extends Clip
     {
         this.add(this.frequency);
     }
+
+    /** Carries the world coordinates this action keeps along with its replay, when the replay is moved. */
+    public void relocate(ActionRelocation relocation)
+    {}
 
     public boolean isClient()
     {

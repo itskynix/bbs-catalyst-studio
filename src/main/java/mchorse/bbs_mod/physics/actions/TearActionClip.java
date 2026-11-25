@@ -1,6 +1,8 @@
 package mchorse.bbs_mod.physics.actions;
 
+import mchorse.bbs_mod.actions.ActionRelocation;
 import mchorse.bbs_mod.actions.types.ActionClip;
+import net.minecraft.util.math.Vec3d;
 import mchorse.bbs_mod.camera.data.Point;
 import mchorse.bbs_mod.camera.values.ValuePoint;
 import mchorse.bbs_mod.settings.values.core.ValueString;
@@ -39,6 +41,15 @@ public class TearActionClip extends ActionClip
         this.add(this.bone);
         this.add(this.strength);
         this.add(this.direction);
+    }
+
+    @Override
+    public void relocate(ActionRelocation relocation)
+    {
+        Point way = this.direction.get();
+        Vec3d turned = relocation.vector(way.x, way.y, way.z);
+
+        this.direction.set(new Point(turned.x, turned.y, turned.z));
     }
 
     @Override

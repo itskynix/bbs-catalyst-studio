@@ -1926,6 +1926,10 @@ public class UIKeys
     public static final IKey MODEL_BLOCKS_KEYS_TELEPORT = L10n.lang("bbs.ui.model_blocks.keys.teleport");
     public static final IKey MODEL_BLOCKS_KEYS_TELEPORT_ORBIT = L10n.lang("bbs.ui.model_blocks.keys.teleport_orbit");
     public static final IKey MODEL_BLOCKS_KEYS_TOGGLE_RENDERING = L10n.lang("bbs.ui.model_blocks.keys.toggle_rendering");
+    public static final IKey MODEL_BLOCKS_UNDO = L10n.lang("bbs.ui.model_blocks.undo");
+    public static final IKey MODEL_BLOCKS_REDO = L10n.lang("bbs.ui.model_blocks.redo");
+    public static final IKey MODEL_BLOCKS_UNDONE = L10n.lang("bbs.ui.model_blocks.undone");
+    public static final IKey MODEL_BLOCKS_REDONE = L10n.lang("bbs.ui.model_blocks.redone");
     public static final IKey MODEL_BLOCKS_SHADOW = L10n.lang("bbs.ui.model_blocks.shadow");
     public static final IKey MODEL_BLOCKS_TITLE = L10n.lang("bbs.ui.model_blocks.title");
     public static final IKey MODEL_BLOCKS_TRANSFORM_DEFAULT = L10n.lang("bbs.ui.model_blocks.transform.default");

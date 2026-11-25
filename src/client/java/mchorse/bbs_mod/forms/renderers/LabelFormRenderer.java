@@ -10,6 +10,7 @@ import mchorse.bbs_mod.forms.CustomVertexConsumerProvider;
 import mchorse.bbs_mod.forms.FormTranslucentQueue;
 import mchorse.bbs_mod.forms.FormUtilsClient;
 import mchorse.bbs_mod.forms.forms.LabelForm;
+import mchorse.bbs_mod.forms.forms.utils.LabelColorSpans;
 import mchorse.bbs_mod.forms.renderers.utils.FormColorBlend;
 import mchorse.bbs_mod.forms.renderers.utils.TextDepthMesh;
 import mchorse.bbs_mod.forms.renderers.utils.TextFx;
@@ -114,6 +115,8 @@ public class LabelFormRenderer extends FormRenderer<LabelForm>
         try
         {
             List<String> wrap = font.wrap(text, x2 - x1 - 4);
+            List<Integer> colors = this.visibleColors();
+            int[] cursor = {0};
 
             int th = font.getHeight();
             int lineHeight = th + 4;
@@ -122,7 +125,10 @@ public class LabelFormRenderer extends FormRenderer<LabelForm>
 
             for (String s : wrap)
             {
-                context.batcher.textShadow(s, x1 + 2, y, color);
+                for (Run run : this.runs(font.getRenderer(), s, colors, cursor))
+                {
+                    context.batcher.textShadow(run.text, x1 + 2 + run.offset, y, run.rgb == null ? color : (color & 0xff000000) | run.rgb);
+                }
 
                 y += lineHeight;
             }
@@ -236,10 +242,6 @@ public class LabelFormRenderer extends FormRenderer<LabelForm>
         {
             this.renderAdvanced(context, consumers, font, light);
         }
-        else if (this.form.max.get() <= 10)
-        {
-            this.renderString(context, consumers, font, light);
-        }
         else
         {
             this.renderLimitedString(context, consumers, font, light);
@@ -328,18 +330,14 @@ public class LabelFormRenderer extends FormRenderer<LabelForm>
         int w = 0;
         int h = font.getHeight();
         String content = StringUtils.processColoredText(this.form.text.get());
-        List<String> lines = FontRenderer.wrap(renderer, content, this.form.max.get());
+        List<String> lines = this.layoutLines(renderer, content);
+        List<Integer> colors = this.visibleColors();
 
-        if (lines.size() <= 1)
+        if (lines.size() <= 1 && colors.isEmpty())
         {
             this.renderString(context, consumers, font, light);
 
             return;
-        }
-
-        for (int i = 0; i < lines.size(); i++)
-        {
-            lines.set(i, lines.get(i).trim());
         }
 
         for (String line : lines)
@@ -387,28 +385,26 @@ public class LabelFormRenderer extends FormRenderer<LabelForm>
             y2 = y;
         }
 
-        Color cColor = new Color().set(context.color, true);
-
-        FormColorBlend.blend(cColor, this.form.color.get());
-        OverlayBlend.apply(cColor, this.form.overlayColor.get());
-
-        int color = cColor.getARGBColor();
+        int[] cursor = {0};
 
         for (String line : lines)
         {
             int x2 = x + (this.form.anchorLines.get() ? (int) ((w - renderer.getWidth(line)) * this.form.anchorX.get()) : 0);
 
-            renderer.draw(
-                line,
-                x2,
-                y2,
-                color, false,
-                context.stack.peek().getPositionMatrix(),
-                consumers,
-                TextRenderer.TextLayerType.NORMAL,
-                0,
-                light
-            );
+            for (Run run : this.runs(renderer, line, colors, cursor))
+            {
+                renderer.draw(
+                    run.text,
+                    x2 + run.offset,
+                    y2,
+                    this.fillColor(context, run.rgb).getARGBColor(), false,
+                    context.stack.peek().getPositionMatrix(),
+                    consumers,
+                    TextRenderer.TextLayerType.NORMAL,
+                    0,
+                    light
+                );
+            }
 
             y2 += lineHeight;
         }
@@ -418,6 +414,148 @@ public class LabelFormRenderer extends FormRenderer<LabelForm>
         RenderSystem.enableDepthTest();
 
         this.renderShadow(context, x, y, w, h);
+    }
+
+    /* Lines and coloured parts */
+
+    /** The drawn lines: wrapped to the width when there is one, otherwise split where the text has new lines. */
+    private List<String> layoutLines(TextRenderer renderer, String content)
+    {
+        List<String> lines = new ArrayList<>();
+
+        if (this.form.max.get() > 10)
+        {
+            for (String line : FontRenderer.wrap(renderer, content, this.form.max.get()))
+            {
+                lines.add(line.trim());
+            }
+
+            return lines;
+        }
+
+        /* The formatting codes in force carry over onto the next line */
+        StringBuilder active = new StringBuilder();
+        StringBuilder line = new StringBuilder();
+
+        for (int i = 0; i < content.length(); i++)
+        {
+            char c = content.charAt(i);
+
+            if (c == '\n')
+            {
+                lines.add(line.toString());
+                line = new StringBuilder(active);
+
+                continue;
+            }
+
+            if (c == '\u00A7' && i + 1 < content.length())
+            {
+                follow(active, content.charAt(i + 1));
+                line.append(c).append(content.charAt(++i));
+
+                continue;
+            }
+
+            line.append(c);
+        }
+
+        lines.add(line.toString());
+
+        return lines;
+    }
+
+    private static void follow(StringBuilder active, char code)
+    {
+        if (code == 'r' || code == 'R')
+        {
+            active.setLength(0);
+        }
+        else
+        {
+            active.append('\u00A7').append(code);
+        }
+    }
+
+    /** The colour of every visible letter, or an empty list when the label is in one colour. */
+    private List<Integer> visibleColors()
+    {
+        List<LabelColorSpans.Span> spans = LabelColorSpans.parse(this.form.colorSpans.get());
+
+        return spans.isEmpty() ? Collections.emptyList() : LabelColorSpans.visible(this.form.text.get(), spans);
+    }
+
+    /** A stretch of a line in one colour, and how far into the line it starts. */
+    private record Run(String text, float offset, Integer rgb) {}
+
+    private List<Run> runs(TextRenderer renderer, String line, List<Integer> colors, int[] cursor)
+    {
+        if (colors.isEmpty())
+        {
+            return List.of(new Run(line, 0F, null));
+        }
+
+        List<Run> runs = new ArrayList<>();
+        StringBuilder active = new StringBuilder();
+        StringBuilder text = new StringBuilder();
+        Integer rgb = null;
+        float offset = 0F;
+
+        for (int i = 0; i < line.length(); i++)
+        {
+            char c = line.charAt(i);
+
+            if (c == '\u00A7' && i + 1 < line.length())
+            {
+                follow(active, line.charAt(i + 1));
+                text.append(c).append(line.charAt(++i));
+
+                continue;
+            }
+
+            if (!Character.isWhitespace(c))
+            {
+                Integer color = cursor[0] < colors.size() ? colors.get(cursor[0]) : null;
+
+                cursor[0]++;
+
+                if (!java.util.Objects.equals(color, rgb))
+                {
+                    if (!text.isEmpty())
+                    {
+                        runs.add(new Run(text.toString(), offset, rgb));
+                        text = new StringBuilder(active);
+                        offset = renderer.getWidth(line.substring(0, i));
+                    }
+
+                    rgb = color;
+                }
+            }
+
+            text.append(c);
+        }
+
+        runs.add(new Run(text.toString(), offset, rgb));
+
+        return runs;
+    }
+
+    /** The label's fill, or a part's own colour with the label's opacity, with the same blending. */
+    private Color fillColor(FormRenderingContext context, Integer rgb)
+    {
+        Color color = new Color().set(context.color, true);
+        Color source = this.form.color.get();
+
+        if (rgb != null)
+        {
+            source = new Color((rgb >> 16 & 255) / 255F, (rgb >> 8 & 255) / 255F, (rgb & 255) / 255F, source.a);
+        }
+
+        FormColorBlend.blend(color, source);
+        /* Text is a flat fill, so the CPU mix is exactly what the overlay texture would do. */
+        OverlayBlend.apply(color, this.form.overlayColor.get());
+
+        return color;
     }
 
     /* Advanced text: reveal, bend, depth and outline. Anything left at its default takes the plain path above. */
@@ -432,6 +570,7 @@ public class LabelFormRenderer extends FormRenderer<LabelForm>
         final int reveal;
         final float lineCenter;
         final float lineWidth;
+        Integer rgb;
 
         Glyph(String text, float x, float width, int line, int reveal, float lineCenter, float lineWidth)
         {
@@ -472,15 +611,8 @@ public class LabelFormRenderer extends FormRenderer<LabelForm>
         boolean occlusion = this.form.depthOcclusion.get();
         int fontHeight = font.getHeight();
         String content = StringUtils.processColoredText(this.form.text.get());
-        List<String> lines = new ArrayList<>();
-
-        if (this.form.max.get() > 10)
-        {
-            for (String line : FontRenderer.wrap(renderer, content, this.form.max.get()))
-            {
-                lines.add(line.trim());
-            }
-        }
+        List<String> lines = this.layoutLines(renderer, content);
+        List<Integer> colors = this.visibleColors();
 
         if (lines.isEmpty())
         {
@@ -499,7 +631,7 @@ public class LabelFormRenderer extends FormRenderer<LabelForm>
         int y = (int) (-h * this.form.anchorY.get());
 
         /* Cut the text into glyphs. Characters only when something needs them one by one. */
-        boolean perCharacter = arc != 0F || mode != LabelForm.ANIMATION_NONE;
+        boolean perCharacter = arc != 0F || mode != LabelForm.ANIMATION_NONE || !colors.isEmpty();
         List<Glyph> glyphs = new ArrayList<>();
         int characters = 0;
         int words = 0;
@@ -563,7 +695,10 @@ public class LabelFormRenderer extends FormRenderer<LabelForm>
                 String piece = active.toString() + c;
                 int reveal = mode == LabelForm.ANIMATION_CHARACTER ? characters - 1 : (mode == LabelForm.ANIMATION_WORD ? words - 1 : (mode == LabelForm.ANIMATION_LINE ? li : 0));
 
-                glyphs.add(new Glyph(piece, lineX + renderer.getWidth(line.substring(0, i)), renderer.getWidth(piece), li, reveal, lineCenter, lineWidth));
+                Glyph glyph = new Glyph(piece, lineX + renderer.getWidth(line.substring(0, i)), renderer.getWidth(piece), li, reveal, lineCenter, lineWidth);
+
+                glyph.rgb = characters - 1 < colors.size() ? colors.get(characters - 1) : null;
+                glyphs.add(glyph);
             }
         }
 
@@ -676,6 +811,8 @@ public class LabelFormRenderer extends FormRenderer<LabelForm>
 
         for (Glyph glyph : glyphs)
         {
+            Color glyphFill = glyph.rgb == null ? fill : this.fillColor(context, glyph.rgb);
+            Color glyphSide = glyph.rgb == null ? side : new Color(glyphFill.r * 0.6F, glyphFill.g * 0.6F, glyphFill.b * 0.6F, glyphFill.a);
             float u = 1F;
             float opacity = 1F;
 
@@ -754,7 +891,7 @@ public class LabelFormRenderer extends FormRenderer<LabelForm>
 
             if (fx)
             {
-                float alpha = fill.a * fillOpacity * opacity;
+                float alpha = glyphFill.a * fillOpacity * opacity;
 
                 if (alpha >= 1F / 255F)
                 {
@@ -762,14 +899,14 @@ public class LabelFormRenderer extends FormRenderer<LabelForm>
 
                     if (shattering)
                     {
-                        TextFx.shatter(bodyOut, mesh, matrix, drawX, drawY, thickness, fill, alpha, brightness, shatterProgress, this.form.shatterSpread.get(), glyphIndex, scratch);
+                        TextFx.shatter(bodyOut, mesh, matrix, drawX, drawY, thickness, glyphFill, alpha, brightness, shatterProgress, this.form.shatterSpread.get(), glyphIndex, scratch);
                     }
                     else
                     {
                         float lineStart = glyph.lineCenter - glyph.lineWidth / 2F;
 
                         TextFx.dissolve(
-                            bodyOut, mesh, matrix, drawX, drawY, depth, fill, alpha, brightness,
+                            bodyOut, mesh, matrix, drawX, drawY, depth, glyphFill, alpha, brightness,
                             this.form.dissolveMode.get(), dissolveProgress, this.form.dissolveEdge.get(), this.form.dissolveBurnColor.get(), 2.7F / Math.max(fontHeight, 1),
                             glyph.x, y + glyph.line * lineHeight, (glyph.x - lineStart) / Math.max(glyph.lineWidth, 1F), glyph.lineWidth
                         );
@@ -778,22 +915,22 @@ public class LabelFormRenderer extends FormRenderer<LabelForm>
             }
             else if (solid)
             {
-                float alpha = fill.a * fillOpacity * opacity;
+                float alpha = glyphFill.a * fillOpacity * opacity;
 
                 if (alpha >= 1F / 255F)
                 {
-                    this.emitBody(bodyOut, meshes.get(glyph.text), matrix, drawX, drawY, depth, fill, alpha, brightness, occlusion ? -1 : 0);
+                    this.emitBody(bodyOut, meshes.get(glyph.text), matrix, drawX, drawY, depth, glyphFill, alpha, brightness, occlusion ? -1 : 0);
 
                     if (!occlusion)
                     {
-                        this.emitBody(bodyOut, meshes.get(glyph.text), matrix, drawX, drawY, depth, fill, alpha, brightness, 1);
-                        this.emitBody(bodyOut, meshes.get(glyph.text), matrix, drawX, drawY, depth, fill, alpha, brightness, 2);
+                        this.emitBody(bodyOut, meshes.get(glyph.text), matrix, drawX, drawY, depth, glyphFill, alpha, brightness, 1);
+                        this.emitBody(bodyOut, meshes.get(glyph.text), matrix, drawX, drawY, depth, glyphFill, alpha, brightness, 2);
                     }
                 }
             }
-            else if (fillOpacity * fill.a > 0F)
+            else if (fillOpacity * glyphFill.a > 0F)
             {
-                parts.add(() -> this.drawGlyph(renderer, consumers, placed, glyph.text, px, py, 0F, withAlpha(fill, fillOpacity * fo), light));
+                parts.add(() -> this.drawGlyph(renderer, consumers, placed, glyph.text, px, py, 0F, withAlpha(glyphFill, fillOpacity * fo), light));
             }
 
             for (int k = 0; k < ring; k++)
@@ -810,7 +947,7 @@ public class LabelFormRenderer extends FormRenderer<LabelForm>
             {
                 float lz = -0.3F - depth * j / layers;
 
-                parts.add(() -> this.drawGlyph(renderer, consumers, placed, glyph.text, px, py, lz, withAlpha(side, po), light));
+                parts.add(() -> this.drawGlyph(renderer, consumers, placed, glyph.text, px, py, lz, withAlpha(glyphSide, po), light));
             }
 
             if (shadow.a > 0F)

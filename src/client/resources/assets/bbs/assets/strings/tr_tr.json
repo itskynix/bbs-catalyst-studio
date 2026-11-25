@@ -5242,5 +5242,14 @@
     "bbs.ui.trigger_box.hint.variable_name": "Değişkenin adı. Ad değişince düğümler onu göstermeye devam eder.",
     "bbs.ui.trigger_box.hint.variable_type": "Değişkenin tuttuğu değer türü. Yeni bir tür değeri sıfırlar.",
     "bbs.ui.trigger_box.pick_sound": "Ses seç",
-    "bbs.ui.trigger_box.slot_empty": "Seçilmedi"
+    "bbs.ui.trigger_box.slot_empty": "Seçilmedi",
+    "bbs.ui.model_blocks.undo": "Geri al",
+    "bbs.ui.model_blocks.redo": "Yinele",
+    "bbs.ui.model_blocks.undone": "Model blok değişikliği geri alındı",
+    "bbs.ui.model_blocks.redone": "Model blok değişikliği yinelendi",
+    "bbs.ui.forms.editors.label.part_color": "Seçim rengi",
+    "bbs.ui.forms.editors.label.part_color_tooltip": "Metnin seçili kısmını renklendirir",
+    "bbs.ui.forms.editors.label.part_clear": "Rengi temizle",
+    "bbs.ui.forms.editors.label.part_clear_tooltip": "Seçili kısmı etiket rengine döndürür; seçim yoksa tüm kısımları",
+    "bbs.ui.forms.editors.label.part_none_selected": "Önce metnin bir kısmını seçin"
 }

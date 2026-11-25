@@ -6083,5 +6083,14 @@
 	"bbs.ui.trigger_box.hint.variable_name": "The variable's name. Nodes keep pointing at it when it is renamed.",
 	"bbs.ui.trigger_box.hint.variable_type": "What the variable holds. A new type resets its value.",
 	"bbs.ui.trigger_box.pick_sound": "Pick a sound",
-	"bbs.ui.trigger_box.slot_empty": "Nothing picked"
+	"bbs.ui.trigger_box.slot_empty": "Nothing picked",
+	"bbs.ui.model_blocks.undo": "Undo",
+	"bbs.ui.model_blocks.redo": "Redo",
+	"bbs.ui.model_blocks.undone": "Model block change undone",
+	"bbs.ui.model_blocks.redone": "Model block change redone",
+	"bbs.ui.forms.editors.label.part_color": "Selection colour",
+	"bbs.ui.forms.editors.label.part_color_tooltip": "Colours the selected part of the text",
+	"bbs.ui.forms.editors.label.part_clear": "Clear colour",
+	"bbs.ui.forms.editors.label.part_clear_tooltip": "Gives the selected part the label colour again; with nothing selected, all parts",
+	"bbs.ui.forms.editors.label.part_none_selected": "Select a part of the text first"
 }

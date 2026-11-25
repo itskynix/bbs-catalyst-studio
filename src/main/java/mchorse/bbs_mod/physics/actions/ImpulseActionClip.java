@@ -1,6 +1,8 @@
 package mchorse.bbs_mod.physics.actions;
 
+import mchorse.bbs_mod.actions.ActionRelocation;
 import mchorse.bbs_mod.actions.types.ActionClip;
+import net.minecraft.util.math.Vec3d;
 import mchorse.bbs_mod.camera.data.Point;
 import mchorse.bbs_mod.camera.values.ValuePoint;
 import mchorse.bbs_mod.settings.values.numeric.ValueBoolean;
@@ -57,6 +59,20 @@ public class ImpulseActionClip extends ActionClip
         this.add(this.strength);
         this.add(this.radius);
         this.add(this.direction);
+    }
+
+    @Override
+    public void relocate(ActionRelocation relocation)
+    {
+        Point at = this.point.get();
+        Vec3d moved = relocation.point(at.x, at.y, at.z);
+
+        this.point.set(new Point(moved.x, moved.y, moved.z));
+
+        Point way = this.direction.get();
+        Vec3d turned = relocation.vector(way.x, way.y, way.z);
+
+        this.direction.set(new Point(turned.x, turned.y, turned.z));
     }
 
     @Override

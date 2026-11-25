@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.actions.types.item;
 
+import mchorse.bbs_mod.actions.ActionRelocation;
 import mchorse.bbs_mod.actions.SuperFakePlayer;
 import mchorse.bbs_mod.actions.values.ValueBlockHitResult;
 import mchorse.bbs_mod.film.Film;
@@ -28,6 +29,12 @@ public class UseBlockItemActionClip extends ItemActionClip
         super.shift(dx, dy, dz);
 
         this.hit.shift(dx, dy, dz);
+    }
+
+    @Override
+    public void relocate(ActionRelocation relocation)
+    {
+        this.hit.relocate(relocation);
     }
 
     @Override
