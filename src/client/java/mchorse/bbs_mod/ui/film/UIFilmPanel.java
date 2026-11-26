@@ -316,6 +316,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         this.unpackTutorial.tooltip(UIKeys.FILM_TUTORIAL_UNPACK_TOOLTIP);
         this.unpackTutorial.setVisible(false);
         this.actions().action(this.unpackTutorial);
+        mchorse.bbs_mod.api.client.events.FilmEditEvents.CHANGED.register((film, values, cause) -> this.onTutorialEdited(film));
 
         this.openOverlay.setVisible(false);
         this.actions().sync();
@@ -912,6 +913,11 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
      */
     public void openTutorial(String id)
     {
+        this.openTutorial(id, true);
+    }
+
+    private void openTutorial(String id, boolean announce)
+    {
         if (TutorialFilms.get(id) == null)
         {
             return;
@@ -919,16 +925,39 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
 
         MinecraftClient mc = MinecraftClient.getInstance();
         net.minecraft.util.math.BlockPos origin = TUTORIAL_ORIGINS.computeIfAbsent(id, (k) -> mc.player == null ? net.minecraft.util.math.BlockPos.ORIGIN : mc.player.getBlockPos());
-        Film film = TutorialFilms.build(id, origin.getX(), origin.getY(), origin.getZ());
+        Film film = TutorialFilms.build(id, origin.getX(), origin.getY(), origin.getZ(), tutorialGround(mc.world, origin.getY()));
 
         this.save();
         this.fill(film);
         BBSSettings.recentData.forget(this.getType().getId(), id);
+        this.tutorialRebuiltAt = System.currentTimeMillis();
 
-        if (this.getContext() != null)
+        if (announce && this.getContext() != null)
         {
             this.getContext().notifyInfo(UIKeys.FILM_TUTORIAL_OPENED);
         }
+    }
+
+    /**
+     * The ground a tutorial's actors are stood on, for Process Replays' Fit to Ground: the first
+     * block met going down from a little above where the film was opened, so a roof or a tree top
+     * high above the spot is not taken for it; NaN, leaving the actor as it is, when there is none
+     * within reach.
+     */
+    private static mchorse.bbs_mod.ui.film.replays.ReplayBatchProcessor.GroundProvider tutorialGround(net.minecraft.world.World world, int y)
+    {
+        if (world == null)
+        {
+            return null;
+        }
+
+        return (x, z) ->
+        {
+            Vec3d from = new Vec3d(x, y + 6D, z);
+            net.minecraft.util.hit.BlockHitResult hit = mchorse.bbs_mod.utils.RayTracing.rayTrace(world, from, new Vec3d(0D, -1D, 0D), 24D);
+
+            return hit == null || hit.getType() == net.minecraft.util.hit.HitResult.Type.MISS ? Double.NaN : hit.getPos().y;
+        };
     }
 
     @Override
@@ -2609,6 +2638,14 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
 
     private void dupeData(String name)
     {
+        /* A tutorial is copied only through Unpack Film, which asks first */
+        if (this.isTutorial())
+        {
+            this.confirmUnpackTutorial();
+
+            return;
+        }
+
         if (this.getData() != null && !this.overlay.namesList.hasInHierarchy(name))
         {
             this.save();
@@ -3668,6 +3705,8 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
             BBSSettings.lightInputs = false;
         }
 
+        this.renderTutorialRipples(context);
+
         if (this.entered)
         {
             ClientPlayerEntity player = MinecraftClient.getInstance().player;
@@ -4045,9 +4084,188 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         }
     }
 
+    /* The tutorial lock: a tutorial film can be played, scrubbed and looked at, and nothing else */
+
+    /** When the open tutorial was last built again by the safety net. */
+    private long tutorialRebuiltAt;
+
+    /** Where and when a refused click was: [x, y, millis]. */
+    private final List<long[]> tutorialRipples = new ArrayList<>();
+
+    /** How many rings a refused click sends out, how far apart in time, and how long each lives. */
+    private static final int RIPPLE_RINGS = 3;
+    private static final long RIPPLE_GAP = 110L;
+    private static final long RIPPLE_LIFE = 420L;
+
+    /**
+     * Whether a click on the open tutorial is to be refused. Let through: the top bar and its
+     * buttons (Unpack Film among them), the viewport's buttons — play, loop, flight and the
+     * like, but not recording a replay — and the strip of the camera timeline's ruler, where a
+     * click scrubs. Everything else would select, drag, type or open something that edits.
+     */
+    private boolean refusesTutorialClick(UIContext context)
+    {
+        if (!this.isTutorial() || !this.area.isInside(context))
+        {
+            return false;
+        }
+
+        if (this.topBar.area.isInside(context) || this.actions().area.isInside(context))
+        {
+            return false;
+        }
+
+        if (context.mouseButton != 0)
+        {
+            return true;
+        }
+
+        if (this.preview != null && this.preview.icons != null && this.preview.icons.area.isInside(context)
+            && (this.preview.recordReplay == null || !this.preview.recordReplay.area.isInside(context)))
+        {
+            return false;
+        }
+
+        UIClips clips = this.cameraEditor == null ? null : this.cameraEditor.clips;
+
+        return !(clips != null && clips.isVisible() && clips.area.isInside(context)
+            && context.mouseY < mchorse.bbs_mod.ui.utils.renderers.TimelineRulerRenderer.getRulerBottom(clips.area));
+    }
+
+    /** A refused click or key on a tutorial: the critical sound, and three rings out from the pointer. */
+    private void refuseTutorial(UIContext context)
+    {
+        UIUtils.playCriticalError();
+
+        long now = System.currentTimeMillis();
+
+        this.tutorialRipples.add(new long[] {context.mouseX, context.mouseY, now});
+
+        if (this.tutorialRipples.size() > 8)
+        {
+            this.tutorialRipples.remove(0);
+        }
+    }
+
+    private void renderTutorialRipples(UIContext context)
+    {
+        if (this.tutorialRipples.isEmpty())
+        {
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+
+        this.tutorialRipples.removeIf((ripple) -> now - ripple[2] > RIPPLE_GAP * (RIPPLE_RINGS - 1) + RIPPLE_LIFE);
+
+        for (long[] ripple : this.tutorialRipples)
+        {
+            for (int ring = 0; ring < RIPPLE_RINGS; ring++)
+            {
+                long age = now - ripple[2] - ring * RIPPLE_GAP;
+
+                if (age < 0 || age > RIPPLE_LIFE)
+                {
+                    continue;
+                }
+
+                float t = age / (float) RIPPLE_LIFE;
+                float radius = 4F + t * 22F;
+                int alpha = (int) ((1F - t) * 220F);
+                int color = (alpha << 24) | 0xff4d4d;
+                int segments = 28;
+
+                for (int i = 0; i < segments; i++)
+                {
+                    double angle = Math.PI * 2D * i / segments;
+                    float x = ripple[0] + (float) Math.cos(angle) * radius;
+                    float y = ripple[1] + (float) Math.sin(angle) * radius;
+
+                    context.batcher.box(x - 1F, y - 1F, x + 1F, y + 1F, color);
+                }
+            }
+        }
+    }
+
+    @Override
+    protected IUIElement childrenKeyPressed(UIContext context)
+    {
+        if (this.isTutorial() && context.getKeyAction() == mchorse.bbs_mod.ui.utils.keys.KeyAction.PRESSED && !this.allowsTutorialKey(context.getKeyCode()))
+        {
+            this.refuseTutorial(context);
+
+            return this;
+        }
+
+        return super.childrenKeyPressed(context);
+    }
+
+    @Override
+    protected IUIElement childrenTextInput(UIContext context)
+    {
+        return this.isTutorial() ? this : super.childrenTextInput(context);
+    }
+
+    /** The keys a tutorial still answers: playing and pausing, stepping, flying the camera, leaving. */
+    private boolean allowsTutorialKey(int key)
+    {
+        return switch (key)
+        {
+            case GLFW.GLFW_KEY_SPACE, GLFW.GLFW_KEY_ESCAPE, GLFW.GLFW_KEY_LEFT, GLFW.GLFW_KEY_RIGHT, GLFW.GLFW_KEY_UP, GLFW.GLFW_KEY_DOWN,
+                 GLFW.GLFW_KEY_HOME, GLFW.GLFW_KEY_END, GLFW.GLFW_KEY_W, GLFW.GLFW_KEY_A, GLFW.GLFW_KEY_S, GLFW.GLFW_KEY_D,
+                 GLFW.GLFW_KEY_Q, GLFW.GLFW_KEY_E, GLFW.GLFW_KEY_LEFT_SHIFT, GLFW.GLFW_KEY_RIGHT_SHIFT, GLFW.GLFW_KEY_LEFT_CONTROL,
+                 GLFW.GLFW_KEY_RIGHT_CONTROL, GLFW.GLFW_KEY_LEFT_ALT, GLFW.GLFW_KEY_RIGHT_ALT, GLFW.GLFW_KEY_TAB, GLFW.GLFW_KEY_F1 -> true;
+            default -> false;
+        };
+    }
+
+    /**
+     * The safety net under the lock: should anything still change the open tutorial, it is built
+     * again as it was, and the change answered like a refused click.
+     */
+    private void onTutorialEdited(Film film)
+    {
+        if (film == null || film != this.data || !this.isTutorial())
+        {
+            return;
+        }
+
+        /* Something the editor does on its own right after a film opens must not set off a loop of rebuilding */
+        long now = System.currentTimeMillis();
+
+        if (now - this.tutorialRebuiltAt < 1000L)
+        {
+            return;
+        }
+
+        this.tutorialRebuiltAt = now;
+
+        String id = film.getId();
+
+        MinecraftClient.getInstance().execute(() ->
+        {
+            if (this.data == film)
+            {
+                if (this.getContext() != null)
+                {
+                    this.refuseTutorial(this.getContext());
+                }
+
+                this.openTutorial(id, false);
+            }
+        });
+    }
+
     @Override
     protected IUIElement childrenMouseClicked(UIContext context)
     {
+        if (this.refusesTutorialClick(context))
+        {
+            this.refuseTutorial(context);
+
+            return this;
+        }
+
         if (context.mouseButton == 0)
         {
             if (this.leftDrawerOpen && !this.leftDrawerPinned && this.leftDrawerOverlay != null && this.leftDrawerTabBtn != null)

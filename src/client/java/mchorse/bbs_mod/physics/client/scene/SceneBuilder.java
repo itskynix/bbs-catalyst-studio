@@ -148,13 +148,13 @@ final class SceneBuilder
             && adopted.above() == physics.worldAbove.get()
             && adopted.covers(centers, this.scene.getOriginX(), this.scene.getOriginY(), this.scene.getOriginZ()))
         {
-            window = WorldCollider.adopt(this.world, adopted);
+            window = WorldCollider.adopt(this.world, adopted, this.scene.groundBodies());
         }
         else
         {
             window = WorldCollider.build(this.world, MinecraftClient.getInstance().world,
                 this.scene.getOriginX(), this.scene.getOriginY(), this.scene.getOriginZ(), centers,
-                physics.worldRadius.get(), physics.worldBelow.get(), physics.worldAbove.get());
+                physics.worldRadius.get(), physics.worldBelow.get(), physics.worldAbove.get(), this.scene.groundBodies());
         }
 
         if (window.boxes() == 0)

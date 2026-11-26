@@ -18,6 +18,7 @@ import mchorse.bbs_mod.camera.data.Placement;
 import mchorse.bbs_mod.camera.data.Position;
 import mchorse.bbs_mod.film.Film;
 import mchorse.bbs_mod.film.replays.Replay;
+import mchorse.bbs_mod.ui.film.replays.ReplayBatchProcessor;
 import mchorse.bbs_mod.forms.forms.ModelForm;
 import mchorse.bbs_mod.l10n.L10n;
 import mchorse.bbs_mod.l10n.keys.IKey;
@@ -83,6 +84,9 @@ public final class TutorialFilms
 
     private static final List<Tutorial> ALL = new ArrayList<>();
 
+    /** Where the actors of the film being built stand: the world's ground, or null. Set only while {@link #build} runs. */
+    private static ReplayBatchProcessor.GroundProvider ground;
+
     static
     {
         register("physics", Icons.PHYSICS, TutorialFilms::physics);
@@ -125,6 +129,29 @@ public final class TutorialFilms
     /** The tutorial film of {@code id} laid out around the block {@code x y z}, or null when there is no such tutorial. */
     public static Film build(String id, int x, int y, int z)
     {
+        return build(id, x, y, z, null);
+    }
+
+    /**
+     * The same, every actor stood on the ground of the world it opens in with Process Replays' own
+     * "Fit to Ground" ({@code ground} finds it; null leaves the actors on the origin's level).
+     */
+    public static Film build(String id, int x, int y, int z, ReplayBatchProcessor.GroundProvider ground)
+    {
+        TutorialFilms.ground = ground;
+
+        try
+        {
+            return buildOn(id, x, y, z);
+        }
+        finally
+        {
+            TutorialFilms.ground = null;
+        }
+    }
+
+    private static Film buildOn(String id, int x, int y, int z)
+    {
         Tutorial tutorial = get(id);
 
         if (tutorial == null)
@@ -144,7 +171,7 @@ public final class TutorialFilms
     /* The films */
 
     /**
-     * New Physics: two characters with active physics. The left one stands and takes a shove at
+     * New Physics: two characters with active physics. The left one walks in and takes a shove at
      * tick 40: it staggers, balances and recovers. The right one is thrown at tick 70: it braces
      * before the ground, lands, lies still, and gets back up.
      */
@@ -154,23 +181,35 @@ public final class TutorialFilms
 
         idle(film, duration, x + 0.5, y + 2.4, z - 4.5, 180F, 14F, 70F);
 
-        Replay left = actor(film, "a0000001", key("physics.left"), x - 1.5, y, z + 3.5, 180F);
+        /* The left one walks in from the side, then turns to the camera */
+        Replay left = actor(film, "a0000001", key("physics.left"), x - 4.5, y, z + 3.5, -90F);
+
+        walk(left, 0, 32, x - 4.5, z + 3.5, x - 1.5, z + 3.5);
+        turn(left, 32, 38, -90F, 180F);
+
         Replay right = actor(film, "a0000002", key("physics.right"), x + 2.5, y, z + 3.5, 180F);
 
         activeRagdoll(left, 0.8F, 50F, 0.6F);
         activeRagdoll(right, 0.6F, 40F, 0.5F);
 
-        /* A shove sideways at the left one's chest: a stagger it recovers from */
-        impulse(left, 40, x - 2.5, y + 1.2, z + 3.5, false, 1F, 0F, 0F, 4F, 2F);
-        /* A blast under the right one's side: off its feet, a brace, a landing, and up again */
-        impulse(right, 70, x + 2.0, y + 0.3, z + 3.5, false, 0.35F, 1F, 0F, 9F, 2.5F);
+        double leftY = standing(left);
+        double rightY = standing(right);
 
-        subtitle(film, 0, 70, key("physics.step1"));
-        subtitle(film, 70, 90, key("physics.step2"));
-        subtitle(film, 160, duration - 160, key("physics.step3"));
+        /* A shove sideways at the left one's chest: a stagger it recovers from */
+        impulse(left, 40, x - 2.5, leftY + 1.2, z + 3.5, false, 1F, 0F, 0F, 4F, 2F);
+        /* A blast under the right one's side: off its feet, a brace, a landing, and up again */
+        impulse(right, 70, x + 2.0, rightY + 0.3, z + 3.5, false, 0.35F, 1F, 0F, 9F, 2.5F);
+
+        subtitle(film, 0, 70, key("physics.step1"), 1);
+        subtitle(film, 70, 90, key("physics.step2"), 1);
+        subtitle(film, 160, duration - 160, key("physics.step3"), 1);
     }
 
-    /** New Effects: one character, and the screen effects one after the other, each named as it plays. */
+    /**
+     * New Effects: one character walking to and fro, and the screen effects one after the other,
+     * each on its own row of the timeline, its values easing in and out on its own tracks, and
+     * named as it plays.
+     */
     private static void effects(Film film, int x, int y, int z)
     {
         int step = 40;
@@ -178,45 +217,62 @@ public final class TutorialFilms
         int duration = step * names.length;
 
         idle(film, duration, x + 0.5, y + 1.9, z - 2.5, 180F, 8F, 60F);
-        actor(film, "a0000001", key("effects.actor"), x + 0.5, y, z + 2.5, 180F);
+
+        Replay actor = actor(film, "a0000001", key("effects.actor"), x - 1.5, y, z + 2.5, -90F);
+
+        for (int i = 0; i < 4; i++)
+        {
+            boolean out = i % 2 == 0;
+            int from = i * 60;
+
+            walk(actor, from, from + 56, out ? x - 1.5 : x + 2.5, z + 2.5, out ? x + 2.5 : x - 1.5, z + 2.5);
+            turn(actor, from + 56, from + 60, out ? -90F : 90F, out ? 90F : -90F);
+        }
 
         ColorGradeClip grade = new ColorGradeClip();
 
         grade.overlayColor.set(0x3a5f9a);
-        value(grade.overlayAlpha, 0.18D);
-        value(grade.saturation, 0.45D);
-        value(grade.contrast, 1.2D);
+        ramp(grade.overlayAlpha, step, 0D, 0.18D);
+        ramp(grade.saturation, step, 1D, 0.45D);
+        ramp(grade.contrast, step, 1D, 1.2D);
 
         VignetteClip vignette = new VignetteClip();
 
-        value(vignette.intensity, 0.85D);
-        value(vignette.radius, 0.6D);
+        ramp(vignette.intensity, step, 0D, 0.85D);
+        ramp(vignette.radius, step, 0.75D, 0.6D);
 
         LetterboxClip letterbox = new LetterboxClip();
 
         GrainClip grain = new GrainClip();
 
-        value(grain.strength, 0.6D);
+        ramp(grain.strength, step, 0D, 0.6D);
+        ramp(grain.size, step, 1D, 1.5D);
 
         ScreenShakeClip shake = new ScreenShakeClip();
 
-        value(shake.amplitude, 0.7D);
+        ramp(shake.amplitude, step, 0D, 0.7D);
+        ramp(shake.frequency, step, 12D, 16D);
 
         LensDistortionClip lens = new LensDistortionClip();
 
-        value(lens.distortion, 0.35D);
-        value(lens.chromaticAberration, 0.5D);
+        ramp(lens.distortion, step, 0D, 0.35D);
+        ramp(lens.chromaticAberration, step, 0D, 0.5D);
 
         FxClip[] effects = {grade, vignette, letterbox, grain, shake, lens};
 
         for (int i = 0; i < effects.length; i++)
         {
-            place(film, effects[i], i * step, step, 1);
-            subtitle(film, i * step, step, key(names[i]));
+            effects[i].title.set(key(names[i] + "_title"));
+            place(film, effects[i], i * step, step, 1 + i);
+            subtitle(film, i * step, step, key(names[i]), effects.length + 1);
         }
     }
 
-    /** New Cameras: a dolly in, an orbit round the actor, a dolly zoom and a FOV punch, each named as it plays. */
+    /**
+     * New Cameras: a dolly in, an orbit round the actor, a dolly zoom and a FOV punch, each on its
+     * own row of the timeline over the base shot, the actor walking towards the camera, each named
+     * as it plays.
+     */
     private static void cameras(Film film, int x, int y, int z)
     {
         int step = 60;
@@ -224,19 +280,25 @@ public final class TutorialFilms
         double ax = x + 0.5;
         double az = z + 3.5;
 
-        Replay actor = actor(film, "a0000001", key("cameras.actor"), ax, y, az, 180F);
+        Replay actor = actor(film, "a0000001", key("cameras.actor"), ax, y, az + 2, 180F);
+
+        walk(actor, 0, duration, ax, az + 2, ax, az - 1);
+
+        double ay = standing(actor);
 
         /* The base shot the modifiers work on, the whole film long */
-        idle(film, duration, ax, y + 1.7, az - 5, 180F, 4F, 60F);
+        idle(film, duration, ax, ay + 1.7, az - 5, 180F, 4F, 60F);
 
         DollyClip dolly = new DollyClip();
 
-        dolly.position.set(new Position((float) ax, (float) (y + 1.7), (float) (az - 7), 180F, 4F, 0F, 60F));
+        dolly.title.set(key("cameras.dolly_title"));
+        dolly.position.set(new Position((float) ax, (float) (ay + 1.7), (float) (az - 7), 180F, 4F, 0F, 60F));
         dolly.distance.set(4F);
         place(film, dolly, 0, step, 1);
 
         OrbitClip orbit = new OrbitClip();
 
+        orbit.title.set(key("cameras.orbit_title"));
         orbit.selector.set(actor.getId());
         orbit.distance.set(4F);
         orbit.yaw.set(60F);
@@ -245,22 +307,27 @@ public final class TutorialFilms
 
         DollyZoomClip zoom = new DollyZoomClip();
 
+        zoom.title.set(key("cameras.dolly_zoom_title"));
         zoom.focus.set(5F);
-        place(film, zoom, step * 2, step, 2);
+        place(film, zoom, step * 2, step, 3);
 
         FovPunchClip punch = new FovPunchClip();
 
+        punch.title.set(key("cameras.fov_punch_title"));
         punch.intensity.set(14F);
         punch.punchDuration.set(12F);
-        place(film, punch, step * 3 + 10, step - 10, 2);
+        place(film, punch, step * 3 + 10, step - 10, 4);
 
-        subtitle(film, 0, step, key("cameras.dolly"));
-        subtitle(film, step, step, key("cameras.orbit"));
-        subtitle(film, step * 2, step, key("cameras.dolly_zoom"));
-        subtitle(film, step * 3, step, key("cameras.fov_punch"));
+        subtitle(film, 0, step, key("cameras.dolly"), 5);
+        subtitle(film, step, step, key("cameras.orbit"), 5);
+        subtitle(film, step * 2, step, key("cameras.dolly_zoom"), 5);
+        subtitle(film, step * 3, step, key("cameras.fov_punch"), 5);
     }
 
     /* Pieces */
+
+    /** How big the explanations are drawn: a film subtitle, a line of small text at the bottom middle. */
+    private static final float SUBTITLE_SCALE = 4F;
 
     private static String key(String id)
     {
@@ -272,6 +339,7 @@ public final class TutorialFilms
     {
         IdleClip idle = new IdleClip();
 
+        idle.title.set(key("base_shot"));
         idle.position.set(new Position((float) x, (float) y, (float) z, yaw, pitch, 0F, fov));
         place(film, idle, 0, duration, 0);
     }
@@ -284,28 +352,41 @@ public final class TutorialFilms
         film.camera.addClip(clip);
     }
 
-    /** A line of text along the bottom of the frame. */
-    private static void subtitle(Film film, int tick, int duration, String text)
+    /** A line of small text at the bottom middle of the frame, on a row of its own above the clips it explains. */
+    private static void subtitle(Film film, int tick, int duration, String text, int layer)
     {
         SubtitleClip subtitle = new SubtitleClip();
-        Placement placement = new Placement(SubtitleClip.DEFAULT_SCALE);
+        Placement placement = new Placement(SUBTITLE_SCALE);
 
-        placement.windowY = 0.88F;
+        placement.windowX = 0.5F;
+        placement.windowY = 0.94F;
+        placement.anchorX = 0.5F;
         placement.anchorY = 1F;
         subtitle.placement.set(placement);
         subtitle.title.set(text);
+        subtitle.fontSize.set(9);
         subtitle.background.set(0x99000000);
-        subtitle.maxWidth.set(420);
-        place(film, subtitle, tick, duration, 3);
+        subtitle.backgroundOffset.set(3F);
+        subtitle.maxWidth.set(360);
+        place(film, subtitle, tick, duration, layer);
     }
 
-    /** One effect value held for the whole clip: a single keyframe at its start. */
-    private static void value(FxClip.Channel channel, double value)
+    /** An effect value easing in from {@code rest} to {@code value} and out again over a clip of {@code length} ticks: four keyframes on its track. */
+    private static void ramp(FxClip.Channel channel, int length, double rest, double value)
     {
-        channel.channel.insert(0F, value);
+        int ease = Math.max(1, Math.min(8, length / 4));
+
+        channel.channel.insert(0F, rest);
+        channel.channel.insert(ease, value);
+        channel.channel.insert(length - ease, value);
+        channel.channel.insert(length, rest);
     }
 
-    /** A Steve standing at a place, facing the camera, with a fixed id so the film builds the same each time. */
+    /**
+     * A Steve at a place, facing {@code yaw}, with a fixed id so the film builds the same each time,
+     * and stood on the ground of the world with Process Replays' own Fit to Ground when the film is
+     * built for a world.
+     */
     private static Replay actor(Film film, String id, String label, double x, double y, double z, float yaw)
     {
         Replay replay = new Replay(id);
@@ -322,7 +403,46 @@ public final class TutorialFilms
         replay.keyframes.bodyYaw.insert(0F, (double) yaw);
         film.replays.add(replay);
 
+        if (ground != null)
+        {
+            ReplayBatchProcessor.NormalParams params = new ReplayBatchProcessor.NormalParams();
+
+            params.groundProvider = ground;
+            ReplayBatchProcessor.applyNormal(List.of(new ReplayBatchProcessor.VisibleReplay(replay, 0, 0)), List.of("y"), ReplayBatchProcessor.Operation.FIT_HEIGHT, params);
+        }
+
         return replay;
+    }
+
+    /** Where the actor stands on its first tick, after it was stood on the ground. */
+    private static double standing(Replay replay)
+    {
+        return replay.keyframes.y.interpolate(0F);
+    }
+
+    /** The actor walks in a straight line from one place to another, from tick {@code from} to {@code to}, facing the way it goes. */
+    private static void walk(Replay replay, int from, int to, double x1, double z1, double x2, double z2)
+    {
+        double yaw = Math.toDegrees(Math.atan2(-(x2 - x1), z2 - z1));
+
+        replay.keyframes.x.insert(from, x1);
+        replay.keyframes.z.insert(from, z1);
+        replay.keyframes.x.insert(to, x2);
+        replay.keyframes.z.insert(to, z2);
+        replay.keyframes.yaw.insert(from, yaw);
+        replay.keyframes.headYaw.insert(from, yaw);
+        replay.keyframes.bodyYaw.insert(from, yaw);
+    }
+
+    /** The actor turns on the spot from one yaw to another. */
+    private static void turn(Replay replay, int from, int to, float yaw1, float yaw2)
+    {
+        replay.keyframes.yaw.insert(from, (double) yaw1);
+        replay.keyframes.headYaw.insert(from, (double) yaw1);
+        replay.keyframes.bodyYaw.insert(from, (double) yaw1);
+        replay.keyframes.yaw.insert(to, (double) yaw2);
+        replay.keyframes.headYaw.insert(to, (double) yaw2);
+        replay.keyframes.bodyYaw.insert(to, (double) yaw2);
     }
 
     /**

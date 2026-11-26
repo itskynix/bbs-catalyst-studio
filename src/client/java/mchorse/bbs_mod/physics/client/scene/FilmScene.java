@@ -345,6 +345,21 @@ public class FilmScene implements AutoCloseable
     /** The region the world's blocks were collected from. */
     private WorldCollider.Window window;
 
+    /** The body of each section of {@link #window}, in its order: what a block broken or placed swaps a new shape into. */
+    private final List<Integer> groundBodies = new ArrayList<>();
+
+    /** The world's living things near the actors, followed by kinematic bodies — see {@link EntityProxies}. */
+    private EntityProxies proxies;
+
+    /** The film tick the clock last asked for, to tell playback from a jump. */
+    private int lastTicked = -2;
+
+    /** Blocks broken or placed, each pinned to the tick it happened on: [tick, x, y, z] in scene coordinates — see {@link #worldEdited}. */
+    private final List<double[]> wakes = new ArrayList<>();
+
+    private static com.github.stephengold.joltjni.BroadPhaseLayerFilter anyBroadPhase;
+    private static com.github.stephengold.joltjni.ObjectLayerFilter anyObject;
+
     /**
      * Model forms whose model had not finished loading when this scene was assembled, so nothing
      * could be built for them — see {@link #needsRebuild()}.
@@ -465,6 +480,9 @@ public class FilmScene implements AutoCloseable
             this.actors.addAll(builder.buildActors(this.cast));
             this.reach();
 
+            /* The world's players and mobs near the actors: fixed slots, made with everything else */
+            this.proxies = new EntityProxies(this.world);
+
             this.world.optimize();
 
             /* The recording's shape is fixed here: every channel exists, so a tick is a fixed number
@@ -574,6 +592,11 @@ public class FilmScene implements AutoCloseable
     }
 
     /** The fallback ground, which is drawn but has no channel of its own — it never moves. */
+    List<Integer> groundBodies()
+    {
+        return this.groundBodies;
+    }
+
     void addFloor(SceneBody floor)
     {
         this.bodies.add(floor);
@@ -865,6 +888,22 @@ public class FilmScene implements AutoCloseable
          * top of a recording made under the old one, only to be thrown away by the invalidation on
          * the tick after. */
         this.applyWorldSettings();
+
+        /* Played forwards with someone near: the scene goes live, see EntityProxies */
+        boolean advanced = tick == this.lastTicked + 1;
+        boolean jumped = tick != this.lastTicked && !advanced;
+
+        this.lastTicked = tick;
+
+        if (this.proxies != null)
+        {
+            int from = this.proxies.liveTick(this, tick, advanced, jumped || exporting);
+
+            if (from >= 0)
+            {
+                this.invalidateFrom(Math.max(1, from), false);
+            }
+        }
 
         if (this.manualCalculation() && !this.calculationRequested)
         {
@@ -1387,6 +1426,14 @@ public class FilmScene implements AutoCloseable
         this.staging = this.cache.beginFrame(tick);
         this.recordPoses(tick, this.staging, true);
 
+        /* The world's players and mobs where they were on this tick, and the bodies around a block broken on this tick woken */
+        if (this.proxies != null)
+        {
+            this.proxies.pose(this, this.world.getBodies(), tick, this.world.getDeltaTime());
+        }
+
+        this.wakeAround(tick);
+
         /* Before the drives: a field that takes its bodies from the animation must be known when each rig decides who is in charge */
         this.clips.collectFields(this.cast, tick);
 
@@ -1398,6 +1445,11 @@ public class FilmScene implements AutoCloseable
         /* After the drives, deliberately: a drive writes a body's velocity outright, so a push
          * applied before it would be erased in the same tick it was given. */
         this.clips.apply(this.cast, tick);
+
+        if (this.proxies != null)
+        {
+            this.proxies.push(this, tick);
+        }
     }
 
     /**
@@ -1581,9 +1633,115 @@ public class FilmScene implements AutoCloseable
      */
     private int recordingEnd(int cursor)
     {
+        /* Live with someone near: no further than the cursor, so each tick is made with the world as it is then */
+        if (this.proxies != null && this.proxies.isLive())
+        {
+            return cursor;
+        }
+
         int duration = this.film == null ? 0 : this.film.camera.calculateDuration();
 
         return Math.max(cursor, duration + LOOKAHEAD_PAST_END);
+    }
+
+    /**
+     * Blocks were broken or placed in the world ({@code changed}, world coordinates): the sections
+     * of the ground they and their neighbours sit in are built again from the world as it is now
+     * and swapped into their bodies, nothing else of the ground is touched. The change is pinned to
+     * the tick the film is on: the recording is taken back from there, and every time that tick is
+     * simulated the bodies around the change are woken — Jolt does not wake a body asleep on ground
+     * that went away, and a ragdoll lying on a block that was dug out would hang in the air.
+     *
+     * @param generation the batch of edits this is, so scenes sharing a ground build each section once
+     */
+    public void worldEdited(net.minecraft.world.World world, List<net.minecraft.util.math.BlockPos> changed, int generation)
+    {
+        if (world == null || this.world == null || this.window == null || this.window.sections().isEmpty() || changed.isEmpty())
+        {
+            return;
+        }
+
+        this.land();
+
+        java.util.TreeSet<Integer> touched = new java.util.TreeSet<>();
+
+        for (net.minecraft.util.math.BlockPos pos : changed)
+        {
+            /* Its neighbours too: a block dug out uncovers the ones beside it, which were left out as buried */
+            for (net.minecraft.util.math.Direction direction : net.minecraft.util.math.Direction.values())
+            {
+                this.touch(touched, pos.getX() + direction.getOffsetX(), pos.getY() + direction.getOffsetY(), pos.getZ() + direction.getOffsetZ());
+            }
+
+            this.touch(touched, pos.getX(), pos.getY(), pos.getZ());
+        }
+
+        if (touched.isEmpty())
+        {
+            return;
+        }
+
+        com.github.stephengold.joltjni.BodyInterface bodies = this.world.getBodies();
+
+        for (int index : touched)
+        {
+            com.github.stephengold.joltjni.readonly.ConstShape shape = this.window.shapeFor(world, index, generation);
+
+            if (shape != null && index < this.groundBodies.size())
+            {
+                bodies.setShape(this.groundBodies.get(index), shape, false, com.github.stephengold.joltjni.enumerate.EActivation.DontActivate);
+            }
+        }
+
+        int tick = Math.max(1, this.filmTick);
+
+        for (net.minecraft.util.math.BlockPos pos : changed)
+        {
+            this.wakes.add(new double[] {tick, pos.getX() + 0.5D - this.originX, pos.getY() + 0.5D - this.originY, pos.getZ() + 0.5D - this.originZ});
+        }
+
+        this.invalidateFrom(tick, false);
+    }
+
+    private void touch(java.util.Set<Integer> touched, int x, int y, int z)
+    {
+        if (this.window.collects(x, y, z))
+        {
+            int index = this.window.sectionOf(x, y, z);
+
+            if (index >= 0)
+            {
+                touched.add(index);
+            }
+        }
+    }
+
+    /** On the tick a block was broken or placed, every body within reach of it is woken, on every run of that tick. */
+    private void wakeAround(int tick)
+    {
+        if (this.wakes.isEmpty())
+        {
+            return;
+        }
+
+        if (anyBroadPhase == null)
+        {
+            anyBroadPhase = new com.github.stephengold.joltjni.BroadPhaseLayerFilter();
+            anyObject = new com.github.stephengold.joltjni.ObjectLayerFilter();
+        }
+
+        for (double[] wake : this.wakes)
+        {
+            if ((int) wake[0] != tick)
+            {
+                continue;
+            }
+
+            try (com.github.stephengold.joltjni.AaBox box = new com.github.stephengold.joltjni.AaBox(new com.github.stephengold.joltjni.Vec3((float) wake[1], (float) wake[2], (float) wake[3]), 3F))
+            {
+                this.world.getBodies().activateBodiesInAaBox(box, anyBroadPhase, anyObject);
+            }
+        }
     }
 
     private boolean manualCalculation()
@@ -1869,7 +2027,7 @@ public class FilmScene implements AutoCloseable
 
         /* The ground too: collected afresh, it is another set of blocks — what the recording landed
          * on, and what the contacts it remembers are with, would not be what this scene stands on. */
-        boolean sameGround = this.window != null && given.ground != null && this.window.shape() == given.ground.shape();
+        boolean sameGround = this.window != null && given.ground != null && this.window == given.ground;
 
         /* And under the same knobs: a recording made under another gravity is another film. */
         boolean sameKnobs = given.gravity == this.gravity && given.speed == this.speed && given.collisionSteps == this.collisionSteps;

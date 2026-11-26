@@ -23,20 +23,27 @@ import net.minecraft.util.shape.VoxelShape;
 import net.minecraft.world.World;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
- * Turns the blocks around a scene into a single static body, so physics lands on the world the
- * film is actually shot in instead of on an invented floor.
+ * Turns the blocks around a scene into static bodies, so physics lands on the world the film is
+ * actually shot in instead of on an invented floor.
  *
  * <p>Built once, from a box of blocks around <em>every place the film keeps something simulated</em>
  * — the scene's origin, and the starting spot of each actor whose tree carries any physics. One
  * area was not enough, and that was found the hard way rather than reasoned about: a balloon
  * placed ninety blocks from the film's first actor fell through the world, because the world had
  * only ever been collected around that first actor — from the viewport, indistinguishable from
- * collision being broken. Overlapping areas are collected once; the areas are still fixed at
- * assembly, from tick-0 positions, because rebuilding collision every time a body moves would cost
- * far more than it buys.</p>
+ * collision being broken. Overlapping areas are collected once.</p>
+ *
+ * <p><b>In sections, so the world can change under a scene.</b> The blocks go into one static body
+ * per sixteen-block cube of the world ({@link Section}), every cube the areas reach having a body
+ * from the start, an empty one holding only a placeholder far under the world. A block broken or
+ * placed while a film is open is then one section rebuilt from the world as it is now and swapped
+ * into its body ({@link #rebuild}) — a few thousand blocks read at most, never the whole window — and
+ * the set of bodies never changes, so the scene's checkpoints stay valid around the edit.</p>
  *
  * <p>Blocks with every neighbour a full cube are skipped. Nothing can ever touch them, and in a
  * region this size they are the overwhelming majority — everything under the surface. Skipping
@@ -44,6 +51,33 @@ import java.util.List;
  */
 public final class WorldCollider
 {
+    /** The edge of a section, in blocks. */
+    public static final int SECTION = 16;
+
+    /** One sixteen-block cube of the collected world: its place, and the shape its body stands on now. */
+    public static final class Section
+    {
+        public final int sx;
+        public final int sy;
+        public final int sz;
+        ConstShape shape;
+        int boxes;
+        /** The batch of world edits this section was last rebuilt for, so scenes sharing the window build it once. */
+        int generation = -1;
+
+        Section(int sx, int sy, int sz)
+        {
+            this.sx = sx;
+            this.sy = sy;
+            this.sz = sz;
+        }
+
+        public boolean holds(int x, int y, int z)
+        {
+            return Math.floorDiv(x, SECTION) == this.sx && Math.floorDiv(y, SECTION) == this.sy && Math.floorDiv(z, SECTION) == this.sz;
+        }
+    }
+
     /**
      * The regions of the world a scene collected its collision from, and how many boxes came out.
      * Each area is the block its region is centred on, in the scene's own coordinates.
@@ -52,23 +86,90 @@ public final class WorldCollider
      * changed while a film is open and the region a body is being judged against has to be the one
      * that was actually built.</p>
      *
-     * <p>Along with the shape the blocks came to, or null when there were none: a scene built for
+     * <p>Along with the sections the blocks went into, empty when there were none: a scene built for
      * the same film after BBS rebuilt its cast stands on the same blocks without collecting them
      * again (see {@link #adopt}). A shape belongs to no world, so it outlives the one it was built
-     * for. And with a digest of every box in it, in the order they went in: two windows with the
-     * same digest are the same ground to the last box, which is what a recording kept on disk is
-     * checked against (see {@link RecordingStore}).</p>
+     * for. And with a digest of every box in it, in the order they went in, and of every edit
+     * since: two windows with the same digest are the same ground to the last box, which is what a
+     * recording kept on disk is checked against (see {@link RecordingStore}).</p>
      */
-    public record Window(int radius, int below, int above, int boxes, List<int[]> areas, ConstShape shape, byte[] ground)
+    public static final class Window
     {
+        private final int radius;
+        private final int below;
+        private final int above;
+        private int boxes;
+        private final List<int[]> areas;
+        /** The areas in world coordinates: [baseX, baseY, baseZ, minY, maxY], as they were collected. */
+        private final List<int[]> accepted;
+        private final List<Section> sections;
+        private byte[] ground;
+        private final double originX;
+        private final double originY;
+        private final double originZ;
+
+        Window(int radius, int below, int above, int boxes, List<int[]> areas, List<int[]> accepted, List<Section> sections, byte[] ground, double originX, double originY, double originZ)
+        {
+            this.radius = radius;
+            this.below = below;
+            this.above = above;
+            this.boxes = boxes;
+            this.areas = areas;
+            this.accepted = accepted;
+            this.sections = sections;
+            this.ground = ground;
+            this.originX = originX;
+            this.originY = originY;
+            this.originZ = originZ;
+        }
+
+        public int radius()
+        {
+            return this.radius;
+        }
+
+        public int below()
+        {
+            return this.below;
+        }
+
+        public int above()
+        {
+            return this.above;
+        }
+
+        public int boxes()
+        {
+            return this.boxes;
+        }
+
+        public List<int[]> areas()
+        {
+            return this.areas;
+        }
+
+        public List<Section> sections()
+        {
+            return this.sections;
+        }
+
+        public byte[] ground()
+        {
+            return this.ground;
+        }
+
         /**
-         * Lets go of the shape, once no scene will stand on it again: a scene going without handing
-         * it on, or a handover nobody took. The body standing on it keeps its own hold for as long
-         * as its world lasts.
+         * Lets go of the shapes, once no scene will stand on them again: a scene going without
+         * handing them on, or a handover nobody took. The bodies standing on them keep their own
+         * hold for as long as their world lasts.
          */
         public void release()
         {
-            JoltRelease.release(this.shape);
+            for (Section section : this.sections)
+            {
+                JoltRelease.release(section.shape);
+                section.shape = null;
+            }
         }
 
         /**
@@ -114,6 +215,123 @@ public final class WorldCollider
 
             return false;
         }
+
+        /** Whether a block of the world (world coordinates) is one this window collected. */
+        public boolean collects(int x, int y, int z)
+        {
+            return claimedBy(this.accepted, this.accepted.size(), x, y, z, this.radius);
+        }
+
+        /** The index of the section holding a block of the world, or -1 when no section does. */
+        public int sectionOf(int x, int y, int z)
+        {
+            for (int i = 0; i < this.sections.size(); i++)
+            {
+                if (this.sections.get(i).holds(x, y, z))
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        /** The shape section {@code index} stands on after the batch of edits {@code generation}: built for it the first time it is asked, the same shape after. */
+        public ConstShape shapeFor(World world, int index, int generation)
+        {
+            Section section = this.sections.get(index);
+
+            if (section.generation != generation)
+            {
+                section.generation = generation;
+
+                return this.rebuild(world, index);
+            }
+
+            return section.shape;
+        }
+
+        /**
+         * Builds section {@code index} again from the world as it is now and keeps the new shape,
+         * letting go of the old one; returns the new shape for the caller's own body, or null when
+         * it could not be built. The digest takes the edit in, so a recording kept on disk is no
+         * longer taken for this ground.
+         */
+        public ConstShape rebuild(World world, int index)
+        {
+            Section section = this.sections.get(index);
+            Fingerprint edit = new Fingerprint().put(this.ground).put(section.sx).put(section.sy).put(section.sz);
+            StaticCompoundShapeSettings compound = new StaticCompoundShapeSettings();
+            BlockPos.Mutable pos = new BlockPos.Mutable();
+            BlockPos.Mutable probe = new BlockPos.Mutable();
+            int boxes = 0;
+            int x0 = section.sx * SECTION;
+            int y0 = section.sy * SECTION;
+            int z0 = section.sz * SECTION;
+
+            for (int y = y0; y < y0 + SECTION; y++)
+            {
+                for (int x = x0; x < x0 + SECTION; x++)
+                {
+                    for (int z = z0; z < z0 + SECTION; z++)
+                    {
+                        if (!this.collects(x, y, z))
+                        {
+                            continue;
+                        }
+
+                        pos.set(x, y, z);
+
+                        BlockState state = world.getBlockState(pos);
+
+                        if (state.isAir())
+                        {
+                            continue;
+                        }
+
+                        VoxelShape shape = state.getCollisionShape(world, pos);
+
+                        if (shape.isEmpty() || (Block.isShapeFullCube(shape) && isBuried(world, probe, x, y, z)))
+                        {
+                            continue;
+                        }
+
+                        for (Box box : shape.getBoundingBoxes())
+                        {
+                            if (addBox(compound, edit, box, x - this.originX, y - this.originY, z - this.originZ))
+                            {
+                                boxes += 1;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (boxes == 0)
+            {
+                addPlaceholder(compound, section, world, this.originX, this.originY, this.originZ);
+            }
+
+            ShapeResult result = compound.create();
+
+            if (result.hasError())
+            {
+                BBSPhysics.LOGGER.error("Could not rebuild a section of world collision: {}", result.getError());
+                JoltRelease.release(result, compound);
+
+                return null;
+            }
+
+            ConstShape shape = JoltRelease.take(result);
+
+            JoltRelease.release(compound, section.shape);
+            this.boxes += boxes - section.boxes;
+            section.shape = shape;
+            section.boxes = boxes;
+            this.ground = edit.put(boxes).digest();
+
+            return shape;
+        }
     }
 
     /**
@@ -126,6 +344,9 @@ public final class WorldCollider
     /** Thinner than this and the box is not worth handing to the solver. */
     private static final float MIN_HALF_EXTENT = 0.005F;
 
+    /** How far under the world's floor an empty section keeps its placeholder, where nothing ever reaches. */
+    private static final int PLACEHOLDER_DEPTH = 256;
+
     private WorldCollider()
     {}
 
@@ -137,21 +358,19 @@ public final class WorldCollider
      * is collected once. How far each region reaches is the film's — see {@link
      * mchorse.bbs_mod.physics.engine.FilmPhysics#worldRadius}.
      *
+     * @param bodies where the ids of the bodies made are put, one per section in the window's order
      * @return the regions that were collected, with the number of boxes in them — zero boxes
-     *         meaning there was nothing solid to add and no body was created. Deliberately not the
-     *         body's id: Jolt hands out ids from zero, and the world is the first body a scene
-     *         creates, so "0" would be both the id it gets and the answer meaning "nothing" — and
-     *         the scene would lay its fallback floor through the real ground
+     *         meaning there was nothing solid to add and no body was created
      */
     public static Window build(PhysicsWorld physics, World world, double originX, double originY, double originZ, List<double[]> centers,
-        int radius, int below, int above)
+        int radius, int below, int above, List<Integer> bodies)
     {
         List<int[]> areas = new ArrayList<>(1);
         Fingerprint ground = new Fingerprint().put(radius).put(below).put(above);
 
         if (world == null)
         {
-            return new Window(radius, below, above, 0, areas, null, ground.put("no world").digest());
+            return new Window(radius, below, above, 0, areas, new ArrayList<>(0), new ArrayList<>(0), ground.put("no world").digest(), originX, originY, originZ);
         }
 
         /* Which centres deserve a region of their own: [baseX, baseY, baseZ, minY, maxY] each. */
@@ -179,10 +398,33 @@ public final class WorldCollider
 
         if (accepted.isEmpty())
         {
-            return new Window(radius, below, above, 0, areas, null, ground.put("nothing accepted").digest());
+            return new Window(radius, below, above, 0, areas, accepted, new ArrayList<>(0), ground.put("nothing accepted").digest(), originX, originY, originZ);
         }
 
-        StaticCompoundShapeSettings compound = new StaticCompoundShapeSettings();
+        /* Every section the areas reach, in a fixed order, each with its own compound */
+        Map<Long, Section> sections = new LinkedHashMap<>();
+        Map<Long, StaticCompoundShapeSettings> compounds = new LinkedHashMap<>();
+
+        for (int[] area : accepted)
+        {
+            for (int sy = Math.floorDiv(area[3], SECTION); sy <= Math.floorDiv(area[4], SECTION); sy++)
+            {
+                for (int sx = Math.floorDiv(area[0] - radius, SECTION); sx <= Math.floorDiv(area[0] + radius, SECTION); sx++)
+                {
+                    for (int sz = Math.floorDiv(area[2] - radius, SECTION); sz <= Math.floorDiv(area[2] + radius, SECTION); sz++)
+                    {
+                        long key = key(sx, sy, sz);
+
+                        if (!sections.containsKey(key))
+                        {
+                            sections.put(key, new Section(sx, sy, sz));
+                            compounds.put(key, new StaticCompoundShapeSettings());
+                        }
+                    }
+                }
+            }
+        }
+
         BlockPos.Mutable pos = new BlockPos.Mutable();
         BlockPos.Mutable probe = new BlockPos.Mutable();
         int boxes = 0;
@@ -232,7 +474,7 @@ public final class WorldCollider
                     for (int z = baseZ - radius; z <= baseZ + radius; z++)
                     {
                         /* An earlier region already collected this block: once is enough. */
-                        if (claimedEarlier(accepted, at, x, y, z, radius))
+                        if (claimedBy(accepted, at, x, y, z, radius))
                         {
                             continue;
                         }
@@ -259,13 +501,16 @@ public final class WorldCollider
                             continue;
                         }
 
-                        List<Box> parts = shape.getBoundingBoxes();
+                        long key = key(Math.floorDiv(x, SECTION), Math.floorDiv(y, SECTION), Math.floorDiv(z, SECTION));
+                        StaticCompoundShapeSettings compound = compounds.get(key);
+                        Section section = sections.get(key);
 
-                        for (Box box : parts)
+                        for (Box box : shape.getBoundingBoxes())
                         {
                             if (addBox(compound, ground, box, x - originX, y - originY, z - originZ))
                             {
                                 boxes += 1;
+                                section.boxes += 1;
                             }
                         }
                     }
@@ -277,60 +522,105 @@ public final class WorldCollider
 
         if (boxes == 0)
         {
-            JoltRelease.release(compound);
+            for (StaticCompoundShapeSettings compound : compounds.values())
+            {
+                JoltRelease.release(compound);
+            }
 
-            return new Window(radius, below, above, 0, areas, null, ground.put("no boxes").digest());
+            return new Window(radius, below, above, 0, areas, accepted, new ArrayList<>(0), ground.put("no boxes").digest(), originX, originY, originZ);
         }
 
-        ShapeResult result = compound.create();
+        List<Section> list = new ArrayList<>(sections.size());
 
-        if (result.hasError())
+        for (Map.Entry<Long, Section> entry : sections.entrySet())
         {
-            BBSPhysics.LOGGER.error("Could not build world collision for a physics scene: {}", result.getError());
-            JoltRelease.release(result, compound);
+            Section section = entry.getValue();
+            StaticCompoundShapeSettings compound = compounds.get(entry.getKey());
 
-            return new Window(radius, below, above, 0, new ArrayList<>(0), null, ground.put("failed").digest());
+            if (section.boxes == 0)
+            {
+                addPlaceholder(compound, section, world, originX, originY, originZ);
+            }
+
+            ShapeResult result = compound.create();
+
+            if (result.hasError())
+            {
+                BBSPhysics.LOGGER.error("Could not build world collision for a physics scene: {}", result.getError());
+                JoltRelease.release(result, compound);
+
+                for (Section done : list)
+                {
+                    JoltRelease.release(done.shape);
+                }
+
+                return new Window(radius, below, above, 0, new ArrayList<>(0), accepted, new ArrayList<>(0), ground.put("failed").digest(), originX, originY, originZ);
+            }
+
+            /* A hold of its own on the compound, kept by the window for as long as some scene stands
+             * on it (see Window#release); the result and the settings are done with. */
+            section.shape = JoltRelease.take(result);
+            JoltRelease.release(compound);
+            list.add(section);
         }
 
-        /* A hold of its own on the compound, kept by the window for as long as some scene stands
-         * on it (see Window#release); the result and the settings are done with. */
-        ConstShape shape = JoltRelease.take(result);
-
-        JoltRelease.release(compound);
-        addGround(physics, shape);
+        for (Section section : list)
+        {
+            bodies.add(addGround(physics, section.shape));
+        }
 
         int[] first = accepted.get(0);
 
-        BBSPhysics.LOGGER.debug("World collision built from {} boxes in {} area(s), the first around ({}, {}, {}).",
-            boxes, accepted.size(), first[0], first[1], first[2]);
+        BBSPhysics.LOGGER.debug("World collision built from {} boxes in {} area(s) and {} sections, the first around ({}, {}, {}).",
+            boxes, accepted.size(), list.size(), first[0], first[1], first[2]);
 
-        return new Window(radius, below, above, boxes, areas, shape, ground.put(boxes).digest());
+        return new Window(radius, below, above, boxes, areas, accepted, list, ground.put(boxes).digest(), originX, originY, originZ);
     }
 
     /**
-     * Stands a scene on the blocks another scene of the same film collected — the same body, made
+     * Stands a scene on the blocks another scene of the same film collected — the same bodies, made
      * the same way, without reading a block of the world. Only for a scene centred where that one
-     * was, since the shape sits around its origin.
+     * was, since the shapes sit around its origin.
      */
-    public static Window adopt(PhysicsWorld physics, Window window)
+    public static Window adopt(PhysicsWorld physics, Window window, List<Integer> bodies)
     {
-        if (window.shape() != null)
+        for (Section section : window.sections)
         {
-            addGround(physics, window.shape());
+            bodies.add(addGround(physics, section.shape));
         }
 
         return window;
     }
 
-    /** One body at the scene's origin; every block sits inside it as a child shape. */
-    private static void addGround(PhysicsWorld physics, ConstShape shape)
+    /** One body at the scene's origin; every block of its section sits inside it as a child shape. */
+    private static int addGround(PhysicsWorld physics, ConstShape shape)
     {
         BodyCreationSettings settings = new BodyCreationSettings(shape, new RVec3(0D, 0D, 0D), Quat.sIdentity(), EMotionType.Static, PhysicsLayers.STATIC);
 
         settings.setFriction(0.6F);
 
-        physics.getBodies().createAndAddBody(settings, EActivation.DontActivate);
+        int id = physics.getBodies().createAndAddBody(settings, EActivation.DontActivate);
+
         JoltRelease.release(settings);
+
+        return id;
+    }
+
+    /** What an empty section stands on: one small box far under the world, where nothing ever goes. */
+    private static void addPlaceholder(StaticCompoundShapeSettings compound, Section section, World world, double originX, double originY, double originZ)
+    {
+        BoxShape leaf = new BoxShape(new Vec3(0.25F, 0.25F, 0.25F), 0.05F);
+
+        compound.addShape(new Vec3(
+            (float) (section.sx * SECTION + SECTION / 2 - originX),
+            (float) (world.getBottomY() - PLACEHOLDER_DEPTH - originY),
+            (float) (section.sz * SECTION + SECTION / 2 - originZ)), Quat.sIdentity(), leaf);
+        JoltRelease.release(leaf);
+    }
+
+    private static long key(int sx, int sy, int sz)
+    {
+        return ((long) (sx & 0x3FFFFF) << 42) | ((long) (sy & 0xFFFFF) << 22) | (sz & 0x3FFFFF);
     }
 
     /**
@@ -357,10 +647,10 @@ public final class WorldCollider
         return false;
     }
 
-    /** Whether a block of region {@code at} was already collected by an earlier region. */
-    private static boolean claimedEarlier(List<int[]> accepted, int at, int x, int y, int z, int radius)
+    /** Whether a block is inside one of the first {@code count} regions — for {@code count} = the region at hand, already collected by an earlier one. */
+    private static boolean claimedBy(List<int[]> accepted, int count, int x, int y, int z, int radius)
     {
-        for (int i = 0; i < at; i++)
+        for (int i = 0; i < count; i++)
         {
             int[] area = accepted.get(i);
 
@@ -413,6 +703,22 @@ public final class WorldCollider
             }
 
             if (!neighbour)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** The same test against the world alone, for one section rebuilt after an edit. */
+    private static boolean isBuried(World world, BlockPos.Mutable probe, int x, int y, int z)
+    {
+        for (Direction direction : Direction.values())
+        {
+            probe.set(x + direction.getOffsetX(), y + direction.getOffsetY(), z + direction.getOffsetZ());
+
+            if (!Block.isShapeFullCube(world.getBlockState(probe).getCollisionShape(world, probe)))
             {
                 return false;
             }

@@ -323,8 +323,12 @@ public class FilmScenes
 
         if (SCENES.isEmpty() || !isEnabled())
         {
+            CHANGED_BLOCKS.clear();
+
             return;
         }
+
+        flushChangedBlocks();
 
         boolean exporting = exporting();
         List<Map.Entry<BaseFilmController, FilmScene>> scenes = new ArrayList<>(SCENES.entrySet());
@@ -924,6 +928,63 @@ public class FilmScenes
         }
 
         return taken;
+    }
+
+    /** Blocks of the client's world whose collision changed since the last frame, as BlockPos longs; and how many batches went out. */
+    private static final java.util.Set<Long> CHANGED_BLOCKS = new java.util.LinkedHashSet<>();
+    private static int editGeneration;
+
+    /**
+     * A block of the world changed (from {@code WorldEditsMixin}): kept for the next frame, where
+     * every scene takes the batch in at once. A change that leaves nothing to collide with on either
+     * side — grass, a flower, a torch — is no change to physics and is not kept.
+     */
+    public static void blockChanged(net.minecraft.world.World world, net.minecraft.util.math.BlockPos pos, net.minecraft.block.BlockState before, net.minecraft.block.BlockState after)
+    {
+        if (before == after || SCENES.isEmpty())
+        {
+            return;
+        }
+
+        if (before.getCollisionShape(world, pos).isEmpty() && after.getCollisionShape(world, pos).isEmpty())
+        {
+            return;
+        }
+
+        CHANGED_BLOCKS.add(pos.asLong());
+    }
+
+    /** Hands the blocks changed since the last frame to every scene, as one batch. */
+    private static void flushChangedBlocks()
+    {
+        if (CHANGED_BLOCKS.isEmpty())
+        {
+            return;
+        }
+
+        List<net.minecraft.util.math.BlockPos> changed = new ArrayList<>(CHANGED_BLOCKS.size());
+
+        for (long pos : CHANGED_BLOCKS)
+        {
+            changed.add(net.minecraft.util.math.BlockPos.fromLong(pos));
+        }
+
+        CHANGED_BLOCKS.clear();
+        editGeneration += 1;
+
+        net.minecraft.world.World world = net.minecraft.client.MinecraftClient.getInstance().world;
+
+        for (FilmScene scene : SCENES.values())
+        {
+            try
+            {
+                scene.worldEdited(world, changed, editGeneration);
+            }
+            catch (Throwable e)
+            {
+                BBSPhysics.LOGGER.error("A physics scene failed to take in a change of the world.", e);
+            }
+        }
     }
 
     /** Whether the frame rate has dropped, smoothed over the last frames. */

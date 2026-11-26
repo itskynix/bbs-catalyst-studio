@@ -12,7 +12,8 @@
         "DeathFilmPanelMixin",
         "DeathEditorRecordingMixin",
         "DeathRecordingUndoMixin",
-        "DeathActionRecordingMixin"
+        "DeathActionRecordingMixin",
+        "WorldEditsMixin"
     ],
     "injectors": {
         "defaultRequire": 1
