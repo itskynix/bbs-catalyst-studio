@@ -932,6 +932,12 @@ public class FlowRuntime
     private String world(Run run, FlowNode node, String pin, int depth)
     {
         Entity entity = node.getType() != null && node.getType().dataInput("entity") != null ? this.entity(run, this.input(run, node, "entity", depth)) : null;
+        String[] transform = FlowNodeTypes.transformOf(node.type);
+
+        if (transform != null)
+        {
+            return vec(this.transform(run, node, pin, transform[0], transform[1], entity, depth));
+        }
 
         switch (node.type)
         {
@@ -998,6 +1004,46 @@ public class FlowRuntime
                 return value == null ? "" : value.toString();
             }
         }
+    }
+
+    /**
+     * A Get of the box's, an entity's or a block's location, rotation or scale (a transform's output
+     * pin names which), in the world or relative to the box, by {@link FlowTransforms} as the code view's Java does.
+     */
+    private Vec3d transform(Run run, FlowNode node, String pin, String family, String part, Entity entity, int depth)
+    {
+        mchorse.bbs_mod.blocks.entities.TriggerBoxBlockEntity box = run.world.getBlockEntity(this.pos) instanceof mchorse.bbs_mod.blocks.entities.TriggerBoxBlockEntity b ? b : null;
+        boolean relative = FlowValues.truthy(node.param("relative"));
+        String what = part.equals("transform") ? pin : part;
+
+        if (family.equals("trigger"))
+        {
+            return switch (what)
+            {
+                case "rotation" -> FlowTransforms.triggerRotation(box, relative);
+                case "scale" -> FlowTransforms.triggerScale(box, relative);
+                default -> FlowTransforms.triggerLocation(box, relative);
+            };
+        }
+
+        if (family.equals("entity"))
+        {
+            return switch (what)
+            {
+                case "rotation" -> FlowTransforms.entityRotation(box, run.entity, entity, relative);
+                case "scale" -> FlowTransforms.entityScale(box, run.entity, entity, relative);
+                default -> FlowTransforms.entityLocation(box, run.entity, entity, relative);
+            };
+        }
+
+        Vec3d position = this.position(run, this.input(run, node, "position", depth));
+
+        return switch (what)
+        {
+            case "rotation" -> FlowTransforms.blockRotation(box, run.entity, position, relative);
+            case "scale" -> FlowTransforms.blockScale(box, run.entity, position, relative);
+            default -> FlowTransforms.blockLocation(box, run.entity, position, relative);
+        };
     }
 
     private static String vec(Vec3d v)

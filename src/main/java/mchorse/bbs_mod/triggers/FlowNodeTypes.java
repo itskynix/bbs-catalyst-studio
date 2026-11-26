@@ -56,6 +56,9 @@ public class FlowNodeTypes
     /** The comparisons the old branch could make, in the order its field cycles through them. */
     public static final java.util.List<String> OPERATORS = java.util.List.of("==", "!=", ">", "<", ">=", "<=");
 
+    /** What a Get of the box, an entity or a block reads; a transform reads the other three at once. */
+    public static final java.util.List<String> TRANSFORM_PARTS = java.util.List.of("location", "rotation", "scale", "transform");
+
     private static final Map<String, FlowNodeType> TYPES = new LinkedHashMap<>();
 
     static
@@ -155,6 +158,22 @@ public class FlowNodeTypes
         add("world_time", Kind.WORLD).value("result", "integer");
         add("is_raining", Kind.WORLD).value("result", "boolean");
         add("block_at", Kind.WORLD).data("position", "vec3", "0 0 0").value("result", "string");
+        /* Where the box, an entity and a block are, how turned and how big: in the world, or relative to the box (FlowTransforms) */
+        for (String part : TRANSFORM_PARTS)
+        {
+            transform(add("get_trigger_" + part, Kind.WORLD), part);
+        }
+
+        for (String part : TRANSFORM_PARTS)
+        {
+            transform(add("get_entity_" + part, Kind.WORLD).data("entity", "entity", "@entity"), part);
+        }
+
+        for (String part : TRANSFORM_PARTS)
+        {
+            transform(add("get_block_" + part, Kind.WORLD).data("position", "vec3", "~ ~-1 ~"), part);
+        }
+
         add("players_in_radius", Kind.WORLD).data("position", "vec3", "~ ~ ~").data("radius", "float", "8").value("count", "integer").value("players", "string");
 
         /* Game actions: commands run as the entity, at operator level */
@@ -168,10 +187,10 @@ public class FlowNodeTypes
         add("remove_item", Kind.ACTION).in("exec").out("then").data("entity", "entity", "@entity").data("item", "item", "minecraft:diamond").data("count", "integer", "1").command("clear {entity} {item} {count}");
         add("add_effect", Kind.ACTION).in("exec").out("then").data("entity", "entity", "@entity").data("effect", "string", "minecraft:speed").data("seconds", "integer", "10").data("amplifier", "integer", "0").command("effect give {entity} {effect} {seconds} {amplifier}");
         add("remove_effect", Kind.ACTION).in("exec").out("then").data("entity", "entity", "@entity").data("effect", "string", "minecraft:speed").command("effect clear {entity} {effect}");
-        add("spawn_entity", Kind.ACTION).in("exec").out("then").data("type", "string", "minecraft:pig").data("position", "vec3", "~ ~ ~").command("summon {type} {position}");
+        add("spawn_entity", Kind.ACTION).in("exec").out("then").data("type", "entity_type", "minecraft:pig").data("position", "vec3", "~ ~ ~").command("summon {type} {position}");
         add("set_block", Kind.ACTION).in("exec").out("then").data("position", "vec3", "~ ~-1 ~").data("block", "block", "minecraft:gold_block").command("setblock {position} {block}");
         add("play_sound", Kind.ACTION).in("exec").out("then").data("sound", "sound", "minecraft:entity.experience_orb.pickup").data("position", "vec3", "~ ~ ~").data("volume", "float", "1").data("pitch", "float", "1").command("playsound {sound} master @a {position} {volume} {pitch}");
-        add("spawn_particle", Kind.ACTION).in("exec").out("then").data("particle", "string", "minecraft:happy_villager").data("position", "vec3", "~ ~1 ~").data("count", "integer", "10").command("particle {particle} {position} 0.3 0.3 0.3 0.05 {count}");
+        add("spawn_particle", Kind.ACTION).in("exec").out("then").data("particle", "particle", "minecraft:happy_villager").data("position", "vec3", "~ ~1 ~").data("count", "integer", "10").command("particle {particle} {position} 0.3 0.3 0.3 0.05 {count}");
         add("show_title", Kind.ACTION).in("exec").out("then").data("entity", "entity", "@entity").data("text", "string", "Welcome").command("title {entity} title {text:json}");
         add("show_actionbar", Kind.ACTION).in("exec").out("then").data("entity", "entity", "@entity").data("text", "string", "You found it").command("title {entity} actionbar {text:json}");
 
@@ -189,6 +208,37 @@ public class FlowNodeTypes
 
         /* Old */
         add(BRANCH, Kind.FLOW).in("exec").out("true", "false").param("variable", "").param("operator", "==").param("value", "0").hidden();
+    }
+
+    /** The switch between the world and the box's frame, and the outputs: one vec3, or all three for a transform. */
+    private static void transform(FlowNodeType type, String part)
+    {
+        type.param("relative", "false");
+
+        if (part.equals("transform"))
+        {
+            type.value("location", "vec3").value("rotation", "vec3").value("scale", "vec3");
+        }
+        else
+        {
+            type.value("result", "vec3");
+        }
+    }
+
+    /** The family (trigger, entity, block) and the part a Get of a transform reads, or null for any other node. */
+    public static String[] transformOf(String id)
+    {
+        for (String family : new String[] {"trigger", "entity", "block"})
+        {
+            String prefix = "get_" + family + "_";
+
+            if (id.startsWith(prefix) && TRANSFORM_PARTS.contains(id.substring(prefix.length())))
+            {
+                return new String[] {family, id.substring(prefix.length())};
+            }
+        }
+
+        return null;
     }
 
     private static FlowNodeType add(String id, Kind kind)

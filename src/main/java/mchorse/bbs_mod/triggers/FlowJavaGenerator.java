@@ -54,6 +54,7 @@ public class FlowJavaGenerator
         this.line(0, "");
         this.line(0, "import mchorse.bbs_mod.triggers.FlowBBS;");
         this.line(0, "import mchorse.bbs_mod.triggers.FlowEntities;");
+        this.line(0, "import mchorse.bbs_mod.triggers.FlowTransforms;");
         this.line(0, "import net.minecraft.entity.Entity;");
         this.line(0, "import net.minecraft.util.math.Vec3d;");
         this.line(0, "");
@@ -575,7 +576,7 @@ public class FlowJavaGenerator
         {
             case "integer", "float", "number" -> "number";
             case "boolean" -> "boolean";
-            case "string", "block", "item", "sound", "color" -> "string";
+            case "string", "block", "item", "sound", "particle", "entity_type", "color" -> "string";
             default -> "any";
         };
     }
@@ -792,7 +793,15 @@ public class FlowJavaGenerator
 
                 return new Expr("this.select(" + String.join(", ", args) + ")", "any");
             }
-            default -> {}
+            default ->
+            {
+                String[] transform = FlowNodeTypes.transformOf(node.type);
+
+                if (transform != null)
+                {
+                    return new Expr(this.transformOf(node, pin, transform[0], transform[1], depth), "any");
+                }
+            }
         }
 
         /* A node with execution pins only remembers its values: a loop's index, a counter's count */
@@ -827,6 +836,24 @@ public class FlowJavaGenerator
         String method = camel(type.id) + (type.dataOutputs.size() > 1 ? capital(camel(pin)) : "");
 
         return new Expr("this." + method + "(" + String.join(", ", args) + ")", outputType);
+    }
+
+    /**
+     * A Get of the box's, an entity's or a block's location, rotation or scale: the very FlowTransforms
+     * call the box makes, given the box ({@code this.box()}), the entity of the event, and the switch.
+     */
+    private String transformOf(FlowNode node, String pin, String family, String part, int depth)
+    {
+        String what = part.equals("transform") ? pin : part;
+        String relative = String.valueOf(FlowValues.truthy(node.param("relative")));
+        String args = switch (family)
+        {
+            case "trigger" -> "this.box(), " + relative;
+            case "entity" -> "this.box(), entity, " + this.input(node, "entity", depth).code() + ", " + relative;
+            default -> "this.box(), entity, " + this.input(node, "position", depth).code() + ", " + relative;
+        };
+
+        return "FlowTransforms." + family + capital(what) + "(" + args + ")";
     }
 
     /** Format Text: the template as a string expression, each {name} the value of its pin. */

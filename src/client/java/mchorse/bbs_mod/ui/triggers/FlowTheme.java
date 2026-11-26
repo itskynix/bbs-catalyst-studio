@@ -169,6 +169,8 @@ public class FlowTheme
             case "block" -> 0xffe8892c;
             case "item" -> 0xff57dbe6;
             case "sound" -> 0xffd4a017;
+            case "particle" -> 0xffb48cf0;
+            case "entity_type" -> 0xff5c9be0;
             case "color" -> 0xffd65ce0;
             case "array" -> 0xff7f9cf5;
             default -> 0xff9aa3ad;

@@ -1256,7 +1256,7 @@ public class UITriggerBoxMenu extends UIBaseMenu
         }
     }
 
-    private static final java.util.Set<String> SWITCH_PARAMS = java.util.Set.of("start_closed", "start_open", "random", "loop", "clamp", "camera");
+    private static final java.util.Set<String> SWITCH_PARAMS = java.util.Set.of("start_closed", "start_open", "random", "loop", "clamp", "camera", "relative");
 
     private void fillNodeDetails(FlowNode node)
     {
