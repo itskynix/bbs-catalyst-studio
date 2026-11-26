@@ -4,6 +4,7 @@ import com.mojang.brigadier.StringReader;
 import net.minecraft.command.EntitySelector;
 import net.minecraft.command.EntitySelectorReader;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -198,7 +199,28 @@ public final class FlowEntities
             return null;
         }
 
-        return v.isEmpty() ? null : server.getPlayerManager().getPlayer(v);
+        if (v.isEmpty())
+        {
+            return null;
+        }
+
+        ServerPlayerEntity player = server.getPlayerManager().getPlayer(v);
+
+        if (player != null)
+        {
+            return player;
+        }
+
+        /* A name in another case, or one shown differently from the profile's */
+        for (ServerPlayerEntity online : server.getPlayerManager().getPlayerList())
+        {
+            if (online.getGameProfile().getName().equalsIgnoreCase(v) || online.getName().getString().equalsIgnoreCase(v))
+            {
+                return online;
+            }
+        }
+
+        return null;
     }
 
     /** What a variable of type entity keeps for the value: the UUID of the entity, or the value as it is. */
@@ -215,7 +237,15 @@ public final class FlowEntities
         return entity == null ? raw(value) : entity.getUuidAsString();
     }
 
-    /** What a command should see for the value: a selector as it is, an entity as its UUID, "@s" when nothing is found. */
+    /**
+     * What a command should see for the value: a selector as it is, a player by name, any other
+     * entity by UUID, "@s" when nothing is found.
+     *
+     * <p>A player must go in by name: give, clear, effect and title take players only, and vanilla
+     * reads a UUID as a selector that may hold other entities and turns it down ("Only players may
+     * be affected by this command"). That is why @a worked while @entity and a player's name, which
+     * used to be written as UUIDs, did nothing.</p>
+     */
     public static String commandTarget(Entity source, ServerWorld world, Vec3d origin, Object value)
     {
         if (isSelector(value))
@@ -223,9 +253,23 @@ public final class FlowEntities
             return raw(value);
         }
 
-        Entity entity = resolveEntity(source, world, origin, value);
+        return commandName(resolveEntity(source, world, origin, value));
+    }
 
-        return entity == null ? "@s" : entity.getUuidAsString();
+    /** How a command names an entity: a player by their name, anything else by its UUID, nothing as "@s". */
+    public static String commandName(Entity entity)
+    {
+        if (entity == null)
+        {
+            return "@s";
+        }
+
+        if (entity instanceof PlayerEntity player)
+        {
+            return player.getGameProfile().getName();
+        }
+
+        return entity.getUuidAsString();
     }
 
     /** A selector read the way a command reads it, from the source entity or else from the box. */

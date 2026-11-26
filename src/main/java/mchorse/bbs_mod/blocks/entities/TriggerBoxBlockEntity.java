@@ -6,6 +6,7 @@ import mchorse.bbs_mod.data.types.BaseType;
 import mchorse.bbs_mod.data.types.MapType;
 import mchorse.bbs_mod.triggers.FlowGraph;
 import mchorse.bbs_mod.triggers.FlowNodeTypes;
+import mchorse.bbs_mod.triggers.FlowEntities;
 import mchorse.bbs_mod.triggers.FlowRuntime;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
@@ -211,7 +212,8 @@ public class TriggerBoxBlockEntity extends BlockEntity
                 {
                     this.inside.remove(uuid);
                     this.health.remove(uuid);
-                    this.runtime.fire(world, FlowNodeTypes.ON_EXIT, world.getEntity(uuid), 0);
+                    /* Found in any world: a player who left through a portal still set OnExit off */
+                    this.runtime.fire(world, FlowNodeTypes.ON_EXIT, FlowEntities.byReference(world.getServer(), uuid.toString()), 0);
                 }
             }
         }
