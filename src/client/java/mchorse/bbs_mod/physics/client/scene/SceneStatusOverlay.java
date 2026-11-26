@@ -70,11 +70,24 @@ public class SceneStatusOverlay extends UIElement
         if (status == null) return;
         boolean debug = BBSPhysicsSettings.debug != null && BBSPhysicsSettings.debug.get();
         boolean warning = status.full() || status.lostAt() >= 0 || status.ghosts() > 0 || status.outside() > 0 || status.lost() > 0;
+        boolean heavy = scene != null && scene.isHeavy();
+        boolean manual = scene != null && scene.waitingForCalculation();
+
+        /* Physics runs live on its own: the badge, and its recalculation, only come forward when the
+         * scene is too heavy to keep live or the frame rate has dropped, when something needs
+         * attention, or when manual calculation is on and waiting. The shortcut still asks any time. */
+        if (!warning && !heavy && !manual && !debug)
+        {
+            return;
+        }
+
         State state = warning ? State.WARNING : status.waiting() ? State.WAITING
             : status.computing() ? State.COMPUTING : status.ready() ? State.READY : State.WAITING;
 
         var viewport = this.preview.getViewport();
-        String label = state == State.WARNING ? "!" : state == State.COMPUTING ? (int) (status.progress() * 100) + "%" : "";
+        String label = state == State.WARNING ? "!" : heavy ? mchorse.bbs_mod.l10n.L10n.lang("bbs_physics.status.recalculate").get()
+            + (state == State.COMPUTING ? " " + (int) (status.progress() * 100) + "%" : "")
+            : state == State.COMPUTING ? (int) (status.progress() * 100) + "%" : "";
         int width = label.isEmpty() ? 20 : 25 + context.batcher.getFont().getWidth(label);
         if (viewport.w < width + 16 || viewport.h < 40) return;
         int x = viewport.x + 8;
@@ -87,11 +100,14 @@ public class SceneStatusOverlay extends UIElement
         if (scene.waitingForCalculation())
             this.details = mchorse.bbs_mod.l10n.L10n.lang("bbs_physics.status.manual").get()
                 + " (" + mchorse.bbs_mod.physics.client.PhysicsKeybinds.CALCULATE.getKeyCombo() + ")\n" + this.details;
+        if (heavy)
+            this.details = mchorse.bbs_mod.l10n.L10n.lang(FilmScenes.isLowFps() ? "bbs_physics.status.low_fps" : "bbs_physics.status.heavy").get()
+                + "\n" + this.details;
         this.details = mchorse.bbs_mod.l10n.L10n.lang("bbs_physics.status.click_calculate").get()
-            + "\n" + this.details;
+            + " (" + mchorse.bbs_mod.physics.client.PhysicsKeybinds.CALCULATE.getKeyCombo() + ")\n" + this.details;
         boolean hover = this.area.isInside(context);
         int background = hover ? 0xdd20272f : 0xb320272f;
-        int accent = state.color;
+        int accent = heavy && state != State.WARNING ? 0xffeea455 : state.color;
         // One-pixel inset corners keep the badge compact and match the editor's pixel UI.
         context.batcher.box(x + 1, y, x + width - 1, y + 20, background);
         context.batcher.box(x, y + 1, x + 1, y + 19, background);

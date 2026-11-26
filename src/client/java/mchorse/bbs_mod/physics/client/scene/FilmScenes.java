@@ -77,6 +77,14 @@ public class FilmScenes
     private static long frameStarted;
     private static long frameSpent;
 
+    /** The frame time, smoothed, and whether the frame rate counts as dropped — see {@link #onFrame}. */
+    private static long frameAverage;
+    private static boolean lowFps;
+
+    /** Below twenty frames a second the frame rate has dropped; above about twenty eight it has recovered. */
+    private static final long LOW_FPS_FRAME = 50_000_000L;
+    private static final long RECOVERED_FRAME = 36_000_000L;
+
     /** The films whose changes are followed as they happen — see {@link #watch}. */
     private static final List<WeakReference<Film>> WATCHED = new ArrayList<>();
 
@@ -306,6 +314,13 @@ public class FilmScenes
         frameStarted = now;
         frameSpent = 0;
 
+        /* Only frames that follow each other: a pause in drawing is not a slow frame */
+        if (interval < FRAMES_GONE)
+        {
+            frameAverage = frameAverage == 0L ? interval : (frameAverage * 15L + interval) / 16L;
+            lowFps = lowFps ? frameAverage > RECOVERED_FRAME : frameAverage > LOW_FPS_FRAME;
+        }
+
         if (SCENES.isEmpty() || !isEnabled())
         {
             return;
@@ -313,6 +328,11 @@ public class FilmScenes
 
         boolean exporting = exporting();
         List<Map.Entry<BaseFilmController, FilmScene>> scenes = new ArrayList<>(SCENES.entrySet());
+
+        for (Map.Entry<BaseFilmController, FilmScene> entry : scenes)
+        {
+            entry.getValue().updateLoad(lowFps, now);
+        }
 
         /* Most urgent first: the frame's budget is the one its most urgent scene asks for. */
         scenes.sort(Comparator.comparing((Map.Entry<BaseFilmController, FilmScene> entry) -> entry.getValue().demand()).reversed());
@@ -344,7 +364,7 @@ public class FilmScenes
 
                 if (deadline == 0L)
                 {
-                    deadline = now + budget(demand, scene.isEditor(), scene.isEditing(), other);
+                    deadline = now + budget(demand, scene.isEditor(), scene.isEditing(), scene.isHeavy(), other);
                 }
 
                 scene.advance(deadline);
@@ -372,7 +392,7 @@ public class FilmScenes
      * an asked-for calculation), but never below what the old per-tick schedule gave: nothing records
      * slower than it did.</p>
      */
-    static long budget(FilmScene.Demand demand, boolean editor, boolean editing, long other)
+    static long budget(FilmScene.Demand demand, boolean editor, boolean editing, boolean heavy, long other)
     {
         double share;
         double floor;
@@ -388,7 +408,8 @@ public class FilmScenes
             }
             case CATCH_UP ->
             {
-                share = !editor ? 0.35D : editing ? 0.24D : 0.6D;
+                /* Live while editing: the frame the author is looking at gets almost half the time, unless the scene is heavy */
+                share = !editor ? 0.35D : editing ? (heavy ? 0.24D : 0.45D) : 0.6D;
                 floor = 0.24D;
                 frame = 33_000_000L;
             }
@@ -903,6 +924,12 @@ public class FilmScenes
         }
 
         return taken;
+    }
+
+    /** Whether the frame rate has dropped, smoothed over the last frames. */
+    public static boolean isLowFps()
+    {
+        return lowFps;
     }
 
     public static int getSceneCount()

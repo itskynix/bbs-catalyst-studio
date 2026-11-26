@@ -106,7 +106,17 @@ public class FilmScene implements AutoCloseable
      * batches would be work thrown away — worse, work thrown away inside the frames they are
      * dragging in.
      */
-    private static final long IDLE_AFTER_EDIT = 200_000_000L;
+    private static final long IDLE_AFTER_EDIT = 100_000_000L;
+
+    /** A scene is heavy when one step costs more than this, in nanoseconds: half a frame at sixty frames a second. */
+    private static final long HEAVY_STEP = 8_000_000L;
+
+    /** ...or when reaching the cursor would take longer than this at the steps' cost, in nanoseconds. */
+    private static final long HEAVY_WAIT = 1_500_000_000L;
+
+    /** How long the condition must hold before the scene counts as heavy, and stop holding before it counts as light again. */
+    private static final long HEAVY_AFTER = 500_000_000L;
+    private static final long LIGHT_AFTER = 2_000_000_000L;
 
     /** How far past the film's own length the recording is allowed to run. */
     private static final int LOOKAHEAD_PAST_END = 40;
@@ -259,6 +269,11 @@ public class FilmScene implements AutoCloseable
 
     /** When the last edit arrived — the background catch-up keeps clear for a moment after one. */
     private long editedAt;
+
+    /* Whether the scene is too heavy for the frames to keep it live, and since when the condition has (not) held — see {@link #updateLoad} */
+    private boolean heavy;
+    private long heavySince;
+    private long lightSince;
 
     /** When the last step finished, and what a step has been costing — see {@link #recordUntil}. */
     private long steppedAt;
@@ -907,7 +922,65 @@ public class FilmScene implements AutoCloseable
             return Demand.CATCH_UP;
         }
 
+        /* A heavy editor scene keeps its frames for the cursor: running ahead waits until it is light again, or until a recalculation is asked for */
+        if (this.heavy && this.editor)
+        {
+            return Demand.NONE;
+        }
+
         return this.backgroundAllowed() ? Demand.BACKGROUND : Demand.NONE;
+    }
+
+    /**
+     * Once a frame: whether this scene is more than the frames can keep live. It is when the frame
+     * rate has dropped ({@code lowFps}), when one step costs more than half a frame, when reaching
+     * the cursor would take longer than a second and a half, or when more active ragdolls run in a
+     * tick than the budget gives full rate to. Held for half a second before it counts, and let go
+     * of two seconds after it stops, so the recalculate button does not flicker.
+     *
+     * <p>Only the pace of the recording depends on this, never what is recorded: a tick comes out
+     * the same whichever frame records it.</p>
+     */
+    public void updateLoad(boolean lowFps, long now)
+    {
+        int missing = this.cache.has(this.filmTick) ? 0 : Math.max(0, this.filmTick - this.cache.getComputed() + 1);
+        boolean condition = lowFps || this.stepCost > HEAVY_STEP || (long) missing * this.stepCost > HEAVY_WAIT
+            || this.activeState.getUsed() > ActiveSceneState.FULL_RATE * 2;
+
+        if (condition)
+        {
+            this.lightSince = 0L;
+
+            if (this.heavySince == 0L)
+            {
+                this.heavySince = now;
+            }
+
+            if (!this.heavy && now - this.heavySince >= HEAVY_AFTER)
+            {
+                this.heavy = true;
+            }
+        }
+        else
+        {
+            this.heavySince = 0L;
+
+            if (this.lightSince == 0L)
+            {
+                this.lightSince = now;
+            }
+
+            if (this.heavy && now - this.lightSince >= LIGHT_AFTER)
+            {
+                this.heavy = false;
+            }
+        }
+    }
+
+    /** Whether this scene is too heavy to keep live, so the recalculate button is offered. */
+    public boolean isHeavy()
+    {
+        return this.heavy;
     }
 
     /** Whether this is the editor's scene, where an author is waiting rather than an audience. */

@@ -36,17 +36,25 @@ public final class ActiveSceneState
     private final TreeMap<Integer, Event> events = new TreeMap<>();
     private int tick;
     private int slots;
+    private int used;
 
     /** A new tick of the scene: the budget starts over. */
     public void begin(int tick)
     {
         this.tick = tick;
+        this.used = this.slots;
         this.slots = 0;
     }
 
     public int getTick()
     {
         return this.tick;
+    }
+
+    /** How many controllers had work to do in the tick before this one: the active load, see {@code FilmScene#updateLoad}. */
+    public int getUsed()
+    {
+        return this.used;
     }
 
     /** The next slot of this tick's budget, for a controller that has work to do. */

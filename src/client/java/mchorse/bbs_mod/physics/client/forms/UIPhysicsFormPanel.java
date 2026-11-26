@@ -236,6 +236,7 @@ public class UIPhysicsFormPanel extends UIFormPanel<Form>
                 if (!this.syncing && this.form != null)
                 {
                     ActiveRagdolls.set(this.form, knob, v.floatValue());
+                    this.pushLive();
                 }
             });
 
@@ -326,6 +327,7 @@ public class UIPhysicsFormPanel extends UIFormPanel<Form>
         if (!this.syncing && this.form != null)
         {
             PhysicsForms.setAuthority(this.form, value);
+            this.pushLive();
         }
     }
 
@@ -337,6 +339,7 @@ public class UIPhysicsFormPanel extends UIFormPanel<Form>
         }
 
         PhysicsForms.setBody(this.form, edit.apply(PhysicsForms.getBody(this.form)));
+        this.pushLive();
     }
 
     private void editRagdoll(UnaryOperator<FormRagdoll> edit)
@@ -347,6 +350,66 @@ public class UIPhysicsFormPanel extends UIFormPanel<Form>
         }
 
         FormRagdolls.set(this.form, edit.apply(FormRagdolls.get(this.form)));
+        this.pushLive();
+    }
+
+    /**
+     * Live physics while the form is being edited. This panel edits the form editor's working
+     * copy, which only reaches the film when the editor closes, so the knobs did nothing to the
+     * scene until then: tuning a ragdoll meant closing the editor or asking for a recalculation
+     * after every change. Now each change is also handed to the very form the physics scene
+     * simulates, the cast copy of the replay being edited, and the scene takes its recording back.
+     * The background recording then refills it from there on its own, live.
+     *
+     * <p>The film itself is left alone, as before: it gets the form when the editor closes, so the
+     * undo history keeps one entry per edit. Only what a live body can take is handed over: the
+     * numbers, the handle and the active physics. A change of the physics type, a bone's joint or the
+     * collision markup still needs the scene to be built again, which closing the editor does.</p>
+     */
+    private void pushLive()
+    {
+        if (this.syncing || this.form == null)
+        {
+            return;
+        }
+
+        UIFilmPanel panel = this.getParent(UIFilmPanel.class);
+
+        if (panel == null || panel.getController() == null || panel.getController().editorController == null)
+        {
+            return;
+        }
+
+        mchorse.bbs_mod.forms.entities.IEntity entity = panel.getController().getCurrentEntity();
+        Form root = entity == null ? null : entity.getForm();
+        String path = FormUtils.getPath(this.form);
+        Form cast = root == null ? null : FormUtils.getForm(root, path);
+
+        if (cast == null || cast == this.form || cast.getClass() != this.form.getClass() || !FormUtils.getPath(cast).equals(path)
+            || PhysicsForms.getType(cast) != PhysicsForms.getType(this.form))
+        {
+            return;
+        }
+
+        PhysicsForms.setBody(cast, PhysicsForms.getBody(this.form));
+        PhysicsForms.setAuthority(cast, PhysicsForms.getAuthority(this.form));
+
+        if (FormRagdolls.isEnabled(this.form))
+        {
+            FormRagdolls.set(cast, FormRagdolls.get(this.form));
+        }
+
+        for (ActiveKnob knob : ActiveKnob.values())
+        {
+            ActiveRagdolls.set(cast, knob, ActiveRagdolls.get(this.form, knob));
+        }
+
+        FilmScene scene = FilmScenes.get(panel.getController().editorController);
+
+        if (scene != null)
+        {
+            scene.invalidate();
+        }
     }
 
     /* Syncing the UI */
