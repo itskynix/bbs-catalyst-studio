@@ -5945,6 +5945,8 @@
 	"bbs.ui.trigger_box.combo_empty": "Nothing to pick",
 	"bbs.ui.trigger_box.option.entity": "the entity that set it off",
 	"bbs.ui.trigger_box.option.player": "player",
+	"bbs.ui.trigger_box.option.nearest_player": "the nearest player",
+	"bbs.ui.trigger_box.option.all_players": "every player",
 	"bbs.ui.trigger_box.option.any_replay": "Any replay",
 	"bbs.ui.trigger_box.film_placeholder": "Film id",
 	"bbs.ui.trigger_box.actor_prefix": "Name prefix or UUID",

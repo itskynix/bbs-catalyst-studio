@@ -15,7 +15,8 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 
-import java.util.UUID;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * The BBS side of a trigger flow: films, cameras, forms and model blocks, called straight on the
@@ -24,7 +25,8 @@ import java.util.UUID;
  * does what the nodes do.
  *
  * <p>Every method takes the entity that set the flow off ({@code source}) and the target as any of:
- * an entity, "@entity" (the source itself), a player's name, or an entity UUID.</p>
+ * an entity, "@entity" (the source itself), a selector such as @a, a player's name, or an entity
+ * UUID, resolved by {@link FlowEntities} as everywhere else in a flow.</p>
  */
 public final class FlowBBS
 {
@@ -37,16 +39,22 @@ public final class FlowBBS
     public static void use(MinecraftServer server)
     {
         FlowBBS.server = server;
+        FlowEntities.use(server);
     }
 
     /* Films */
 
-    /** Plays a film to a player, its camera on the player's view when {@code camera} is true. */
+    /** Plays a film to a player (or every player a selector names), its camera on their view when {@code camera} is true. */
     public static void playFilm(Entity source, Object player, Object film, Object camera)
     {
         String filmId = text(film);
 
-        if (resolve(source, player) instanceof ServerPlayerEntity target && !filmId.isBlank())
+        if (filmId.isBlank())
+        {
+            return;
+        }
+
+        for (ServerPlayerEntity target : players(source, player))
         {
             ServerNetwork.sendPlayFilm(target, filmId, FlowValues.truthy(text(camera)));
         }
@@ -64,7 +72,7 @@ public final class FlowBBS
 
         BBSMod.getActions().stop(filmId);
 
-        if (resolve(source, player) instanceof ServerPlayerEntity target)
+        for (ServerPlayerEntity target : players(source, player))
         {
             ServerNetwork.sendStopFilm(target, filmId);
         }
@@ -81,7 +89,9 @@ public final class FlowBBS
     /** Morphs a player into a form, given as BBS form data (as the form editor copies it). */
     public static void setForm(Entity source, Object player, Object formData)
     {
-        if (!(resolve(source, player) instanceof ServerPlayerEntity target))
+        List<ServerPlayerEntity> targets = players(source, player);
+
+        if (targets.isEmpty())
         {
             return;
         }
@@ -93,8 +103,11 @@ public final class FlowBBS
 
             if (form != null)
             {
-                ServerNetwork.sendMorphToTracked(target, form);
-                Morph.getMorph(target).setForm(FormUtils.copy(form));
+                for (ServerPlayerEntity target : targets)
+                {
+                    ServerNetwork.sendMorphToTracked(target, form);
+                    Morph.getMorph(target).setForm(FormUtils.copy(form));
+                }
             }
         }
         catch (Exception e)
@@ -106,7 +119,7 @@ public final class FlowBBS
     /** Turns a player back into themselves. */
     public static void clearForm(Entity source, Object player)
     {
-        if (resolve(source, player) instanceof ServerPlayerEntity target)
+        for (ServerPlayerEntity target : players(source, player))
         {
             ServerNetwork.sendMorphToTracked(target, null);
             Morph.getMorph(target).setForm(null);
@@ -198,47 +211,25 @@ public final class FlowBBS
         return new Vec3d(xyz[0], xyz[1], xyz[2]);
     }
 
-    /** An entity: itself, "@entity" or nothing for the source, a player's name, or a UUID. */
+    /** An entity: itself, "@entity" or nothing for the source, a selector, a player's name, or a UUID. */
     public static Entity resolve(Entity source, Object value)
     {
-        if (value instanceof Entity entity)
+        return FlowEntities.resolveEntity(source, value);
+    }
+
+    /** Every player the value names: the source, a name, a UUID, or all a selector finds. */
+    private static List<ServerPlayerEntity> players(Entity source, Object value)
+    {
+        List<ServerPlayerEntity> players = new ArrayList<>();
+
+        for (Entity entity : FlowEntities.resolveEntities(source, value))
         {
-            return entity;
-        }
-
-        String v = text(value);
-
-        if (v.isEmpty() || v.equals("@entity") || v.equals("@s"))
-        {
-            return source;
-        }
-
-        MinecraftServer server = source != null && source.getServer() != null ? source.getServer() : FlowBBS.server;
-
-        if (server == null)
-        {
-            return null;
-        }
-
-        try
-        {
-            UUID uuid = UUID.fromString(v);
-
-            for (ServerWorld world : server.getWorlds())
+            if (entity instanceof ServerPlayerEntity player && !players.contains(player))
             {
-                Entity found = world.getEntity(uuid);
-
-                if (found != null)
-                {
-                    return found;
-                }
+                players.add(player);
             }
+        }
 
-            return null;
-        }
-        catch (IllegalArgumentException e)
-        {
-            return server.getPlayerManager().getPlayer(v);
-        }
+        return players;
     }
 }

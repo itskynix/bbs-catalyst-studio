@@ -1065,6 +1065,11 @@ public class UITriggerBoxMenu extends UIBaseMenu
 
         switch (type)
         {
+            case "entity" ->
+            {
+                /* The entity of the event, a player online, or a typed selector, name or UUID */
+                return FlowFields.combo(value, setter, FlowFields::entities, key("entity_placeholder"));
+            }
             case "color" ->
             {
                 mchorse.bbs_mod.ui.framework.elements.input.UIColor color = new mchorse.bbs_mod.ui.framework.elements.input.UIColor((c) -> setter.accept(String.format("%06x", c & 0xffffff)));
@@ -1409,8 +1414,9 @@ public class UITriggerBoxMenu extends UIBaseMenu
                 this.changed();
             });
         }
-        else if (declared.equals("entity"))
+        else if (declared.equals("entity") || this.graph.inputType(node, pin).equals("entity"))
         {
+            /* An entity pin, or the value of a Set on an entity variable: the same list everywhere */
             field = FlowFields.combo(node.param(pin), (text) ->
             {
                 node.params.put(pin, text);

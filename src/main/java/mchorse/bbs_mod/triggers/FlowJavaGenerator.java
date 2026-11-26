@@ -53,6 +53,7 @@ public class FlowJavaGenerator
         this.line(0, "package bbs.triggers;");
         this.line(0, "");
         this.line(0, "import mchorse.bbs_mod.triggers.FlowBBS;");
+        this.line(0, "import mchorse.bbs_mod.triggers.FlowEntities;");
         this.line(0, "import net.minecraft.entity.Entity;");
         this.line(0, "import net.minecraft.util.math.Vec3d;");
         this.line(0, "");
@@ -588,19 +589,22 @@ public class FlowJavaGenerator
     private Expr input(FlowNode node, String pin, int depth)
     {
         FlowLink link = this.graph.dataInto(node.id, pin);
+        String declared = node.declaredInputType(pin);
+        boolean entityPin = declared.equals("entity") || this.setsEntity(node, pin);
 
         if (link != null)
         {
-            return this.expr(this.graph.get(link.from()), link.pin(), depth + 1);
+            Expr expr = this.expr(this.graph.get(link.from()), link.pin(), depth + 1);
+
+            return entityPin ? this.wiredEntity(node, expr) : expr;
         }
 
         String raw = node.param(pin);
-        String declared = node.declaredInputType(pin);
         String t = raw.trim();
 
-        if (declared.equals("entity") && (t.isEmpty() || t.equals("@entity")))
+        if (entityPin)
         {
-            return new Expr("entity", "any");
+            return this.typedEntity(node, t);
         }
 
         if (t.equals("true") || t.equals("false"))
@@ -623,6 +627,62 @@ public class FlowJavaGenerator
         {
             return new Expr(this.template(raw), "string");
         }
+    }
+
+    /* Entities: every value that names one goes through FlowEntities, as in the box */
+
+    /** Whether the pin is the value of a Set on a variable of type entity. */
+    private boolean setsEntity(FlowNode node, String pin)
+    {
+        if (!node.type.equals(FlowNodeTypes.SET_VARIABLE) || !pin.equals("value"))
+        {
+            return false;
+        }
+
+        FlowVariable variable = this.graph.variableOf(node);
+
+        return variable != null && variable.type.equals("entity");
+    }
+
+    /** Whether the node does something to its entity (and so to all a selector such as @a finds). */
+    private static boolean acts(FlowNode node)
+    {
+        FlowNodeType.Kind kind = node.getType().kind;
+
+        return kind == FlowNodeType.Kind.ACTION || kind == FlowNodeType.Kind.CINEMATIC;
+    }
+
+    /** A typed entity value: "@entity" is the entity of the event, anything else is looked up. */
+    private Expr typedEntity(FlowNode node, String t)
+    {
+        if (FlowEntities.isSource(t))
+        {
+            return new Expr("entity", "any");
+        }
+
+        String raw = quote(FlowEntities.raw(t));
+        boolean many = FlowEntities.isMany(t);
+
+        if (node.type.equals(FlowNodeTypes.SET_VARIABLE))
+        {
+            /* A variable keeps the entity; a selector of many stays a selector and is looked at when read */
+            return new Expr(many ? raw : "FlowEntities.resolveEntity(entity, " + raw + ")", "any");
+        }
+
+        return new Expr("FlowEntities." + (many && acts(node) ? "resolveEntities" : "resolveEntity") + "(entity, " + raw + ")", "any");
+    }
+
+    /** A wired entity value (a Get of an entity variable, a name read somewhere): looked up where it is used. */
+    private Expr wiredEntity(FlowNode node, Expr expr)
+    {
+        String code = expr.code();
+
+        if (code.equals("entity") || code.startsWith("FlowEntities.") || node.type.equals(FlowNodeTypes.SET_VARIABLE))
+        {
+            return expr;
+        }
+
+        return new Expr("FlowEntities." + (acts(node) ? "resolveEntities" : "resolveEntity") + "(entity, " + code + ")", "any");
     }
 
     private String number(FlowNode node, String pin)
@@ -937,7 +997,8 @@ public class FlowJavaGenerator
             case "integer" -> "int";
             case "float" -> "float";
             case "vec3" -> "Vec3d";
-            case "entity" -> "Entity";
+            /* An entity, or the reference to one ("@entity", a name, a UUID), looked up where it is used */
+            case "entity" -> "Object";
             default -> "String";
         };
     }
@@ -957,7 +1018,7 @@ public class FlowJavaGenerator
 
                 yield "new Vec3d(" + xyz[0] + ", " + xyz[1] + ", " + xyz[2] + ")";
             }
-            case "entity" -> "null";
+            case "entity" -> v.isEmpty() ? "null" : quote(FlowEntities.raw(v));
             default -> quote(v);
         };
     }

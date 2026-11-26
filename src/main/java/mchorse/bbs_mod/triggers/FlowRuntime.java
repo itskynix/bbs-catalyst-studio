@@ -161,7 +161,7 @@ public class FlowRuntime
 
                 if (node != null)
                 {
-                    this.out(new Run(world, p.entity == null ? null : world.getEntity(p.entity)), node, p.pin);
+                    this.out(new Run(world, p.entity == null ? null : this.source(world, p.entity)), node, p.pin);
                 }
             }
         }
@@ -195,7 +195,7 @@ public class FlowRuntime
 
             s.put("next", next + Math.max(1L, (Long) s.get("interval")));
             s.put("count", (Integer) s.getOrDefault("count", 0) + 1);
-            this.out(new Run(world, uuid == null ? null : world.getEntity(uuid)), node, "tick");
+            this.out(new Run(world, uuid == null ? null : this.source(world, uuid)), node, "tick");
         }
     }
 
@@ -591,17 +591,20 @@ public class FlowRuntime
             }
             case "damage_entity", "heal_entity" ->
             {
-                if (this.entity(run, this.input(run, node, "entity", 0)) instanceof LivingEntity living)
-                {
-                    float amount = (float) parse(this.input(run, node, "amount", 0), 0);
+                float amount = (float) parse(this.input(run, node, "amount", 0), 0);
 
-                    if (node.type.equals("heal_entity"))
+                for (Entity target : this.entities(run, this.input(run, node, "entity", 0)))
+                {
+                    if (target instanceof LivingEntity living)
                     {
-                        living.heal(amount);
-                    }
-                    else
-                    {
-                        living.damage(run.world.getDamageSources().generic(), amount);
+                        if (node.type.equals("heal_entity"))
+                        {
+                            living.heal(amount);
+                        }
+                        else
+                        {
+                            living.damage(run.world.getDamageSources().generic(), amount);
+                        }
                     }
                 }
 
@@ -639,10 +642,9 @@ public class FlowRuntime
             }
             case "launch_entity" ->
             {
-                Entity target = this.entity(run, this.input(run, node, "entity", 0));
                 double[] v = FlowValues.vec(this.input(run, node, "velocity", 0));
 
-                if (target != null)
+                for (Entity target : this.entities(run, this.input(run, node, "entity", 0)))
                 {
                     target.addVelocity(v[0], v[1], v[2]);
                     target.velocityModified = true;
@@ -891,23 +893,22 @@ public class FlowRuntime
         return parse(this.input(run, node, pin, depth), 0);
     }
 
+    /** Whether a value is there: an entity reference (@entity, a UUID, a selector) only when it finds one. */
     private String valid(Run run, String value)
     {
-        String v = value.trim();
+        String v = FlowEntities.raw(value);
 
         if (v.isEmpty())
         {
             return "false";
         }
 
-        try
+        if (FlowEntities.isSource(v) || FlowEntities.isSelector(v) || FlowEntities.byReference(run.world.getServer(), v) != null)
         {
-            return String.valueOf(run.world.getEntity(UUID.fromString(v)) != null);
+            return String.valueOf(this.entity(run, v) != null);
         }
-        catch (IllegalArgumentException e)
-        {
-            return "true";
-        }
+
+        return String.valueOf(!v.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"));
     }
 
     private String mapRange(Run run, FlowNode node, int depth)
@@ -1021,24 +1022,31 @@ public class FlowRuntime
         return new Vec3d(xyz[0], xyz[1], xyz[2]);
     }
 
-    /** "@entity" (or nothing) is the entity that set the flow off; otherwise a UUID or a player's name. */
+    /**
+     * The entity a value names, through {@link FlowEntities}, as everywhere else in a flow: "@entity"
+     * (or nothing) is the entity that set the run off, then a selector, a UUID or a player's name.
+     */
     private Entity entity(Run run, String value)
     {
-        String v = value == null ? "" : value.trim();
+        return FlowEntities.resolveEntity(run.entity, run.world, this.origin(), value);
+    }
 
-        if (v.isEmpty() || v.equals("@entity") || v.equals("@s"))
-        {
-            return run.entity;
-        }
+    /** Every entity a value names: all a selector such as @a finds, otherwise the one. */
+    private List<Entity> entities(Run run, String value)
+    {
+        return FlowEntities.resolveEntities(run.entity, run.world, this.origin(), value);
+    }
 
-        try
-        {
-            return run.world.getEntity(UUID.fromString(v));
-        }
-        catch (IllegalArgumentException e)
-        {
-            return run.world.getServer().getPlayerManager().getPlayer(v);
-        }
+    /** Where a selector looks from when no entity set the run off: the box. */
+    private Vec3d origin()
+    {
+        return Vec3d.ofCenter(this.pos);
+    }
+
+    /** The entity a delayed or pulsed run was set off by, wherever it is now. */
+    private Entity source(ServerWorld world, UUID uuid)
+    {
+        return uuid == null ? null : FlowEntities.byReference(world.getServer(), uuid.toString());
     }
 
     private UUID uuid(Run run)
@@ -1046,14 +1054,12 @@ public class FlowRuntime
         return run.entity == null ? null : run.entity.getUuid();
     }
 
-    /** A value about to be stored in a variable of the type: an entity variable keeps a UUID. */
+    /** A value about to be stored in a variable of the type: an entity variable keeps a UUID (a selector of many stays itself). */
     private String asValue(Run run, String value, String type)
     {
         if (type.equals("entity"))
         {
-            Entity entity = this.entity(run, value);
-
-            return entity == null ? value : entity.getUuidAsString();
+            return FlowEntities.reference(run.entity, run.world, this.origin(), value);
         }
 
         return value;
@@ -1125,9 +1131,8 @@ public class FlowRuntime
 
             if (node.declaredInputType(key).equals("entity"))
             {
-                Entity entity = this.entity(run, value);
-
-                value = entity == null ? "@s" : entity.getUuidAsString();
+                /* A selector goes into the command as it is, so @a still means everyone */
+                value = FlowEntities.commandTarget(run.entity, run.world, this.origin(), value);
             }
 
             builder.append(mode.equals("q") || mode.equals("json") ? "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"" : value);

@@ -5104,6 +5104,8 @@
     "bbs.ui.trigger_box.combo_empty": "Seçilecek bir şey yok",
     "bbs.ui.trigger_box.option.entity": "akışı başlatan varlık",
     "bbs.ui.trigger_box.option.player": "oyuncu",
+    "bbs.ui.trigger_box.option.nearest_player": "en yakın oyuncu",
+    "bbs.ui.trigger_box.option.all_players": "tüm oyuncular",
     "bbs.ui.trigger_box.option.any_replay": "Herhangi bir replay",
     "bbs.ui.trigger_box.film_placeholder": "Film kimliği",
     "bbs.ui.trigger_box.actor_prefix": "Ad ön eki ya da UUID",

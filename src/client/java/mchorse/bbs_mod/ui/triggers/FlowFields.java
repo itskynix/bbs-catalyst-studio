@@ -8,6 +8,7 @@ import mchorse.bbs_mod.forms.forms.Form;
 import mchorse.bbs_mod.ui.forms.UIFormPalette;
 import mchorse.bbs_mod.film.replays.Replay;
 import mchorse.bbs_mod.l10n.L10n;
+import mchorse.bbs_mod.triggers.FlowEntities;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.ContentType;
 import mchorse.bbs_mod.ui.framework.UIContext;
@@ -121,13 +122,19 @@ public class FlowFields
 
     /* Lists */
 
-    /** The entity that set the flow off, then every player online by name. */
+    /**
+     * The entity that set the flow off, the nearest and every player, then each player online by name.
+     * The list only shows the description: what goes into the field is the bare value ("@entity",
+     * "@a", the name), which the flow resolves the same way it resolves a typed one.
+     */
     public static void entities(Consumer<List<Option>> callback)
     {
         List<Option> list = new ArrayList<>();
         MinecraftClient mc = MinecraftClient.getInstance();
 
-        list.add(new Option("@entity", "@entity  " + key("option.entity").get()));
+        list.add(new Option(FlowEntities.SOURCE, FlowEntities.SOURCE + "  " + key("option.entity").get()));
+        list.add(new Option("@p", "@p  " + key("option.nearest_player").get()));
+        list.add(new Option("@a", "@a  " + key("option.all_players").get()));
 
         if (mc.getNetworkHandler() != null)
         {
