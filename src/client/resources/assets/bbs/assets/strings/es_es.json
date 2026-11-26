@@ -462,7 +462,6 @@
     "bbs.ui.film.teleport-title": "Teleportación",
     "bbs.ui.film.teleport.context.player": "Teletransportar jugador a la cámara",
     "bbs.ui.film.title": "Películas",
-    "bbs.ui.film.video_recording": "Grabando %s, presiona %s para detener...",
     "bbs.ui.forms.categories.add_category-description": "Escribe el nombre de la categoría de la forma:",
     "bbs.ui.forms.categories.add_category-title": "Añadir categoría",
     "bbs.ui.forms.categories.context.add_category": "Añadir categoría...",

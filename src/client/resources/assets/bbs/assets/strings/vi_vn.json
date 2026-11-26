@@ -484,7 +484,6 @@
     "bbs.ui.film.teleport-title": "Dịch chuyển",
     "bbs.ui.film.teleport.context.player": "Dịch chuyển người chơi đến máy ảnh",
     "bbs.ui.film.title": "Phim",
-    "bbs.ui.film.video_recording": "Đang ghi %s, nhấn %s để dừng...",
     "bbs.ui.forms.categories.add_category-description": "Nhập tên cho danh mục form:",
     "bbs.ui.forms.categories.add_category-title": "Thêm danh mục",
     "bbs.ui.forms.categories.context.add_category": "Thêm danh mục...",

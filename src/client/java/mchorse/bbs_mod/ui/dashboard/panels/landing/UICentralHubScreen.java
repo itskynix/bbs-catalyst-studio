@@ -9,6 +9,7 @@ import mchorse.bbs_mod.ui.dashboard.panels.UIDashboardPanel;
 import mchorse.bbs_mod.ui.dashboard.panels.motion.UIMMotionPanel;
 import mchorse.bbs_mod.ui.dashboard.textures.UITextureManagerPanel;
 import mchorse.bbs_mod.ui.film.UIFilmPanel;
+import mchorse.bbs_mod.ui.recap.UIRecapPanel;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.utils.FontRenderer;
@@ -51,6 +52,7 @@ public class UICentralHubScreen extends UIElement
         new Card(UIKeys.CENTRAL_HUB_CARD_FILMS_TITLE, UIKeys.CENTRAL_HUB_CARD_FILMS_DESC, Icons.FILM, UIFilmPanel.class, false),
         new Card(UIKeys.CENTRAL_HUB_CARD_CATALYST_TITLE, UIKeys.CENTRAL_HUB_CARD_CATALYST_DESC, Icons.FIVE_STAR, UICatalystPanel.class, false),
         new Card(UIKeys.CENTRAL_HUB_CARD_MMOTION_TITLE, UIKeys.CENTRAL_HUB_CARD_MMOTION_DESC, Icons.CURVES, UIMMotionPanel.class, true),
+        new Card(UIKeys.CENTRAL_HUB_CARD_RECAP_TITLE, UIKeys.CENTRAL_HUB_CARD_RECAP_DESC, Icons.STOPWATCH, UIRecapPanel.class, true),
         new Card(UIKeys.CENTRAL_HUB_CARD_PARTICLES_TITLE, UIKeys.CENTRAL_HUB_CARD_PARTICLES_DESC, Icons.PARTICLE, UIParticleSchemePanel.class, false),
         new Card(UIKeys.CENTRAL_HUB_CARD_MODELS_TITLE, UIKeys.CENTRAL_HUB_CARD_MODELS_DESC, Icons.POSE, UIModelEditorPanel.class, false),
         new Card(UIKeys.CENTRAL_HUB_CARD_AUDIO_TITLE, UIKeys.CENTRAL_HUB_CARD_AUDIO_DESC, Icons.SOUND, UIAudioEditorPanel.class, false),

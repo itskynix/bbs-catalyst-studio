@@ -441,7 +441,6 @@
     "bbs.ui.film.teleport-title": "انتقال",
     "bbs.ui.film.teleport.context.player": "نقل اللاعب إلى الكاميرا",
     "bbs.ui.film.title": "فيلم",
-    "bbs.ui.film.video_recording": "جاري التسجيل %s، اضغط %s للإيقاف...",
     "bbs.ui.forms.categories.add_category-description": "اكتب اسم فئة النموذج:",
     "bbs.ui.forms.categories.add_category-title": "إضافة فئة",
     "bbs.ui.forms.categories.context.add_category": "إضافة فئة...",

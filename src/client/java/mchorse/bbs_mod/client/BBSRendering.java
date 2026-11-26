@@ -763,7 +763,6 @@ public class BBSRendering
             BBSModClient.getVideoRecorder().recordFrame();
         }
 
-        renderRecordingOverlay();
 
         if (customSize)
         {
@@ -935,48 +934,6 @@ public class BBSRendering
         mchorse.bbs_mod.nav.NavigationWandController.renderHud(batcher2D);
         mchorse.bbs_mod.physics.InWorldPhysicsTool.renderHud(batcher2D);
         VehicleRide.renderHud(batcher2D, tickDelta);
-    }
-
-    /**
-     * Draw the recording countdown / frame-counter overlay. This is operator UI: it is drawn from
-     * {@link #onRenderBeforeScreen()} after the export blit but before the buffer is copied to the
-     * screen, so it shows up on screen but is never captured into the file.
-     */
-    private static void renderRecordingOverlay()
-    {
-        if (!BBSSettings.recordingOverlays.get() || UIScreen.getCurrentMenu() != null)
-        {
-            return;
-        }
-
-        String label;
-
-        if (BBSModClient.isVideoExportDelayPending())
-        {
-            int countdown = Math.max(0, (int) Math.ceil(BBSModClient.getVideoExportDelayRemainingMs() / 50D));
-
-            label = String.valueOf(countdown / 20F);
-        }
-        else if (BBSModClient.getVideoRecorder().isRecording())
-        {
-            int count = BBSModClient.getVideoRecorder().getCounter();
-
-            label = UIKeys.FILM_VIDEO_RECORDING.format(
-                count,
-                BBSModClient.getKeyPlayFilmAndRecord().getBoundKeyLocalizedText().getString()
-            ).get();
-        }
-        else
-        {
-            return;
-        }
-
-        MinecraftClient mc = MinecraftClient.getInstance();
-        DrawContext drawContext = new DrawContext(mc, mc.getBufferBuilders().getEntityVertexConsumers());
-
-        renderRecordingTimerOverlay(new Batcher2D(drawContext), label);
-
-        drawContext.draw();
     }
 
     public static void renderRecordingTimerOverlay(Batcher2D batcher2D, String label)

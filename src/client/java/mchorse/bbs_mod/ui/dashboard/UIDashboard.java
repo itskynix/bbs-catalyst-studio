@@ -420,6 +420,7 @@ public class UIDashboard extends UIBaseMenu
         this.buildStep("film", () -> this.panels.registerHiddenPanel(new UIFilmPanel(this)));
         this.buildStep("catalyst", () -> this.panels.registerHiddenPanel(new UICatalystPanel(this)));
         this.buildStep("mmotion", () -> this.panels.registerHiddenPanel(new UIMMotionPanel(this)));
+        this.buildStep("recap", () -> this.panels.registerHiddenPanel(new mchorse.bbs_mod.ui.recap.UIRecapPanel(this)));
         this.buildStep("model blocks", () -> this.panels.registerPanel(new UIModelBlockPanel(this), UIKeys.MODEL_BLOCKS_TITLE, Icons.BLOCK));
         this.buildStep("particles", () -> this.panels.registerHiddenPanel(new UIParticleSchemePanel(this)));
         this.buildStep("model editor", () -> this.panels.registerHiddenPanel(new UIModelEditorPanel(this)));

@@ -486,7 +486,6 @@
     "bbs.ui.film.teleport-title": "เทเลพอร์ต",
     "bbs.ui.film.teleport.context.player": "ย้ายผู้เล่นไปที่กล้อง",
     "bbs.ui.film.title": "ภาพยนตร์",
-    "bbs.ui.film.video_recording": "กำลังบันทึก %s, กด %s เพื่อหยุด...",
     "bbs.ui.forms.categories.add_category-description": "พิมพ์ชื่อสำหรับแบบฟอร์ม:",
     "bbs.ui.forms.categories.add_category-title": "เพิ่มหมวดหมู่",
     "bbs.ui.forms.categories.context.add_category": "เพิ่มหมวดหมู่...",

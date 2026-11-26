@@ -478,7 +478,6 @@
     "bbs.ui.film.teleport-title": "Teleportálás",
     "bbs.ui.film.teleport.context.player": "Játékos teleportálása a kamerához",
     "bbs.ui.film.title": "Filmek",
-    "bbs.ui.film.video_recording": "%s felvétele, nyomd meg a(z) %s gombot a leállításhoz...",
     "bbs.ui.forms.categories.add_category-description": "Írd be a formakategória nevét:",
     "bbs.ui.forms.categories.add_category-title": "Kategória hozzáadás",
     "bbs.ui.forms.categories.context.add_category": "Kategória hozzáadása...",

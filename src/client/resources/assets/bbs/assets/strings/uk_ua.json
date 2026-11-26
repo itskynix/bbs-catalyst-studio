@@ -482,7 +482,6 @@
     "bbs.ui.film.teleport-title": "Телепортуватись",
     "bbs.ui.film.teleport.context.player": "Телепортувати гравця до камери",
     "bbs.ui.film.title": "Фільми",
-    "bbs.ui.film.video_recording": "Записується %s, натисніть %s щоб зупинити запис...",
     "bbs.ui.forms.categories.add_category-description": "Введіть назву для категорії форми:",
     "bbs.ui.forms.categories.add_category-title": "Додати категорію",
     "bbs.ui.forms.categories.context.add_category": "Додати категорію...",

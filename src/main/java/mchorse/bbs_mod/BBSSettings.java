@@ -133,7 +133,6 @@ public class BBSSettings {
 
 	public static ValueString videoEncoderPath;
 	public static ValueBoolean videoEncoderLog;
-	public static ValueBoolean worldExportResizeWindow;
 	public static ValueInt videoWidth;
 	public static ValueInt videoHeight;
 	public static ValueInt videoFrameRate;
@@ -225,6 +224,8 @@ public class BBSSettings {
 	public static ValueBoolean autoSaccadicMask;
 	public static ValueFloat saccadicAngleThreshold;
 	public static ValueInt saccadicCooldown;
+	public static ValueBoolean recapInstant;
+	public static ValueInt recapInstantSeconds;
 
 	public static ValueBoolean renderAllModelBlocks;
 	public static ValueBoolean clickModelBlocks;
@@ -616,7 +617,7 @@ public class BBSSettings {
 		 * than the one long page it came from */
 		migrated |= migrateLegacyCategory(root, "export", "video",
 			"export_path", "filename_format", "open_folder_after_export", "play_sound_after_export",
-			"world_export_resize_window", "audio", "minecraft_sounds", "mute_audio_while_render");
+			"audio", "minecraft_sounds", "mute_audio_while_render");
 		migrated |= migrateLegacyCategory(root, "encoder", "video",
 			"encoder_path", "log", "arguments", "arguments_audio", "arguments_mux");
 
@@ -953,6 +954,11 @@ public class BBSSettings {
 		saccadicAngleThreshold = builder.getFloat("saccadic_angle_threshold", 35F, 1F, 180F);
 		saccadicCooldown = builder.getInt("saccadic_cooldown", 4, 0, 60);
 
+		/* Recap Studio: whether the last stretch of play can be saved after the fact, and how long that stretch is */
+		builder.category("recap", Icons.STOPWATCH);
+		recapInstant = builder.getBoolean("instant", false);
+		recapInstantSeconds = builder.getInt("instant_seconds", 60, 10, 600);
+
 		/* Output */
 		/* Ordered by how often it gets touched: the resolution first, then the
 		 * file, the sound and the frames, and the encoder last */
@@ -961,7 +967,6 @@ public class BBSSettings {
 		videoHeight = builder.getInt("height", 720, 2, 8096);
 		videoFrameRate = builder.getInt("frame_rate", 60, 10, 1000);
 		videoLimitFrameRate = builder.getBoolean("limit_frame_rate", false);
-		worldExportResizeWindow = builder.getBoolean("world_export_resize_window", false);
 		videoExportPath = builder.getString("export_path", "");
 		videoExportFilenameFormat = builder.getString("filename_format", "{datetime}");
 		videoExportAudio = builder.getBoolean("audio", false);

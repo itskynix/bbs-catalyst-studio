@@ -401,7 +401,6 @@
     "bbs.ui.film.open_replay_editor": "리플레이 편집기 열기",
     "bbs.ui.film.open_voice_line_editor": "음성 대사 편집기 열기",
     "bbs.ui.film.recording": "녹화 중 %s",
-    "bbs.ui.film.video_recording": "녹화 중 %s, 중지하려면 %s를 누르세요...",
     "bbs.ui.film.render_audio": "오디오 렌더링 (오디오 클립에서)",
     "bbs.ui.film.render_audio.error": "오디오 클립을 렌더링할 수 없습니다! 자세한 내용은 latest.log를 참조하십시오...",
     "bbs.ui.film.render_audio.success": "오디오 클립이 성공적으로 렌더링되었습니다!",

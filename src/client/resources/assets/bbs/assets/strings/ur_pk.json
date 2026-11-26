@@ -417,7 +417,6 @@
     "bbs.ui.film.teleport-description": "لگتا ہے آپ منظر سے بہت دور ہیں۔ اگر کیمرہ تک ٹیلی پورٹ کرنا چاہتے ہیں تو دائیں سائیڈ بار میں ٹیلی پورٹ آئیکن دبائیں!",
     "bbs.ui.film.teleport-title": "ٹیلی پورٹ",
     "bbs.ui.film.title": "فلمیں",
-    "bbs.ui.film.video_recording": "ریکارڈنگ %s، روکنے کے لیے %s دبائیں...",
     "bbs.ui.film.controller.control_mode-tooltip": "کنٹرول موڈ سے نکلنے کے لیے %s دبائیں...",
     "bbs.ui.film.controller.insert_frame-description": "وہ کی فریم گروپ منتخب کریں جسے آپ داخل کرنا چاہتے ہیں:",
     "bbs.ui.film.controller.insert_frame-title": "کی فریم داخل کریں",

@@ -500,7 +500,6 @@
     "bbs.ui.film.teleport-title": "傳送",
     "bbs.ui.film.teleport.context.player": "將玩家傳送至攝像機",
     "bbs.ui.film.title": "影片",
-    "bbs.ui.film.video_recording": "正在錄製 %s, 按 %s 停止...",
     "bbs.ui.forms.categories.add_category-description": "為形態類別輸入名稱：",
     "bbs.ui.forms.categories.add_category-title": "添加類別",
     "bbs.ui.forms.categories.context.add_category": "添加類別...",

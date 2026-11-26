@@ -430,7 +430,6 @@
     "bbs.ui.film.teleport-description": "Parece que você está muito longe da cena. Se você quiser se teletransportar para a câmera, clique no ícone de teletransporte na barra lateral direita!",
     "bbs.ui.film.teleport-title": "Teletransportar",
     "bbs.ui.film.title": "Filmes",
-    "bbs.ui.film.video_recording": "Gravando %s, pressione %s para parar.",
     "bbs.ui.film.controller.control_mode-tooltip": "Pressionar %s para sair do modo de controle",
     "bbs.ui.film.controller.insert_frame-description": "Escolha um grupo de quadros-chave que você deseja inserir:",
     "bbs.ui.film.controller.insert_frame-title": "Inserir quadro-chave",

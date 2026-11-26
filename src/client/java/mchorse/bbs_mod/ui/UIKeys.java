@@ -1048,7 +1048,6 @@ public class UIKeys
     public static final IKey FILM_TELEPORT_DESCRIPTION = L10n.lang("bbs.ui.film.teleport-description");
     public static final IKey FILM_TELEPORT_TITLE = L10n.lang("bbs.ui.film.teleport-title");
     public static final IKey FILM_TITLE = L10n.lang("bbs.ui.film.title");
-    public static final IKey FILM_VIDEO_RECORDING = L10n.lang("bbs.ui.film.video_recording");
     public static final IKey FILM_MENU_WINDOW = L10n.lang("bbs.ui.film.menu.window");
     public static final IKey FILM_MENU_TOOLS = L10n.lang("bbs.ui.film.menu.tools");
     public static final IKey FILM_MENU_HELP = L10n.lang("bbs.ui.film.menu.help");
@@ -1823,6 +1822,8 @@ public class UIKeys
     public static final IKey CENTRAL_HUB_CARD_CATALYST_DESC = L10n.lang("bbs.central_hub.card.catalyst.desc");
     public static final IKey CENTRAL_HUB_CARD_MMOTION_TITLE = L10n.lang("bbs.central_hub.card.mmotion.title");
     public static final IKey CENTRAL_HUB_CARD_MMOTION_DESC = L10n.lang("bbs.central_hub.card.mmotion.desc");
+    public static final IKey CENTRAL_HUB_CARD_RECAP_TITLE = L10n.lang("bbs.central_hub.card.recap.title");
+    public static final IKey CENTRAL_HUB_CARD_RECAP_DESC = L10n.lang("bbs.central_hub.card.recap.desc");
     public static final IKey CENTRAL_HUB_CARD_PARTICLES_TITLE = L10n.lang("bbs.central_hub.card.particles.title");
     public static final IKey CENTRAL_HUB_CARD_PARTICLES_DESC = L10n.lang("bbs.central_hub.card.particles.desc");
     public static final IKey CENTRAL_HUB_CARD_MODELS_TITLE = L10n.lang("bbs.central_hub.card.models.title");

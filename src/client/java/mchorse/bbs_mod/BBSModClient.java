@@ -68,7 +68,6 @@ import mchorse.bbs_mod.film.replays.UIRadialReplayScreen;
 import mchorse.bbs_mod.film.replays.MultiTrackReplaySession;
 import net.minecraft.client.gui.screen.Screen;
 import mchorse.bbs_mod.film.Recorder;
-import mchorse.bbs_mod.film.WorldVideoExportSession;
 import mchorse.bbs_mod.film.replays.Replay;
 import mchorse.bbs_mod.forms.FormCategories;
 import mchorse.bbs_mod.forms.FormPortals;
@@ -181,10 +180,11 @@ public class BBSModClient implements ClientModInitializer
     private static KeyBinding keyPlayFilm;
     private static KeyBinding keyPauseFilm;
     private static KeyBinding keyRecordReplay;
+    private static KeyBinding keyRecapRecord;
+    private static KeyBinding keyRecapMarker;
     private static KeyBinding keyReplayNextTrack;
     private static KeyBinding keyReplayPrevTrack;
     private static KeyBinding keyReplayRadial;
-    private static KeyBinding keyPlayFilmAndRecord;
     private static KeyBinding keyOpenReplays;
     private static KeyBinding keyOpenMorphing;
     private static KeyBinding keyNavPreview;
@@ -200,7 +200,6 @@ public class BBSModClient implements ClientModInitializer
     private static Films films;
     private static GunZoom gunZoom;
 
-    private static final WorldVideoExportSession worldExportSession = new WorldVideoExportSession();
 
     private static float originalFramebufferScale;
     private static boolean customGUIScale;
@@ -324,22 +323,17 @@ public class BBSModClient implements ClientModInitializer
         return keyZoom;
     }
 
-    public static KeyBinding getKeyPlayFilmAndRecord()
+    public static KeyBinding getKeyRecapRecord()
     {
-        return keyPlayFilmAndRecord;
+        return keyRecapRecord;
     }
 
-    public static boolean isVideoExportDelayPending()
+    public static KeyBinding getKeyRecapMarker()
     {
-        return worldExportSession.isWarmingUp();
+        return keyRecapMarker;
     }
 
-    public static long getVideoExportDelayRemainingMs()
-    {
-        return worldExportSession.getWarmupRemainingMs();
-    }
-
-    /** Returns the dashboard without creating it. Used to avoid creating UI when handling keys (e.g. F6) before user has opened BBS. */
+    /** Returns the dashboard without creating it. Used to avoid creating UI when handling keys before the user has opened BBS. */
     public static UIDashboard getDashboardIfCreated()
     {
         if (dashboard != null)
@@ -737,8 +731,9 @@ public class BBSModClient implements ClientModInitializer
         keyReplayNextTrack = this.createKey("replay_next_track", GLFW.GLFW_KEY_RIGHT);
         keyReplayPrevTrack = this.createKey("replay_prev_track", GLFW.GLFW_KEY_LEFT);
         keyReplayRadial = this.createKey("replay_radial", GLFW.GLFW_KEY_R);
-        keyPlayFilmAndRecord = this.createKey("play_film_and_record", GLFW.GLFW_KEY_F6);
         keyOpenReplays = this.createKey("open_replays", GLFW.GLFW_KEY_RIGHT_SHIFT);
+        keyRecapRecord = this.createKey("recap_record", GLFW.GLFW_KEY_F6);
+        keyRecapMarker = this.createKey("recap_marker", GLFW.GLFW_KEY_F8);
         keyOpenMorphing = this.createKey("open_morphing", GLFW.GLFW_KEY_B);
         keyNavPreview = this.createKey("navmesh_preview", GLFW.GLFW_KEY_P);
         keyDemorph = this.createKey("demorph", GLFW.GLFW_KEY_PERIOD);
@@ -855,11 +850,23 @@ public class BBSModClient implements ClientModInitializer
             }
         });
 
+        /* The recap transport at the bottom of the pause menu; only for the menu on screen, not the copies a film draws */
+        net.fabricmc.fabric.api.client.screen.v1.ScreenEvents.AFTER_INIT.register((client, screen, width, height) ->
+        {
+            if (screen instanceof net.minecraft.client.gui.screen.GameMenuScreen && client.currentScreen == screen
+                && !net.fabricmc.fabric.api.client.screen.v1.Screens.getButtons(screen).isEmpty())
+            {
+                net.fabricmc.fabric.api.client.screen.v1.Screens.getButtons(screen).add(new mchorse.bbs_mod.recap.RecapPauseBar(width, height));
+            }
+        });
+
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> mchorse.bbs_mod.recap.RecapRecorder.onJoin());
+
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) ->
         {
+            mchorse.bbs_mod.recap.RecapRecorder.onLeave();
             dashboard = null;
             DashboardWarmup.reset();
-            worldExportSession.stop();
             client.execute(() -> videos.delete());
 
             /* Corners are raw coordinates: kept across a world change they would point the wand
@@ -942,8 +949,6 @@ public class BBSModClient implements ClientModInitializer
                 textures.update();
             }
 
-            worldExportSession.update();
-
             /* Build the dashboard while nothing is asking for it, so that the key below
              * opens one that is already there */
             DashboardWarmup.tick(mc);
@@ -978,8 +983,13 @@ public class BBSModClient implements ClientModInitializer
             }
             while (keyReplayRadial.wasPressed()) this.keyReplayRadial(mc);
             while (keyNavPreview.wasPressed()) mchorse.bbs_mod.nav.NavPreview.toggle();
-            while (keyPlayFilmAndRecord.wasPressed()) this.keyPlayFilmAndRecord();
             while (keyOpenReplays.wasPressed()) this.keyOpenReplays();
+            while (keyRecapRecord.wasPressed()) mchorse.bbs_mod.recap.RecapRecorder.toggleWithMessage();
+            while (keyRecapMarker.wasPressed()) mchorse.bbs_mod.recap.RecapRecorder.markerWithMessage();
+
+            /* The recap clock runs on game ticks, and a recap asked for opens once its world is in */
+            mchorse.bbs_mod.recap.RecapRecorder.tick(mc);
+            mchorse.bbs_mod.recap.RecapWorlds.tick(mc);
             while (keyOpenMorphing.wasPressed())
             {
                 UIDashboard dashboard = getDashboard();
@@ -1164,39 +1174,6 @@ public class BBSModClient implements ClientModInitializer
         }
     }
 
-    /**
-     * Start video recording and film playback together (F6). Recording stops
-     * automatically when the film finishes.
-     */
-    private void keyPlayFilmAndRecord()
-    {
-        if (getDashboardIfCreated() == null)
-        {
-            return;
-        }
-
-        UIFilmPanel panel = getDashboard().getPanel(UIFilmPanel.class);
-
-        if (panel.getData() == null)
-        {
-            return;
-        }
-
-        String filmId = panel.getData().getId();
-
-        if (worldExportSession.isExporting())
-        {
-            /* Toggle off only this film's combo; ignore the key while an unrelated recording runs. */
-            if (filmId.equals(worldExportSession.getFilmId()))
-            {
-                worldExportSession.cancel();
-            }
-
-            return;
-        }
-
-        worldExportSession.start(filmId, panel.getData());
-    }
 
     private void keyPauseFilm()
     {
