@@ -22,6 +22,7 @@ import mchorse.bbs_mod.client.renderer.MorphRenderer;
 import mchorse.bbs_mod.data.types.BaseType;
 import mchorse.bbs_mod.data.types.MapType;
 import mchorse.bbs_mod.film.Film;
+import mchorse.bbs_mod.film.tutorials.TutorialFilms;
 import mchorse.bbs_mod.film.FrozenFilmController;
 import mchorse.bbs_mod.film.markers.FilmMarker;
 import mchorse.bbs_mod.film.Recorder;
@@ -157,6 +158,12 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
     public UIFilmDrawerContainer rightDrawerOverlay;
 
     public UIIcon duplicateFilm;
+
+    /** "Unpack Film": shown on the right of the top bar while a tutorial film is open, see {@link #openTutorial}. */
+    public UIIcon unpackTutorial;
+
+    /** The block each tutorial film was first laid out around this session, so reopening it gives the same film. */
+    private static final java.util.Map<String, net.minecraft.util.math.BlockPos> TUTORIAL_ORIGINS = new java.util.HashMap<>();
 
     /* Main editors */
     public UIClipsPanel cameraEditor;
@@ -304,6 +311,11 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         {
             this.actions().editor(this.openWorldEditor, this.worldEditor::isVisible);
         }
+
+        this.unpackTutorial = new UIIcon(Icons.UNLOCKED, (b) -> this.confirmUnpackTutorial());
+        this.unpackTutorial.tooltip(UIKeys.FILM_TUTORIAL_UNPACK_TOOLTIP);
+        this.unpackTutorial.setVisible(false);
+        this.actions().action(this.unpackTutorial);
 
         this.openOverlay.setVisible(false);
         this.actions().sync();
@@ -877,7 +889,118 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
             return L10n.lang("bbs.multiplayer.locked_badge").format(lock.playerName).get();
         }
 
+        if (this.isTutorial())
+        {
+            return UIKeys.FILM_TUTORIAL_BADGE.get();
+        }
+
         return this.isFilmReadOnly() ? L10n.lang("bbs.multiplayer.read_only_badge").get() : null;
+    }
+
+    /* Tutorial films */
+
+    /** Whether the open film is one of the mod's tutorial films, which is never written anywhere. */
+    public boolean isTutorial()
+    {
+        return this.data != null && TutorialFilms.isTutorial(this.data.getId());
+    }
+
+    /**
+     * Opens a tutorial film read only: built around the block the player stands on the first time
+     * it is opened this session, then the same film every time after. It plays, scrubs and can be
+     * looked through like any film; nothing about it is saved, synced or put in the recent list.
+     */
+    public void openTutorial(String id)
+    {
+        if (TutorialFilms.get(id) == null)
+        {
+            return;
+        }
+
+        MinecraftClient mc = MinecraftClient.getInstance();
+        net.minecraft.util.math.BlockPos origin = TUTORIAL_ORIGINS.computeIfAbsent(id, (k) -> mc.player == null ? net.minecraft.util.math.BlockPos.ORIGIN : mc.player.getBlockPos());
+        Film film = TutorialFilms.build(id, origin.getX(), origin.getY(), origin.getZ());
+
+        this.save();
+        this.fill(film);
+        BBSSettings.recentData.forget(this.getType().getId(), id);
+
+        if (this.getContext() != null)
+        {
+            this.getContext().notifyInfo(UIKeys.FILM_TUTORIAL_OPENED);
+        }
+    }
+
+    @Override
+    public void requestData(String id)
+    {
+        /* A tab left on a tutorial: built again here, there is no file to ask for */
+        if (TutorialFilms.isTutorial(id))
+        {
+            this.openTutorial(id);
+
+            return;
+        }
+
+        super.requestData(id);
+    }
+
+    private void confirmUnpackTutorial()
+    {
+        if (!this.isTutorial())
+        {
+            return;
+        }
+
+        UIOverlay.addOverlay(this.getContext(), new mchorse.bbs_mod.ui.framework.elements.overlay.UIConfirmOverlayPanel(
+            UIKeys.FILM_TUTORIAL_UNPACK_TITLE, UIKeys.FILM_TUTORIAL_UNPACK_MESSAGE, (confirmed) ->
+        {
+            if (confirmed)
+            {
+                this.unpackTutorial();
+            }
+        }));
+    }
+
+    /**
+     * "Unpack Film": the open tutorial becomes an ordinary film of the author's, a copy of every
+     * value it holds (replays, keyframes, forms with their physics, camera, effects and action
+     * clips) under a free name next to their other films. The tutorial itself is untouched and
+     * stays in the list.
+     */
+    private void unpackTutorial()
+    {
+        TutorialFilms.Tutorial tutorial = this.data == null ? null : TutorialFilms.get(this.data.getId());
+
+        if (tutorial == null)
+        {
+            return;
+        }
+
+        String base = "tutorial_" + tutorial.key();
+        String name = base;
+
+        for (int i = 2; this.overlay.namesList.hasInHierarchy(name); i++)
+        {
+            name = base + "_" + i;
+        }
+
+        String tutorialId = this.data.getId();
+        Film copy = new Film();
+
+        copy.fromData(this.data.toData());
+        copy.setId(name);
+        copy.stampCreationTimeNow();
+
+        this.overlay.namesList.addFile(name);
+        this.fill(copy);
+        this.forceSave();
+        this.tabs.forgetId(tutorialId);
+
+        if (this.getContext() != null)
+        {
+            this.getContext().notifySuccess(UIKeys.FILM_TUTORIAL_UNPACKED.format(name));
+        }
     }
 
     @Override
@@ -1715,7 +1838,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
     /** Send a replay (index) or the whole list (-1) to the server, which writes it and passes it on. */
     public void sendReplaySync(int index)
     {
-        if (!this.isSyncingReplays())
+        if (!this.isSyncingReplays() || this.isTutorial())
         {
             return;
         }
@@ -1885,7 +2008,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
     /** Nothing here may be written: another player has the film open, or the server lets this player only look. */
     public boolean isFilmReadOnly()
     {
-        return this.getFilmLock() != null || (this.data != null && !StudioLocks.canWrite());
+        return this.isTutorial() || this.getFilmLock() != null || (this.data != null && !StudioLocks.canWrite());
     }
 
     @Override
@@ -2741,7 +2864,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
      */
     public void captureFilmThumbnail()
     {
-        if (this.data == null || this.data.getId() == null || this.data.getId().trim().isEmpty() || MinecraftClient.getInstance().world == null)
+        if (this.isTutorial() || this.data == null || this.data.getId() == null || this.data.getId().trim().isEmpty() || MinecraftClient.getInstance().world == null)
         {
             return;
         }
@@ -2881,6 +3004,12 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
     @Override
     public void forceSave()
     {
+        /* A tutorial is read only, whichever way a save is asked for */
+        if (this.isTutorial())
+        {
+            return;
+        }
+
         super.forceSave();
         this.captureFilmThumbnail();
     }
@@ -3076,6 +3205,17 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         if (this.duplicateFilm != null)
         {
             this.duplicateFilm.setEnabled(data != null);
+        }
+
+        if (this.unpackTutorial != null)
+        {
+            boolean tutorial = data != null && TutorialFilms.isTutorial(data.getId());
+
+            if (this.unpackTutorial.isVisible() != tutorial)
+            {
+                this.unpackTutorial.setVisible(tutorial);
+                this.actions().sync();
+            }
         }
 
         this.actionEditor.setClips(null);
@@ -4101,6 +4241,6 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
     @Override
     protected boolean canSave(UIContext context)
     {
-        return !this.recorder.isRecording();
+        return !this.recorder.isRecording() && !this.isTutorial();
     }
 }

@@ -785,6 +785,14 @@ public class UIKeys
     public static final IKey FILM_HUB_CREATE_FILM = L10n.lang("bbs.ui.film.hub.create_film");
     public static final IKey HUB_CREATE_PROJECT = L10n.lang("bbs.ui.hub.create_project");
     public static final IKey FILM_HUB_RECENT_PROJECTS = L10n.lang("bbs.ui.film.hub.recent_projects");
+    public static final IKey FILM_TUTORIALS_TITLE = L10n.lang("bbs.ui.film.tutorials.title");
+    public static final IKey FILM_TUTORIALS_HINT = L10n.lang("bbs.ui.film.tutorials.hint");
+    public static final IKey FILM_TUTORIAL_BADGE = L10n.lang("bbs.ui.film.tutorials.badge");
+    public static final IKey FILM_TUTORIAL_OPENED = L10n.lang("bbs.ui.film.tutorials.opened");
+    public static final IKey FILM_TUTORIAL_UNPACK_TOOLTIP = L10n.lang("bbs.ui.film.tutorials.unpack");
+    public static final IKey FILM_TUTORIAL_UNPACK_TITLE = L10n.lang("bbs.ui.film.tutorials.unpack_title");
+    public static final IKey FILM_TUTORIAL_UNPACK_MESSAGE = L10n.lang("bbs.ui.film.tutorials.unpack_message");
+    public static final IKey FILM_TUTORIAL_UNPACKED = L10n.lang("bbs.ui.film.tutorials.unpacked");
     public static final IKey FILM_HUB_ALL = L10n.lang("bbs.ui.film.hub.all");
     public static final IKey FILM_HUB_EMPTY_RECENT = L10n.lang("bbs.ui.film.hub.empty_recent");
     public static final IKey FILM_HUB_NO_SEARCH_RESULTS = L10n.lang("bbs.ui.film.hub.no_search_results");

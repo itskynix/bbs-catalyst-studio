@@ -69,9 +69,15 @@ public class UIFilmUndoHandler extends UIFormUndoHandler
 
         if (this.actionsTimer.checkReset())
         {
-            for (BaseValue syncData : this.syncData)
+            UIFilmPanel panel = (UIFilmPanel) this.uiElement;
+
+            /* A tutorial film is never sent anywhere: the server has no film of that id to change */
+            if (!panel.isTutorial())
             {
-                ClientNetwork.sendSyncData(((UIFilmPanel) this.uiElement).getData().getId(), syncData);
+                for (BaseValue syncData : this.syncData)
+                {
+                    ClientNetwork.sendSyncData(panel.getData().getId(), syncData);
+                }
             }
 
             this.syncData.clear();

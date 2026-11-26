@@ -3,6 +3,7 @@ package mchorse.bbs_mod.ui.film;
 import mchorse.bbs_mod.BBSMod;
 import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.BBSSettings;
+import mchorse.bbs_mod.film.tutorials.TutorialFilms;
 import mchorse.bbs_mod.graphics.texture.Texture;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.resources.Link;
@@ -72,6 +73,12 @@ public class UIFilmHubScreen extends UILandingScreen
     private Set<String> known;
     private String searchQuery = "";
 
+    /** The tutorial list's width on a wide screen; it narrows with the card, see {@link #resize}. */
+    private static final int TUTORIALS_WIDTH = 200;
+
+    private final UIElement tutorialsPanel;
+    private final UIScrollView tutorialsList;
+
     public UIFilmHubScreen(UIFilmPanel filmPanel)
     {
         super(filmPanel);
@@ -137,7 +144,7 @@ public class UIFilmHubScreen extends UILandingScreen
                 return false;
             }
         };
-        this.projectsPanel.relative(this.card).x(8).y(126).w(1F, -16).h(1F, -134);
+        this.projectsPanel.relative(this.card).x(TUTORIALS_WIDTH + 16).y(126).w(1F, -(TUTORIALS_WIDTH + 24)).h(1F, -134);
         this.projectsPanel.add(new UIRenderable((context) ->
         {
             Area a = this.projectsPanel.area;
@@ -174,7 +181,37 @@ public class UIFilmHubScreen extends UILandingScreen
         this.projectsPanel.add(this.recentTitle, openFolderBtn, refreshBtn, this.cardsScroll);
         this.projectsPanel.add(new UIRenderable(this::renderEmptyHint));
 
-        this.card.add(header, this.searchContainer, this.createBtn, badge, this.projectsPanel);
+        /* 5. Tutorial films on the left: a plain list, no previews for now */
+        this.tutorialsPanel = new UIElement();
+        this.tutorialsPanel.relative(this.card).x(8).y(126).w(TUTORIALS_WIDTH).h(1F, -134);
+        this.tutorialsPanel.add(new UIRenderable((context) ->
+        {
+            Area a = this.tutorialsPanel.area;
+            int border = BBSSettings.color(BBSSettings.dividerColor(), Colors.A12);
+
+            context.batcher.dropShadow(a.x, a.y, a.ex(), a.ey(), 8, Colors.A50, 0);
+            context.batcher.box(a.x, a.y, a.ex(), a.ey(), 0xf00c1017);
+            context.batcher.outline(a.x, a.y, a.ex(), a.ey(), border);
+        }));
+
+        UILabel tutorialsTitle = UI.label(UIKeys.FILM_TUTORIALS_TITLE).color(Colors.setA(Colors.WHITE, 0.65F));
+
+        tutorialsTitle.labelAnchor(0, 0.5F);
+        tutorialsTitle.tooltip(UIKeys.FILM_TUTORIALS_HINT);
+        tutorialsTitle.relative(this.tutorialsPanel).xy(10, 5).w(1F, -20).h(16);
+
+        this.tutorialsList = new UIScrollView();
+        this.tutorialsList.relative(this.tutorialsPanel).x(4).y(24).w(1F, -8).h(1F, -28);
+        this.tutorialsList.column(3).vertical().stretch().scroll().padding(2);
+
+        for (TutorialFilms.Tutorial tutorial : TutorialFilms.all())
+        {
+            this.tutorialsList.add(new UITutorialRow(this, tutorial));
+        }
+
+        this.tutorialsPanel.add(tutorialsTitle, this.tutorialsList);
+
+        this.card.add(header, this.searchContainer, this.createBtn, badge, this.tutorialsPanel, this.projectsPanel);
         this.add(this.card);
 
         this.refresh();
@@ -314,9 +351,14 @@ public class UIFilmHubScreen extends UILandingScreen
     @Override
     public void resize()
     {
-        int maxW = Math.min(540, Math.max(320, this.area.w - 40));
-        int maxH = Math.min(410, Math.max(250, this.area.h - 30));
+        /* Wide enough for the tutorial list on the left and three project cards a row on the right */
+        int maxW = Math.min(720, Math.max(360, this.area.w - 40));
+        int maxH = Math.min(470, Math.max(250, this.area.h - 30));
+        int tutorialsW = Math.max(130, Math.min(TUTORIALS_WIDTH, (int) (maxW * 0.3F)));
+
         this.card.wh(maxW, maxH);
+        this.tutorialsPanel.w(tutorialsW);
+        this.projectsPanel.x(tutorialsW + 16).w(1F, -(tutorialsW + 24));
 
         int searchW = Math.min(360, maxW - 32);
         this.searchContainer.w(searchW);
@@ -500,6 +542,52 @@ public class UIFilmHubScreen extends UILandingScreen
         else
         {
             mc.execute(() -> invalidateThumbnail(filmId));
+        }
+    }
+
+    /**
+     * One tutorial film in the list on the left: its icon, title and the start of what it shows.
+     * Clicked, it opens the film read only in the editor.
+     */
+    public static class UITutorialRow extends UIClickable<UITutorialRow>
+    {
+        private final TutorialFilms.Tutorial tutorial;
+
+        public UITutorialRow(UIFilmHubScreen hub, TutorialFilms.Tutorial tutorial)
+        {
+            super((r) ->
+            {
+                UIUtils.playClick();
+                hub.filmPanel.openTutorial(tutorial.id());
+            });
+
+            this.tutorial = tutorial;
+            this.h(34);
+            this.tooltip(tutorial.description(), 220, mchorse.bbs_mod.utils.Direction.RIGHT);
+        }
+
+        @Override
+        protected UITutorialRow get()
+        {
+            return this;
+        }
+
+        @Override
+        protected void renderSkin(UIContext context)
+        {
+            Area a = this.area;
+            int primary = BBSSettings.primaryColor.get();
+            FontRenderer font = context.batcher.getFont();
+
+            context.batcher.box(a.x, a.y, a.ex(), a.ey(), this.hover ? 0xe01a2232 : 0xc010141d);
+            context.batcher.outline(a.x, a.y, a.ex(), a.ey(), this.hover ? (Colors.A100 | primary) : 0x2affffff);
+            context.batcher.icon(this.tutorial.icon(), this.hover ? (Colors.A100 | primary) : Colors.setA(Colors.WHITE, 0.7F), a.x + 12, a.my(), 0.5F, 0.5F);
+
+            int textX = a.x + 24;
+            int textW = a.w - 30;
+
+            context.batcher.text(font.limitToWidth(this.tutorial.title().get(), textW), textX, a.y + 6, this.hover ? Colors.WHITE : Colors.setA(Colors.WHITE, 0.9F), false);
+            context.batcher.text(font.limitToWidth(this.tutorial.description().get(), textW), textX, a.y + 8 + font.getHeight(), Colors.setA(Colors.WHITE, 0.45F), false);
         }
     }
 
