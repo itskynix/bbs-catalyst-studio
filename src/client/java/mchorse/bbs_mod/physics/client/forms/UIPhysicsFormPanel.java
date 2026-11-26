@@ -34,9 +34,13 @@ import mchorse.bbs_mod.physics.client.ragdoll.UIRagdollSection;
 import mchorse.bbs_mod.physics.forms.FormBody;
 import mchorse.bbs_mod.physics.forms.PhysicsForms;
 import mchorse.bbs_mod.physics.forms.PhysicsType;
+import mchorse.bbs_mod.physics.ragdoll.ActiveKnob;
+import mchorse.bbs_mod.physics.ragdoll.ActiveRagdolls;
 import mchorse.bbs_mod.physics.ragdoll.FormRagdoll;
 import mchorse.bbs_mod.physics.ragdoll.FormRagdolls;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.UnaryOperator;
 
 /** Selects one physics type and edits its settings without changing collision markup. */
@@ -82,6 +86,10 @@ public class UIPhysicsFormPanel extends UIFormPanel<Form>
     public UITrackpad muscleDamping;
     private final UIElement musclesRow;
     public UIToggle ragdollSelfCollide;
+
+    /** Active physics: one pad per knob, in {@link ActiveKnob} order, and the section they sit in */
+    private final UITrackpad[] activePads = new UITrackpad[ActiveKnob.values().length];
+    private final UIElement activeSection;
 
     private final UIRagdollSection ragdollBones;
 
@@ -218,6 +226,35 @@ public class UIPhysicsFormPanel extends UIFormPanel<Form>
         this.ragdollAuthorityRow = UI.labelRow(PhysicsKeys.AUTHORITY, this.ragdollAuthority);
 
         this.ragdollBones = new UIRagdollSection(() -> this.options.resize());
+
+        List<UIElement> activeRows = new ArrayList<>();
+
+        for (ActiveKnob knob : ActiveKnob.values())
+        {
+            UITrackpad pad = new UITrackpad((v) ->
+            {
+                if (!this.syncing && this.form != null)
+                {
+                    ActiveRagdolls.set(this.form, knob, v.floatValue());
+                }
+            });
+
+            pad.limit(knob.min, knob.max);
+
+            switch (knob)
+            {
+                case FALL_ANGLE -> pad.increment(5D).values(1D, 0.5D, 5D);
+                case ITERATIONS -> pad.integer().increment(1D);
+                case SLEEP_SPEED -> pad.increment(0.01D).values(0.01D, 0.001D, 0.05D);
+                default -> pad.increment(0.05D);
+            }
+
+            pad.tooltip(PhysicsKeys.activeTooltip(knob));
+            this.activePads[knob.ordinal()] = pad;
+            activeRows.add(UI.labelRow(PhysicsKeys.activeLabel(knob), pad));
+        }
+
+        this.activeSection = PhysicsFields.section(PhysicsKeys.ACTIVE_TITLE, "physics.ragdoll.active", activeRows.toArray(new UIElement[0]));
 
         this.chainAuthority = PhysicsFields.authority(this::setAuthority);
         this.chainAuthorityRow = UI.labelRow(PhysicsKeys.AUTHORITY, this.chainAuthority);
@@ -393,6 +430,12 @@ public class UIPhysicsFormPanel extends UIFormPanel<Form>
         this.muscles.setValue(ragdollConfig.muscles());
         this.muscleDamping.setValue(ragdollConfig.muscleDamping());
         this.ragdollSelfCollide.setValue(ragdollConfig.selfCollide());
+
+        for (ActiveKnob knob : ActiveKnob.values())
+        {
+            this.activePads[knob.ordinal()].setValue(ActiveRagdolls.get(this.form, knob));
+        }
+
         this.bodyAuthority.setValue(authority);
         this.ragdollAuthority.setValue(authority);
         this.chainAuthority.setValue(authority);
@@ -436,6 +479,7 @@ public class UIPhysicsFormPanel extends UIFormPanel<Form>
                 this.ragdollAuthorityRow, this.ragdollMassRow, this.ragdollDampingRow,
                 this.ragdollGravityRow, this.musclesRow));
             this.options.add(this.ragdollFrictionRow, this.ragdollSelfCollide);
+            this.options.add(this.activeSection);
             this.options.add(this.ragdollBones);
         }
         else if (chain)

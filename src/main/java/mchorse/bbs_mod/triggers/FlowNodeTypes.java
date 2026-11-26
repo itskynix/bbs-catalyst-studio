@@ -201,6 +201,9 @@ public class FlowNodeTypes
         add("set_form", Kind.CINEMATIC).in("exec").out("then").data("player", "entity", "@entity").data("form", "string", "{id:\"bbs:model\",model:\"player/steve\"}");
         add("clear_form", Kind.CINEMATIC).in("exec").out("then").data("player", "entity", "@entity");
         add("model_block_state", Kind.CINEMATIC).in("exec").out("then").data("position", "vec3", "0 0 0").data("state", "string", "idle");
+        add("set_active_physics", Kind.CINEMATIC).in("exec").out("then").data("player", "entity", "@entity").data("film", "string", "").data("strength", "float", "1");
+        add("reset_active_physics", Kind.CINEMATIC).in("exec").out("then").data("player", "entity", "@entity").data("film", "string", "");
+        add("physics_stagger", Kind.CINEMATIC).in("exec").out("then").data("player", "entity", "@entity").data("film", "string", "").data("amount", "float", "0.6").data("knockdown", "boolean", "false");
         add("get_form", Kind.CINEMATIC).data("entity", "entity", "@entity").value("form_id", "string").value("form", "string");
 
         /* Debug */

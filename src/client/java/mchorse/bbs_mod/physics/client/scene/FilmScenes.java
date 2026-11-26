@@ -875,6 +875,36 @@ public class FilmScenes
         handover = null;
     }
 
+    /**
+     * A trigger flow changed the active physics of a film playing here ({@code filmId}, or every
+     * playing film when empty). Pinned to the tick each scene's film is on and simulated again from
+     * there, so it becomes part of that film's recording; the editor's scene is left alone.
+     *
+     * @return how many scenes took it
+     */
+    public static int applyActive(String filmId, ActiveSceneState.Event event)
+    {
+        int taken = 0;
+
+        for (FilmScene scene : SCENES.values())
+        {
+            Film film = scene.getFilm();
+
+            if (scene.isEditor() || film == null || (!filmId.isEmpty() && !filmId.equals(film.getId())))
+            {
+                continue;
+            }
+
+            int tick = Math.max(0, scene.getFilmTick());
+
+            scene.getActiveState().add(tick, event);
+            scene.invalidateFrom(tick, false);
+            taken += 1;
+        }
+
+        return taken;
+    }
+
     public static int getSceneCount()
     {
         return SCENES.size();

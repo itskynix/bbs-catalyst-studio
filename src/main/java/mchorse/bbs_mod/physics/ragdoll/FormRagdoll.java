@@ -109,6 +109,12 @@ public record FormRagdoll(boolean enabled, Set<String> excluded, Map<String, Rag
         return new FormRagdoll(this.enabled, this.excluded, this.joints, this.mass, this.damping, this.friction, this.gravity, this.selfCollide, this.muscles, muscleDamping);
     }
 
+    /** Both muscle numbers at once — what the active physics sets the tone to, in one object a tick rather than two. */
+    public FormRagdoll withMuscleTone(float muscles, float muscleDamping)
+    {
+        return new FormRagdoll(this.enabled, this.excluded, this.joints, this.mass, this.damping, this.friction, this.gravity, this.selfCollide, muscles, muscleDamping);
+    }
+
     /** Whether the ragdoll claims {@code bone}, assuming the markup gave it a shape at all. */
     public boolean isPart(String bone)
     {

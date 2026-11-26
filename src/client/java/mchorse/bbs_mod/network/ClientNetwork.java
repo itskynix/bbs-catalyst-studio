@@ -91,6 +91,7 @@ public class ClientNetwork
         BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_STUDIO_LOCKS, (client, buf) -> handleStudioLocks(client, buf));
         BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_RECORDING_DENIED, (client, buf) -> handleRecordingDenied(client, buf));
         BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_REPLAY_SYNC, (client, buf) -> handleReplaySync(client, buf));
+        BBSClientNetworking.registerReceiver(ServerNetwork.CLIENT_ACTIVE_PHYSICS, (client, buf) -> handleActivePhysics(client, buf));
     }
 
     /** Another player changed a replay (index) or the list of replays (-1) of a film: an open one takes it in */
@@ -254,6 +255,17 @@ public class ClientNetwork
                 }
             });
         });
+    }
+
+    /** A trigger flow changed the active physics of a playing film: pinned to the tick its scene is on */
+    private static void handleActivePhysics(MinecraftClient client, PacketByteBuf buf)
+    {
+        String filmId = buf.readString();
+        float strength = buf.readFloat();
+        float stagger = buf.readFloat();
+        boolean knockdown = buf.readBoolean();
+
+        client.execute(() -> mchorse.bbs_mod.physics.client.scene.FilmScenes.applyActive(filmId, new mchorse.bbs_mod.physics.client.scene.ActiveSceneState.Event(strength, stagger, knockdown)));
     }
 
     private static void handleStopFilmPacket(MinecraftClient client, PacketByteBuf buf)

@@ -239,6 +239,32 @@ public class PhysicsKeys
     public static final IKey RAGDOLL_FRICTION_TOOLTIP = L10n.lang("bbs_physics.forms.ragdoll.friction_tooltip");
     public static final IKey RAGDOLL_MUSCLES = L10n.lang("bbs_physics.forms.ragdoll.muscles");
     public static final IKey RAGDOLL_MUSCLES_TOOLTIP = L10n.lang("bbs_physics.forms.ragdoll.muscles_tooltip");
+
+    /* Active physics: the live controller on a ragdoll */
+    public static final IKey ACTIVE_TITLE = L10n.lang("bbs_physics.forms.active.title");
+    private static final IKey[] ACTIVE_LABELS = new IKey[mchorse.bbs_mod.physics.ragdoll.ActiveKnob.values().length];
+    private static final IKey[] ACTIVE_TOOLTIPS = new IKey[ACTIVE_LABELS.length];
+
+    static
+    {
+        for (mchorse.bbs_mod.physics.ragdoll.ActiveKnob knob : mchorse.bbs_mod.physics.ragdoll.ActiveKnob.values())
+        {
+            String id = knob.name().toLowerCase(java.util.Locale.ROOT);
+
+            ACTIVE_LABELS[knob.ordinal()] = L10n.lang("bbs_physics.forms.active." + id);
+            ACTIVE_TOOLTIPS[knob.ordinal()] = L10n.lang("bbs_physics.forms.active." + id + "_tooltip");
+        }
+    }
+
+    public static IKey activeLabel(mchorse.bbs_mod.physics.ragdoll.ActiveKnob knob)
+    {
+        return ACTIVE_LABELS[knob.ordinal()];
+    }
+
+    public static IKey activeTooltip(mchorse.bbs_mod.physics.ragdoll.ActiveKnob knob)
+    {
+        return ACTIVE_TOOLTIPS[knob.ordinal()];
+    }
     public static final IKey RAGDOLL_MUSCLE_DAMPING_TOOLTIP = L10n.lang("bbs_physics.forms.ragdoll.muscle_damping_tooltip");
     public static final IKey RAGDOLL_SELF_COLLIDE = L10n.lang("bbs_physics.forms.ragdoll.self_collide");
     public static final IKey RAGDOLL_SELF_COLLIDE_TOOLTIP = L10n.lang("bbs_physics.forms.ragdoll.self_collide_tooltip");

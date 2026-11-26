@@ -635,6 +635,21 @@ public class FlowRuntime
                 FlowBBS.clearForm(run.entity, this.input(run, node, "player", 0));
                 this.out(run, node, "then");
             }
+            case "set_active_physics" ->
+            {
+                FlowBBS.setActivePhysics(run.entity, this.input(run, node, "player", 0), this.input(run, node, "film", 0), this.input(run, node, "strength", 0));
+                this.out(run, node, "then");
+            }
+            case "reset_active_physics" ->
+            {
+                FlowBBS.resetActivePhysics(run.entity, this.input(run, node, "player", 0), this.input(run, node, "film", 0));
+                this.out(run, node, "then");
+            }
+            case "physics_stagger" ->
+            {
+                FlowBBS.physicsStagger(run.entity, this.input(run, node, "player", 0), this.input(run, node, "film", 0), this.input(run, node, "amount", 0), this.input(run, node, "knockdown", 0));
+                this.out(run, node, "then");
+            }
             case "model_block_state" ->
             {
                 FlowBBS.modelBlockState(run.entity, this.input(run, node, "position", 0), this.input(run, node, "state", 0));

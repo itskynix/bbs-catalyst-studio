@@ -248,6 +248,9 @@ public class FilmScene implements AutoCloseable
      */
     private int staleFrom = FRESH;
     private final boolean editor;
+
+    /** The active ragdolls' shared tick: their budget and the changes a trigger flow sent — see {@link ActiveSceneState}. */
+    private final ActiveSceneState activeState = new ActiveSceneState();
     private boolean calculationRequested;
     private boolean calculationComplete;
     private int requestedEnd;
@@ -604,6 +607,11 @@ public class FilmScene implements AutoCloseable
     List<SceneActor> getActors()
     {
         return this.actors;
+    }
+
+    public ActiveSceneState getActiveState()
+    {
+        return this.activeState;
     }
 
     /** The film this scene simulates — the debug overlay reads its impulse clips to mark them. */
@@ -1289,6 +1297,7 @@ public class FilmScene implements AutoCloseable
     {
         this.step += 1;
         this.posed = tick;
+        this.activeState.begin(tick);
         this.cast.applyReached(tick);
         this.clips.prepareDeaths(this.cast, tick);
 

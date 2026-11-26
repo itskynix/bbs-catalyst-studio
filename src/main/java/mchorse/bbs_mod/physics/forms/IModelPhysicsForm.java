@@ -40,4 +40,7 @@ public interface IModelPhysicsForm
 
     /** One keyframable number of the ragdoll — see {@link PhysicsKnobValue}. */
     PhysicsKnobValue bbs_physics$getRagdollKnob(RagdollKnob knob);
+
+    /** One keyframable number of the ragdoll's active physics — see {@link mchorse.bbs_mod.physics.ragdoll.ActiveKnob}. */
+    PhysicsKnobValue bbs_physics$getActiveKnob(mchorse.bbs_mod.physics.ragdoll.ActiveKnob knob);
 }

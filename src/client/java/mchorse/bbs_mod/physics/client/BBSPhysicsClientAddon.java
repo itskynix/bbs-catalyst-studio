@@ -116,6 +116,12 @@ public class BBSPhysicsClientAddon implements BBSAddonMod
             });
         }
 
+        for (mchorse.bbs_mod.physics.ragdoll.ActiveKnob knob : mchorse.bbs_mod.physics.ragdoll.ActiveKnob.values())
+        {
+            event.register(knob.id, Icons.LIMB, 0xe0a84a);
+            event.registerLabel(knob.id, PhysicsKeys.activeLabel(knob));
+        }
+
         for (ChainKnob knob : ChainKnob.values())
         {
             event.register(knob.id, Icons.CURVES, 0x58bec9);

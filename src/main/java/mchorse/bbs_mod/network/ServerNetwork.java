@@ -86,6 +86,8 @@ public class ServerNetwork
     public static final Identifier CLIENT_RECORDING_DENIED = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c22"));
     /** A replay (index), or the whole list of replays (-1), of a film changed by another player */
     public static final Identifier CLIENT_REPLAY_SYNC = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c23"));
+    /** A trigger flow changed the active physics of a film the player is watching. */
+    public static final Identifier CLIENT_ACTIVE_PHYSICS = BBSNetworking.s2c(Ids.of(BBSMod.MOD_ID, "c24"));
 
     public static final Identifier SERVER_MODEL_BLOCK_FORM_PACKET = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s1"));
     public static final Identifier SERVER_MODEL_BLOCK_TRANSFORMS_PACKET = BBSNetworking.c2s(Ids.of(BBSMod.MOD_ID, "s2"));
@@ -1185,6 +1187,23 @@ public class ServerNetwork
         {
             e.printStackTrace();
         }
+    }
+
+    /**
+     * Changes the active physics of a film playing for the player, every playing film when
+     * {@code filmId} is empty: {@code strength} from now on (NaN keeps it, below 0 goes back to the
+     * form's own), and a one-off stagger or knockdown.
+     */
+    public static void sendActivePhysics(ServerPlayerEntity player, String filmId, float strength, float stagger, boolean knockdown)
+    {
+        PacketByteBuf buf = PacketByteBufs.create();
+
+        buf.writeString(filmId);
+        buf.writeFloat(strength);
+        buf.writeFloat(stagger);
+        buf.writeBoolean(knockdown);
+
+        BBSNetworking.send(player, CLIENT_ACTIVE_PHYSICS, buf);
     }
 
     public static void sendStopFilm(ServerPlayerEntity player, String filmId)

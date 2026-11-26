@@ -72,6 +72,9 @@ public final class PhysicsLayers
     public static final int OBJECT_LAYERS = 6;
 
     private static final int BP_STATIC = 0;
+
+    /** The broad phase layer the static world sits in, for a query that should only see the ground. */
+    public static final int BROAD_PHASE_STATIC = BP_STATIC;
     private static final int BP_MOVING = 1;
     private static final int BROAD_PHASE_LAYERS = 2;
 

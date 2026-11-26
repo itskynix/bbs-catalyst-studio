@@ -149,6 +149,45 @@ public final class FlowBBS
         return morph == null ? null : morph.getForm();
     }
 
+    /* Active physics: the live ragdoll controller of the films a player is watching */
+
+    /**
+     * Sets the active physics strength of every active ragdoll in a film playing for the player
+     * (every playing film when {@code film} is empty), from the tick it arrives on: 0 is the passive
+     * ragdoll, 1 the full live response. The player's game pins it to that film tick and simulates
+     * on from there, so the film plays it out the same each time it passes it.
+     */
+    public static void setActivePhysics(Entity source, Object player, Object film, Object strength)
+    {
+        float value = (float) Math.max(0D, Math.min(1D, FlowValues.parse(text(strength), 1D)));
+
+        for (ServerPlayerEntity target : players(source, player))
+        {
+            ServerNetwork.sendActivePhysics(target, text(film), value, 0F, false);
+        }
+    }
+
+    /** Gives the film's active ragdolls back their own strength, as their forms and keyframes have it. */
+    public static void resetActivePhysics(Entity source, Object player, Object film)
+    {
+        for (ServerPlayerEntity target : players(source, player))
+        {
+            ServerNetwork.sendActivePhysics(target, text(film), -1F, 0F, false);
+        }
+    }
+
+    /** Staggers the film's active ragdolls by {@code amount} (0 to 1) on the tick it arrives on, and knocks them down when {@code knockdown} is true. */
+    public static void physicsStagger(Entity source, Object player, Object film, Object amount, Object knockdown)
+    {
+        float value = (float) Math.max(0D, Math.min(1D, FlowValues.parse(text(amount), 0.6D)));
+        boolean down = FlowValues.truthy(text(knockdown));
+
+        for (ServerPlayerEntity target : players(source, player))
+        {
+            ServerNetwork.sendActivePhysics(target, text(film), Float.NaN, value, down);
+        }
+    }
+
     /* Model blocks */
 
     /** Plays an animation state on the model block at a position, for every player within 64 blocks. */

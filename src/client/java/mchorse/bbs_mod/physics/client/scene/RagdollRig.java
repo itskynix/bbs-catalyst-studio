@@ -42,6 +42,7 @@ import mchorse.bbs_mod.physics.engine.PhysicsWorld;
 import mchorse.bbs_mod.physics.engine.RigMemory;
 import mchorse.bbs_mod.physics.engine.JoltRelease;
 import mchorse.bbs_mod.physics.forms.PhysicsForms;
+import mchorse.bbs_mod.physics.ragdoll.ActiveKnob;
 import mchorse.bbs_mod.physics.ragdoll.FormRagdoll;
 import mchorse.bbs_mod.physics.ragdoll.FormRagdolls;
 import mchorse.bbs_mod.physics.ragdoll.RagdollJoint;
@@ -281,6 +282,17 @@ public class RagdollRig implements SceneRig
     private boolean muscleMisframed;
 
     private final Matrix4f poseFrame = new Matrix4f();
+
+    /* Active physics: the controller, the trunk it reads, and what it is handed each tick */
+    private static final Quaternionf BUILD_POSE = new Quaternionf();
+    private final ActiveRagdoll active = new ActiveRagdoll();
+    private int trunkIndex = -2;
+    private int[] partIds;
+    private int lastIterations = -1;
+    private final Quaternionf trunkTarget = new Quaternionf();
+    private boolean trunkTargetValid;
+    private final Vector3f pushVelocity = new Vector3f();
+    private final Quaternionf inverseParent = new Quaternionf();
 
     private RecordedFrame frames;
 
@@ -680,7 +692,7 @@ public class RagdollRig implements SceneRig
      * <p>Only joints whose two ends the pose can place; a joint on a torn bone is left alone, its
      * target being the last thing the head wants after coming off.</p>
      */
-    private void aimMuscles(MatrixCache matrices, Matrix4f actorWorld, float strength)
+    private void aimMuscles(MatrixCache matrices, Matrix4f actorWorld, float strength, float brace)
     {
         if (strength <= 0F || matrices == null)
         {
@@ -710,12 +722,19 @@ public class RagdollRig implements SceneRig
             /* target = toParent⁻¹ · (parent⁻¹ · child) · toChild — Jolt's own SetTargetOrientationBS,
              * which this binding does not expose, written out. */
             this.target.set(joint.toParent).conjugate()
-                .mul(this.parentRotation.conjugate(new Quaternionf()).mul(this.childRotation))
+                .mul(this.parentRotation.conjugate(this.inverseParent).mul(this.childRotation))
                 .mul(joint.toChild);
 
             if (!PhysicsMath.finite(this.target.w))
             {
                 continue;
+            }
+
+            /* The fall reflex: the limbs lean from the animated pose towards the one the ragdoll was
+             * built in — identity in the joint's own space — as far as the brace says */
+            if (brace > 0F)
+            {
+                this.target.slerp(BUILD_POSE, Math.min(1F, brace));
             }
 
             this.targetQuat.set(this.target.x, this.target.y, this.target.z, this.target.w);
@@ -840,11 +859,22 @@ public class RagdollRig implements SceneRig
 
         /* Inside a physics field that takes bodies from the animation: limp and free, so it floats and is pulled */
         boolean floated = !reset && !this.dead && scene != null && this.inField(physics.getBodies(), scene);
+        BodyInterface bodies = physics.getBodies();
+        Part trunk = this.trunk();
+        int trunkId = trunk == null ? -1 : trunk.id;
+
+        /* Active physics decides the hold and the muscle tone before anything is driven; off, it changes nothing */
+        boolean active = this.active.begin(this.form, scene == null ? null : scene.getActiveState(), bodies, trunkId,
+            !this.kinematic && !reset, !reset && !this.dead && !floated, config.muscles(), config.muscleDamping());
+
+        if (active)
+        {
+            config = config.withMuscleTone(this.active.tone, this.active.toneDamping);
+        }
 
         if (this.dead || floated) config = config.withMuscles(0F);
         this.applySettings(physics, config);
-
-        BodyInterface bodies = physics.getBodies();
+        this.applyIterations(active ? (int) this.active.knob(ActiveKnob.ITERATIONS) : 0);
 
         /* Before anything else on a restart: the torn bones go back on, so the placement below
          * stands a whole character on its keyframes rather than one missing its head. */
@@ -854,6 +884,11 @@ public class RagdollRig implements SceneRig
         }
 
         float authority = floated ? 0F : this.authority();
+
+        if (active)
+        {
+            authority *= this.active.authorityScale;
+        }
         boolean wanted = authority >= 1F;
         boolean put = reset;
 
@@ -889,8 +924,10 @@ public class RagdollRig implements SceneRig
 
         if (!this.kinematic)
         {
-            this.aimMuscles(matrices, actorWorld, this.dead ? 0F : config.muscles());
+            this.aimMuscles(matrices, actorWorld, this.dead ? 0F : config.muscles(), active ? this.active.brace : 0F);
         }
+
+        this.trunkTargetValid = false;
 
         for (Part part : this.parts)
         {
@@ -909,6 +946,13 @@ public class RagdollRig implements SceneRig
             this.worldMatrix.set(actorWorld).mul(entry.matrix());
             this.worldMatrix.getTranslation(this.translation);
             this.worldMatrix.getUnnormalizedRotation(this.orientation);
+
+            if (part == trunk)
+            {
+                /* What the balance holds the trunk against: its animated rotation this tick */
+                this.trunkTarget.set(this.orientation).normalize();
+                this.trunkTargetValid = PhysicsMath.finite(this.trunkTarget.w);
+            }
 
             this.scratchPosition.set(
                 this.translation.x - scene.getOriginX(),
@@ -936,6 +980,112 @@ public class RagdollRig implements SceneRig
                 this.drive(bodies, part, PhysicsMath.grip(effective));
             }
         }
+
+        /* After the drives, which write velocities outright: the balance and the landing land on top of them */
+        if (active)
+        {
+            this.active.after(physics, bodies, trunkId, this.trunkTargetValid ? this.trunkTarget : null, this.partIds(), !this.kinematic);
+        }
+    }
+
+    /* Active physics */
+
+    /** The trunk: the part no joint hangs from, the one the attachment built the body around. Found once, the joints never change. */
+    private Part trunk()
+    {
+        if (this.trunkIndex == -2)
+        {
+            this.trunkIndex = -1;
+
+            Set<String> hanging = new HashSet<>();
+
+            for (Joint joint : this.joints)
+            {
+                hanging.add(joint.child);
+            }
+
+            for (int i = 0; i < this.parts.size(); i++)
+            {
+                if (!hanging.contains(this.parts.get(i).bone))
+                {
+                    this.trunkIndex = i;
+
+                    break;
+                }
+            }
+
+            if (this.trunkIndex < 0 && !this.parts.isEmpty())
+            {
+                this.trunkIndex = 0;
+            }
+        }
+
+        return this.trunkIndex < 0 ? null : this.parts.get(this.trunkIndex);
+    }
+
+    private int[] partIds()
+    {
+        if (this.partIds == null)
+        {
+            this.partIds = new int[this.parts.size()];
+
+            for (int i = 0; i < this.partIds.length; i++)
+            {
+                this.partIds[i] = this.parts.get(i).id;
+            }
+        }
+
+        return this.partIds;
+    }
+
+    /** The solver iterations the parts get: the active physics' cap, or the scene's own at 0. Pushed only when it changes. */
+    private void applyIterations(int iterations)
+    {
+        if (iterations == this.lastIterations)
+        {
+            return;
+        }
+
+        this.lastIterations = iterations;
+
+        for (Part part : this.parts)
+        {
+            part.body().getMotionProperties().setNumVelocityStepsOverride(iterations);
+            part.body().getMotionProperties().setNumPositionStepsOverride(iterations);
+        }
+    }
+
+    /** The fastest a push moves any part, in blocks per second. */
+    private float hitSpeed(BodyInterface bodies, SceneImpulse push)
+    {
+        float fastest = 0F;
+
+        for (Part part : this.parts)
+        {
+            bodies.getPosition(part.id, this.scratchPosition);
+
+            if (push.velocityAt((float) this.scratchPosition.xx(), (float) this.scratchPosition.yy(), (float) this.scratchPosition.zz(), this.pushVelocity))
+            {
+                fastest = Math.max(fastest, this.pushVelocity.length());
+            }
+        }
+
+        return fastest;
+    }
+
+    /** A hit takes a character the animation held: every part goes dynamic now, so this very push lands on it. */
+    private void releaseForHit(BodyInterface bodies)
+    {
+        for (Part part : this.parts)
+        {
+            if (!this.torn.contains(part.bone))
+            {
+                bodies.setMotionType(part.id, EMotionType.Dynamic, EActivation.Activate);
+                bodies.setObjectLayer(part.id, PhysicsLayers.MOVING);
+            }
+        }
+
+        this.kinematic = false;
     }
 
     /**
@@ -994,6 +1144,8 @@ public class RagdollRig implements SceneRig
         {
             memory.write(this.severed.contains(joint.constraint));
         }
+
+        this.active.remember(memory);
     }
 
     @Override
@@ -1029,6 +1181,9 @@ public class RagdollRig implements SceneRig
 
             joint.constraint.setEnabled(!severed);
         }
+
+        this.active.recall(memory);
+        this.lastIterations = -1;
 
         for (Part part : this.parts)
         {
@@ -1200,6 +1355,13 @@ public class RagdollRig implements SceneRig
     public void impulse(PhysicsWorld physics, SceneImpulse push)
     {
         BodyInterface bodies = physics.getBodies();
+        float speed = this.active.isOn() ? this.hitSpeed(bodies, push) : 0F;
+
+        /* With active physics a character the animation holds takes the hit instead of ignoring it */
+        if (this.kinematic && this.active.releases(speed))
+        {
+            this.releaseForHit(bodies);
+        }
 
         for (Part part : this.parts)
         {
@@ -1209,6 +1371,19 @@ public class RagdollRig implements SceneRig
             }
 
             push.apply(bodies, part.id);
+        }
+
+        if (speed > 0F && !this.kinematic)
+        {
+            Part trunk = this.trunk();
+
+            this.active.hit(speed);
+
+            if (trunk != null)
+            {
+                /* The push is accounted for here; the next tick must not read it again as a hit */
+                this.active.remember(bodies, trunk.id, true);
+            }
         }
     }
 
