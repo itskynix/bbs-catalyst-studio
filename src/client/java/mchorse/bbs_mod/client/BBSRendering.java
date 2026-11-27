@@ -644,6 +644,7 @@ public class BBSRendering
 
         BBSModClient.getVideos().startFrame();
         BBSModClient.getFilms().startRenderFrame(mc./*$ gtd*/getTickDelta()/**/);
+        mchorse.bbs_mod.recap.RecapRecorder.onRenderFrame(mc, mc./*$ gtd*/getTickDelta()/**/);
 
         UIBaseMenu menu = UIScreen.getCurrentMenu();
 
@@ -1020,7 +1021,8 @@ public class BBSRendering
 
             BBSModClient.getFilms().render(worldRenderContext);
 
-            /* Recap Studio: the recorded player, where the recording had it, and the entities around it */
+            /* Recap Studio: isolated cross-dimension stage (on servers), recorded player, and entities around it */
+            mchorse.bbs_mod.recap.RecapScene.renderStage(worldRenderContext);
             mchorse.bbs_mod.recap.RecapScene.renderActor(worldRenderContext);
             mchorse.bbs_mod.recap.RecapScene.renderEntities(worldRenderContext);
         }

@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.recap;
 
+import mchorse.bbs_mod.recap.RecapJournal;
 import mchorse.bbs_mod.recap.RecapRecord;
 import mchorse.bbs_mod.recap.RecapStore;
 import mchorse.bbs_mod.recap.RecapTime;
@@ -51,6 +52,7 @@ public class UIRecapHome extends UIElement
     private final UIButton delete;
 
     private List<RecapRecord> records = List.of();
+    private List<RecapJournal.Recoverable> recoverable = List.of();
     private RecapRecord picked;
     private int infoLimit = Integer.MAX_VALUE;
 
@@ -98,6 +100,7 @@ public class UIRecapHome extends UIElement
     {
         String keep = this.picked == null ? "" : this.picked.id;
 
+        this.recoverable = RecapJournal.scan();
         this.records = RecapStore.list();
         this.picked = this.records.isEmpty() ? null : this.records.get(0);
 
@@ -110,6 +113,11 @@ public class UIRecapHome extends UIElement
         }
 
         this.list.removeAll();
+
+        for (RecapJournal.Recoverable item : this.recoverable)
+        {
+            this.list.add(new UIRecoveryRow(item));
+        }
 
         for (RecapRecord record : this.records)
         {
@@ -269,7 +277,7 @@ public class UIRecapHome extends UIElement
         this.renderPanel(context, this.list.area.x - 1, this.list.area.y - PANEL_HEAD - 1, this.list.area.ex() + 1, this.list.area.ey() + 1, Icons.FILM, UIRecapKeys.text("home.list"));
         super.render(context);
 
-        if (this.records.isEmpty())
+        if (this.records.isEmpty() && this.recoverable.isEmpty())
         {
             this.renderEmpty(context, this.list.area);
         }
@@ -451,6 +459,65 @@ public class UIRecapHome extends UIElement
 
             context.batcher.text(font.limitToWidth(meta, infoWidth), x, a.y + 18, RecapStyle.dim(), false);
             renderStrip(context, this.record, x, a.y + 31, infoWidth - 6, 9);
+        }
+    }
+
+    /** Banner row for an interrupted recording session found in {@code .active/}. */
+    private class UIRecoveryRow extends UIElement
+    {
+        private final RecapJournal.Recoverable item;
+
+        private UIRecoveryRow(RecapJournal.Recoverable item)
+        {
+            this.item = item;
+            this.h(40);
+
+            UIButton recoverBtn = new UIButton(UIRecapKeys.key("home.recover_button"), (b) ->
+            {
+                RecapRecord restored = RecapJournal.recover(this.item);
+
+                if (restored != null)
+                {
+                    UIRecapHome.this.picked = restored;
+
+                    if (UIRecapHome.this.getContext() != null)
+                    {
+                        UIRecapHome.this.getContext().notifySuccess(UIRecapKeys.key("message.recovered"));
+                    }
+                }
+
+                UIRecapHome.this.refresh();
+            });
+            UIButton discardBtn = new UIButton(UIRecapKeys.key("home.discard_button"), (b) ->
+            {
+                RecapJournal.discard(this.item);
+                UIRecapHome.this.refresh();
+            });
+
+            recoverBtn.primary();
+            recoverBtn.relative(this).x(1F, -142).y(10).w(66).h(20);
+            discardBtn.relative(this).x(1F, -72).y(10).w(66).h(20);
+            this.add(recoverBtn, discardBtn);
+        }
+
+        @Override
+        public void render(UIContext context)
+        {
+            Area a = this.area;
+            FontRenderer font = context.batcher.getFont();
+            int accent = RecapStyle.accent();
+
+            RecapStyle.surface(context.batcher, a.x, a.y, a.ex(), a.ey(), 0, false);
+            context.batcher.box(a.x, a.y, a.x + 3, a.ey(), accent);
+            context.batcher.icon(Icons.REFRESH, accent, a.x + 14, a.my(), 0.5F, 0.5F);
+
+            int textW = Math.max(40, a.w - 172);
+            String title = UIRecapKeys.text("home.recover_title");
+            String meta = this.item.worldName() + "  ·  " + RecapTime.format(this.item.ticks());
+
+            context.batcher.text(font.limitToWidth(title, textW), a.x + 26, a.y + 7, RecapStyle.text(), false);
+            context.batcher.text(font.limitToWidth(meta, textW), a.x + 26, a.y + 21, RecapStyle.dim(), false);
+            super.render(context);
         }
     }
 }

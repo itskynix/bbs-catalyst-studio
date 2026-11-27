@@ -67,6 +67,13 @@ public class ActorEyeClientClip extends ActorEyeClip
         ReplayPov pov = replay == null ? null : replay.pov;
         float filmTick = context.ticks + context.transition;
         float replayTick = replay == null ? filmTick : replay.getTick(context.ticks) + context.transition;
+        /* Recap Studio's recorded player: its eyes are the game's own, not a bone of a model */
+        boolean recorded = entity instanceof mchorse.bbs_mod.recap.RecapActor;
+
+        if (recorded && replay != null)
+        {
+            replayTick = mchorse.bbs_mod.recap.RecapScene.povTick();
+        }
         float tick = context.relativeTick + context.transition;
         Point offset = this.offsetAt(tick);
 
@@ -78,7 +85,7 @@ public class ActorEyeClientClip extends ActorEyeClip
 
         Point angle = this.angleAt(tick);
         boolean headLook = this.headLook.get();
-        TrackerFrame frame = headLook ? TrackerFrame.resolve(((CameraClipContext) context).entities, entity, this.bone.get(),
+        TrackerFrame frame = headLook && !(recorded && "head".equals(this.bone.get())) ? TrackerFrame.resolve(((CameraClipContext) context).entities, entity, this.bone.get(),
             position.point.x, position.point.y, position.point.z, context.transition) : null;
         float body = Lerps.lerp(entity.getPrevBodyYaw(), entity.getBodyYaw(), context.transition) + 180F;
 
@@ -107,6 +114,13 @@ public class ActorEyeClientClip extends ActorEyeClip
              * looks - or, without Head Look, level and straight ahead of its body */
             x = Lerps.lerp(entity.getPrevX(), entity.getX(), context.transition) + offset.x;
             y = Lerps.lerp(entity.getPrevY(), entity.getY(), context.transition) + entity.getEyeHeight() + offset.y;
+
+            if (recorded)
+            {
+                /* The clip's own offset lifts the eyes from a head bone's pivot: already at the eyes here */
+                y -= 0.25D;
+            }
+
             z = Lerps.lerp(entity.getPrevZ(), entity.getZ(), context.transition) + offset.z;
             yaw = (headLook ? Lerps.lerp(entity.getPrevHeadYaw(), entity.getHeadYaw(), context.transition) + 180F : body) + (float) angle.y;
             pitch = (headLook ? Lerps.lerp(entity.getPrevPitch(), entity.getPitch(), context.transition) : 0F) + (float) angle.x;

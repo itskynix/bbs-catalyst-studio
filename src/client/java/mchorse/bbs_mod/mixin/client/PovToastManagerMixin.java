@@ -9,13 +9,15 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** A toast that pops up during a live take goes into the take too, on the tick it popped up */
+/** A toast that pops up during a live take or a recap recording goes into it too, on the tick it popped up */
 @Mixin(ToastManager.class)
 public class PovToastManagerMixin
 {
     @Inject(method = "add", at = @At("HEAD"))
     private void onAdd(Toast toast, CallbackInfo info)
     {
+        mchorse.bbs_mod.recap.RecapRecorder.onToast(toast);
+
         Recorder recorder = BBSModClient.getFilms() == null ? null : BBSModClient.getFilms().getRecorder();
 
         if (recorder != null && !recorder.hasNotStarted() && recorder.tick >= 0)

@@ -3,9 +3,13 @@ package mchorse.bbs_mod.recap;
 import mchorse.bbs_mod.mixin.client.RecapEntityFlagInvoker;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
+import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.text.Text;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -28,31 +32,25 @@ import java.util.zip.Inflater;
 import java.util.zip.InflaterInputStream;
 
 /**
- * Every other entity around the recorded player, tick by tick: mobs, animals, other players,
- * dropped items, arrows, minecarts, boats, armor stands, falling blocks, lit TNT and the rest, each
- * as a track of its own from the tick it was first seen to the last.
+ * Every other entity around the recorded player, tick by tick.
  *
- * <p><b>What a track keeps.</b> The kind of entity and its look, the entity's own data as the game
- * saves it with what changes every tick taken out (its colour, its variant, its items, its name),
- * kept again only when it changes; and where it was, how it was turned, its stride, its arm swing,
- * its pose, whether it burned, crouched, sprinted, swam, glided, glowed or hid, how hurt and how
- * far into dying it was, kept only on the ticks that changed something, so a sleeping cat costs one
- * frame, not one a tick.</p>
- *
- * <p><b>Played back</b> by Recap Studio as copies made from the look, in no world's list of
- * entities, placed and drawn where and as the track has them at the moment drawn
- * ({@link RecapScene#renderEntities}).</p>
+ * <p>Version 2 deduplicates entity look NBT across all tracks through {@link RecapPool}, removes
+ * the 64-look cap per entity, bounds concurrent active nearby entities ({@link #ACTIVE_MAX})
+ * instead of lifetime total tracks, and uses a lightweight equipment/state signature so
+ * {@code entity.writeNbt} only runs when visual state changed.</p>
  */
 public class RecapEntities
 {
     private static final int MAGIC = 0x52434e31;
-    private static final int VERSION = 1;
+    private static final int VERSION = 2;
 
-    /** How far from the recorded player entities are kept, and how many at most. */
+    /** Range around the recorded player and maximum concurrent nearby entities tracked per tick. */
     public static final double RANGE = 96D;
-    public static final int MAX = 384;
+    public static final int MAX = 512;
+    public static final int ACTIVE_MAX = 512;
 
-    /** The entity's own data that changes all the time and says nothing of how it looks. */
+    private static final EquipmentSlot[] EQUIPMENT_SLOTS = EquipmentSlot.values();
+
     private static final Set<String> VOLATILE = Set.of("Pos", "Motion", "Rotation", "FallDistance", "Fire", "Air", "OnGround", "PortalCooldown",
         "HurtTime", "HurtByTimestamp", "DeathTime", "Brain", "Attributes", "Age", "Health", "AbsorptionAmount", "PickupDelay", "Time", "fuse", "Fuse",
         "life", "Life", "XpP", "XpLevel", "XpTotal", "XpSeed", "foodLevel", "foodSaturationLevel", "foodExhaustionLevel", "foodTickTimer", "Score",
@@ -60,9 +58,11 @@ public class RecapEntities
         "AngryAt", "InLove", "ForcedAge", "Leash", "Passengers", "Motive", "Dimension", "playerGameType", "previousPlayerGameType", "seenCredits",
         "current_explosion_impact_pos", "ignore_fall_damage_from_current_explosion", "current_impulse_context_reset_grace_time", "SpawnX", "SpawnY", "SpawnZ");
 
+    private final RecapPool pool = new RecapPool();
+    private final List<Look> sharedLooks = new ArrayList<>();
     private final List<Track> tracks = new ArrayList<>();
 
-    /* Recording: the tracks of the entities seen last tick, by their id */
+    /* Recording: the tracks of the entities seen last tick, by their id + dimension */
     private final Map<String, Track> live = new HashMap<>();
     private int sweep;
 
@@ -82,6 +82,10 @@ public class RecapEntities
         public int last;
         public final List<Look> looks = new ArrayList<>();
 
+        int[] lookTicks = new int[4];
+        int[] lookPoolIds = new int[4];
+        int lookCount;
+
         int[] ticks = new int[8];
         double[] x = new double[8];
         double[] y = new double[8];
@@ -100,7 +104,8 @@ public class RecapEntities
         int size;
 
         /* Recording only */
-        int lookHash;
+        int lastPoolId = -1;
+        long lastSignature;
         int lastLookTick = Integer.MIN_VALUE;
 
         Track(String uuid, String type, String dimension, String name, boolean player, int first)
@@ -117,6 +122,23 @@ public class RecapEntities
         public int frames()
         {
             return this.size;
+        }
+
+        void pushLook(int tick, int poolId, Look lookObject)
+        {
+            if (this.lookCount == this.lookTicks.length)
+            {
+                int cap = this.lookCount * 2;
+
+                this.lookTicks = Arrays.copyOf(this.lookTicks, cap);
+                this.lookPoolIds = Arrays.copyOf(this.lookPoolIds, cap);
+            }
+
+            this.lookTicks[this.lookCount] = tick;
+            this.lookPoolIds[this.lookCount] = poolId;
+            this.lookCount += 1;
+            this.looks.add(lookObject);
+            this.lastPoolId = poolId;
         }
 
         void push(int tick, double x, double y, double z, float yaw, float pitch, float head, float body, float limbPos, float limbSpeed, float swing, int pose, int flags, int hurt, int death)
@@ -200,20 +222,59 @@ public class RecapEntities
             return found;
         }
 
-        /** The look at {@code tick}: the last at or before it, else the first. */
+        /** Binary-searched look at {@code tick}: the last at or before it, else the first. */
         public Look lookAt(int tick)
         {
-            Look found = this.looks.isEmpty() ? null : this.looks.get(0);
-
-            for (Look look : this.looks)
+            if (this.looks.isEmpty())
             {
-                if (look.tick <= tick)
+                return null;
+            }
+
+            int low = 0;
+            int high = this.looks.size() - 1;
+            int found = 0;
+
+            while (low <= high)
+            {
+                int mid = (low + high) >>> 1;
+
+                if (this.looks.get(mid).tick <= tick)
                 {
-                    found = look;
+                    found = mid;
+                    low = mid + 1;
                 }
                 else
                 {
-                    break;
+                    high = mid - 1;
+                }
+            }
+
+            return this.looks.get(found);
+        }
+
+        int lookIndexAt(int tick)
+        {
+            if (this.lookCount == 0)
+            {
+                return -1;
+            }
+
+            int low = 0;
+            int high = this.lookCount - 1;
+            int found = 0;
+
+            while (low <= high)
+            {
+                int mid = (low + high) >>> 1;
+
+                if (this.lookTicks[mid] <= tick)
+                {
+                    found = mid;
+                    low = mid + 1;
+                }
+                else
+                {
+                    high = mid - 1;
                 }
             }
 
@@ -228,11 +289,6 @@ public class RecapEntities
             return tick >= this.first && tick <= this.last && this.size > 0;
         }
 
-        /**
-         * The entity at {@code time}: between two frames of consecutive ticks it is between them,
-         * after a frame with none on the next tick it stays as that frame had it. False when it was
-         * not there.
-         */
         public boolean sample(float time, Frame out)
         {
             if (!this.isAt(time))
@@ -315,74 +371,159 @@ public class RecapEntities
 
     public void clear()
     {
+        this.pool.clear();
+        this.sharedLooks.clear();
         this.tracks.clear();
         this.live.clear();
     }
 
+    /** Interns a look string in the pool, returning a canonical {@link Look} instance for that tick and pool entry. */
+    private int internLook(String data)
+    {
+        int poolId = this.pool.putString(data == null || data.isEmpty() ? "{}" : data);
+
+        while (this.sharedLooks.size() <= poolId)
+        {
+            int idx = this.sharedLooks.size();
+
+            this.sharedLooks.add(new Look(0, this.pool.getString(idx)));
+        }
+
+        return poolId;
+    }
+
+    private void attachLook(Track track, int tick, int poolId)
+    {
+        if (poolId < 0)
+        {
+            poolId = this.internLook("{}");
+        }
+
+        /* When tick == 0 we can share the canonical Look object directly; otherwise wrap with the same pooled String */
+        Look canonical = poolId < this.sharedLooks.size() ? this.sharedLooks.get(poolId) : new Look(0, this.pool.getString(poolId));
+        Look look = tick == 0 ? canonical : new Look(tick, canonical.data);
+
+        track.pushLook(tick, poolId, look);
+    }
+
     /* Recording */
 
-    /**
-     * The entities around {@code around} at {@code tick}: a frame for those that changed, a new
-     * track for those new, the end of the track of those gone. {@code skip} is left out: the player
-     * recorded on its own.
-     */
+    private static String liveKey(String uuid, String dimension)
+    {
+        return dimension == null ? uuid : dimension + "|" + uuid;
+    }
+
     public void record(Iterable<Entity> entities, Entity skip, Entity around, int tick, String dimension)
     {
-        int count = 0;
+        int active = 0;
         double range = RANGE * RANGE;
         this.sweep += 1;
 
         for (Entity entity : entities)
         {
-            if (entity == skip || entity.isRemoved() || around != null && entity.squaredDistanceTo(around) > range)
+            if (entity == skip || entity.isRemoved() || (around != null && entity.squaredDistanceTo(around) > range))
             {
                 continue;
             }
 
+            if (active >= ACTIVE_MAX)
+            {
+                break;
+            }
+
             String uuid = entity.getUuidAsString();
-            Track track = this.live.get(uuid);
+            String key = liveKey(uuid, dimension);
+            Track track = this.live.get(key);
 
             if (track == null)
             {
-                if (count >= MAX || this.live.size() >= MAX)
-                {
-                    continue;
-                }
-
                 String type = EntityType.getId(entity.getType()).toString();
                 boolean player = entity instanceof PlayerEntity;
 
                 track = new Track(uuid, type, dimension, player ? entity.getName().getString() : "", player, tick);
                 this.tracks.add(track);
-                this.live.put(uuid, track);
+                this.live.put(key, track);
             }
 
-            count += 1;
+            active += 1;
             track.last = tick;
             this.lookOf(track, entity, tick);
             this.frameOf(track, entity, tick);
         }
 
-        /* Those not seen this tick are gone: their tracks end on the last tick they were seen */
+        /* Entities that left range or died close their live track without blocking future entities */
         Iterator<Track> it = this.live.values().iterator();
 
         while (it.hasNext())
         {
-            Track track = it.next();
-
-            if (track.last != tick)
+            if (it.next().last != tick)
             {
                 it.remove();
             }
         }
     }
 
-    /** The entity's look, kept again when it changed, no more than once in five seconds. */
+    /** Fast zero-allocation visual state signature to skip redundant full entity NBT writes. */
+    private static long signatureOf(Entity entity)
+    {
+        long sig = 1469598103934665603L;
+
+        sig = (sig ^ entity.getPose().ordinal()) * 1099511628211L;
+        sig = (sig ^ (entity.isInvisible() ? 1L : 0L)) * 1099511628211L;
+        sig = (sig ^ (entity.isGlowing() ? 2L : 0L)) * 1099511628211L;
+
+        Text customName = entity.getCustomName();
+
+        if (customName != null)
+        {
+            sig = (sig ^ customName.getString().hashCode()) * 1099511628211L;
+        }
+
+        if (entity instanceof LivingEntity living)
+        {
+            sig = (sig ^ (living.isBaby() ? 1L : 0L)) * 1099511628211L;
+
+            for (EquipmentSlot slot : EQUIPMENT_SLOTS)
+            {
+                ItemStack stack = living.getEquippedStack(slot);
+
+                if (!stack.isEmpty())
+                {
+                    sig = (sig ^ Item.getRawId(stack.getItem())) * 1099511628211L;
+                    sig = (sig ^ stack.getCount()) * 1099511628211L;
+                    sig = (sig ^ stack.getDamage()) * 1099511628211L;
+
+                    NbtCompound tag = stack.getNbt();
+
+                    if (tag != null)
+                    {
+                        sig = (sig ^ tag.hashCode()) * 1099511628211L;
+                    }
+                }
+                else
+                {
+                    sig *= 1099511628211L;
+                }
+            }
+        }
+
+        return sig == 0L ? 1L : sig;
+    }
+
     private void lookOf(Track track, Entity entity, int tick)
     {
-        boolean due = track.looks.isEmpty() || (tick - track.lastLookTick >= 100 && (tick + track.uuid.hashCode()) % 20 == 0);
+        long signature = signatureOf(entity);
+        boolean first = track.lookCount == 0;
+        boolean changed = signature != track.lastSignature;
+        boolean periodic = !first && tick - track.lastLookTick >= 200 && Math.floorMod(tick + entity.getId(), 40) == 0;
 
-        if (!due || track.looks.size() >= 64)
+        if (!first && !changed && !periodic)
+        {
+            return;
+        }
+
+        /* Throttle rapid equipment flicker to at most once every 4 ticks */
+        if (!first && changed && tick - track.lastLookTick < 4)
         {
             return;
         }
@@ -407,14 +548,14 @@ public class RecapEntities
             data = "{}";
         }
 
-        int hash = data.hashCode();
+        int poolId = this.internLook(data);
 
-        if (track.looks.isEmpty() || hash != track.lookHash)
+        if (first || poolId != track.lastPoolId)
         {
-            track.looks.add(new Look(tick, data));
-            track.lookHash = hash;
+            this.attachLook(track, tick, poolId);
         }
 
+        track.lastSignature = signature;
         track.lastLookTick = tick;
     }
 
@@ -456,7 +597,6 @@ public class RecapEntities
             return;
         }
 
-        /* Still since an earlier tick: that stillness is kept up to the tick before, so the move starts now */
         if (last >= 0 && track.ticks[last] < tick - 1)
         {
             track.copy(track, last, tick - 1);
@@ -465,7 +605,92 @@ public class RecapEntities
         track.push(tick, x, y, z, yaw, pitch, head, body, limbPos, limbSpeed, swing, pose, flags, hurt, death);
     }
 
-    /* Buffers */
+    /** Merges another slice's tracks into this stream, continuing contiguous entity tracks seamlessly. */
+    public void append(RecapEntities other, int tickOffset)
+    {
+        if (other == null || other.isEmpty())
+        {
+            return;
+        }
+
+        int[] remap = this.pool.mergeFrom(other.pool);
+
+        while (this.sharedLooks.size() < this.pool.size())
+        {
+            int idx = this.sharedLooks.size();
+
+            this.sharedLooks.add(new Look(0, this.pool.getString(idx)));
+        }
+
+        Map<String, Track> tailByKey = new HashMap<>();
+
+        for (Track existing : this.tracks)
+        {
+            tailByKey.put(liveKey(existing.uuid, existing.dimension), existing);
+        }
+
+        for (Track src : other.tracks)
+        {
+            if (src.size == 0)
+            {
+                continue;
+            }
+
+            String key = liveKey(src.uuid, src.dimension);
+            Track prev = tailByKey.get(key);
+            int shiftedFirst = src.first + tickOffset;
+            int shiftedLast = src.last + tickOffset;
+
+            if (prev != null && prev.type.equals(src.type) && shiftedFirst <= prev.last + 2)
+            {
+                prev.last = Math.max(prev.last, shiftedLast);
+
+                for (int i = 0; i < src.lookCount; i++)
+                {
+                    int mapped = RecapPool.remapId(remap, src.lookPoolIds[i]);
+
+                    if (mapped >= 0 && mapped != prev.lastPoolId)
+                    {
+                        this.attachLook(prev, src.lookTicks[i] + tickOffset, mapped);
+                    }
+                }
+
+                for (int i = 0; i < src.size; i++)
+                {
+                    prev.copy(src, i, src.ticks[i] + tickOffset);
+                }
+            }
+            else
+            {
+                Track copy = new Track(src.uuid, src.type, src.dimension, src.name, src.player, shiftedFirst);
+
+                copy.last = shiftedLast;
+
+                for (int i = 0; i < src.lookCount; i++)
+                {
+                    int mapped = RecapPool.remapId(remap, src.lookPoolIds[i]);
+
+                    this.attachLook(copy, src.lookTicks[i] + tickOffset, mapped);
+                }
+
+                if (copy.lookCount == 0 && !src.looks.isEmpty())
+                {
+                    for (Look look : src.looks)
+                    {
+                        this.attachLook(copy, look.tick + tickOffset, this.internLook(look.data));
+                    }
+                }
+
+                for (int i = 0; i < src.size; i++)
+                {
+                    copy.copy(src, i, src.ticks[i] + tickOffset);
+                }
+
+                this.tracks.add(copy);
+                tailByKey.put(key, copy);
+            }
+        }
+    }
 
     /** The tracks from {@code from} on, their ticks counted from there; each starts as it was there. */
     public static RecapEntities tail(RecapEntities source, int from)
@@ -483,13 +708,27 @@ public class RecapEntities
 
             copy.last = track.last - from;
 
-            Look first = track.lookAt(from);
+            int firstIdx = track.lookIndexAt(from);
 
-            for (Look look : track.looks)
+            if (firstIdx >= 0)
             {
-                if (look == first || look.tick > from)
+                for (int i = firstIdx; i < track.lookCount; i++)
                 {
-                    copy.looks.add(new Look(Math.max(0, look.tick - from), look.data));
+                    String data = source.pool.getString(track.lookPoolIds[i]);
+
+                    entities.attachLook(copy, Math.max(0, track.lookTicks[i] - from), entities.internLook(data));
+                }
+            }
+            else
+            {
+                Look first = track.lookAt(from);
+
+                for (Look look : track.looks)
+                {
+                    if (look == first || look.tick > from)
+                    {
+                        entities.attachLook(copy, Math.max(0, look.tick - from), entities.internLook(look.data));
+                    }
                 }
             }
 
@@ -516,7 +755,6 @@ public class RecapEntities
 
         RecapEntities kept = tail(this, oldest);
 
-        /* Ticks stay counted from the start: the kept tracks are moved back by as much */
         for (Track track : kept.tracks)
         {
             track.first += oldest;
@@ -527,32 +765,54 @@ public class RecapEntities
                 track.ticks[i] += oldest;
             }
 
-            for (int i = 0; i < track.looks.size(); i++)
+            for (int i = 0; i < track.lookCount; i++)
             {
+                track.lookTicks[i] += oldest;
                 Look look = track.looks.get(i);
-
                 track.looks.set(i, new Look(look.tick + oldest, look.data));
             }
         }
 
-        Map<String, Track> byId = new HashMap<>();
+        Map<String, Track> byKey = new HashMap<>();
 
         for (Track track : kept.tracks)
         {
-            if (this.live.containsKey(track.uuid) && this.live.get(track.uuid).last == track.last)
-            {
-                Track old = this.live.get(track.uuid);
+            String key = liveKey(track.uuid, track.dimension);
+            Track old = this.live.get(key);
 
-                track.lookHash = old.lookHash;
+            if (old != null && old.last == track.last)
+            {
+                track.lastSignature = old.lastSignature;
                 track.lastLookTick = old.lastLookTick;
-                byId.put(track.uuid, track);
+                byKey.put(key, track);
             }
+        }
+
+        this.pool.clear();
+        this.sharedLooks.clear();
+        int[] remap = this.pool.mergeFrom(kept.pool);
+
+        while (this.sharedLooks.size() < this.pool.size())
+        {
+            int idx = this.sharedLooks.size();
+
+            this.sharedLooks.add(new Look(0, this.pool.getString(idx)));
+        }
+
+        for (Track track : kept.tracks)
+        {
+            for (int i = 0; i < track.lookCount; i++)
+            {
+                track.lookPoolIds[i] = RecapPool.remapId(remap, track.lookPoolIds[i]);
+            }
+
+            track.lastPoolId = track.lookCount == 0 ? -1 : track.lookPoolIds[track.lookCount - 1];
         }
 
         this.tracks.clear();
         this.tracks.addAll(kept.tracks);
         this.live.clear();
-        this.live.putAll(byId);
+        this.live.putAll(byKey);
     }
 
     /* Files */
@@ -571,47 +831,7 @@ public class RecapEntities
                 DeflaterOutputStream packed = new DeflaterOutputStream(raw, deflater, 1 << 16);
                 DataOutputStream out = new DataOutputStream(new BufferedOutputStream(packed, 1 << 16));
 
-                out.writeInt(this.tracks.size());
-
-                for (Track track : this.tracks)
-                {
-                    out.writeUTF(track.uuid);
-                    out.writeUTF(track.type);
-                    out.writeUTF(track.dimension == null ? "" : track.dimension);
-                    out.writeUTF(track.name);
-                    out.writeBoolean(track.player);
-                    out.writeInt(track.first);
-                    out.writeInt(track.last);
-                    out.writeInt(track.looks.size());
-
-                    for (Look look : track.looks)
-                    {
-                        out.writeInt(look.tick);
-                        RecapGear.writeLong(out, look.data);
-                    }
-
-                    out.writeInt(track.size);
-
-                    for (int i = 0; i < track.size; i++)
-                    {
-                        out.writeInt(track.ticks[i]);
-                        out.writeDouble(track.x[i]);
-                        out.writeDouble(track.y[i]);
-                        out.writeDouble(track.z[i]);
-                        out.writeFloat(track.yaw[i]);
-                        out.writeFloat(track.pitch[i]);
-                        out.writeFloat(track.head[i]);
-                        out.writeFloat(track.body[i]);
-                        out.writeFloat(track.limbPos[i]);
-                        out.writeFloat(track.limbSpeed[i]);
-                        out.writeFloat(track.swing[i]);
-                        out.writeByte(track.pose[i]);
-                        out.writeByte(track.flags[i]);
-                        out.writeByte(track.hurt[i]);
-                        out.writeByte(track.death[i]);
-                    }
-                }
-
+                this.writeToStream(out);
                 out.flush();
                 packed.finish();
             }
@@ -628,6 +848,51 @@ public class RecapEntities
         }
     }
 
+    public void writeToStream(DataOutputStream out) throws IOException
+    {
+        this.pool.write(out);
+        out.writeInt(this.tracks.size());
+
+        for (Track track : this.tracks)
+        {
+            out.writeUTF(track.uuid);
+            out.writeUTF(track.type);
+            out.writeUTF(track.dimension == null ? "" : track.dimension);
+            out.writeUTF(track.name);
+            out.writeBoolean(track.player);
+            out.writeInt(track.first);
+            out.writeInt(track.last);
+            RecapPool.writeVar(out, track.lookCount);
+
+            for (int i = 0; i < track.lookCount; i++)
+            {
+                out.writeInt(track.lookTicks[i]);
+                RecapPool.writeVar(out, track.lookPoolIds[i] + 1);
+            }
+
+            RecapPool.writeVar(out, track.size);
+
+            for (int i = 0; i < track.size; i++)
+            {
+                out.writeInt(track.ticks[i]);
+                out.writeDouble(track.x[i]);
+                out.writeDouble(track.y[i]);
+                out.writeDouble(track.z[i]);
+                out.writeFloat(track.yaw[i]);
+                out.writeFloat(track.pitch[i]);
+                out.writeFloat(track.head[i]);
+                out.writeFloat(track.body[i]);
+                out.writeFloat(track.limbPos[i]);
+                out.writeFloat(track.limbSpeed[i]);
+                out.writeFloat(track.swing[i]);
+                out.writeByte(track.pose[i]);
+                out.writeByte(track.flags[i]);
+                out.writeByte(track.hurt[i]);
+                out.writeByte(track.death[i]);
+            }
+        }
+    }
+
     public static RecapEntities read(File file)
     {
         if (!file.isFile())
@@ -637,58 +902,121 @@ public class RecapEntities
 
         try (DataInputStream raw = new DataInputStream(new BufferedInputStream(new FileInputStream(file))))
         {
-            if (raw.readInt() != MAGIC || raw.readInt() != VERSION)
+            int version;
+
+            if (raw.readInt() != MAGIC || (version = raw.readInt()) < 1 || version > VERSION)
             {
                 return null;
             }
 
             try (DataInputStream in = new DataInputStream(new BufferedInputStream(new InflaterInputStream(raw, new Inflater(), 1 << 16), 1 << 16)))
             {
-                RecapEntities entities = new RecapEntities();
-                int count = in.readInt();
-
-                if (count < 0 || count > 1 << 20)
-                {
-                    return null;
-                }
-
-                for (int t = 0; t < count; t++)
-                {
-                    String uuid = in.readUTF();
-                    String type = in.readUTF();
-                    String dimension = in.readUTF();
-                    String name = in.readUTF();
-                    boolean player = in.readBoolean();
-                    Track track = new Track(uuid, type, dimension.isEmpty() ? null : dimension, name, player, in.readInt());
-
-                    track.last = in.readInt();
-
-                    int looks = in.readInt();
-
-                    for (int i = 0; i < looks; i++)
-                    {
-                        int tick = in.readInt();
-
-                        track.looks.add(new Look(tick, RecapGear.readLong(in)));
-                    }
-
-                    int frames = in.readInt();
-
-                    for (int i = 0; i < frames; i++)
-                    {
-                        track.push(in.readInt(), in.readDouble(), in.readDouble(), in.readDouble(), in.readFloat(), in.readFloat(), in.readFloat(), in.readFloat(),
-                            in.readFloat(), in.readFloat(), in.readFloat(), in.readByte(), in.readByte(), in.readByte(), in.readByte());
-                    }
-
-                    entities.tracks.add(track);
-                }
-
-                return entities;
+                return version == 1 ? readV1(in) : readFromStream(in);
             }
         }
         catch (IOException | RuntimeException e)
         {
             return null;
         }
+    }
+
+    private static RecapEntities readV1(DataInputStream in) throws IOException
+    {
+        RecapEntities entities = new RecapEntities();
+        int count = in.readInt();
+
+        if (count < 0 || count > 1 << 20)
+        {
+            return null;
+        }
+
+        for (int t = 0; t < count; t++)
+        {
+            String uuid = in.readUTF();
+            String type = in.readUTF();
+            String dimension = in.readUTF();
+            String name = in.readUTF();
+            boolean player = in.readBoolean();
+            Track track = new Track(uuid, type, dimension.isEmpty() ? null : dimension, name, player, in.readInt());
+
+            track.last = in.readInt();
+
+            int looks = in.readInt();
+
+            for (int i = 0; i < looks; i++)
+            {
+                int tick = in.readInt();
+                String data = RecapGear.readLong(in);
+
+                entities.attachLook(track, tick, entities.internLook(data));
+            }
+
+            int frames = in.readInt();
+
+            for (int i = 0; i < frames; i++)
+            {
+                track.push(in.readInt(), in.readDouble(), in.readDouble(), in.readDouble(), in.readFloat(), in.readFloat(), in.readFloat(), in.readFloat(),
+                    in.readFloat(), in.readFloat(), in.readFloat(), in.readByte(), in.readByte(), in.readByte(), in.readByte());
+            }
+
+            entities.tracks.add(track);
+        }
+
+        return entities;
+    }
+
+    public static RecapEntities readFromStream(DataInputStream in) throws IOException
+    {
+        RecapEntities entities = new RecapEntities();
+        RecapPool loadedPool = RecapPool.read(in);
+        int[] remap = entities.pool.mergeFrom(loadedPool);
+
+        while (entities.sharedLooks.size() < entities.pool.size())
+        {
+            int idx = entities.sharedLooks.size();
+
+            entities.sharedLooks.add(new Look(0, entities.pool.getString(idx)));
+        }
+
+        int count = in.readInt();
+
+        if (count < 0 || count > 1 << 20)
+        {
+            throw new IOException("Bad entity count");
+        }
+
+        for (int t = 0; t < count; t++)
+        {
+            String uuid = in.readUTF();
+            String type = in.readUTF();
+            String dimension = in.readUTF();
+            String name = in.readUTF();
+            boolean player = in.readBoolean();
+            Track track = new Track(uuid, type, dimension.isEmpty() ? null : dimension, name, player, in.readInt());
+
+            track.last = in.readInt();
+
+            int looks = RecapPool.readVar(in);
+
+            for (int i = 0; i < looks; i++)
+            {
+                int tick = in.readInt();
+                int poolId = RecapPool.remapId(remap, RecapPool.readVar(in) - 1);
+
+                entities.attachLook(track, tick, poolId);
+            }
+
+            int frames = RecapPool.readVar(in);
+
+            for (int i = 0; i < frames; i++)
+            {
+                track.push(in.readInt(), in.readDouble(), in.readDouble(), in.readDouble(), in.readFloat(), in.readFloat(), in.readFloat(), in.readFloat(),
+                    in.readFloat(), in.readFloat(), in.readFloat(), in.readByte(), in.readByte(), in.readByte(), in.readByte());
+            }
+
+            entities.tracks.add(track);
+        }
+
+        return entities;
     }
 }

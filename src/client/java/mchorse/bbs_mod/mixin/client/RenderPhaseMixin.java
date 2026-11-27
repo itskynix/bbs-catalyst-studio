@@ -38,6 +38,11 @@ public abstract class RenderPhaseMixin
         {
             recordingGlint = false;
 
+            if (mchorse.bbs_mod.recap.RecapScene.isActive())
+            {
+                return (long) (mchorse.bbs_mod.recap.RecapScene.sourceNow() * 50D);
+            }
+
             return timeMs;
         }
 

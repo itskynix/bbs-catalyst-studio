@@ -15,6 +15,9 @@ public class RecapData
     public RecapEntities entities;
     public RecapSounds sounds;
     public RecapParticles particles;
+    public RecapHudStream hud;
+    public RecapBaseline baseline;
+    public RecapPov pov;
 
     public static RecapData load(RecapRecord record)
     {
@@ -28,6 +31,9 @@ public class RecapData
         data.entities = RecapStore.loadEntities(record);
         data.sounds = RecapStore.loadSounds(record);
         data.particles = RecapStore.loadParticles(record);
+        data.hud = RecapStore.loadHud(record);
+        data.baseline = RecapStore.loadBaseline(record);
+        data.pov = RecapStore.loadPov(record);
 
         return data;
     }
@@ -45,5 +51,15 @@ public class RecapData
     public boolean hasParticles()
     {
         return this.particles != null;
+    }
+
+    public boolean hasHud()
+    {
+        return this.hud != null && !this.hud.isEmpty();
+    }
+
+    public boolean hasBaseline()
+    {
+        return this.baseline != null && !this.baseline.isEmpty();
     }
 }

@@ -259,6 +259,14 @@ public class MobFormRenderer extends FormRenderer<MobForm> implements ITickable
         }
     }
 
+    /** The entity the bones are read from, made if need be; null while there is no world. */
+    public Entity standInEntity()
+    {
+        this.ensureEntity();
+
+        return this.entity;
+    }
+
     private void ensureEntity()
     {
         this.entity = this.standIn.ensure(this.form.mobID.get(), this.form.mobNBT.get(), this.form.slim.get(), this.form.isPlayer());

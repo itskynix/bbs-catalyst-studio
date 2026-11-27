@@ -6,6 +6,7 @@ import mchorse.bbs_mod.l10n.L10n;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.Keys;
 import mchorse.bbs_mod.ui.UIKeys;
+import mchorse.bbs_mod.ui.film.IUIClipTargets;
 import mchorse.bbs_mod.ui.film.IUIClipsDelegate;
 import mchorse.bbs_mod.ui.film.UIClipsPanel;
 import mchorse.bbs_mod.ui.film.UIFilmPanel;
@@ -76,6 +77,13 @@ public class UIActorEyeClip extends UIClip<ActorEyeClientClip>
 
         this.selector = new UIButton(UIKeys.CAMERA_PANELS_TARGET_TITLE, (b) ->
         {
+            if (this.editor instanceof IUIClipTargets targets)
+            {
+                targets.showTargets(this.getContext(), this.clip.selector.get(), (i) -> this.clip.selector.set(i));
+
+                return;
+            }
+
             UIFilmPanel panel = this.getParent(UIFilmPanel.class);
 
             if (panel != null)
@@ -88,6 +96,13 @@ public class UIActorEyeClip extends UIClip<ActorEyeClientClip>
 
         this.bone = new UIButton(key("bone"), (b) ->
         {
+            if (this.editor instanceof IUIClipTargets targets)
+            {
+                targets.showTargetBones(this.getContext(), this.clip.selector.get(), this.clip.bone.get(), (attachment) -> this.clip.bone.set(attachment));
+
+                return;
+            }
+
             UIAnchorKeyframeFactory.displayAttachments(this.getParent(UIFilmPanel.class), this.clip.selector.get(), this.clip.bone.get(), (attachment) -> this.clip.bone.set(attachment));
         });
         this.bone.tooltip(key("bone_tooltip"));
@@ -175,8 +190,8 @@ public class UIActorEyeClip extends UIClip<ActorEyeClientClip>
     {
         super.registerPanels();
 
-        /* Recap Studio has no actors to pick: its clip follows the recorded player by itself */
-        if (this.editor.pickActors())
+        /* Recap Studio picks among the recorded players instead of a film's actors */
+        if (this.editor.pickActors() || this.editor instanceof IUIClipTargets)
         {
             this.panels.add(this.section(key("replay_source"), this.selector, this.bone));
         }

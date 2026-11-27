@@ -226,6 +226,8 @@ public class BBSSettings {
 	public static ValueInt saccadicCooldown;
 	public static ValueBoolean recapInstant;
 	public static ValueInt recapInstantSeconds;
+	public static ValueBoolean recapBaseline;
+	public static ValueBoolean recapKeepRunning;
 
 	public static ValueBoolean renderAllModelBlocks;
 	public static ValueBoolean clickModelBlocks;
@@ -958,6 +960,8 @@ public class BBSSettings {
 		builder.category("recap", Icons.STOPWATCH);
 		recapInstant = builder.getBoolean("instant", false);
 		recapInstantSeconds = builder.getInt("instant_seconds", 60, 10, 600);
+		recapBaseline = builder.getBoolean("baseline", true);
+		recapKeepRunning = builder.getBoolean("keep_running", false);
 
 		/* Output */
 		/* Ordered by how often it gets touched: the resolution first, then the

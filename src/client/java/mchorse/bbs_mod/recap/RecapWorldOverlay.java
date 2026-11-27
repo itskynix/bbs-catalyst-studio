@@ -8,15 +8,24 @@ import it.unimi.dsi.fastutil.longs.LongArrayList;
 import it.unimi.dsi.fastutil.longs.LongIterator;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import mchorse.bbs_mod.BBSMod;
+import mchorse.bbs_mod.utils.VersionCompat;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
+import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.world.ClientWorld;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.StringNbtReader;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.ChunkSectionPos;
 import net.minecraft.world.chunk.WorldChunk;
 import net.minecraft.world.chunk.light.LightingProvider;
+
+import java.lang.ref.SoftReference;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * The one owner of the blocks Recap Studio puts on the world: while a recap is shown, every block
@@ -64,6 +73,13 @@ public final class RecapWorldOverlay
 
     /** The real state of every block set, by position. */
     private static final Long2ObjectOpenHashMap<BlockState> live = new Long2ObjectOpenHashMap<>();
+    /** The real BlockEntity NBT of every block set (empty compound when none existed). */
+    private static final Long2ObjectOpenHashMap<NbtCompound> liveNbt = new Long2ObjectOpenHashMap<>();
+    private static final NbtCompound NO_NBT = new NbtCompound();
+    private static final Map<String, SoftReference<CachedIndex>> indexCache = new HashMap<>();
+
+    private record CachedIndex(RecapEvents events, int revision, Index index)
+    {}
     /** The blocks waiting to be set to the cursor's state, by chunk section, oldest section first. */
     private static final Long2ObjectLinkedOpenHashMap<LongOpenHashSet> queue = new Long2ObjectLinkedOpenHashMap<>();
     private static int queued;
@@ -204,6 +220,7 @@ public final class RecapWorldOverlay
         dimension = null;
         index = null;
         live.clear();
+        liveNbt.clear();
         queue.clear();
         queued = 0;
         changed.clear();
@@ -250,7 +267,7 @@ public final class RecapWorldOverlay
 
         if (index == null || sourceRevision != source.getRevision())
         {
-            index = new Index(source, dimension);
+            index = getOrBuildIndex(source, dimension);
             sourceRevision = source.getRevision();
             appliedTick = Integer.MIN_VALUE;
         }
@@ -299,6 +316,68 @@ public final class RecapWorldOverlay
         {
             settleLight();
         }
+    }
+
+    /** Immediately applies all queued block and BlockEntity changes at {@code tick} and settles lighting. */
+    public static void settleImmediate(ClientWorld into, int tick)
+    {
+        update(into, tick);
+
+        if (world != null && world == into)
+        {
+            drain(Integer.MAX_VALUE, true);
+            settleLight();
+        }
+    }
+
+    /** Replays synced block events (chest lids, bells, note blocks, pistons) between {@code fromTick} and {@code toTick}. */
+    public static void playActions(int fromTick, int toTick, String activeDimension)
+    {
+        if (source == null || world == null || toTick <= fromTick || activeDimension == null || !activeDimension.equals(dimension))
+        {
+            return;
+        }
+
+        applying = true;
+
+        try
+        {
+            for (int i = source.firstActionAtOrAfter(fromTick + 1); i < source.actionSize() && source.actionTick(i) <= toTick; i++)
+            {
+                if (!source.isActionIn(i, activeDimension) || !isLoaded(chunkOf(source.actionPos(i))))
+                {
+                    continue;
+                }
+
+                BlockPos pos = BlockPos.fromLong(source.actionPos(i));
+
+                world.addSyncedBlockEvent(pos, source.actionBlock(i), source.actionType(i), source.actionData(i));
+            }
+        }
+        catch (RuntimeException ignored)
+        {}
+        finally
+        {
+            applying = false;
+        }
+    }
+
+    private static Index getOrBuildIndex(RecapEvents events, String dim)
+    {
+        String key = dim == null ? "" : dim;
+        SoftReference<CachedIndex> ref = indexCache.get(key);
+        CachedIndex cached = ref == null ? null : ref.get();
+
+        if (cached != null && cached.events() == events && cached.revision() == events.getRevision())
+        {
+            return cached.index();
+        }
+
+        Index built = new Index(events, dim);
+
+        indexCache.put(key, new SoftReference<>(new CachedIndex(events, events.getRevision(), built)));
+
+        return built;
     }
 
     private static void enqueue(long pos)
@@ -362,7 +441,7 @@ public final class RecapWorldOverlay
         }
     }
 
-    /** Sets one block to the recap's state at {@code tick}, its real state kept first. */
+    /** Sets one block to the recap's state at {@code tick}, its real state and BlockEntity NBT kept first. */
     private static void put(long packed, int tick, int flags)
     {
         BlockState wanted = index.stateAt(packed, tick);
@@ -375,12 +454,76 @@ public final class RecapWorldOverlay
         BlockPos pos = BlockPos.fromLong(packed);
         BlockState current = world.getBlockState(pos);
 
-        live.putIfAbsent(packed, current);
+        if (!live.containsKey(packed))
+        {
+            live.put(packed, current);
+            liveNbt.put(packed, captureLiveNbt(pos));
+        }
 
         if (wanted != current)
         {
+            if (current.isOf(Blocks.MOVING_PISTON) && !wanted.isOf(Blocks.MOVING_PISTON))
+            {
+                world.removeBlockEntity(pos);
+            }
+
             set(pos, wanted, flags);
         }
+
+        String wantedNbt = index.nbtAt(packed, tick);
+
+        if (wantedNbt != null && !wantedNbt.isEmpty() && wanted.hasBlockEntity())
+        {
+            applyBlockEntityNbt(pos, wanted, wantedNbt);
+        }
+    }
+
+    private static NbtCompound captureLiveNbt(BlockPos pos)
+    {
+        try
+        {
+            BlockEntity be = world.getBlockEntity(pos);
+
+            return be == null ? NO_NBT : VersionCompat.createNbtWithId(be);
+        }
+        catch (Throwable e)
+        {
+            return NO_NBT;
+        }
+    }
+
+    private static void applyBlockEntityNbt(BlockPos pos, BlockState state, String text)
+    {
+        try
+        {
+            NbtCompound nbt = StringNbtReader.parse(text);
+
+            nbt.putInt("x", pos.getX());
+            nbt.putInt("y", pos.getY());
+            nbt.putInt("z", pos.getZ());
+
+            if (!nbt.contains("id", 8))
+            {
+                BlockEntity existing = world.getBlockEntity(pos);
+
+                if (existing != null)
+                {
+                    NbtCompound base = VersionCompat.createNbtWithId(existing);
+
+                    base.copyFrom(nbt);
+                    nbt = base;
+                }
+            }
+
+            BlockEntity created = VersionCompat.createBlockEntity(world, pos, state, nbt);
+
+            if (created != null)
+            {
+                world.addBlockEntity(created);
+            }
+        }
+        catch (Throwable ignored)
+        {}
     }
 
     private static void set(BlockPos pos, BlockState state, int flags)
@@ -422,10 +565,33 @@ public final class RecapWorldOverlay
                 }
 
                 BlockPos pos = BlockPos.fromLong(packed);
+                BlockState realState = entry.getValue();
 
-                if (world.getBlockState(pos) != entry.getValue())
+                if (world.getBlockState(pos) != realState)
                 {
-                    set(pos, entry.getValue(), Block.NOTIFY_LISTENERS | Block.FORCE_STATE);
+                    if (world.getBlockState(pos).isOf(Blocks.MOVING_PISTON) && !realState.isOf(Blocks.MOVING_PISTON))
+                    {
+                        world.removeBlockEntity(pos);
+                    }
+
+                    set(pos, realState, Block.NOTIFY_LISTENERS | Block.FORCE_STATE);
+                }
+
+                NbtCompound realNbt = liveNbt.get(packed);
+
+                if (realNbt != null && !realNbt.isEmpty() && realState.hasBlockEntity())
+                {
+                    try
+                    {
+                        BlockEntity restored = VersionCompat.createBlockEntity(world, pos, realState, realNbt.copy());
+
+                        if (restored != null)
+                        {
+                            world.addBlockEntity(restored);
+                        }
+                    }
+                    catch (Throwable ignored)
+                    {}
                 }
             }
         }
@@ -437,11 +603,16 @@ public final class RecapWorldOverlay
 
     /* What comes from outside while the recap is shown */
 
+    public static void onBlockChanged(ClientWorld in, BlockPos pos, BlockState to)
+    {
+        onBlockChanged(in, pos, to, null);
+    }
+
     /**
      * A block of a client world changed, not by the overlay: when it is one the recap touched, the
      * change is what the world really has there now, and the recap's state goes back over it.
      */
-    public static void onBlockChanged(ClientWorld in, BlockPos pos, BlockState to)
+    public static void onBlockChanged(ClientWorld in, BlockPos pos, BlockState to, NbtCompound toNbt)
     {
         if (applying || in != world || index == null)
         {
@@ -453,6 +624,7 @@ public final class RecapWorldOverlay
         if (index.touches(packed))
         {
             live.put(packed, to);
+            liveNbt.put(packed, toNbt == null ? NO_NBT : toNbt.copy());
             enqueue(packed);
         }
     }
@@ -476,7 +648,12 @@ public final class RecapWorldOverlay
 
         for (long packed : positions)
         {
-            live.put(packed, chunk.getBlockState(pos.set(packed)));
+            pos.set(packed);
+            live.put(packed, chunk.getBlockState(pos));
+
+            BlockEntity be = chunk.getBlockEntity(pos);
+
+            liveNbt.put(packed, be == null ? NO_NBT : VersionCompat.createNbtWithId(be));
             enqueue(packed);
         }
     }
@@ -499,6 +676,7 @@ public final class RecapWorldOverlay
         for (long packed : positions)
         {
             live.remove(packed);
+            liveNbt.remove(packed);
 
             long key = ChunkSectionPos.fromBlockPos(packed);
             LongOpenHashSet section = queue.get(key);
@@ -629,6 +807,38 @@ public final class RecapWorldOverlay
             }
 
             return found < 0 ? this.events.from(list[0]) : this.events.to(list[found]);
+        }
+
+        /** The BlockEntity NBT string at {@code pos} at {@code tick}, or empty when none was recorded. */
+        String nbtAt(long pos, int tick)
+        {
+            int[] list = this.byPos.get(pos);
+
+            if (list == null || list.length == 0)
+            {
+                return "";
+            }
+
+            int low = 0;
+            int high = list.length - 1;
+            int found = -1;
+
+            while (low <= high)
+            {
+                int middle = (low + high) >>> 1;
+
+                if (this.events.tick(list[middle]) <= tick)
+                {
+                    found = middle;
+                    low = middle + 1;
+                }
+                else
+                {
+                    high = middle - 1;
+                }
+            }
+
+            return found < 0 ? this.events.fromNbt(list[0]) : this.events.toNbt(list[found]);
         }
 
         /** The blocks with a change after the earlier of two ticks and up to the later one: what differs between the two. */

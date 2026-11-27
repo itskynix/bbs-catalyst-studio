@@ -68,9 +68,11 @@ public final class RecapGhosts
             this.world = current;
         }
 
-        String here = RecapWorldOverlay.dimensionOf(current);
+        String here = RecapScene.effectiveDimension();
+        boolean isolated = RecapScene.showsIsolatedStage();
         EntityRenderDispatcher dispatcher = mc.getEntityRenderDispatcher();
         int tick = (int) Math.floor(source);
+        float subTick = Math.max(0F, Math.min(1F, source - tick));
         double range = DRAW_RANGE * DRAW_RANGE;
 
         for (RecapEntities.Track track : entities.getTracks())
@@ -127,8 +129,15 @@ public final class RecapGhosts
 
                 own.peek().getPositionMatrix().set(matrices.peek().getPositionMatrix());
                 own.peek().getNormalMatrix().set(matrices.peek().getNormalMatrix());
-                pose(ghost, this.frame, tick);
-                dispatcher.render(ghost, dx, dy, dz, this.frame.yaw, 1F, own, consumers, dispatcher.getLight(ghost, 1F));
+                pose(ghost, this.frame, tick, subTick);
+
+                int light = isolated
+                    ? ("minecraft:the_nether".equals(here) || "minecraft:the_end".equals(here)
+                        ? net.minecraft.client.render.LightmapTextureManager.pack(8, 7)
+                        : net.minecraft.client.render.LightmapTextureManager.MAX_LIGHT_COORDINATE)
+                    : dispatcher.getLight(ghost, subTick);
+
+                dispatcher.render(ghost, dx, dy, dz, this.frame.yaw, subTick, own, consumers, light);
             }
             catch (Throwable e)
             {
@@ -185,8 +194,8 @@ public final class RecapGhosts
         }
     }
 
-    /** Puts the copy where, as turned and as moving as the frame has it, with no further transition. */
-    private static void pose(Entity ghost, RecapEntities.Frame frame, int tick)
+    /** Puts the copy where, as turned and as moving as the frame has it, compensating LimbAnimator sub-tick offset. */
+    private static void pose(Entity ghost, RecapEntities.Frame frame, int tick, float subTick)
     {
         ghost.setPos(frame.x, frame.y, frame.z);
         ghost.prevX = ghost.lastRenderX = frame.x;
@@ -215,10 +224,11 @@ public final class RecapGhosts
 
             living.bodyYaw = living.prevBodyYaw = frame.body;
             living.headYaw = living.prevHeadYaw = frame.head;
-            limbs.bbs$setPos(frame.limbPos);
+            limbs.bbs$setPos(frame.limbPos + frame.limbSpeed * (1F - subTick));
             limbs.bbs$setSpeed(frame.limbSpeed);
             limbs.bbs$setPrevSpeed(frame.limbSpeed);
             living.handSwingProgress = living.lastHandSwingProgress = frame.swing;
+            living.preferredHand = net.minecraft.util.Hand.MAIN_HAND;
             living.hurtTime = frame.hurt;
             living.deathTime = frame.death;
         }

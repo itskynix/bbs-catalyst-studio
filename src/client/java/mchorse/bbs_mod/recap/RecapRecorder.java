@@ -2,36 +2,33 @@ package mchorse.bbs_mod.recap;
 
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.l10n.L10n;
+import mchorse.bbs_mod.mixin.client.RecapClientTimeAccessor;
+import mchorse.bbs_mod.mixin.client.RecapWorldWeatherAccessor;
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.Camera;
+import net.minecraft.client.sound.SoundInstance;
+import net.minecraft.client.toast.SystemToast;
+import net.minecraft.client.world.ClientWorld;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.particle.ParticleEffect;
 import net.minecraft.text.Text;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.GameMode;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
- * The recording side of a recap: its state, its clock, its markers and its camera, driven by the
- * transport bar of the pause menu and by the key bindings.
- *
- * <p><b>States.</b> Idle, recording and stopped. Only a recording counts: Stop holds the clock
- * where it is, Start then goes on from there, and Save or Cancel end the session and put the clock
- * back to zero. Nothing runs behind a stopped or ended recording.</p>
- *
- * <p><b>The clock.</b> A running recording counts client ticks, twenty a second, also while the
- * pause menu is open, so the time on the transport bar goes on from the moment Start is pressed
- * there. What is drawn between two ticks is {@code ticks + transition}, the transition being the
- * frame's share of the next tick; nothing reads the wall clock. Every counted tick also keeps where
- * the camera was ({@link RecapTrack}), which is what Recap Studio shows the recap through.</p>
- *
- * <p><b>Instant recap.</b> The last stretch of play can be saved after the fact: the ticks played
- * since the world was joined, their camera and the markers pressed in them are counted all the
- * time, so switching the setting on mid session already has the stretch behind it; a paused game
- * is not play and does not add to it, and neither does Recap Studio looking through a recap's
- * camera. Saving takes the last so many seconds, the setting's length, or all that was played when
- * that is shorter.</p>
+ * The recording side of a recap: segmented 5-minute disk spooling ({@link RecapSpool.Session}),
+ * zero-shift 30-second Instant Recap buckets ({@link RecapSpool.Ring}), sub-tick POV camera
+ * capture, HUD &amp; local baseline capture, and pause-aware game-tick timing.
  */
 public final class RecapRecorder
 {
@@ -40,47 +37,35 @@ public final class RecapRecorder
         IDLE, RECORDING, STOPPED
     }
 
-    /** The longest instant recap the setting allows, in ticks: what the play buffer keeps. */
+    /** The longest instant recap the setting allows, in ticks: what the play ring keeps. */
     private static final int BUFFER_LIMIT = 600 * 20;
 
-    /**
-     * The most block changes a recording keeps, about forty four megabytes of them: past it the
-     * camera, the movement and the sky go on and the blocks stop, with a word when it is near and
-     * when it is reached. The play buffer keeps half as many, its oldest going first.
-     */
-    public static final int EVENT_LIMIT = 2_000_000;
-    private static final int PLAYED_EVENT_LIMIT = EVENT_LIMIT / 2;
+    /** Total block changes kept in a manual session before warning/capping. */
+    public static final int EVENT_LIMIT = 4_000_000;
     private static boolean eventsNear;
     private static boolean eventsFull;
 
     private static State state = State.IDLE;
     private static int ticks;
+    private static int totalEvents;
     private static final List<Integer> markers = new ArrayList<>();
-    private static final RecapTrack track = new RecapTrack();
-    private static final RecapMotion motion = new RecapMotion();
-    private static final RecapEvents events = new RecapEvents();
     private static final RecapDimensions dimensions = new RecapDimensions();
-    private static final RecapEnvironment environment = new RecapEnvironment();
-    private static final RecapGear gear = new RecapGear();
-    private static final RecapEntities entities = new RecapEntities();
-    private static final RecapSounds sounds = new RecapSounds();
-    private static final RecapParticles particles = new RecapParticles();
     private static RecapWorlds.Info world;
+    private static RecapSpool.Session activeSession;
+    private static RecapSpool.Slice currentSlice;
 
     /** Set while the world gives off its own ambient particles and sounds, which are not kept. */
     public static boolean ambient;
 
     private static int playedTicks;
     private static final List<Integer> playedMarkers = new ArrayList<>();
-    private static final RecapTrack playedTrack = new RecapTrack();
-    private static final RecapMotion playedMotion = new RecapMotion();
-    private static final RecapEvents playedEvents = new RecapEvents();
     private static final RecapDimensions playedDimensions = new RecapDimensions();
-    private static final RecapEnvironment playedEnvironment = new RecapEnvironment();
-    private static final RecapGear playedGear = new RecapGear();
-    private static final RecapEntities playedEntities = new RecapEntities();
-    private static final RecapSounds playedSounds = new RecapSounds();
-    private static final RecapParticles playedParticles = new RecapParticles();
+    private static final RecapSpool.Ring instantRing = new RecapSpool.Ring();
+    /* The point of view of the running recording, and of the instant buffer */
+    private static final RecapPov povSession = new RecapPov();
+    private static final RecapPov povRing = new RecapPov();
+    /* Set while Recap shows a toast of its own, which is not part of the take */
+    private static boolean ownToast;
 
     private RecapRecorder()
     {}
@@ -100,15 +85,34 @@ public final class RecapRecorder
         return markers.size();
     }
 
-    /** The recording's time between two ticks, for drawing: the ticks plus the frame's transition. */
+    public static String activeSessionId()
+    {
+        return activeSession == null ? null : activeSession.id;
+    }
+
+    /** The recording's time between two ticks, for drawing: stands still while the game is paused. */
     public static float getTime(float transition)
     {
-        return state == State.RECORDING ? ticks + Math.max(0F, Math.min(1F, transition)) : ticks;
+        MinecraftClient mc = MinecraftClient.getInstance();
+        boolean paused = mc != null && mc.isPaused();
+
+        return state == State.RECORDING && !paused ? ticks + Math.max(0F, Math.min(1F, transition)) : ticks;
+    }
+
+    /** Whether the world is to go on under the pause menu: a recording is running and the setting asks for it. */
+    public static boolean keepsWorldRunning()
+    {
+        return state == State.RECORDING && BBSSettings.recapKeepRunning != null && BBSSettings.recapKeepRunning.get();
     }
 
     public static boolean isInstantEnabled()
     {
         return BBSSettings.recapInstant != null && BBSSettings.recapInstant.get();
+    }
+
+    private static boolean isBaselineEnabled()
+    {
+        return BBSSettings.recapBaseline == null || BBSSettings.recapBaseline.get();
     }
 
     private static int instantWindow()
@@ -119,49 +123,84 @@ public final class RecapRecorder
     /** How much play an instant recap would take right now. */
     public static int getInstantTicks()
     {
-        return Math.min(instantWindow(), Math.min(playedTicks, playedTrack.size()));
+        return Math.min(instantWindow(), instantRing.availableTicks(playedTicks));
     }
 
-    /** Once a client tick. */
+    /** Captures intra-tick POV camera motion on render frames while actively playing. */
+    public static void onRenderFrame(MinecraftClient mc, float tickDelta)
+    {
+        if (mc == null || mc.world == null || mc.gameRenderer == null || mc.isPaused() || RecapScene.isActive())
+        {
+            return;
+        }
+
+        boolean rec = state == State.RECORDING && currentSlice != null && currentSlice.ticks > 0;
+        RecapSpool.Slice ring = !rec && isInstantEnabled() ? instantRing.current() : (isInstantEnabled() ? instantRing.current() : null);
+
+        if (!rec && (ring == null || ring.ticks <= 0))
+        {
+            return;
+        }
+
+        Camera camera = mc.gameRenderer.getCamera();
+        Vec3d pos = camera.getPos();
+        float clampedDelta = Math.max(0F, Math.min(1F, tickDelta));
+        float fov = mc.options.getFov().getValue();
+
+        if (rec)
+        {
+            currentSlice.track.addSubSample((currentSlice.ticks - 1) + clampedDelta, pos.x, pos.y, pos.z, camera.getYaw(), camera.getPitch(), fov);
+        }
+
+        if (ring != null && ring.ticks > 0)
+        {
+            ring.track.addSubSample((ring.ticks - 1) + clampedDelta, pos.x, pos.y, pos.z, camera.getYaw(), camera.getPitch(), fov);
+        }
+    }
+
+    /** Once a client tick. Neither manual recording nor Instant Recap advances while the game world is paused. */
     public static void tick(MinecraftClient mc)
     {
-        if (mc.world == null)
+        if (mc.world == null || mc.isPaused())
         {
             return;
         }
 
-        /* The recording counts on with the pause menu open; only play feeds the instant stretch */
-        if (state == State.RECORDING)
+        String dim = RecapWorldOverlay.dimensionOf(mc.world);
+
+        if (state == State.RECORDING && currentSlice != null)
         {
+            if (mc.player != null && !RecapScene.isActive())
+            {
+                povSession.record(ticks, mc.player);
+            }
+
+            sampleSliceTick(mc, currentSlice, dim, isBaselineEnabled());
             ticks += 1;
-            sample(mc, track);
-            sampleMotion(mc, motion);
-            sampleEnvironment(mc, environment);
-            sampleGear(mc, gear);
-            entities.record(mc.world.getEntities(), mc.player, mc.player, ticks - 1, RecapWorldOverlay.dimensionOf(mc.world));
-            dimensions.mark(ticks - 1, RecapWorldOverlay.dimensionOf(mc.world));
+            dimensions.mark(ticks - 1, dim);
+
+            if (currentSlice.ticks >= RecapSpool.SLICE_TICKS || currentSlice.events.size() >= RecapSpool.SLICE_EVENT_CAP)
+            {
+                rotateSlice(false);
+            }
         }
 
-        if (mc.isPaused() || RecapScene.isActive())
+        if (RecapScene.isActive())
         {
             return;
         }
 
+        RecapSpool.Slice ring = instantRing.active(playedTicks, BUFFER_LIMIT);
+
+        if (isInstantEnabled() && mc.player != null)
+        {
+            povRing.record(playedTicks, mc.player);
+            povRing.dropBefore(playedTicks - BUFFER_LIMIT);
+        }
+
+        sampleSliceTick(mc, ring, dim, isInstantEnabled() && isBaselineEnabled());
         playedTicks += 1;
-        sample(mc, playedTrack);
-        playedTrack.trim(BUFFER_LIMIT);
-        sampleMotion(mc, playedMotion);
-        playedMotion.trim(BUFFER_LIMIT);
-        sampleEnvironment(mc, playedEnvironment);
-        playedEnvironment.trim(BUFFER_LIMIT);
-        sampleGear(mc, playedGear);
-        playedGear.trim(BUFFER_LIMIT);
-        playedEntities.record(mc.world.getEntities(), mc.player, mc.player, playedTicks - 1, RecapWorldOverlay.dimensionOf(mc.world));
-        playedEntities.dropBefore(playedTicks - BUFFER_LIMIT);
-        playedSounds.dropBefore(playedTicks - BUFFER_LIMIT);
-        playedParticles.dropBefore(playedTicks - BUFFER_LIMIT);
-        playedEvents.dropBefore(playedTicks - BUFFER_LIMIT);
-        playedDimensions.mark(playedTicks - 1, RecapWorldOverlay.dimensionOf(mc.world));
+        playedDimensions.mark(playedTicks - 1, dim);
         playedDimensions.dropBefore(playedTicks - BUFFER_LIMIT);
 
         int oldest = playedTicks - BUFFER_LIMIT;
@@ -169,7 +208,44 @@ public final class RecapRecorder
         playedMarkers.removeIf((marker) -> marker < oldest);
     }
 
-    /** How the player moves this tick: a frame for every tick the camera is kept on, so both line up. */
+    private static void sampleSliceTick(MinecraftClient mc, RecapSpool.Slice slice, String dim, boolean captureBaseline)
+    {
+        int localTick = slice.ticks;
+
+        slice.ticks += 1;
+        sample(mc, slice.track);
+        sampleMotion(mc, slice.motion);
+        sampleEnvironment(mc, slice.environment);
+        sampleGear(mc, slice.gear);
+        slice.entities.record(mc.world.getEntities(), mc.player, mc.player, localTick, dim);
+        slice.hud.record(mc, localTick);
+
+        if (captureBaseline)
+        {
+            slice.baseline.recordStep(mc.world, mc.player, dim);
+        }
+    }
+
+    private static void rotateSlice(boolean cleanStop)
+    {
+        if (activeSession == null || currentSlice == null || currentSlice.ticks <= 0)
+        {
+            return;
+        }
+
+        RecapSpool.Slice sealed = currentSlice;
+        RecapSpool.Slice next = new RecapSpool.Slice(ticks);
+
+        next.gear.seedFrom(sealed.gear);
+        currentSlice = next;
+
+        List<Integer> markersCopy = new ArrayList<>(markers);
+        RecapDimensions dimsCopy = new RecapDimensions();
+
+        dimsCopy.copy(dimensions);
+        activeSession.spoolSlice(sealed, ticks, markersCopy, dimsCopy, cleanStop);
+    }
+
     private static void sampleMotion(MinecraftClient mc, RecapMotion into)
     {
         if (mc.player != null)
@@ -178,7 +254,6 @@ public final class RecapRecorder
         }
         else if (!into.isEmpty())
         {
-            /* No player for a moment: the last frame again, so the frames keep step with the ticks */
             RecapMotion.Frame frame = new RecapMotion.Frame();
 
             into.sample(into.size() - 1, frame);
@@ -186,12 +261,11 @@ public final class RecapRecorder
         }
     }
 
-    /** What the player has on it and its interface's numbers this tick, a frame for every tick as the camera. */
     private static void sampleGear(MinecraftClient mc, RecapGear into)
     {
         if (mc.player != null)
         {
-            net.minecraft.world.GameMode mode = mc.interactionManager == null ? null : mc.interactionManager.getCurrentGameMode();
+            GameMode mode = mc.interactionManager == null ? null : mc.interactionManager.getCurrentGameMode();
 
             into.add(mc.player, mode == null ? -1 : mode.getId());
         }
@@ -201,134 +275,141 @@ public final class RecapRecorder
         }
     }
 
-    /* The world's sounds and particles, as they come */
+    /* Sounds, particles and world events */
 
     private static boolean keepsEffects()
     {
-        return !ambient && (state == State.RECORDING || !RecapScene.isActive());
+        MinecraftClient mc = MinecraftClient.getInstance();
+
+        return !ambient && mc != null && !mc.isPaused() && (state == State.RECORDING || !RecapScene.isActive());
     }
 
-    /** A sound the game plays, with its loudness and pitch as asked. */
-    public static void onSound(net.minecraft.client.sound.SoundInstance sound, float volume, float pitch)
+    public static void onSound(SoundInstance sound, float volume, float pitch)
     {
         if (!keepsEffects() || !RecapSounds.isKept(sound))
         {
             return;
         }
 
-        String dimension = RecapWorldOverlay.dimensionOf(MinecraftClient.getInstance().world);
+        MinecraftClient mc = MinecraftClient.getInstance();
+        String dimension = RecapWorldOverlay.dimensionOf(mc.world);
 
-        if (state == State.RECORDING)
+        if (state == State.RECORDING && currentSlice != null)
         {
-            sounds.add(ticks, sound, volume, pitch, dimension);
+            currentSlice.sounds.add(currentSlice.ticks, sound, volume, pitch, dimension);
         }
 
-        if (!RecapScene.isActive() && MinecraftClient.getInstance().world != null)
+        RecapSpool.Slice ring = instantRing.current();
+
+        if (!RecapScene.isActive() && mc.world != null && ring != null)
         {
-            playedSounds.add(playedTicks, sound, volume, pitch, dimension);
+            ring.sounds.add(ring.ticks, sound, volume, pitch, dimension);
         }
     }
 
-    /** A particle the game sends off. */
-    public static void onParticle(net.minecraft.particle.ParticleEffect effect, double x, double y, double z, double vx, double vy, double vz)
+    public static void onParticle(ParticleEffect effect, double x, double y, double z, double vx, double vy, double vz)
     {
         if (RecapParticles.replaying || !keepsEffects())
         {
             return;
         }
 
-        String dimension = RecapWorldOverlay.dimensionOf(MinecraftClient.getInstance().world);
+        MinecraftClient mc = MinecraftClient.getInstance();
+        String dimension = RecapWorldOverlay.dimensionOf(mc.world);
 
-        if (state == State.RECORDING)
+        if (state == State.RECORDING && currentSlice != null)
         {
-            particles.addEffect(ticks, effect, x, y, z, vx, vy, vz, dimension);
+            currentSlice.particles.addEffect(currentSlice.ticks, effect, x, y, z, vx, vy, vz, dimension);
         }
 
-        if (!RecapScene.isActive() && MinecraftClient.getInstance().world != null)
+        RecapSpool.Slice ring = instantRing.current();
+
+        if (!RecapScene.isActive() && mc.world != null && ring != null)
         {
-            playedParticles.addEffect(playedTicks, effect, x, y, z, vx, vy, vz, dimension);
+            ring.particles.addEffect(ring.ticks, effect, x, y, z, vx, vy, vz, dimension);
         }
     }
 
-    /** The dust of a block broken. */
-    public static void onBlockBreakParticles(net.minecraft.util.math.BlockPos pos, net.minecraft.block.BlockState state)
+    public static void onBlockBreakParticles(BlockPos pos, BlockState state)
     {
         if (RecapParticles.replaying || !keepsEffects())
         {
             return;
         }
 
-        String dimension = RecapWorldOverlay.dimensionOf(MinecraftClient.getInstance().world);
+        MinecraftClient mc = MinecraftClient.getInstance();
+        String dimension = RecapWorldOverlay.dimensionOf(mc.world);
 
-        if (RecapRecorder.state == State.RECORDING)
+        if (RecapRecorder.state == State.RECORDING && currentSlice != null)
         {
-            particles.addBlockBreak(ticks, pos, state, dimension);
+            currentSlice.particles.addBlockBreak(currentSlice.ticks, pos, state, dimension);
         }
 
-        if (!RecapScene.isActive() && MinecraftClient.getInstance().world != null)
+        RecapSpool.Slice ring = instantRing.current();
+
+        if (!RecapScene.isActive() && mc.world != null && ring != null)
         {
-            playedParticles.addBlockBreak(playedTicks, pos, state, dimension);
+            ring.particles.addBlockBreak(ring.ticks, pos, state, dimension);
         }
     }
 
-    /** The dust of a block hit. */
-    public static void onBlockHitParticles(net.minecraft.util.math.BlockPos pos, net.minecraft.util.math.Direction side)
+    public static void onBlockHitParticles(BlockPos pos, Direction side)
     {
         if (RecapParticles.replaying || !keepsEffects())
         {
             return;
         }
 
-        String dimension = RecapWorldOverlay.dimensionOf(MinecraftClient.getInstance().world);
+        MinecraftClient mc = MinecraftClient.getInstance();
+        String dimension = RecapWorldOverlay.dimensionOf(mc.world);
 
-        if (state == State.RECORDING)
+        if (state == State.RECORDING && currentSlice != null)
         {
-            particles.addBlockHit(ticks, pos, side, dimension);
+            currentSlice.particles.addBlockHit(currentSlice.ticks, pos, side, dimension);
         }
 
-        if (!RecapScene.isActive() && MinecraftClient.getInstance().world != null)
+        RecapSpool.Slice ring = instantRing.current();
+
+        if (!RecapScene.isActive() && mc.world != null && ring != null)
         {
-            playedParticles.addBlockHit(playedTicks, pos, side, dimension);
+            ring.particles.addBlockHit(ring.ticks, pos, side, dimension);
         }
     }
 
-    /**
-     * The world around this tick, read from the world's own values: never the time or weather a
-     * shown recap or a film draws over them.
-     */
     private static void sampleEnvironment(MinecraftClient mc, RecapEnvironment into)
     {
-        net.minecraft.client.world.ClientWorld world = mc.world;
-        long time = ((mchorse.bbs_mod.mixin.client.RecapClientTimeAccessor) world.getLevelProperties()).bbs$getTimeOfDay();
-        mchorse.bbs_mod.mixin.client.RecapWorldWeatherAccessor weather = (mchorse.bbs_mod.mixin.client.RecapWorldWeatherAccessor) world;
+        ClientWorld cw = mc.world;
+        long time = ((RecapClientTimeAccessor) cw.getLevelProperties()).bbs$getTimeOfDay();
+        RecapWorldWeatherAccessor weather = (RecapWorldWeatherAccessor) cw;
 
         into.add(time, weather.bbs$getRainGradient(), weather.bbs$getThunderGradient());
     }
 
-    /**
-     * A block of a client world changed: broken, placed or used. It goes into the running recording
-     * at its tick, and into the instant stretch while play is going on, each with the dimension it
-     * changed in; the recap's own blocks put in by Recap Studio are not play and are left out. A
-     * change from outside over a block the shown recap set is what that block really is now.
-     */
-    public static void onBlockChanged(net.minecraft.client.world.ClientWorld in, net.minecraft.util.math.BlockPos pos, net.minecraft.block.BlockState from, net.minecraft.block.BlockState to)
+    public static void onBlockChanged(ClientWorld in, BlockPos pos, BlockState from, BlockState to)
     {
-        if (RecapWorldOverlay.isApplying() || from == to)
+        onBlockChanged(in, pos, from, to, null, null);
+    }
+
+    /** Records a block change along with optional before/after BlockEntity NBT payloads. */
+    public static void onBlockChanged(ClientWorld in, BlockPos pos, BlockState from, BlockState to, NbtCompound fromNbt, NbtCompound toNbt)
+    {
+        if (RecapWorldOverlay.isApplying() || (from == to && fromNbt == null && toNbt == null))
         {
             return;
         }
 
-        RecapWorldOverlay.onBlockChanged(in, pos, to);
+        RecapWorldOverlay.onBlockChanged(in, pos, to, toNbt);
 
         String dimension = RecapWorldOverlay.dimensionOf(in);
 
-        if (state == State.RECORDING)
+        if (state == State.RECORDING && currentSlice != null)
         {
-            if (events.size() < EVENT_LIMIT)
+            if (totalEvents < EVENT_LIMIT)
             {
-                events.add(ticks, pos, from, to, dimension);
+                currentSlice.events.add(currentSlice.ticks, pos, from, to, fromNbt, toNbt, dimension);
+                totalEvents += 1;
 
-                if (!eventsNear && events.size() >= EVENT_LIMIT / 4 * 3)
+                if (!eventsNear && totalEvents >= EVENT_LIMIT / 4 * 3)
                 {
                     eventsNear = true;
                     say("bbs.recap.message.events_near");
@@ -341,16 +422,67 @@ public final class RecapRecorder
             }
         }
 
-        if (in != null && !RecapScene.isActive())
-        {
-            playedEvents.add(playedTicks, pos, from, to, dimension);
+        RecapSpool.Slice ring = instantRing.current();
 
-            if (playedEvents.size() > PLAYED_EVENT_LIMIT)
-            {
-                /* In a chunk, so the front is moved on now and then rather than every change */
-                playedEvents.dropFirst(playedEvents.size() - PLAYED_EVENT_LIMIT + PLAYED_EVENT_LIMIT / 16);
-            }
+        if (in != null && !RecapScene.isActive() && ring != null && ring.events.size() < RecapSpool.SLICE_EVENT_CAP)
+        {
+            ring.events.add(ring.ticks, pos, from, to, fromNbt, toNbt, dimension);
         }
+    }
+
+    /** Records a synced block event (chest lid open/close, note block, bell, piston action). */
+    public static void onBlockAction(ClientWorld in, BlockPos pos, Block block, int type, int data)
+    {
+        if (RecapWorldOverlay.isApplying() || in == null)
+        {
+            return;
+        }
+
+        String dimension = RecapWorldOverlay.dimensionOf(in);
+
+        if (state == State.RECORDING && currentSlice != null)
+        {
+            currentSlice.events.addBlockAction(currentSlice.ticks, pos, block, type, data, dimension);
+        }
+
+        RecapSpool.Slice ring = instantRing.current();
+
+        if (!RecapScene.isActive() && ring != null)
+        {
+            ring.events.addBlockAction(ring.ticks, pos, block, type, data, dimension);
+        }
+    }
+
+    /** A toast of the game popping up while recording: part of the point of view. */
+    public static void onToast(net.minecraft.client.toast.Toast toast)
+    {
+        if (ownToast || RecapScene.isActive())
+        {
+            return;
+        }
+
+        if (state == State.RECORDING)
+        {
+            povSession.toast(ticks, toast);
+        }
+
+        povRing.toast(playedTicks, toast);
+    }
+
+    /** A totem of undying popping while recording. */
+    public static void onTotem(net.minecraft.item.ItemStack stack)
+    {
+        if (RecapScene.isActive())
+        {
+            return;
+        }
+
+        if (state == State.RECORDING)
+        {
+            povSession.totem(ticks, stack);
+        }
+
+        povRing.totem(playedTicks, stack);
     }
 
     private static void sample(MinecraftClient mc, RecapTrack into)
@@ -378,19 +510,23 @@ public final class RecapRecorder
             return false;
         }
 
+        String id;
+
+        do
+        {
+            id = UUID.randomUUID().toString().substring(0, 8);
+        }
+        while (RecapStore.get(id) != null);
+
         world = info;
         ticks = 0;
+        totalEvents = 0;
         markers.clear();
-        track.clear();
-        motion.clear();
-        events.clear();
-        environment.clear();
-        gear.clear();
-        entities.clear();
-        sounds.clear();
-        particles.clear();
         eventsNear = eventsFull = false;
         dimensions.clear();
+        povSession.clear();
+        activeSession = new RecapSpool.Session(id, info);
+        currentSlice = new RecapSpool.Slice(0);
         state = State.RECORDING;
 
         return true;
@@ -405,26 +541,65 @@ public final class RecapRecorder
 
         state = State.STOPPED;
 
+        /* Flush a durable slice checkpoint to .active/<id>/ when pausing a non-empty stretch */
+        if (currentSlice != null && currentSlice.ticks > 0)
+        {
+            rotateSlice(false);
+        }
+
         return true;
     }
 
     /** Writes the recording to the list and ends the session; null when there is nothing to write. */
     public static RecapRecord save()
     {
-        if (state == State.IDLE || world == null)
+        return saveSession(false);
+    }
+
+    private static RecapRecord saveSession(boolean fastExit)
+    {
+        if (state == State.IDLE || world == null || activeSession == null)
         {
             return null;
         }
 
-        /* The session ends here whatever comes of the writing: no clock runs behind it */
         state = State.STOPPED;
 
-        RecapRecord record = create(world, ticks, markers, data(track, motion, events, environment, gear, entities, sounds, particles), dimensions, false);
+        MinecraftClient mc = MinecraftClient.getInstance();
 
-        if (record != null)
+        /* If Start -> Save was pressed while paused before any client tick ran, capture one frame now */
+        if (ticks == 0 && activeSession.committedCount() == 0 && currentSlice != null && mc != null && mc.world != null)
         {
-            reset();
+            String dim = RecapWorldOverlay.dimensionOf(mc.world);
+
+            sampleSliceTick(mc, currentSlice, dim, isBaselineEnabled());
+            ticks = 1;
+            dimensions.mark(0, dim);
         }
+
+        if (ticks <= 0)
+        {
+            activeSession.discard();
+            reset();
+
+            return null;
+        }
+
+        RecapRecord record = buildRecord(activeSession.id, world, ticks, activeSession.created, markers, dimensions, false);
+
+        if (!RecapStore.save(record))
+        {
+            return null;
+        }
+
+        RecapSpool.Session finishing = activeSession;
+        RecapSpool.Slice tail = currentSlice;
+
+        activeSession = null;
+        currentSlice = null;
+        RecapStore.savePov(record, povSession.extract(0, record.ticks));
+        finishing.finalizeToStore(record, tail, fastExit);
+        reset();
 
         return record;
     }
@@ -434,6 +609,12 @@ public final class RecapRecorder
         if (state == State.IDLE)
         {
             return false;
+        }
+
+        if (activeSession != null)
+        {
+            activeSession.discard();
+            activeSession = null;
         }
 
         reset();
@@ -495,13 +676,21 @@ public final class RecapRecorder
             }
         }
 
-        RecapData data = data(RecapTrack.tail(playedTrack, length), RecapMotion.tail(playedMotion, length), RecapEvents.tail(playedEvents, from), RecapEnvironment.tail(playedEnvironment, length),
-            RecapGear.tail(playedGear, length), RecapEntities.tail(playedEntities, from), RecapSounds.tail(playedSounds, from), RecapParticles.tail(playedParticles, from));
+        RecapData data = instantRing.extractTail(playedTicks, length);
+        int actualTicks = data.track != null && !data.track.isEmpty() ? data.track.size() : length;
+        RecapRecord record = buildRecord("", info, actualTicks, System.currentTimeMillis(), inside, RecapDimensions.tail(playedDimensions, from), true);
 
-        return create(info, length, inside, data, RecapDimensions.tail(playedDimensions, from), true);
+        if (!RecapStore.save(record))
+        {
+            return null;
+        }
+
+        RecapStore.writeAllDirect(record, data, null);
+        RecapStore.savePov(record, povRing.extract(from, playedTicks));
+
+        return record;
     }
 
-    /** The record key: starts a recording, and saves the one running or stopped. */
     public static void toggleWithMessage()
     {
         if (state == State.IDLE)
@@ -514,8 +703,6 @@ public final class RecapRecorder
         }
     }
 
-
-    /** The instant key and button: saves the last stretch, and says what came of it. */
     public static RecapRecord saveInstantWithMessage()
     {
         if (!isInstantEnabled())
@@ -537,7 +724,6 @@ public final class RecapRecorder
         return record;
     }
 
-    /** The start of the transport bar, with what came of it said. */
     public static void startWithMessage()
     {
         boolean resume = state == State.STOPPED;
@@ -572,14 +758,22 @@ public final class RecapRecorder
         }
     }
 
-    /** A pop up in the corner when a recap was written, with its name and length, seen also over the pause menu. */
     private static void toast(String key, RecapRecord record)
     {
         MinecraftClient mc = MinecraftClient.getInstance();
         Text title = Text.literal(L10n.lang(key).get());
         Text description = Text.literal(record.name + "  " + RecapTime.format(record.ticks));
 
-        net.minecraft.client.toast.SystemToast.show(mc.getToastManager(), net.minecraft.client.toast.SystemToast.Type.PERIODIC_NOTIFICATION, title, description);
+        ownToast = true;
+
+        try
+        {
+            SystemToast.show(mc.getToastManager(), SystemToast.Type.PERIODIC_NOTIFICATION, title, description);
+        }
+        finally
+        {
+            ownToast = false;
+        }
     }
 
     public static void cancelWithMessage()
@@ -610,15 +804,9 @@ public final class RecapRecorder
         reset();
         playedTicks = 0;
         playedMarkers.clear();
-        playedTrack.clear();
-        playedMotion.clear();
-        playedEvents.clear();
-        playedEnvironment.clear();
-        playedGear.clear();
-        playedEntities.clear();
-        playedSounds.clear();
-        playedParticles.clear();
         playedDimensions.clear();
+        povRing.clear();
+        instantRing.clear();
     }
 
     /** Leaving the world keeps what was being recorded rather than losing it. */
@@ -626,7 +814,28 @@ public final class RecapRecorder
     {
         if (state != State.IDLE && ticks > 0)
         {
-            save();
+            saveSession(false);
+        }
+        else if (activeSession != null)
+        {
+            activeSession.discard();
+        }
+
+        onJoin();
+    }
+
+    /** Fast game exit: seals the tail slice and journal without blocking shutdown to re-merge multi-slice sessions. */
+    public static void onClientStopping()
+    {
+        if (state != State.IDLE && ticks > 0)
+        {
+            boolean multiSlice = activeSession != null && activeSession.committedCount() > 0;
+
+            saveSession(multiSlice);
+        }
+        else if (activeSession != null)
+        {
+            activeSession.discard();
         }
 
         onJoin();
@@ -636,40 +845,25 @@ public final class RecapRecorder
     {
         state = State.IDLE;
         ticks = 0;
+        totalEvents = 0;
         markers.clear();
-        track.clear();
-        motion.clear();
-        events.clear();
-        environment.clear();
-        gear.clear();
-        entities.clear();
-        sounds.clear();
-        particles.clear();
         eventsNear = eventsFull = false;
         dimensions.clear();
         world = null;
+        activeSession = null;
+        currentSlice = null;
+        povSession.clear();
     }
 
-    private static RecapData data(RecapTrack track, RecapMotion motion, RecapEvents events, RecapEnvironment environment, RecapGear gear, RecapEntities entities, RecapSounds sounds, RecapParticles particles)
-    {
-        RecapData data = new RecapData();
-
-        data.track = track;
-        data.motion = motion;
-        data.events = events;
-        data.environment = environment;
-        data.gear = gear;
-        data.entities = entities;
-        data.sounds = sounds;
-        data.particles = particles;
-
-        return data;
-    }
-
-    private static RecapRecord create(RecapWorlds.Info info, int length, List<Integer> marked, RecapData data, RecapDimensions places, boolean instant)
+    private static RecapRecord buildRecord(String id, RecapWorlds.Info info, int length, long created, List<Integer> marked, RecapDimensions places, boolean instant)
     {
         RecapRecord record = new RecapRecord();
         LocalDateTime now = LocalDateTime.now();
+
+        if (id != null && !id.isEmpty())
+        {
+            record.id = id;
+        }
 
         record.name = info.name() + " " + now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH.mm"));
         record.worldKey = info.key();
@@ -677,7 +871,7 @@ public final class RecapRecorder
         record.worldTarget = info.target();
         record.singleplayer = info.singleplayer();
         record.ticks = length;
-        record.created = System.currentTimeMillis();
+        record.created = created;
         record.instant = instant;
         record.dimensions.copy(places);
 
@@ -685,20 +879,6 @@ public final class RecapRecorder
         {
             record.addMarker(marker);
         }
-
-        if (!RecapStore.save(record))
-        {
-            return null;
-        }
-
-        RecapStore.saveTrack(record, data.track);
-        RecapStore.saveMotion(record, data.motion);
-        RecapStore.saveEvents(record, data.events);
-        RecapStore.saveEnvironment(record, data.environment);
-        RecapStore.saveGear(record, data.gear);
-        RecapStore.saveEntities(record, data.entities);
-        RecapStore.saveSounds(record, data.sounds);
-        RecapStore.saveParticles(record, data.particles);
 
         return record;
     }

@@ -224,6 +224,13 @@ public class RecapPauseBar extends ClickableWidget
         /* Only a running recording moves the time; held or ended, it stands still, at zero when idle.
          * How much an instant save would take is on that button's tooltip instead. */
         String time = RecapTime.format((int) RecapRecorder.getTime(transition));
+
+        /* The single player world stands still under this menu, and the recording with it: say so */
+        if (!this.compact && state == RecapRecorder.State.RECORDING && MinecraftClient.getInstance().isPaused())
+        {
+            time += "  " + L10n.lang("bbs.recap.bar.waiting").get();
+        }
+
         int color = this.compact ? (state == RecapRecorder.State.IDLE ? RecapStyle.dim() : RecapStyle.text()) : (state == RecapRecorder.State.IDLE ? 0xb0ffffff : Colors.WHITE);
         int width = font.getWidth(time);
         int centerX = this.compact ? this.getX() + PADDING + 23 : this.getX() + this.width / 2;

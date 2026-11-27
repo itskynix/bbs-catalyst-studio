@@ -6,6 +6,7 @@ import mchorse.bbs_mod.data.types.MapType;
 import mchorse.bbs_mod.l10n.L10n;
 import mchorse.bbs_mod.ui.Keys;
 import mchorse.bbs_mod.ui.UIKeys;
+import mchorse.bbs_mod.ui.film.IUIClipTargets;
 import mchorse.bbs_mod.ui.film.IUIClipsDelegate;
 import mchorse.bbs_mod.ui.film.UIClipsPanel;
 import mchorse.bbs_mod.ui.film.UIFilmPanel;
@@ -49,6 +50,13 @@ public class UIThirdPersonClip extends UIClip<ThirdPersonClientClip>
 
         this.selector = new UIButton(UIKeys.CAMERA_PANELS_TARGET_TITLE, (b) ->
         {
+            if (this.editor instanceof IUIClipTargets targets)
+            {
+                targets.showTargets(this.getContext(), this.clip.selector.get(), (i) -> this.clip.selector.set(i));
+
+                return;
+            }
+
             UIFilmPanel panel = this.getParent(UIFilmPanel.class);
 
             if (panel != null)
@@ -59,6 +67,13 @@ public class UIThirdPersonClip extends UIClip<ThirdPersonClientClip>
         this.selector.tooltip(UIKeys.CAMERA_PANELS_TARGET_TOOLTIP);
         this.group = new UIButton(UIKeys.GENERIC_KEYFRAMES_ANCHOR_PICK_ATTACHMENT, (b) ->
         {
+            if (this.editor instanceof IUIClipTargets targets)
+            {
+                targets.showTargetBones(this.getContext(), this.clip.selector.get(), this.clip.group.get(), (attachment) -> this.clip.group.set(attachment));
+
+                return;
+            }
+
             UIAnchorKeyframeFactory.displayAttachments(this.getParent(UIFilmPanel.class), this.clip.selector.get(), this.clip.group.get(), (attachment) -> this.clip.group.set(attachment));
         });
         this.group.tooltip(UIKeys.THIRD_PERSON_BONE_TOOLTIP);
@@ -96,8 +111,8 @@ public class UIThirdPersonClip extends UIClip<ThirdPersonClientClip>
     {
         super.registerPanels();
 
-        /* Recap Studio has no actors to pick: its clip follows the recorded player by itself */
-        if (this.editor.pickActors())
+        /* Recap Studio picks among the recorded players instead of a film's actors */
+        if (this.editor.pickActors() || this.editor instanceof IUIClipTargets)
         {
             this.panels.add(this.section(UIKeys.CAMERA_PANELS_TARGET, this.selector, this.group));
         }

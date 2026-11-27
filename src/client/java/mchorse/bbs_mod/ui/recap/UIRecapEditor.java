@@ -398,7 +398,7 @@ public class UIRecapEditor extends UIElement
             menu.action(Icons.FILM, UIRecapKeys.key("editor.export"), this::toggleExport);
         }
 
-        if (this.sceneShown && RecapScene.isElsewhere())
+        if (this.sceneShown && RecapScene.needsServerTravel())
         {
             menu.action(Icons.GLOBE, UIRecapKeys.key("editor.travel"), this::travelToDimension);
         }
@@ -454,7 +454,7 @@ public class UIRecapEditor extends UIElement
         String id = RecapScene.recordedDimension();
         MinecraftClient mc = MinecraftClient.getInstance();
 
-        if (id == null || !RecapScene.isElsewhere() || mc.player == null || this.travelTarget != null)
+        if (id == null || !RecapScene.needsServerTravel() || mc.player == null || this.travelTarget != null)
         {
             return;
         }
@@ -492,6 +492,7 @@ public class UIRecapEditor extends UIElement
 
         if (identifier == null)
         {
+            this.endTravel();
             context.notifyError(UIRecapKeys.key("editor.travel_failed"));
 
             return;
@@ -523,7 +524,12 @@ public class UIRecapEditor extends UIElement
 
                     for (int up = 0; up < 64; up++)
                     {
-                        if (target.isSpaceEmpty(player, size.getBoxAt(x, y + up, z)))
+                        net.minecraft.util.math.BlockPos feet = net.minecraft.util.math.BlockPos.ofFloored(x, y + up, z);
+                        net.minecraft.block.BlockState feetState = target.getBlockState(feet);
+
+                        if (target.isSpaceEmpty(player, size.getBoxAt(x, y + up, z))
+                            && !feetState.isOf(net.minecraft.block.Blocks.NETHER_PORTAL)
+                            && !feetState.isOf(net.minecraft.block.Blocks.END_PORTAL))
                         {
                             safeY = y + up;
 
@@ -532,7 +538,9 @@ public class UIRecapEditor extends UIElement
                     }
 
                     player.fallDistance = 0F;
+                    player.resetPortalCooldown();
                     player.teleport(target, x, safeY, z, yaw, pitch);
+                    player.resetPortalCooldown();
                     done = true;
                 }
             }
@@ -586,11 +594,28 @@ public class UIRecapEditor extends UIElement
         {
             this.travelTicks += 1;
 
-            boolean there = mc.world != null && mc.player != null && this.travelTarget.equals(mchorse.bbs_mod.recap.RecapWorldOverlay.dimensionOf(mc.world))
-                && mc.world.getChunkManager().isChunkLoaded(mc.player.getBlockX() >> 4, mc.player.getBlockZ() >> 4);
+            double focusX = mc.player == null ? 0D : mc.player.getX();
+            double focusZ = mc.player == null ? 0D : mc.player.getZ();
+            int sourceTick = 0;
 
-            /* Arrived and settled a moment, or given up on after twenty seconds */
-            if ((there && this.travelTicks >= 10) || this.travelTicks > 400)
+            if (this.record != null && mc.player != null)
+            {
+                float source = RecapClips.sourceTime(this.record.clips, this.cursor);
+                mchorse.bbs_mod.recap.RecapMotion.Frame at = new mchorse.bbs_mod.recap.RecapMotion.Frame();
+
+                sourceTick = (int) Math.floor(source);
+
+                if (RecapScene.frameAt(this.track, this.motion, source, at, mc.player.getStandingEyeHeight()))
+                {
+                    focusX = at.x;
+                    focusZ = at.z;
+                }
+            }
+
+            boolean ready = mchorse.bbs_mod.recap.RecapSettler.isDimensionReady(mc, this.travelTarget, focusX, focusZ, sourceTick, this.travelTicks);
+
+            /* Arrived with 3x3 chunks, overlay and lighting settled, or timed out after twenty seconds */
+            if (ready || this.travelTicks > 400)
             {
                 this.endTravel();
             }
@@ -598,7 +623,7 @@ public class UIRecapEditor extends UIElement
             return;
         }
 
-        if (!this.sceneShown || this.isFlying() || mc.getServer() == null || !RecapScene.isElsewhere())
+        if (!this.sceneShown || this.isFlying() || mc.getServer() == null || !RecapScene.needsServerTravel())
         {
             this.elsewhereTicks = 0;
             this.failedTarget = null;
@@ -878,12 +903,22 @@ public class UIRecapEditor extends UIElement
             return UIRecapKeys.text("editor.flying_note");
         }
 
+        if (this.isTraveling())
+        {
+            return UIRecapKeys.key("editor.traveling").format(UIRecapKeys.dimensionName(this.travelTarget)).get();
+        }
+
+        if (RecapScene.showsIsolatedStage())
+        {
+            return UIRecapKeys.key("editor.isolated_stage").format(UIRecapKeys.dimensionName(RecapScene.recordedDimension())).get();
+        }
+
         if (RecapScene.isElsewhere())
         {
             return UIRecapKeys.key("editor.other_dimension").format(UIRecapKeys.dimensionName(RecapScene.recordedDimension())).get();
         }
 
-        if (RecapScene.isFirstPerson())
+        if (RecapScene.isPointOfView())
         {
             return UIRecapKeys.text("editor.live_world");
         }

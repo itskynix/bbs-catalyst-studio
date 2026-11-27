@@ -1076,7 +1076,7 @@ public class BBSModClient implements ClientModInitializer
         {
             try
             {
-                mchorse.bbs_mod.recap.RecapRecorder.onLeave();
+                mchorse.bbs_mod.recap.RecapRecorder.onClientStopping();
             }
             catch (Throwable error)
             {

@@ -35,8 +35,9 @@ import java.util.List;
 public class RecapVideoExport extends VideoExportSession
 {
     private final UIRecapEditor editor;
-    private long readyAt;
-    private long warmupFrom;
+    private int warmupTicks;
+    private int settledTicks;
+    private int exportTicks;
 
     public RecapVideoExport(UIRecapEditor editor)
     {
@@ -113,8 +114,9 @@ public class RecapVideoExport extends VideoExportSession
         this.editor.stopPlayback();
         this.editor.setFlight(false);
         this.editor.seekForExport(this.startTick);
-        this.readyAt = 0L;
-        this.warmupFrom = 0L;
+        this.warmupTicks = 0;
+        this.settledTicks = 0;
+        this.exportTicks = 0;
 
         return true;
     }
@@ -180,6 +182,11 @@ public class RecapVideoExport extends VideoExportSession
     protected void onWarmupStarted()
     {
         this.editor.stopPlayback();
+
+        RecapRecord record = this.editor.getRecord();
+        int srcStart = record == null ? 0 : (int) Math.floor(mchorse.bbs_mod.recap.RecapClips.sourceTime(record.clips, this.startTick));
+
+        mchorse.bbs_mod.recap.RecapSettler.settleForExportStart(net.minecraft.client.MinecraftClient.getInstance().world, record, RecapScene.getData(), RecapScene.effectiveDimension(), srcStart);
     }
 
     @Override
@@ -188,41 +195,34 @@ public class RecapVideoExport extends VideoExportSession
         return this.editor.getRecord() == null || !this.editor.isSceneShown();
     }
 
-    /** The warm up ends once the first moment's blocks and light are all in, held a few frames. */
+    /** The warm up ends deterministically once the first moment's blocks, light and pre-roll are settled. */
     @Override
     protected boolean isWarmupReady()
     {
-        long now = System.currentTimeMillis();
-
-        if (this.warmupFrom == 0L)
-        {
-            this.warmupFrom = now;
-        }
+        this.warmupTicks += 1;
 
         /* Light that never settles must not keep the video from ever starting */
-        if (now - this.warmupFrom > 10_000L)
+        if (this.warmupTicks > 200)
         {
             return true;
         }
 
-        if (!RecapScene.isActive() || !RecapWorldOverlay.isSettled())
+        if (!RecapScene.isActive() || RecapScene.isTraveling() || !RecapWorldOverlay.isSettled())
         {
-            this.readyAt = 0L;
+            this.settledTicks = 0;
 
             return false;
         }
 
-        if (this.readyAt == 0L)
-        {
-            this.readyAt = System.currentTimeMillis();
-        }
+        this.settledTicks += 1;
 
-        return System.currentTimeMillis() - this.readyAt > 150L;
+        return this.settledTicks >= 3;
     }
 
     @Override
     protected void onRecordingStarted()
     {
+        this.exportTicks = 0;
         this.editor.seekForExport(this.startTick);
         this.editor.startPlayback();
     }
@@ -230,7 +230,9 @@ public class RecapVideoExport extends VideoExportSession
     @Override
     protected boolean isFinished()
     {
-        if (System.currentTimeMillis() - this.recordingStartedAtMs < 300L)
+        this.exportTicks += 1;
+
+        if (this.exportTicks < 2)
         {
             return false;
         }

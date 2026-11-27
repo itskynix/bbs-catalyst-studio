@@ -41,6 +41,13 @@ public final class RecapWriter
         boolean write(File into) throws IOException;
     }
 
+    /** Runs a sequential storage task on the background data writer thread. */
+    @FunctionalInterface
+    public interface DataTask
+    {
+        boolean run() throws Exception;
+    }
+
     /* Two writers: the recaps' own small files, so the list never waits behind a recording's
      * millions of blocks, and the large data files. A file always goes to the same one, so the
      * writes of one file keep their order */
@@ -140,6 +147,50 @@ public final class RecapWriter
         return future;
     }
 
+    /**
+     * Runs a storage task on the background {@code DATA} thread in strict FIFO order and tracks
+     * its completion under {@code keyFile} for {@link #await} and {@link #shutdown}.
+     */
+    public static synchronized CompletableFuture<Boolean> writeData(File keyFile, DataTask task)
+    {
+        File file = key(keyFile);
+
+        if (closed)
+        {
+            return CompletableFuture.completedFuture(runDataTask(file, task));
+        }
+
+        CompletableFuture<Boolean> future = CompletableFuture.supplyAsync(() -> runDataTask(file, task), DATA);
+
+        pending.put(file, future);
+        future.whenComplete((written, error) ->
+        {
+            synchronized (RecapWriter.class)
+            {
+                if (pending.get(file) == future)
+                {
+                    pending.remove(file);
+                }
+            }
+        });
+
+        return future;
+    }
+
+    private static boolean runDataTask(File file, DataTask task)
+    {
+        try
+        {
+            return task.run();
+        }
+        catch (Throwable e)
+        {
+            BBSMod.LOGGER.error("Recap data task failed for " + file.getName(), e);
+
+            return false;
+        }
+    }
+
     /** Writes into a temporary file next to the target and moves it over the target in one step. */
     private static boolean run(File file, Job job)
     {
@@ -158,6 +209,18 @@ public final class RecapWriter
                 temporary.delete();
 
                 return false;
+            }
+
+            if (file.getName().endsWith(".json") && file.isFile())
+            {
+                File backup = new File(folder, file.getName() + ".bak");
+
+                try
+                {
+                    Files.copy(file.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                }
+                catch (IOException ignored)
+                {}
             }
 
             try

@@ -1,6 +1,20 @@
 package mchorse.bbs_mod.ui.recap;
 
 import mchorse.bbs_mod.BBSModClient;
+import mchorse.bbs_mod.BBSSettings;
+import mchorse.bbs_mod.camera.clips.modifiers.TrackerClip;
+import mchorse.bbs_mod.camera.clips.overwrite.DollyClip;
+import mchorse.bbs_mod.camera.data.Point;
+import mchorse.bbs_mod.forms.FormUtilsClient;
+import mchorse.bbs_mod.forms.entities.IEntity;
+import mchorse.bbs_mod.forms.forms.Form;
+import mchorse.bbs_mod.l10n.keys.IKey;
+import mchorse.bbs_mod.recap.RecapScene;
+import mchorse.bbs_mod.ui.UIKeys;
+import mchorse.bbs_mod.ui.film.IUIClipTargets;
+import mchorse.bbs_mod.ui.utils.bones.UIBonePickerContextMenu;
+import mchorse.bbs_mod.ui.utils.icons.Icons;
+import mchorse.bbs_mod.utils.colors.Colors;
 import mchorse.bbs_mod.camera.Camera;
 import mchorse.bbs_mod.camera.clips.overwrite.ProCameraClip;
 import mchorse.bbs_mod.camera.data.Position;
@@ -22,6 +36,8 @@ import mchorse.bbs_mod.utils.clips.Clips;
 import mchorse.bbs_mod.utils.DataPath;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -34,7 +50,7 @@ import java.util.function.Consumer;
  * recap editor's, the ruler scrubs it and carries the recap's markers. Every change ends up in
  * the recap and in the editor's history ({@link UIRecapEditor#commitTimeline}).</p>
  */
-public class UIRecapClipsPanel extends UITimelinePanel implements IUIClipsDelegate
+public class UIRecapClipsPanel extends UITimelinePanel implements IUIClipsDelegate, IUIClipTargets
 {
     /** The clips that look for a film's actors find none: a recap has no actors, only the world. */
     private static final Film NO_FILM = new Film();
@@ -81,6 +97,92 @@ public class UIRecapClipsPanel extends UITimelinePanel implements IUIClipsDelega
         {
             this.panel.editClip(position);
         }
+    }
+
+    /** What a clip is given as it is made: the film studio's defaults leave some of them still here. */
+    @Override
+    public void clipCreated(Clip clip)
+    {
+        if (clip instanceof DollyClip dolly)
+        {
+            /* The film studio's tenth of a block cannot be seen over a recording */
+            dolly.distance.set(4F);
+        }
+        else if (clip instanceof TrackerClip tracker)
+        {
+            /* Behind and a little above the recorded player, looking the way it looks */
+            tracker.selector.set(RecapClips.PLAYER);
+            tracker.offset.set(new Point(0D, 1.7D, -4D));
+        }
+    }
+
+    /* Targets: the recorded players */
+
+    @Override
+    public void showTargets(UIContext context, String current, Consumer<String> callback)
+    {
+        context.replaceContextMenu((menu) ->
+        {
+            menu.action(Icons.CLOSE, UIKeys.GENERAL_NONE, Colors.NEGATIVE, () -> callback.accept(""));
+
+            for (Map.Entry<String, String> target : RecapScene.targets().entrySet())
+            {
+                String id = target.getKey();
+                IKey name = IKey.constant(this.targetName(id));
+
+                if (id.equals(current))
+                {
+                    menu.action(Icons.POSE, name, BBSSettings.primaryColor(0), () -> callback.accept(id));
+                }
+                else
+                {
+                    menu.action(Icons.POSE, name, () -> callback.accept(id));
+                }
+            }
+        });
+    }
+
+    @Override
+    public void showTargetBones(UIContext context, String target, String current, Consumer<String> callback)
+    {
+        IEntity entity = RecapScene.target(target == null || target.isEmpty() ? RecapClips.PLAYER : target);
+        Form form = entity == null ? null : entity.getForm();
+
+        if (form == null)
+        {
+            return;
+        }
+
+        Set<String> bones = FormUtilsClient.getRenderer(form).collectMatrices(entity, 0F).keySet();
+
+        if (bones.isEmpty())
+        {
+            return;
+        }
+
+        UIBonePickerContextMenu picker = new UIBonePickerContextMenu(callback);
+
+        picker.attachments(form, bones).set(current);
+        context.replaceContextMenu(picker);
+    }
+
+    @Override
+    public String targetName(String target)
+    {
+        String name = RecapScene.targets().get(target);
+
+        if (RecapClips.PLAYER.equals(target))
+        {
+            return UIRecapKeys.text("target.player");
+        }
+
+        return name == null || name.isEmpty() ? target : name;
+    }
+
+    @Override
+    public Map<String, IEntity> targetEntities()
+    {
+        return RecapScene.targetEntities();
     }
 
     /* The delegate */
@@ -380,9 +482,9 @@ public class UIRecapClipsPanel extends UITimelinePanel implements IUIClipsDelega
             String run = null;
             int runX = startX;
 
-            for (int x = startX; x <= endX; x += 2)
+            for (int x = startX; x < endX; x += 2)
             {
-                String id = x >= endX ? null : this.dimensionAt(dimensions, clips, x);
+                String id = this.dimensionAt(dimensions, clips, x);
 
                 if (id != null && id.equals(run))
                 {
@@ -391,11 +493,17 @@ public class UIRecapClipsPanel extends UITimelinePanel implements IUIClipsDelega
 
                 if (run != null)
                 {
-                    this.renderStretch(context, run, runX, Math.min(x, endX), y, h);
+                    this.renderStretch(context, run, runX, x, y, h);
                 }
 
                 run = id;
                 runX = x;
+            }
+
+            /* The last stretch ends with the recording, whatever the width left over at this zoom */
+            if (run != null)
+            {
+                this.renderStretch(context, run, runX, endX, y, h);
             }
 
             int mouseX = context.mouseX;

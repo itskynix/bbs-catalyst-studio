@@ -70,23 +70,24 @@ public final class RecapStore
     public static RecapRecord get(String id)
     {
         File file = file(id);
+        File bak = new File(folder(), id + EXTENSION + ".bak");
 
         RecapWriter.await(file);
 
-        return file.isFile() ? load(file) : null;
+        return file.isFile() || bak.isFile() ? load(file) : null;
     }
 
     private static RecapRecord load(File file)
     {
         try
         {
-            BaseType data = DataToString.read(file);
+            MapType map = RecapSpool.readMapWithBackup(file);
 
-            if (data != null && data.isMap())
+            if (map != null)
             {
                 String name = file.getName();
 
-                return RecapRecord.fromData(name.substring(0, name.length() - EXTENSION.length()), data.asMap());
+                return RecapRecord.fromData(name.substring(0, name.length() - EXTENSION.length()), map);
             }
         }
         catch (Exception e)
@@ -135,7 +136,9 @@ public final class RecapStore
         }
 
         File[] files = {trackFile(record.id), side(record.id, ".motion"), side(record.id, ".world"), side(record.id, ".env"), side(record.id, ".gear"),
-            side(record.id, ".mobs"), side(record.id, ".sounds"), side(record.id, ".particles"), file(record.id)};
+            side(record.id, ".mobs"), side(record.id, ".sounds"), side(record.id, ".particles"), side(record.id, ".hud"), side(record.id, ".base"),
+            side(record.id, ".pov"),
+            new File(folder(), record.id + EXTENSION + ".bak"), file(record.id)};
 
         /* A write still on its way would bring a deleted file back */
         for (File file : files)
@@ -310,6 +313,256 @@ public final class RecapStore
     public static RecapParticles loadParticles(RecapRecord record)
     {
         return record == null || record.id.isEmpty() ? null : RecapParticles.read(waited(side(record.id, ".particles")));
+    }
+
+    /** Recorded first-person HUD stream, from a copy taken now. */
+    public static boolean saveHud(RecapRecord record, RecapHudStream hud)
+    {
+        if (record.id.isEmpty() || hud == null || hud.isEmpty())
+        {
+            return false;
+        }
+
+        RecapHudStream copy = RecapHudStream.tail(hud, 0);
+
+        RecapWriter.write(side(record.id, ".hud"), copy::write, null);
+
+        return true;
+    }
+
+    public static RecapHudStream loadHud(RecapRecord record)
+    {
+        return record == null || record.id.isEmpty() ? null : RecapHudStream.read(waited(side(record.id, ".hud")));
+    }
+
+    /** Writes the recorded point of view, beside the other files. */
+    public static void savePov(RecapRecord record, RecapPov pov)
+    {
+        if (record != null && !record.id.isEmpty() && pov != null && !pov.isEmpty())
+        {
+            RecapWriter.write(side(record.id, ".pov"), pov::write, null);
+        }
+    }
+
+    public static RecapPov loadPov(RecapRecord record)
+    {
+        return record == null || record.id.isEmpty() ? null : RecapPov.read(waited(side(record.id, ".pov")));
+    }
+
+    /** Recorded local section baseline for cross-dimension stages. */
+    public static boolean saveBaseline(RecapRecord record, RecapBaseline baseline)
+    {
+        if (record.id.isEmpty() || baseline == null || baseline.isEmpty())
+        {
+            return false;
+        }
+
+        RecapBaseline copy = new RecapBaseline();
+
+        copy.append(baseline);
+        RecapWriter.write(side(record.id, ".base"), copy::write, null);
+
+        return true;
+    }
+
+    public static RecapBaseline loadBaseline(RecapRecord record)
+    {
+        return record == null || record.id.isEmpty() ? null : RecapBaseline.read(waited(side(record.id, ".base")));
+    }
+
+    /**
+     * Writes an already-isolated {@link RecapData} instance directly on {@link RecapWriter} without
+     * cloning its arrays on the game thread. Ownership of {@code data} transfers to the writer.
+     */
+    public static void writeAllDirect(RecapRecord record, RecapData data, Runnable afterDataWritten)
+    {
+        if (record == null || record.id.isEmpty() || data == null)
+        {
+            return;
+        }
+
+        if (data.track != null)
+        {
+            RecapWriter.write(trackFile(record.id), data.track::write, null);
+        }
+
+        if (data.motion != null)
+        {
+            RecapWriter.write(side(record.id, ".motion"), data.motion::write, null);
+        }
+
+        if (data.events != null)
+        {
+            RecapWriter.write(side(record.id, ".world"), data.events::write, null);
+        }
+
+        if (data.environment != null)
+        {
+            RecapWriter.write(side(record.id, ".env"), data.environment::write, null);
+        }
+
+        if (data.gear != null)
+        {
+            RecapWriter.write(side(record.id, ".gear"), data.gear::write, null);
+        }
+
+        if (data.entities != null)
+        {
+            RecapWriter.write(side(record.id, ".mobs"), data.entities::write, null);
+        }
+
+        if (data.sounds != null)
+        {
+            RecapWriter.write(side(record.id, ".sounds"), data.sounds::write, null);
+        }
+
+        if (data.particles != null)
+        {
+            RecapWriter.write(side(record.id, ".particles"), data.particles::write, null);
+        }
+
+        if (data.hud != null && !data.hud.isEmpty())
+        {
+            RecapWriter.write(side(record.id, ".hud"), data.hud::write, null);
+        }
+
+        if (data.baseline != null && !data.baseline.isEmpty())
+        {
+            RecapWriter.write(side(record.id, ".base"), data.baseline::write, null);
+        }
+
+        if (afterDataWritten != null)
+        {
+            RecapWriter.writeData(new File(folder(), record.id + ".done"), () ->
+            {
+                afterDataWritten.run();
+
+                return true;
+            });
+        }
+    }
+
+    public static void consolidateSessionAsync(RecapRecord record, File sessionDir, int sliceCount)
+    {
+        consolidateSessionSyncOrAsync(record, sessionDir, sliceCount, true);
+    }
+
+    /**
+     * Streams {@code slice_0000.dat .. slice_(N-1).dat} from {@code sessionDir} on the background
+     * data thread, merges them into final sidecar files, and removes {@code sessionDir} once safe.
+     */
+    public static void consolidateSessionSyncOrAsync(RecapRecord record, File sessionDir, int sliceCount, boolean async)
+    {
+        if (record == null || record.id.isEmpty() || sessionDir == null || sliceCount <= 0)
+        {
+            return;
+        }
+
+        RecapData[] box = new RecapData[1];
+        boolean[] allOk = {true};
+
+        RecapWriter.writeData(new File(sessionDir, ".merge"), () ->
+        {
+            box[0] = mergeSlices(sessionDir, sliceCount);
+
+            return box[0] != null;
+        });
+
+        queueMergedWrite(trackFile(record.id), () -> box[0] != null && box[0].track != null ? box[0].track::write : null, allOk);
+        queueMergedWrite(side(record.id, ".motion"), () -> box[0] != null && box[0].motion != null ? box[0].motion::write : null, allOk);
+        queueMergedWrite(side(record.id, ".world"), () -> box[0] != null && box[0].events != null ? box[0].events::write : null, allOk);
+        queueMergedWrite(side(record.id, ".env"), () -> box[0] != null && box[0].environment != null ? box[0].environment::write : null, allOk);
+        queueMergedWrite(side(record.id, ".gear"), () -> box[0] != null && box[0].gear != null ? box[0].gear::write : null, allOk);
+        queueMergedWrite(side(record.id, ".mobs"), () -> box[0] != null && box[0].entities != null ? box[0].entities::write : null, allOk);
+        queueMergedWrite(side(record.id, ".sounds"), () -> box[0] != null && box[0].sounds != null ? box[0].sounds::write : null, allOk);
+        queueMergedWrite(side(record.id, ".particles"), () -> box[0] != null && box[0].particles != null ? box[0].particles::write : null, allOk);
+        queueMergedWrite(side(record.id, ".hud"), () -> box[0] != null && box[0].hasHud() ? box[0].hud::write : null, allOk);
+        queueMergedWrite(side(record.id, ".base"), () -> box[0] != null && box[0].hasBaseline() ? box[0].baseline::write : null, allOk);
+
+        File doneKey = new File(sessionDir, ".cleanup");
+
+        RecapWriter.writeData(doneKey, () ->
+        {
+            if (box[0] != null && allOk[0])
+            {
+                RecapSpool.deleteDirectory(sessionDir);
+            }
+
+            box[0] = null;
+
+            return allOk[0];
+        });
+
+        if (!async)
+        {
+            RecapWriter.await(doneKey);
+        }
+    }
+
+    private static void queueMergedWrite(File target, java.util.function.Supplier<RecapWriter.Job> supplier, boolean[] allOk)
+    {
+        RecapWriter.write(target, (into) ->
+        {
+            RecapWriter.Job job = supplier.get();
+
+            if (job == null)
+            {
+                return false;
+            }
+
+            boolean ok = job.write(into);
+
+            if (!ok)
+            {
+                allOk[0] = false;
+            }
+
+            return ok;
+        }, null);
+    }
+
+    private static RecapData mergeSlices(File sessionDir, int sliceCount)
+    {
+        RecapData merged = new RecapData();
+
+        merged.track = new RecapTrack();
+        merged.motion = new RecapMotion();
+        merged.events = new RecapEvents();
+        merged.environment = new RecapEnvironment();
+        merged.gear = new RecapGear();
+        merged.entities = new RecapEntities();
+        merged.sounds = new RecapSounds();
+        merged.particles = new RecapParticles();
+        merged.hud = new RecapHudStream();
+        merged.baseline = new RecapBaseline();
+
+        int tickOffset = 0;
+        int loaded = 0;
+
+        for (int i = 0; i < sliceCount; i++)
+        {
+            RecapSpool.Slice slice = RecapSpool.Slice.read(RecapSpool.Session.sliceFile(sessionDir, i));
+
+            if (slice == null)
+            {
+                continue;
+            }
+
+            merged.track.append(slice.track);
+            merged.motion.append(slice.motion);
+            merged.events.append(slice.events, tickOffset);
+            merged.environment.append(slice.environment);
+            merged.gear.append(slice.gear);
+            merged.entities.append(slice.entities, tickOffset);
+            merged.sounds.append(slice.sounds, tickOffset);
+            merged.particles.append(slice.particles, tickOffset);
+            merged.hud.append(slice.hud, tickOffset);
+            merged.baseline.append(slice.baseline);
+            tickOffset += slice.ticks;
+            loaded += 1;
+        }
+
+        return loaded > 0 ? merged : null;
     }
 
     private static File waited(File file)

@@ -2,11 +2,8 @@ package mchorse.bbs_mod.ui.recap;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.systems.VertexSorter;
-import mchorse.bbs_mod.camera.clips.modifiers.ActorEyeClip;
-import mchorse.bbs_mod.mixin.client.RecapHudInvoker;
 import mchorse.bbs_mod.mixin.client.RecapInGameHudAccessor;
-import mchorse.bbs_mod.recap.RecapGear;
-import mchorse.bbs_mod.recap.RecapLend;
+import mchorse.bbs_mod.recap.RecapHudStream;
 import mchorse.bbs_mod.recap.RecapOption;
 import mchorse.bbs_mod.recap.RecapScene;
 import mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D;
@@ -16,28 +13,27 @@ import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gl.Framebuffer;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.hud.InGameHud;
-import net.minecraft.client.network.ClientPlayerEntity;
-import net.minecraft.client.option.Perspective;
 import net.minecraft.client.render.DiffuseLighting;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.scoreboard.Scoreboard;
 import net.minecraft.scoreboard.ScoreboardDisplaySlot;
 import net.minecraft.scoreboard.ScoreboardObjective;
 import net.minecraft.scoreboard.Team;
+import net.minecraft.text.OrderedText;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.MathHelper;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
 
+import java.util.List;
+
 /**
- * The game's interface over a recap's frame while it looks out of the recorded player's eyes,
- * drawn into the frame itself, so the viewport and a video show it alike.
+ * The recorded messages over a recap's frame while it shows the recorded player's point of view,
+ * drawn into the frame itself, so the viewport and a video show them alike: the chat, the boss bars,
+ * the title, the scoreboard and the action bar, as the view settings let them through.
  *
- * <p>Laid out the game's way on the frame's own size, at the interface scale the game would pick
- * for a window that size. The point of view clip lets through the hotbar with the hearts, food, air
- * and experience (its interface switch) and the crosshair (its crosshair switch), with what the
- * recorded player had and how it was doing lent for the draw; the view settings let through the
- * chat, the boss bars, the title, the scoreboard and the action bar.</p>
+ * <p>The hotbar, the bars, the crosshair, the screens opened, the status effects and the toasts are
+ * the film studio's point of view ({@code PovHud}), which plays the recorded one.</p>
  */
 public final class RecapHud
 {
@@ -51,17 +47,11 @@ public final class RecapHud
     {
         MinecraftClient mc = MinecraftClient.getInstance();
 
-        if (mc.world == null || mc.player == null || !RecapScene.isFirstPerson())
+        if (mc.world == null || mc.player == null || !RecapScene.isPointOfView())
         {
             return;
         }
 
-        ActorEyeClip clip = RecapScene.povClip();
-        RecapGear.Frame gear = RecapScene.gearNow();
-        int mode = gear == null ? -1 : gear.mode;
-        boolean spectator = mode == 3;
-        boolean hud = clip != null && clip.outHud.get() && !spectator;
-        boolean crosshair = clip != null && clip.outCrosshair.get() && !spectator;
         boolean pieces = false;
 
         for (RecapOption piece : PIECES)
@@ -69,7 +59,7 @@ public final class RecapHud
             pieces |= RecapScene.showsHud(piece);
         }
 
-        if (!hud && !crosshair && !pieces)
+        if (!pieces)
         {
             return;
         }
@@ -81,13 +71,8 @@ public final class RecapHud
         Matrix4f projection = new Matrix4f(RenderSystem.getProjectionMatrix());
         VertexSorter sorting = RenderSystem.getVertexSorting();
         DrawContext draw = new DrawContext(mc, mc.getBufferBuilders().getEntityVertexConsumers());
-        InGameHud game = mc.inGameHud;
-        RecapInGameHudAccessor access = (RecapInGameHudAccessor) game;
-        RecapHudInvoker invoke = (RecapHudInvoker) game;
-        ClientPlayerEntity player = mc.player;
-        Perspective perspective = mc.options.getPerspective();
-        RecapLend lent = gear == null ? null : RecapLend.lend(player, gear, true);
-        float tickDelta = mc.getTickDelta();
+        RecapInGameHudAccessor access = (RecapInGameHudAccessor) mc.inGameHud;
+        float tickDelta = RecapScene.subTick();
 
         /* The interface's own space over the frame; the world's depth is done with */
         RenderSystem.clear(GL11.GL_DEPTH_BUFFER_BIT, MinecraftClient.IS_SYSTEM_MAC);
@@ -100,24 +85,6 @@ public final class RecapHud
         {
             access.bbs$setScaledWidth(w);
             access.bbs$setScaledHeight(h);
-            mc.options.setPerspective(Perspective.FIRST_PERSON);
-
-            if (hud)
-            {
-                invoke.bbs$renderHotbar(tickDelta, draw);
-
-                /* No bars in creative, as the game draws none */
-                if (mode != 1)
-                {
-                    invoke.bbs$renderStatusBars(draw);
-                    game.renderExperienceBar(draw, w / 2 - 91);
-                }
-            }
-
-            if (crosshair)
-            {
-                invoke.bbs$renderCrosshair(draw);
-            }
 
             renderPieces(mc, draw, access, w, h, tickDelta);
             draw.draw();
@@ -128,13 +95,6 @@ public final class RecapHud
         }
         finally
         {
-            mc.options.setPerspective(perspective);
-
-            if (lent != null)
-            {
-                lent.giveBack(player);
-            }
-
             RenderSystem.setProjectionMatrix(projection, sorting);
             RenderSystem.defaultBlendFunc();
         }
@@ -154,21 +114,47 @@ public final class RecapHud
         return scale;
     }
 
-    /** The chat, the boss bars, the title, the scoreboard and the action bar, each as the view settings let it. */
+    /** The chat, the boss bars, the title, the scoreboard and the action bar, from the recorded HUD stream when present. */
     private static void renderPieces(MinecraftClient mc, DrawContext draw, RecapInGameHudAccessor access, int sw, int sh, float tickDelta)
     {
         InGameHud hud = mc.inGameHud;
         TextRenderer font = mc.textRenderer;
         MatrixStack matrices = draw.getMatrices();
-
-        if (RecapScene.showsHud(RecapOption.BOSS_BAR))
-        {
-            hud.getBossBarHud().render(draw);
-        }
+        RecapHudStream.Snapshot recorded = RecapScene.hudNow();
 
         if (RecapScene.showsHud(RecapOption.SCOREBOARD))
         {
             renderScoreboard(mc, draw, access);
+        }
+
+        if (recorded != null)
+        {
+            if (RecapScene.showsHud(RecapOption.BOSS_BAR))
+            {
+                renderRecordedBossBars(draw, font, recorded.bossBars, sw);
+            }
+
+            if (RecapScene.showsHud(RecapOption.TITLE))
+            {
+                renderRecordedTitle(draw, font, recorded, sw, sh);
+            }
+
+            if (RecapScene.showsHud(RecapOption.ACTION_BAR))
+            {
+                renderRecordedActionBar(draw, font, recorded, sw, sh);
+            }
+
+            if (RecapScene.showsHud(RecapOption.CHAT))
+            {
+                renderRecordedChat(draw, font, recorded.chat, sw, sh);
+            }
+
+            return;
+        }
+
+        if (RecapScene.showsHud(RecapOption.BOSS_BAR))
+        {
+            hud.getBossBarHud().render(draw);
         }
 
         if (RecapScene.showsHud(RecapOption.TITLE))
@@ -187,6 +173,153 @@ public final class RecapHud
             matrices.translate(0F, sh - 48, 0F);
             hud.getChatHud().render(draw, hud.getTicks(), -1, -1);
             matrices.pop();
+        }
+    }
+
+    private static void renderRecordedBossBars(DrawContext draw, TextRenderer font, List<RecapHudStream.BossBarView> bars, int sw)
+    {
+        int y = 12;
+        int bx = sw / 2 - 91;
+
+        for (RecapHudStream.BossBarView bar : bars)
+        {
+            int fillW = MathHelper.clamp(Math.round(bar.percent() * 182F), 0, 182);
+            int color = bossColorArgb(bar.colorOrdinal());
+
+            draw.fill(bx - 1, y - 1, bx + 183, y + 6, 0xaa0c0e14);
+            draw.fill(bx, y, bx + 182, y + 5, 0xaa242834);
+
+            if (fillW > 0)
+            {
+                draw.fill(bx, y, bx + fillW, y + 5, color);
+                draw.fill(bx, y, bx + fillW, y + 1, 0x44ffffff);
+            }
+
+            if (!bar.name().isEmpty())
+            {
+                draw.drawTextWithShadow(font, bar.name(), sw / 2 - font.getWidth(bar.name()) / 2, y - 9, 0xffffffff);
+            }
+
+            y += 19;
+        }
+    }
+
+    private static int bossColorArgb(int ordinal)
+    {
+        return switch (ordinal)
+        {
+            case 0 -> 0xffe85d9e;
+            case 1 -> 0xff3ba4e6;
+            case 2 -> 0xffe0423b;
+            case 3 -> 0xff3ec95c;
+            case 4 -> 0xffe6c83b;
+            case 5 -> 0xff9b4de0;
+            default -> 0xffe8eef5;
+        };
+    }
+
+    private static void renderRecordedTitle(DrawContext draw, TextRenderer font, RecapHudStream.Snapshot snap, int sw, int sh)
+    {
+        if (snap.title.isEmpty() || snap.titleRemain <= 0F)
+        {
+            return;
+        }
+
+        int fadeIn = Math.max(1, snap.titleFadeIn);
+        int stay = snap.titleStay;
+        int fadeOut = Math.max(1, snap.titleFadeOut);
+        float left = snap.titleRemain;
+        int alpha = 255;
+
+        if (left > fadeOut + stay)
+        {
+            alpha = (int) ((fadeIn + stay + fadeOut - left) * 255F / fadeIn);
+        }
+
+        if (left <= fadeOut)
+        {
+            alpha = (int) (left * 255F / fadeOut);
+        }
+
+        alpha = MathHelper.clamp(alpha, 0, 255);
+
+        if (alpha <= 8)
+        {
+            return;
+        }
+
+        int color = 0xffffff | (alpha << 24);
+        MatrixStack matrices = draw.getMatrices();
+
+        matrices.push();
+        matrices.translate(sw / 2F, sh / 2F, 0F);
+        matrices.push();
+        matrices.scale(4F, 4F, 4F);
+        draw.drawTextWithShadow(font, snap.title, -font.getWidth(snap.title) / 2, -10, color);
+        matrices.pop();
+
+        if (!snap.subtitle.isEmpty())
+        {
+            matrices.push();
+            matrices.scale(2F, 2F, 2F);
+            draw.drawTextWithShadow(font, snap.subtitle, -font.getWidth(snap.subtitle) / 2, 5, color);
+            matrices.pop();
+        }
+
+        matrices.pop();
+    }
+
+    private static void renderRecordedActionBar(DrawContext draw, TextRenderer font, RecapHudStream.Snapshot snap, int sw, int sh)
+    {
+        if (snap.actionBar.isEmpty() || snap.actionRemain <= 0F)
+        {
+            return;
+        }
+
+        float left = snap.actionRemain;
+        int alpha = MathHelper.clamp((int) (left * 255F / 20F), 0, 255);
+
+        if (alpha <= 8)
+        {
+            return;
+        }
+
+        int base = snap.actionTinted ? MathHelper.hsvToRgb(left / 50F, 0.7F, 0.6F) & 0xffffff : 0xffffff;
+
+        draw.drawTextWithShadow(font, snap.actionBar, sw / 2 - font.getWidth(snap.actionBar) / 2, sh - 72, base | (alpha << 24));
+    }
+
+    private static void renderRecordedChat(DrawContext draw, TextRenderer font, List<RecapHudStream.ChatEntry> chat, int sw, int sh)
+    {
+        if (chat.isEmpty())
+        {
+            return;
+        }
+
+        int maxW = Math.max(80, Math.min(320, sw - 20));
+        int y = sh - 48;
+
+        for (int i = chat.size() - 1; i >= 0 && y > 24; i--)
+        {
+            RecapHudStream.ChatEntry entry = chat.get(i);
+            float fade = entry.ageTicks() > 180F ? (200F - entry.ageTicks()) / 20F : 1F;
+            int alpha = MathHelper.clamp(Math.round(fade * 255F), 0, 255);
+
+            if (alpha <= 8 || entry.text().isEmpty())
+            {
+                continue;
+            }
+
+            List<OrderedText> wrapped = font.wrapLines(Text.literal(entry.text()), maxW);
+            int bg = ((alpha / 2) << 24);
+            int fg = 0xffffff | (alpha << 24);
+
+            for (int l = wrapped.size() - 1; l >= 0 && y > 24; l--)
+            {
+                y -= 9;
+                draw.fill(2, y - 1, 6 + maxW, y + 8, bg);
+                draw.drawTextWithShadow(font, wrapped.get(l), 4, y, fg);
+            }
         }
     }
 

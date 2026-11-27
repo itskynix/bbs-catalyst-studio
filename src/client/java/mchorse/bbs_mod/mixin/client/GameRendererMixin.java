@@ -119,6 +119,8 @@ public abstract class GameRendererMixin
     @Inject(method = "showFloatingItem", at = @At("HEAD"))
     private void bbs$recordFloatingItem(net.minecraft.item.ItemStack floatingItem, CallbackInfo info)
     {
+        mchorse.bbs_mod.recap.RecapRecorder.onTotem(floatingItem);
+
         mchorse.bbs_mod.film.Recorder recorder = BBSModClient.getFilms() == null ? null : BBSModClient.getFilms().getRecorder();
 
         if (recorder != null && !recorder.hasNotStarted() && recorder.tick >= 0)

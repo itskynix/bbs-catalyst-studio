@@ -10,6 +10,7 @@ import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.film.IUIClipsDelegate;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.film.replays.Replay;
+import mchorse.bbs_mod.ui.film.IUIClipTargets;
 import mchorse.bbs_mod.ui.film.UIFilmPanel;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIButton;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UICirculate;
@@ -125,6 +126,13 @@ public class UIProCameraClip extends UIKeyframeClip
 
         this.focusActor = new UIButton(UIKeys.CAMERA_PANELS_DOF_FOCUS_ACTOR_NONE, (b) ->
         {
+            if (this.editor instanceof IUIClipTargets targets)
+            {
+                targets.showTargets(this.getContext(), this.getProClip().focusTargetActor.get(), this::setFocusActor);
+
+                return;
+            }
+
             UIFilmPanel panel = this.getParent(UIFilmPanel.class);
 
             if (panel != null)
@@ -136,6 +144,13 @@ public class UIProCameraClip extends UIKeyframeClip
 
         this.pickFocusActor = new UIIcon(Icons.EYEDROPPER, (b) ->
         {
+            if (this.editor instanceof IUIClipTargets targets)
+            {
+                this.pickRecordedBone(targets);
+
+                return;
+            }
+
             UIFilmPanel panel = this.getParent(UIFilmPanel.class);
 
             if (panel != null)
@@ -174,8 +189,27 @@ public class UIProCameraClip extends UIKeyframeClip
         String actor = id == null ? "" : id;
 
         this.editor.editMultiple(clip.focusTargetActor, (v) -> v.set(actor));
+        this.editor.editMultiple(clip.focusTargetBone, (v) -> v.set(""));
         this.editor.editMultiple(clip.focusMode, (v) -> v.set(actor.isEmpty() ? ProCameraClip.FOCUS_MANUAL : ProCameraClip.FOCUS_ACTOR));
         this.fillFocusSource();
+    }
+
+    /** Recap Studio's target pick: the player first, then the bone of theirs to keep in focus. */
+    private void pickRecordedBone(IUIClipTargets targets)
+    {
+        targets.showTargets(this.getContext(), this.getProClip().focusTargetActor.get(), (actor) ->
+        {
+            this.setFocusActor(actor);
+
+            if (actor != null && !actor.isEmpty())
+            {
+                targets.showTargetBones(this.getContext(), actor, this.getProClip().focusTargetBone.get(), (bone) ->
+                {
+                    this.editor.editMultiple(this.getProClip().focusTargetBone, (v) -> v.set(bone == null ? "" : bone));
+                    this.fillFocusSource();
+                });
+            }
+        });
     }
 
     /** The focus source widgets from the clip: the mode and the name of the actor followed. */
@@ -202,6 +236,13 @@ public class UIProCameraClip extends UIKeyframeClip
                     }
                 }
             }
+        }
+
+        if (!id.isEmpty() && this.editor instanceof IUIClipTargets targets)
+        {
+            String bone = clip.focusTargetBone.get();
+
+            label = IKey.constant(bone.isEmpty() ? targets.targetName(id) : targets.targetName(id) + " / " + bone);
         }
 
         this.focusMode.setValue(clip.focusMode.get());

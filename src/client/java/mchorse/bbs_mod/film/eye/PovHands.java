@@ -73,6 +73,12 @@ public final class PovHands
             return null;
         }
 
+        /* In Recap Studio the recorded player's point of view is the only one */
+        if (mchorse.bbs_mod.recap.RecapScene.isActive())
+        {
+            return mchorse.bbs_mod.recap.RecapClips.PLAYER.equals(id) ? mchorse.bbs_mod.recap.RecapScene.povReplay() : null;
+        }
+
         UIDashboard dashboard = BBSModClient.getDashboardIfCreated();
         UIFilmPanel panel = dashboard == null ? null : dashboard.getPanel(UIFilmPanel.class);
         Replay replay = panel == null ? null : find(panel.getData(), id);

@@ -3,8 +3,13 @@ package mchorse.bbs_mod.mixin.client;
 import mchorse.bbs_mod.camera.WorldFreeCam;
 import mchorse.bbs_mod.forms.structure.StructureWand;
 import mchorse.bbs_mod.film.VehicleRide;
+import mchorse.bbs_mod.recap.RecapScene;
+import mchorse.bbs_mod.ui.framework.UIScreen;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.DownloadingTerrainScreen;
+import net.minecraft.client.gui.screen.Screen;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -18,6 +23,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(MinecraftClient.class)
 public class MinecraftClientMixin
 {
+    @Shadow
+    public Screen currentScreen;
+
+    /* Keep Recap Studio open when singleplayer dimension travel triggers DownloadingTerrainScreen */
+    @Inject(method = "setScreen", at = @At("HEAD"), cancellable = true)
+    private void bbs$keepRecapOpenOnDimensionTravel(Screen screen, CallbackInfo ci)
+    {
+        if (RecapScene.isTraveling() && this.currentScreen instanceof UIScreen && screen instanceof DownloadingTerrainScreen)
+        {
+            ci.cancel();
+        }
+    }
+
     @Inject(method = "getWindowTitle", at = @At("RETURN"), cancellable = true)
     private void bbs$appendStage(CallbackInfoReturnable<String> info)
     {

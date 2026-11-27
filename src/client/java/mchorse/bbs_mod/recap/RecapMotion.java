@@ -4,6 +4,7 @@ import mchorse.bbs_mod.mixin.client.RecapEntityFlagInvoker;
 import mchorse.bbs_mod.mixin.client.RecapLivingAccessor;
 import net.minecraft.entity.EntityPose;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.util.Hand;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -14,21 +15,20 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.zip.Deflater;
+import java.util.zip.DeflaterOutputStream;
+import java.util.zip.Inflater;
+import java.util.zip.InflaterInputStream;
 
 /**
- * How the recorded player moved, one frame a game tick: where its feet were, how its body, head
- * and look were turned, where its legs were in their stride and how fast, its arm swing, its
- * swimming lean, its pose (standing, crouching, swimming, gliding, sleeping) and a few flags
- * (sneaking, sprinting, swimming, gliding, on the ground, swinging).
- *
- * <p>Frame {@code i} is the player at tick {@code i} of the recap; {@link #sample} gives the
- * player between two of them, so the walk is as smooth as the picture. It is kept next to the
- * recap as a small binary file, like the camera.</p>
+ * How the recorded player moved, one frame a game tick, stored compressed in version 2 while
+ * keeping version 1 readable.
  */
 public class RecapMotion
 {
     private static final int MAGIC = 0x52434d31;
-    private static final int VERSION = 1;
+    private static final int VERSION = 2;
+    private static final int MAX_SAMPLES = 20 * 60 * 60 * 6;
 
     public static final int SNEAKING = 1;
     public static final int SPRINTING = 2;
@@ -36,6 +36,10 @@ public class RecapMotion
     public static final int GLIDING = 8;
     public static final int ON_GROUND = 16;
     public static final int SWINGING = 32;
+    public static final int OFF_HAND_SWING = 64;
+
+    /** Used by the flags read back: the gliding flag index of an entity. */
+    public static final int GLIDE_FLAG = 7;
 
     private double[] x = new double[64];
     private double[] y = new double[64];
@@ -96,7 +100,8 @@ public class RecapMotion
             | (player.isSwimming() ? SWIMMING : 0)
             | (player.isFallFlying() ? GLIDING : 0)
             | (player.isOnGround() ? ON_GROUND : 0)
-            | (player.handSwinging ? SWINGING : 0);
+            | (player.handSwinging ? SWINGING : 0)
+            | (player.preferredHand == Hand.OFF_HAND ? OFF_HAND_SWING : 0);
 
         this.add(player.getX(), player.getY(), player.getZ(), player.bodyYaw, player.headYaw, player.getPitch(),
             player.limbAnimator.getPos(), player.limbAnimator.getSpeed(), player.handSwingProgress,
@@ -139,6 +144,20 @@ public class RecapMotion
         this.flags[i] = (byte) flags;
     }
 
+    public void append(RecapMotion other)
+    {
+        if (other == null || other.isEmpty())
+        {
+            return;
+        }
+
+        for (int i = 0; i < other.size; i++)
+        {
+            this.add(other.x[i], other.y[i], other.z[i], other.bodyYaw[i], other.headYaw[i], other.pitch[i], other.limbPos[i],
+                other.limbSpeed[i], other.swing[i], other.lean[i], other.pose[i], other.flags[i]);
+        }
+    }
+
     private static float turn(float a, float b, float t)
     {
         float delta = b - a;
@@ -169,8 +188,21 @@ public class RecapMotion
         out.pitch = this.pitch[a] + (this.pitch[b] - this.pitch[a]) * t;
         out.limbPos = this.limbPos[a] + (this.limbPos[b] - this.limbPos[a]) * t;
         out.limbSpeed = this.limbSpeed[a] + (this.limbSpeed[b] - this.limbSpeed[a]) * t;
-        /* The swing starts over at nought: no blend across the restart */
-        out.swing = this.swing[b] >= this.swing[a] ? this.swing[a] + (this.swing[b] - this.swing[a]) * t : this.swing[a];
+        /* Interpolate cleanly to 1.0 when a swing completes, and avoid blending across a new restart */
+        if (this.swing[b] >= this.swing[a])
+        {
+            out.swing = this.swing[a] + (this.swing[b] - this.swing[a]) * t;
+        }
+        else if (this.swing[a] > 0.5F && this.swing[b] < 0.01F)
+        {
+            float wrapped = this.swing[a] + (1F - this.swing[a]) * t;
+
+            out.swing = wrapped >= 0.999F ? 0F : wrapped;
+        }
+        else
+        {
+            out.swing = this.swing[a];
+        }
         out.lean = this.lean[a] + (this.lean[b] - this.lean[a]) * t;
 
         int pose = this.pose[t < 0.5F ? a : b];
@@ -223,26 +255,25 @@ public class RecapMotion
 
     public boolean write(File file)
     {
-        try (DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(file))))
+        try (DataOutputStream raw = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(file))))
         {
-            out.writeInt(MAGIC);
-            out.writeInt(VERSION);
-            out.writeInt(this.size);
+            raw.writeInt(MAGIC);
+            raw.writeInt(VERSION);
 
-            for (int i = 0; i < this.size; i++)
+            Deflater deflater = new Deflater(Deflater.BEST_SPEED);
+
+            try
             {
-                out.writeDouble(this.x[i]);
-                out.writeDouble(this.y[i]);
-                out.writeDouble(this.z[i]);
-                out.writeFloat(this.bodyYaw[i]);
-                out.writeFloat(this.headYaw[i]);
-                out.writeFloat(this.pitch[i]);
-                out.writeFloat(this.limbPos[i]);
-                out.writeFloat(this.limbSpeed[i]);
-                out.writeFloat(this.swing[i]);
-                out.writeFloat(this.lean[i]);
-                out.writeByte(this.pose[i]);
-                out.writeByte(this.flags[i]);
+                DeflaterOutputStream packed = new DeflaterOutputStream(raw, deflater, 1 << 15);
+                DataOutputStream out = new DataOutputStream(new BufferedOutputStream(packed, 1 << 15));
+
+                this.writeToStream(out);
+                out.flush();
+                packed.finish();
+            }
+            finally
+            {
+                deflater.end();
             }
 
             return true;
@@ -253,6 +284,27 @@ public class RecapMotion
         }
     }
 
+    public void writeToStream(DataOutputStream out) throws IOException
+    {
+        out.writeInt(this.size);
+
+        for (int i = 0; i < this.size; i++)
+        {
+            out.writeDouble(this.x[i]);
+            out.writeDouble(this.y[i]);
+            out.writeDouble(this.z[i]);
+            out.writeFloat(this.bodyYaw[i]);
+            out.writeFloat(this.headYaw[i]);
+            out.writeFloat(this.pitch[i]);
+            out.writeFloat(this.limbPos[i]);
+            out.writeFloat(this.limbSpeed[i]);
+            out.writeFloat(this.swing[i]);
+            out.writeFloat(this.lean[i]);
+            out.writeByte(this.pose[i]);
+            out.writeByte(this.flags[i]);
+        }
+    }
+
     public static RecapMotion read(File file)
     {
         if (!file.isFile())
@@ -260,38 +312,50 @@ public class RecapMotion
             return null;
         }
 
-        try (DataInputStream in = new DataInputStream(new BufferedInputStream(new FileInputStream(file))))
+        try (DataInputStream raw = new DataInputStream(new BufferedInputStream(new FileInputStream(file))))
         {
-            if (in.readInt() != MAGIC || in.readInt() != VERSION)
+            int version;
+
+            if (raw.readInt() != MAGIC || (version = raw.readInt()) < 1 || version > VERSION)
             {
                 return null;
             }
 
-            int size = in.readInt();
-
-            if (size < 0 || size > 20 * 60 * 60 * 6)
+            if (version == 1)
             {
-                return null;
+                return readFromStream(raw);
             }
 
-            RecapMotion motion = new RecapMotion();
-
-            for (int i = 0; i < size; i++)
+            try (DataInputStream in = new DataInputStream(new BufferedInputStream(new InflaterInputStream(raw, new Inflater(), 1 << 15), 1 << 15)))
             {
-                motion.add(in.readDouble(), in.readDouble(), in.readDouble(), in.readFloat(), in.readFloat(), in.readFloat(),
-                    in.readFloat(), in.readFloat(), in.readFloat(), in.readFloat(), in.readByte(), in.readByte());
+                return readFromStream(in);
             }
-
-            return motion;
         }
-        catch (IOException e)
+        catch (IOException | RuntimeException e)
         {
             return null;
         }
     }
 
-    /** Used by the flags read back: the gliding flag index of an entity. */
-    public static final int GLIDE_FLAG = 7;
+    public static RecapMotion readFromStream(DataInputStream in) throws IOException
+    {
+        int size = in.readInt();
+
+        if (size < 0 || size > MAX_SAMPLES)
+        {
+            throw new IOException("Bad motion size");
+        }
+
+        RecapMotion motion = new RecapMotion();
+
+        for (int i = 0; i < size; i++)
+        {
+            motion.add(in.readDouble(), in.readDouble(), in.readDouble(), in.readFloat(), in.readFloat(), in.readFloat(),
+                in.readFloat(), in.readFloat(), in.readFloat(), in.readFloat(), in.readByte(), in.readByte());
+        }
+
+        return motion;
+    }
 
     static boolean isGliding(PlayerEntity player)
     {

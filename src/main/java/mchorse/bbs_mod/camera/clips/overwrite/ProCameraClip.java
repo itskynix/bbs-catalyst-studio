@@ -2,6 +2,7 @@ package mchorse.bbs_mod.camera.clips.overwrite;
 
 import mchorse.bbs_mod.camera.Camera;
 import mchorse.bbs_mod.camera.clips.CameraClipContext;
+import mchorse.bbs_mod.camera.clips.IFocusPoint;
 import mchorse.bbs_mod.camera.clips.fx.FxClip;
 import mchorse.bbs_mod.forms.entities.IEntity;
 import mchorse.bbs_mod.settings.values.core.ValueString;
@@ -14,6 +15,7 @@ import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
+import org.joml.Vector3d;
 import org.joml.Vector3f;
 
 import java.util.Map;
@@ -67,6 +69,9 @@ public class ProCameraClip extends KeyframeClip
     /** Stable id of the replay whose actor is kept in focus (empty = none), as {@code EntityClip#selector}. */
     public final ValueString focusTargetActor = new ValueString("focus_target_actor", "");
 
+    /** A bone of that actor to keep in focus instead of its eyes; empty for the eyes. */
+    public final ValueString focusTargetBone = new ValueString("focus_target_bone", "");
+
     /** Editor guide: a translucent plane at the focus distance, where the picture is sharp. Never in exports. */
     public final ValueBoolean showFocusPlane = new ValueBoolean("show_focus_plane", false);
 
@@ -96,6 +101,7 @@ public class ProCameraClip extends KeyframeClip
         this.add(this.generalBlur);
         this.add(this.focusMode);
         this.add(this.focusTargetActor);
+        this.add(this.focusTargetBone);
         this.add(this.showFocusPlane);
         this.add(this.lockSubjectSize);
         this.add(this.subject);
@@ -254,6 +260,15 @@ public class ProCameraClip extends KeyframeClip
             double x = Lerps.lerp(actor.getPrevX(), actor.getX(), context.transition);
             double y = Lerps.lerp(actor.getPrevY(), actor.getY(), context.transition) + actor.getEyeHeight();
             double z = Lerps.lerp(actor.getPrevZ(), actor.getZ(), context.transition);
+            Vector3d bone = new Vector3d();
+
+            if (actor instanceof IFocusPoint point && point.focusPoint(this.focusTargetBone.get(), context.transition, bone))
+            {
+                x = bone.x;
+                y = bone.y;
+                z = bone.z;
+            }
+
             double along = (x - position.point.x) * look.x + (y - position.point.y) * look.y + (z - position.point.z) * look.z;
 
             return Math.max(0.1D, along);

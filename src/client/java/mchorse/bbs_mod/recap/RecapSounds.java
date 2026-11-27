@@ -24,13 +24,10 @@ import java.util.zip.Inflater;
 import java.util.zip.InflaterInputStream;
 
 /**
- * The sounds of the world while a recap was recorded, each with its tick: blocks broken and put,
- * steps, hits, mobs, deaths, explosions, doors, everything the game played at a place in the world,
- * with how loud, at what pitch and how far it carries.
+ * The sounds of the world while a recap was recorded, each with its tick.
  *
- * <p>Music, the menus' clicks, the weather and the background are left out: the game plays those
- * live anyway. Played back only while the recap plays forward, each sound once as its tick is
- * passed; a scrubbed moment plays none, so the cursor dragged back and forth never stacks them.</p>
+ * <p>Tracks active replayed {@link SoundInstance}s so scrubbing, pausing or leaving the scene
+ * stops lingering recorded sounds immediately without touching live music or UI clicks.</p>
  */
 public class RecapSounds
 {
@@ -39,6 +36,7 @@ public class RecapSounds
 
     /** Set while a recap's own sounds are played, so neither the recorder nor the muting takes them. */
     public static boolean replaying;
+    private static final List<SoundInstance> activeSounds = new ArrayList<>();
 
     private int[] ticks = new int[64];
     private int[] ids = new int[64];
@@ -75,6 +73,32 @@ public class RecapSounds
         this.dimensions.clear();
     }
 
+    /** Stops all currently playing sounds that were started by Recap playback. */
+    public static void stopActive()
+    {
+        if (activeSounds.isEmpty())
+        {
+            return;
+        }
+
+        MinecraftClient mc = MinecraftClient.getInstance();
+
+        if (mc != null && mc.getSoundManager() != null)
+        {
+            for (SoundInstance instance : activeSounds)
+            {
+                try
+                {
+                    mc.getSoundManager().stop(instance);
+                }
+                catch (RuntimeException ignored)
+                {}
+            }
+        }
+
+        activeSounds.clear();
+    }
+
     /** Whether a sound is one a recap keeps: a sound of the world, at a place in it. */
     public static boolean isKept(SoundInstance sound)
     {
@@ -107,6 +131,25 @@ public class RecapSounds
 
         this.push(tick, index(this.names, sound.getId().toString()), sound.getCategory().ordinal(), sound.getX(), sound.getY(), sound.getZ(),
             volume, pitch, flag, dimension == null ? -1 : index(this.dimensions, dimension));
+    }
+
+    public void append(RecapSounds other, int tickOffset)
+    {
+        if (other == null || other.isEmpty())
+        {
+            return;
+        }
+
+        for (int i = 0; i < other.size; i++)
+        {
+            int at = other.head + i;
+            String name = other.names.get(other.ids[at]);
+            int dimIdx = other.dims[at];
+            String dim = dimIdx >= 0 && dimIdx < other.dimensions.size() ? other.dimensions.get(dimIdx) : null;
+
+            this.push(other.ticks[at] + tickOffset, index(this.names, name), other.categories[at], other.xs[at], other.ys[at], other.zs[at],
+                other.volumes[at], other.pitches[at], other.flags[at], dim == null ? -1 : index(this.dimensions, dim));
+        }
     }
 
     private void push(int tick, int id, int category, double x, double y, double z, float volume, float pitch, int flag, int dim)
@@ -163,7 +206,6 @@ public class RecapSounds
         this.head = 0;
     }
 
-    /** The first sound with a tick at or after {@code tick}; they are kept in the order of their ticks. */
     private int firstAtOrAfter(int tick)
     {
         int low = 0;
@@ -186,7 +228,6 @@ public class RecapSounds
         return low;
     }
 
-    /** Forgets the sounds before {@code oldest}; the front only moves on. */
     public void dropBefore(int oldest)
     {
         int first = this.firstAtOrAfter(oldest);
@@ -200,7 +241,6 @@ public class RecapSounds
         }
     }
 
-    /** The sounds from {@code from} on, their ticks counted from there. */
     public static RecapSounds tail(RecapSounds source, int from)
     {
         RecapSounds sounds = new RecapSounds();
@@ -219,10 +259,6 @@ public class RecapSounds
         return sounds;
     }
 
-    /**
-     * Plays the sounds of the source ticks after {@code from} and up to {@code to}, of the
-     * dimension given, once each, as the game would have: at their place, loud and pitched as then.
-     */
     public void play(int from, int to, String dimension)
     {
         if (to <= from || this.size == 0)
@@ -233,6 +269,11 @@ public class RecapSounds
         MinecraftClient mc = MinecraftClient.getInstance();
         SoundCategory[] categories = SoundCategory.values();
         int played = 0;
+
+        if (activeSounds.size() > 256)
+        {
+            activeSounds.subList(0, activeSounds.size() - 128).clear();
+        }
 
         replaying = true;
 
@@ -264,11 +305,12 @@ public class RecapSounds
 
                 boolean relative = (this.flags[at] & 1) != 0;
                 SoundInstance.AttenuationType attenuation = (this.flags[at] & 2) != 0 ? SoundInstance.AttenuationType.NONE : SoundInstance.AttenuationType.LINEAR;
-                /* The same variant every time the recap plays: the seed is the sound's place in it */
                 Random random = Random.create(31L * this.ticks[at] + i);
+                PositionedSoundInstance instance = new PositionedSoundInstance(id, categories[category], this.volumes[at], this.pitches[at], random,
+                    false, 0, attenuation, this.xs[at], this.ys[at], this.zs[at], relative);
 
-                mc.getSoundManager().play(new PositionedSoundInstance(id, categories[category], this.volumes[at], this.pitches[at], random,
-                    false, 0, attenuation, this.xs[at], this.ys[at], this.zs[at], relative));
+                mc.getSoundManager().play(instance);
+                activeSounds.add(instance);
                 played += 1;
             }
         }
@@ -296,38 +338,7 @@ public class RecapSounds
                 DeflaterOutputStream packed = new DeflaterOutputStream(raw, deflater, 1 << 15);
                 DataOutputStream out = new DataOutputStream(new BufferedOutputStream(packed, 1 << 15));
 
-                out.writeInt(this.names.size());
-
-                for (String name : this.names)
-                {
-                    out.writeUTF(name);
-                }
-
-                out.writeInt(this.dimensions.size());
-
-                for (String dimension : this.dimensions)
-                {
-                    out.writeUTF(dimension);
-                }
-
-                out.writeInt(this.size);
-
-                for (int i = 0; i < this.size; i++)
-                {
-                    int at = this.head + i;
-
-                    out.writeInt(this.ticks[at]);
-                    out.writeInt(this.ids[at]);
-                    out.writeByte(this.categories[at]);
-                    out.writeDouble(this.xs[at]);
-                    out.writeDouble(this.ys[at]);
-                    out.writeDouble(this.zs[at]);
-                    out.writeFloat(this.volumes[at]);
-                    out.writeFloat(this.pitches[at]);
-                    out.writeByte(this.flags[at]);
-                    out.writeShort(this.dims[at]);
-                }
-
+                this.writeToStream(out);
                 out.flush();
                 packed.finish();
             }
@@ -341,6 +352,41 @@ public class RecapSounds
         catch (IOException e)
         {
             return false;
+        }
+    }
+
+    public void writeToStream(DataOutputStream out) throws IOException
+    {
+        out.writeInt(this.names.size());
+
+        for (String name : this.names)
+        {
+            out.writeUTF(name);
+        }
+
+        out.writeInt(this.dimensions.size());
+
+        for (String dimension : this.dimensions)
+        {
+            out.writeUTF(dimension);
+        }
+
+        out.writeInt(this.size);
+
+        for (int i = 0; i < this.size; i++)
+        {
+            int at = this.head + i;
+
+            out.writeInt(this.ticks[at]);
+            out.writeInt(this.ids[at]);
+            out.writeByte(this.categories[at]);
+            out.writeDouble(this.xs[at]);
+            out.writeDouble(this.ys[at]);
+            out.writeDouble(this.zs[at]);
+            out.writeFloat(this.volumes[at]);
+            out.writeFloat(this.pitches[at]);
+            out.writeByte(this.flags[at]);
+            out.writeShort(this.dims[at]);
         }
     }
 
@@ -360,45 +406,50 @@ public class RecapSounds
 
             try (DataInputStream in = new DataInputStream(new BufferedInputStream(new InflaterInputStream(raw, new Inflater(), 1 << 15), 1 << 15)))
             {
-                RecapSounds sounds = new RecapSounds();
-                int names = in.readInt();
-
-                for (int i = 0; i < names; i++)
-                {
-                    sounds.names.add(in.readUTF());
-                }
-
-                int dimensions = in.readInt();
-
-                for (int i = 0; i < dimensions; i++)
-                {
-                    sounds.dimensions.add(in.readUTF());
-                }
-
-                int count = in.readInt();
-
-                for (int i = 0; i < count; i++)
-                {
-                    int tick = in.readInt();
-                    int id = in.readInt();
-                    int category = in.readByte();
-                    double x = in.readDouble(), y = in.readDouble(), z = in.readDouble();
-                    float volume = in.readFloat(), pitch = in.readFloat();
-                    int flag = in.readByte();
-                    int dim = in.readShort();
-
-                    if (id >= 0 && id < names && dim < dimensions)
-                    {
-                        sounds.push(tick, id, category, x, y, z, volume, pitch, flag, dim);
-                    }
-                }
-
-                return sounds;
+                return readFromStream(in);
             }
         }
         catch (IOException | RuntimeException e)
         {
             return null;
         }
+    }
+
+    public static RecapSounds readFromStream(DataInputStream in) throws IOException
+    {
+        RecapSounds sounds = new RecapSounds();
+        int names = in.readInt();
+
+        for (int i = 0; i < names; i++)
+        {
+            sounds.names.add(in.readUTF());
+        }
+
+        int dimensions = in.readInt();
+
+        for (int i = 0; i < dimensions; i++)
+        {
+            sounds.dimensions.add(in.readUTF());
+        }
+
+        int count = in.readInt();
+
+        for (int i = 0; i < count; i++)
+        {
+            int tick = in.readInt();
+            int id = in.readInt();
+            int category = in.readByte();
+            double x = in.readDouble(), y = in.readDouble(), z = in.readDouble();
+            float volume = in.readFloat(), pitch = in.readFloat();
+            int flag = in.readByte();
+            int dim = in.readShort();
+
+            if (id >= 0 && id < names && dim < dimensions)
+            {
+                sounds.push(tick, id, category, x, y, z, volume, pitch, flag, dim);
+            }
+        }
+
+        return sounds;
     }
 }

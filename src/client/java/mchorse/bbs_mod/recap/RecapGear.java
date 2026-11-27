@@ -23,28 +23,22 @@ import java.util.zip.Inflater;
 import java.util.zip.InflaterInputStream;
 
 /**
- * What the recorded player had on it and how it was doing, tick by tick: the hotbar, the off hand
- * and the armor, which slot was picked, and the hearts, absorption, food, air, armor points,
- * experience and game mode its interface showed.
+ * What the recorded player had on it and how it was doing, tick by tick.
  *
- * <p>The numbers are kept every tick, like the camera; the items only when a slot changes, so a
- * hotbar held for an hour is fourteen items, not seventy two thousand times fourteen. An item at a
- * tick is the slot's last change at or before it.</p>
- *
- * <p>Played back by lending them to the player while the recorded player is drawn, its first person
- * hands are drawn and its interface is drawn over the frame, and taking them back after.</p>
+ * <p>Version 2 deduplicates serialized item NBT payloads through {@link RecapPool} while keeping
+ * version 1 files readable.</p>
  */
 public class RecapGear
 {
     private static final int MAGIC = 0x52434731;
-    private static final int VERSION = 1;
+    private static final int VERSION = 2;
+    private static final int MAX_SAMPLES = 20 * 60 * 60 * 6;
 
     /** Slots 0 to 8 are the hotbar, 9 the off hand, 10 to 13 the armor from the feet up. */
     public static final int SLOTS = 14;
     public static final int OFF_HAND = 9;
     public static final int ARMOR = 10;
 
-    /* Every tick */
     private byte[] selected = new byte[64];
     private float[] health = new float[64];
     private float[] maxHealth = new float[64];
@@ -57,7 +51,6 @@ public class RecapGear
     private byte[] mode = new byte[64];
     private int size;
 
-    /* The items, by slot, as they changed */
     @SuppressWarnings("unchecked")
     private final List<Change>[] items = new List[SLOTS];
 
@@ -76,7 +69,6 @@ public class RecapGear
         public int level;
         public float progress;
         public int armor;
-        /** The game mode's id, or -1 when it was not known. */
         public int mode = -1;
         public final ItemStack[] items = new ItemStack[SLOTS];
 
@@ -153,6 +145,59 @@ public class RecapGear
 
         this.push(inventory.selectedSlot, player.getHealth(), player.getMaxHealth(), player.getAbsorptionAmount(), player.getHungerManager().getFoodLevel(),
             player.getAir(), player.experienceLevel, player.experienceProgress, player.getArmor(), gameMode);
+    }
+
+    /** Seeds a fresh slice with the latest items held at the end of {@code previous}. */
+    public void seedFrom(RecapGear previous)
+    {
+        if (previous == null || previous.isEmpty())
+        {
+            return;
+        }
+
+        int end = previous.size - 1;
+
+        for (int slot = 0; slot < SLOTS; slot++)
+        {
+            ItemStack held = itemAt(previous.items[slot], end);
+
+            if (!held.isEmpty())
+            {
+                this.items[slot].add(new Change(0, held.copy()));
+            }
+        }
+    }
+
+    /** Appends another slice's samples and sparse item changes. */
+    public void append(RecapGear other)
+    {
+        if (other == null || other.isEmpty())
+        {
+            return;
+        }
+
+        int offset = this.size;
+
+        for (int i = 0; i < other.size; i++)
+        {
+            this.push(other.selected[i], other.health[i], other.maxHealth[i], other.absorption[i], other.food[i], other.air[i],
+                other.level[i], other.progress[i], other.armor[i], other.mode[i]);
+        }
+
+        for (int slot = 0; slot < SLOTS; slot++)
+        {
+            List<Change> dst = this.items[slot];
+
+            for (Change change : other.items[slot])
+            {
+                ItemStack prev = dst.isEmpty() ? ItemStack.EMPTY : dst.get(dst.size() - 1).stack;
+
+                if (dst.isEmpty() ? !change.stack.isEmpty() : !ItemStack.areEqual(prev, change.stack))
+                {
+                    dst.add(new Change(change.tick + offset, change.stack));
+                }
+            }
+        }
     }
 
     /** The last tick again, so the frames keep step with the ticks while there is no player. */
@@ -267,6 +312,11 @@ public class RecapGear
 
         for (int slot = 0; slot < SLOTS; slot++)
         {
+            if (from.items[slot].isEmpty())
+            {
+                continue;
+            }
+
             ItemStack first = itemAt(from.items[slot], start);
 
             if (!first.isEmpty())
@@ -329,35 +379,7 @@ public class RecapGear
                 DeflaterOutputStream packed = new DeflaterOutputStream(raw, deflater, 1 << 15);
                 DataOutputStream out = new DataOutputStream(new BufferedOutputStream(packed, 1 << 15));
 
-                out.writeInt(this.size);
-
-                for (int i = 0; i < this.size; i++)
-                {
-                    out.writeByte(this.selected[i]);
-                    out.writeFloat(this.health[i]);
-                    out.writeFloat(this.maxHealth[i]);
-                    out.writeFloat(this.absorption[i]);
-                    out.writeByte(this.food[i]);
-                    out.writeShort(this.air[i]);
-                    out.writeInt(this.level[i]);
-                    out.writeFloat(this.progress[i]);
-                    out.writeByte(this.armor[i]);
-                    out.writeByte(this.mode[i]);
-                }
-
-                for (int slot = 0; slot < SLOTS; slot++)
-                {
-                    List<Change> list = this.items[slot];
-
-                    out.writeInt(list.size());
-
-                    for (Change change : list)
-                    {
-                        out.writeInt(change.tick);
-                        writeLong(out, change.stack.isEmpty() ? "" : change.stack.writeNbt(new NbtCompound()).toString());
-                    }
-                }
-
+                this.writeToStream(out);
                 out.flush();
                 packed.finish();
             }
@@ -374,6 +396,58 @@ public class RecapGear
         }
     }
 
+    public void writeToStream(DataOutputStream out) throws IOException
+    {
+        RecapPool pool = new RecapPool();
+        int[][] slotIds = new int[SLOTS][];
+
+        for (int slot = 0; slot < SLOTS; slot++)
+        {
+            List<Change> list = this.items[slot];
+            int[] ids = new int[list.size()];
+
+            for (int c = 0; c < ids.length; c++)
+            {
+                ItemStack stack = list.get(c).stack;
+
+                ids[c] = stack.isEmpty() ? -1 : pool.putString(stack.writeNbt(new NbtCompound()).toString());
+            }
+
+            slotIds[slot] = ids;
+        }
+
+        pool.write(out);
+        out.writeInt(this.size);
+
+        for (int i = 0; i < this.size; i++)
+        {
+            out.writeByte(this.selected[i]);
+            out.writeFloat(this.health[i]);
+            out.writeFloat(this.maxHealth[i]);
+            out.writeFloat(this.absorption[i]);
+            out.writeByte(this.food[i]);
+            out.writeShort(this.air[i]);
+            out.writeInt(this.level[i]);
+            out.writeFloat(this.progress[i]);
+            out.writeByte(this.armor[i]);
+            out.writeByte(this.mode[i]);
+        }
+
+        for (int slot = 0; slot < SLOTS; slot++)
+        {
+            List<Change> list = this.items[slot];
+            int[] ids = slotIds[slot];
+
+            RecapPool.writeVar(out, list.size());
+
+            for (int c = 0; c < ids.length; c++)
+            {
+                out.writeInt(list.get(c).tick);
+                RecapPool.writeVar(out, ids[c] + 1);
+            }
+        }
+    }
+
     public static RecapGear read(File file)
     {
         if (!file.isFile())
@@ -383,46 +457,99 @@ public class RecapGear
 
         try (DataInputStream raw = new DataInputStream(new BufferedInputStream(new FileInputStream(file))))
         {
-            if (raw.readInt() != MAGIC || raw.readInt() != VERSION)
+            int version;
+
+            if (raw.readInt() != MAGIC || (version = raw.readInt()) < 1 || version > VERSION)
             {
                 return null;
             }
 
             try (DataInputStream in = new DataInputStream(new BufferedInputStream(new InflaterInputStream(raw, new Inflater(), 1 << 15), 1 << 15)))
             {
-                int size = in.readInt();
-
-                if (size < 0 || size > 20 * 60 * 60 * 6)
-                {
-                    return null;
-                }
-
-                RecapGear gear = new RecapGear();
-
-                for (int i = 0; i < size; i++)
-                {
-                    gear.push(in.readByte(), in.readFloat(), in.readFloat(), in.readFloat(), in.readByte(), in.readShort(), in.readInt(), in.readFloat(), in.readByte(), in.readByte());
-                }
-
-                for (int slot = 0; slot < SLOTS; slot++)
-                {
-                    int count = in.readInt();
-
-                    for (int c = 0; c < count; c++)
-                    {
-                        int tick = in.readInt();
-
-                        gear.items[slot].add(new Change(tick, readStack(readLong(in))));
-                    }
-                }
-
-                return gear;
+                return version == 1 ? readV1(in) : readFromStream(in);
             }
         }
         catch (IOException | RuntimeException e)
         {
             return null;
         }
+    }
+
+    private static RecapGear readV1(DataInputStream in) throws IOException
+    {
+        int size = in.readInt();
+
+        if (size < 0 || size > MAX_SAMPLES)
+        {
+            return null;
+        }
+
+        RecapGear gear = new RecapGear();
+
+        for (int i = 0; i < size; i++)
+        {
+            gear.push(in.readByte(), in.readFloat(), in.readFloat(), in.readFloat(), in.readByte(), in.readShort(), in.readInt(), in.readFloat(), in.readByte(), in.readByte());
+        }
+
+        for (int slot = 0; slot < SLOTS; slot++)
+        {
+            int count = in.readInt();
+
+            for (int c = 0; c < count; c++)
+            {
+                int tick = in.readInt();
+
+                gear.items[slot].add(new Change(tick, readStack(readLong(in))));
+            }
+        }
+
+        return gear;
+    }
+
+    public static RecapGear readFromStream(DataInputStream in) throws IOException
+    {
+        RecapPool pool = RecapPool.read(in);
+        int size = in.readInt();
+
+        if (size < 0 || size > MAX_SAMPLES)
+        {
+            throw new IOException("Bad gear size");
+        }
+
+        ItemStack[] decoded = new ItemStack[pool.size()];
+        RecapGear gear = new RecapGear();
+
+        for (int i = 0; i < size; i++)
+        {
+            gear.push(in.readByte(), in.readFloat(), in.readFloat(), in.readFloat(), in.readByte(), in.readShort(), in.readInt(), in.readFloat(), in.readByte(), in.readByte());
+        }
+
+        for (int slot = 0; slot < SLOTS; slot++)
+        {
+            int count = RecapPool.readVar(in);
+
+            for (int c = 0; c < count; c++)
+            {
+                int tick = in.readInt();
+                int poolId = RecapPool.readVar(in) - 1;
+                ItemStack stack = ItemStack.EMPTY;
+
+                if (poolId >= 0 && poolId < decoded.length)
+                {
+                    stack = decoded[poolId];
+
+                    if (stack == null)
+                    {
+                        stack = readStack(pool.getString(poolId));
+                        decoded[poolId] = stack;
+                    }
+                }
+
+                gear.items[slot].add(new Change(tick, stack));
+            }
+        }
+
+        return gear;
     }
 
     private static ItemStack readStack(String text)
@@ -441,8 +568,6 @@ public class RecapGear
             return ItemStack.EMPTY;
         }
     }
-
-    /* Item data can be longer than a short string allows */
 
     static void writeLong(DataOutputStream out, String text) throws IOException
     {

@@ -460,6 +460,7 @@ public class UIClips extends UITimelineCanvas
             ((CameraClip) clip).fromCamera(this.delegate.getCamera());
         }
 
+        this.delegate.clipCreated(clip);
         this.addClip(clip, tick, layer, duration);
     }
 

@@ -7,6 +7,7 @@ import mchorse.bbs_mod.camera.data.Point;
 import mchorse.bbs_mod.camera.data.Position;
 import mchorse.bbs_mod.forms.entities.IEntity;
 import mchorse.bbs_mod.ui.UIKeys;
+import mchorse.bbs_mod.ui.film.IUIClipTargets;
 import mchorse.bbs_mod.ui.film.IUIClipsDelegate;
 import mchorse.bbs_mod.ui.film.UIFilmPanel;
 import mchorse.bbs_mod.ui.film.clips.modules.UIPointModule;
@@ -43,6 +44,13 @@ public class UITrackerClip extends UIClip<TrackerClientClip>
 
         this.selector = new UIButton(UIKeys.CAMERA_PANELS_TARGET_TITLE, (b) ->
         {
+            if (this.editor instanceof IUIClipTargets targets)
+            {
+                targets.showTargets(this.getContext(), this.clip.selector.get(), (i) -> this.clip.selector.set(i));
+
+                return;
+            }
+
             UIFilmPanel panel = this.getParent(UIFilmPanel.class);
 
             if (panel != null)
@@ -53,6 +61,13 @@ public class UITrackerClip extends UIClip<TrackerClientClip>
         this.selector.tooltip(UIKeys.CAMERA_PANELS_TARGET_TOOLTIP);
         this.group = new UIButton(UIKeys.GENERIC_KEYFRAMES_ANCHOR_PICK_ATTACHMENT, (b) ->
         {
+            if (this.editor instanceof IUIClipTargets targets)
+            {
+                targets.showTargetBones(this.getContext(), this.clip.selector.get(), this.clip.group.get(), (attachment) -> this.clip.group.set(attachment));
+
+                return;
+            }
+
             UIAnchorKeyframeFactory.displayAttachments(this.getParent(UIFilmPanel.class), this.clip.selector.get(), this.clip.group.get(), (attachment) -> this.clip.group.set(attachment));
         });
 
@@ -70,8 +85,8 @@ public class UITrackerClip extends UIClip<TrackerClientClip>
     {
         super.registerPanels();
 
-        /* Recap Studio has no actors to pick: its clip follows the recorded player by itself */
-        if (this.editor.pickActors())
+        /* Recap Studio picks among the recorded players instead of a film's actors */
+        if (this.editor.pickActors() || this.editor instanceof IUIClipTargets)
         {
             this.panels.add(this.section(UIKeys.CAMERA_PANELS_TARGET, this.selector, this.group));
         }
@@ -157,12 +172,14 @@ public class UITrackerClip extends UIClip<TrackerClientClip>
         UIContext context = this.getContext();
         String selector = this.clip.selector.get();
 
-        if (panel == null || context == null || selector.isEmpty())
+        IUIClipTargets targets = this.editor instanceof IUIClipTargets recap ? recap : null;
+
+        if ((panel == null && targets == null) || context == null || selector.isEmpty())
         {
             return null;
         }
 
-        Map<String, IEntity> entities = panel.getController().getEntities();
+        Map<String, IEntity> entities = targets != null ? targets.targetEntities() : panel.getController().getEntities();
         TrackerFrame frame = TrackerFrame.resolve(
             entities,
             entities.get(selector),

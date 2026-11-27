@@ -85,7 +85,10 @@ public final class ActorEyeState
 
     private static Report find(Vec3d camera, int framesBack)
     {
-        if (!(BBSModClient.getCameraController().getCurrent() instanceof CameraWorkCameraController))
+        Object current = BBSModClient.getCameraController().getCurrent();
+
+        /* A film's camera, or Recap Studio's over its recording */
+        if (!(current instanceof CameraWorkCameraController) && current != mchorse.bbs_mod.recap.RecapScene.INSTANCE)
         {
             return null;
         }

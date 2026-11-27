@@ -165,12 +165,10 @@ public class RecapLayout
         {
             try
             {
-                File file = file();
-                BaseType data = file.isFile() ? DataToString.read(file) : null;
+                MapType map = mchorse.bbs_mod.recap.RecapSpool.readMapWithBackup(file());
 
-                if (data != null && data.isMap())
+                if (map != null)
                 {
-                    MapType map = data.asMap();
                     Store store = new Store(fromData(map.getMap("current")));
 
                     store.locked = map.getBool("locked", false);
@@ -208,7 +206,7 @@ public class RecapLayout
             data.put("current", this.current.toData());
             data.put("templates", templates);
             data.putBool("locked", this.locked);
-            DataToString.writeSilently(file(), data, true);
+            mchorse.bbs_mod.recap.RecapSpool.writeJournalAtomically(file(), data);
         }
     }
 }

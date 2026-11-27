@@ -46,6 +46,10 @@ public interface IUIClipsDelegate extends ICursor
         return true;
     }
 
+    /** A clip just made from the add menu, before it goes on the timeline: for what a delegate sets it up with. */
+    public default void clipCreated(Clip clip)
+    {}
+
     /** The clip timeline this delegate shows, for the clip panels that act on it; null when none. */
     public default UIClips getClipsTimeline()
     {

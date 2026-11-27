@@ -73,6 +73,19 @@ public class RecapEnvironment
         this.size += 1;
     }
 
+    public void append(RecapEnvironment other)
+    {
+        if (other == null || other.isEmpty())
+        {
+            return;
+        }
+
+        for (int i = 0; i < other.size; i++)
+        {
+            this.add(other.time[i], other.rain[i], other.thunder[i]);
+        }
+    }
+
     /** The world around at {@code at}, in ticks, between the frames around it; false when empty. */
     public boolean sample(float at, Sample out)
     {
@@ -138,19 +151,7 @@ public class RecapEnvironment
                 DeflaterOutputStream packed = new DeflaterOutputStream(raw, deflater, 1 << 15);
                 DataOutputStream out = new DataOutputStream(new BufferedOutputStream(packed, 1 << 15));
 
-                out.writeInt(this.size);
-
-                long last = 0;
-
-                for (int i = 0; i < this.size; i++)
-                {
-                    /* The steps of the clock, nearly always one, pack to almost nothing */
-                    out.writeLong(this.time[i] - last);
-                    last = this.time[i];
-                    out.writeFloat(this.rain[i]);
-                    out.writeFloat(this.thunder[i]);
-                }
-
+                this.writeToStream(out);
                 out.flush();
                 packed.finish();
             }
@@ -164,6 +165,21 @@ public class RecapEnvironment
         catch (IOException e)
         {
             return false;
+        }
+    }
+
+    public void writeToStream(DataOutputStream out) throws IOException
+    {
+        out.writeInt(this.size);
+
+        long last = 0;
+
+        for (int i = 0; i < this.size; i++)
+        {
+            out.writeLong(this.time[i] - last);
+            last = this.time[i];
+            out.writeFloat(this.rain[i]);
+            out.writeFloat(this.thunder[i]);
         }
     }
 
@@ -183,28 +199,33 @@ public class RecapEnvironment
 
             try (DataInputStream in = new DataInputStream(new BufferedInputStream(new InflaterInputStream(raw, new Inflater(), 1 << 15), 1 << 15)))
             {
-                int size = in.readInt();
-
-                if (size < 0 || size > 20 * 60 * 60 * 6)
-                {
-                    return null;
-                }
-
-                RecapEnvironment environment = new RecapEnvironment();
-                long time = 0;
-
-                for (int i = 0; i < size; i++)
-                {
-                    time += in.readLong();
-                    environment.add(time, in.readFloat(), in.readFloat());
-                }
-
-                return environment;
+                return readFromStream(in);
             }
         }
         catch (IOException | RuntimeException e)
         {
             return null;
         }
+    }
+
+    public static RecapEnvironment readFromStream(DataInputStream in) throws IOException
+    {
+        int size = in.readInt();
+
+        if (size < 0 || size > 20 * 60 * 60 * 6)
+        {
+            throw new IOException("Bad environment size");
+        }
+
+        RecapEnvironment environment = new RecapEnvironment();
+        long time = 0;
+
+        for (int i = 0; i < size; i++)
+        {
+            time += in.readLong();
+            environment.add(time, in.readFloat(), in.readFloat());
+        }
+
+        return environment;
     }
 }
