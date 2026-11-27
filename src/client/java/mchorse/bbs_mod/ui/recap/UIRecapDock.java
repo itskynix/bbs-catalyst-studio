@@ -98,6 +98,21 @@ public class UIRecapDock extends UIElement
             context.batcher.icon(Icons.ALL_DIRECTIONS, RecapStyle.light() ? 0xccffffff : 0x90ffffff, this.area.ex() - 5, this.area.y + HEADER / 2F, 1F, 0.5F);
         }
 
-        super.render(context);
+        /* The content never draws past its panel, however small the layout makes it */
+        if (this.content.area.w <= 0 || this.content.area.h <= 0)
+        {
+            return;
+        }
+
+        context.batcher.clip(this.content.area, context);
+
+        try
+        {
+            super.render(context);
+        }
+        finally
+        {
+            context.batcher.unclip(context);
+        }
     }
 }

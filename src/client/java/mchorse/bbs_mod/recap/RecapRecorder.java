@@ -3,7 +3,9 @@ package mchorse.bbs_mod.recap;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.l10n.L10n;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.render.Camera;
 import net.minecraft.text.Text;
+import net.minecraft.util.math.Vec3d;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -11,19 +13,25 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The recording side of a recap: its state, its clock and its markers, driven by the transport bar
- * of the pause menu and by the key bindings.
+ * The recording side of a recap: its state, its clock, its markers and its camera, driven by the
+ * transport bar of the pause menu and by the key bindings.
+ *
+ * <p><b>States.</b> Idle, recording and stopped. Only a recording counts: Stop holds the clock
+ * where it is, Start then goes on from there, and Save or Cancel end the session and put the clock
+ * back to zero. Nothing runs behind a stopped or ended recording.</p>
  *
  * <p><b>The clock.</b> A running recording counts client ticks, twenty a second, also while the
  * pause menu is open, so the time on the transport bar goes on from the moment Start is pressed
  * there. What is drawn between two ticks is {@code ticks + transition}, the transition being the
- * frame's share of the next tick; nothing reads the wall clock.</p>
+ * frame's share of the next tick; nothing reads the wall clock. Every counted tick also keeps where
+ * the camera was ({@link RecapTrack}), which is what Recap Studio shows the recap through.</p>
  *
  * <p><b>Instant recap.</b> The last stretch of play can be saved after the fact: the ticks played
- * since the world was joined and the markers pressed in them are counted all the time, so switching
- * the setting on mid session already has the stretch behind it; a paused game is not play and does
- * not add to it. Saving takes the last so many seconds, the setting's length, or all that was
- * played when that is shorter.</p>
+ * since the world was joined, their camera and the markers pressed in them are counted all the
+ * time, so switching the setting on mid session already has the stretch behind it; a paused game
+ * is not play and does not add to it, and neither does Recap Studio looking through a recap's
+ * camera. Saving takes the last so many seconds, the setting's length, or all that was played when
+ * that is shorter.</p>
  */
 public final class RecapRecorder
 {
@@ -32,13 +40,18 @@ public final class RecapRecorder
         IDLE, RECORDING, STOPPED
     }
 
+    /** The longest instant recap the setting allows, in ticks: what the play buffer keeps. */
+    private static final int BUFFER_LIMIT = 600 * 20;
+
     private static State state = State.IDLE;
     private static int ticks;
     private static final List<Integer> markers = new ArrayList<>();
+    private static final RecapTrack track = new RecapTrack();
     private static RecapWorlds.Info world;
 
     private static int playedTicks;
     private static final List<Integer> playedMarkers = new ArrayList<>();
+    private static final RecapTrack playedTrack = new RecapTrack();
 
     private RecapRecorder()
     {}
@@ -58,6 +71,12 @@ public final class RecapRecorder
         return markers.size();
     }
 
+    /** The recording's time between two ticks, for drawing: the ticks plus the frame's transition. */
+    public static float getTime(float transition)
+    {
+        return state == State.RECORDING ? ticks + Math.max(0F, Math.min(1F, transition)) : ticks;
+    }
+
     public static boolean isInstantEnabled()
     {
         return BBSSettings.recapInstant != null && BBSSettings.recapInstant.get();
@@ -65,19 +84,13 @@ public final class RecapRecorder
 
     private static int instantWindow()
     {
-        return BBSSettings.recapInstantSeconds == null ? 0 : BBSSettings.recapInstantSeconds.get() * 20;
-    }
-
-    /** The recording's time between two ticks, for drawing: the ticks plus the frame's transition. */
-    public static float getTime(float transition)
-    {
-        return state == State.RECORDING ? ticks + Math.max(0F, Math.min(1F, transition)) : ticks;
+        return BBSSettings.recapInstantSeconds == null ? 0 : Math.min(BUFFER_LIMIT, BBSSettings.recapInstantSeconds.get() * 20);
     }
 
     /** How much play an instant recap would take right now. */
     public static int getInstantTicks()
     {
-        return Math.min(playedTicks, instantWindow());
+        return Math.min(instantWindow(), Math.min(playedTicks, playedTrack.size()));
     }
 
     /** Once a client tick. */
@@ -92,22 +105,41 @@ public final class RecapRecorder
         if (state == State.RECORDING)
         {
             ticks += 1;
+            sample(mc, track);
         }
 
-        if (mc.isPaused())
+        if (mc.isPaused() || RecapScene.isActive())
         {
             return;
         }
 
         playedTicks += 1;
+        sample(mc, playedTrack);
+        playedTrack.trim(BUFFER_LIMIT);
 
-        int oldest = playedTicks - instantWindow();
+        int oldest = playedTicks - BUFFER_LIMIT;
 
         playedMarkers.removeIf((marker) -> marker < oldest);
     }
 
+    private static void sample(MinecraftClient mc, RecapTrack into)
+    {
+        Camera camera = mc.gameRenderer.getCamera();
+        Vec3d pos = camera.getPos();
+
+        into.add(pos.x, pos.y, pos.z, camera.getYaw(), camera.getPitch(), mc.options.getFov().getValue());
+    }
+
+    /** Starts a recording, or goes on with the stopped one from where it was held. */
     public static boolean start()
     {
+        if (state == State.STOPPED)
+        {
+            state = State.RECORDING;
+
+            return true;
+        }
+
         RecapWorlds.Info info = RecapWorlds.current();
 
         if (state != State.IDLE || info == null)
@@ -118,6 +150,7 @@ public final class RecapRecorder
         world = info;
         ticks = 0;
         markers.clear();
+        track.clear();
         state = State.RECORDING;
 
         return true;
@@ -135,7 +168,7 @@ public final class RecapRecorder
         return true;
     }
 
-    /** Writes the recording to the list and goes back to idle; null when there is nothing to write. */
+    /** Writes the recording to the list and ends the session; null when there is nothing to write. */
     public static RecapRecord save()
     {
         if (state == State.IDLE || world == null)
@@ -143,7 +176,10 @@ public final class RecapRecorder
             return null;
         }
 
-        RecapRecord record = create(world, ticks, markers, false);
+        /* The session ends here whatever comes of the writing: no clock runs behind it */
+        state = State.STOPPED;
+
+        RecapRecord record = create(world, ticks, markers, track, false);
 
         if (record != null)
         {
@@ -219,7 +255,7 @@ public final class RecapRecorder
             }
         }
 
-        return create(info, length, inside, true);
+        return create(info, length, inside, RecapTrack.tail(playedTrack, length), true);
     }
 
     /** The record key: starts a recording, and saves the one running or stopped. */
@@ -252,15 +288,40 @@ public final class RecapRecorder
         return record;
     }
 
-    /** The start and stop of the transport bar, with what came of them said. */
+    /** The start of the transport bar, with what came of it said. */
     public static void startWithMessage()
     {
-        say(start() ? "bbs.recap.message.started" : "bbs.recap.message.unavailable");
+        boolean resume = state == State.STOPPED;
+
+        if (start())
+        {
+            say(resume ? "bbs.recap.message.resumed" : "bbs.recap.message.started");
+        }
+        else
+        {
+            say("bbs.recap.message.unavailable");
+        }
+    }
+
+    public static void stopWithMessage()
+    {
+        if (stop())
+        {
+            say("bbs.recap.message.stopped");
+        }
     }
 
     public static void saveWithMessage()
     {
         say(save() != null ? "bbs.recap.message.saved" : "bbs.recap.message.failed");
+    }
+
+    public static void cancelWithMessage()
+    {
+        if (cancel())
+        {
+            say("bbs.recap.message.cancelled");
+        }
     }
 
     public static void markerWithMessage()
@@ -283,6 +344,7 @@ public final class RecapRecorder
         reset();
         playedTicks = 0;
         playedMarkers.clear();
+        playedTrack.clear();
     }
 
     /** Leaving the world keeps what was being recorded rather than losing it. */
@@ -301,10 +363,11 @@ public final class RecapRecorder
         state = State.IDLE;
         ticks = 0;
         markers.clear();
+        track.clear();
         world = null;
     }
 
-    private static RecapRecord create(RecapWorlds.Info info, int length, List<Integer> marked, boolean instant)
+    private static RecapRecord create(RecapWorlds.Info info, int length, List<Integer> marked, RecapTrack camera, boolean instant)
     {
         RecapRecord record = new RecapRecord();
         LocalDateTime now = LocalDateTime.now();
@@ -323,6 +386,13 @@ public final class RecapRecorder
             record.addMarker(marker);
         }
 
-        return RecapStore.save(record) ? record : null;
+        if (!RecapStore.save(record))
+        {
+            return null;
+        }
+
+        RecapStore.saveTrack(record, camera);
+
+        return record;
     }
 }

@@ -3,7 +3,12 @@ package mchorse.bbs_mod.ui.recap;
 import mchorse.bbs_mod.graphics.window.Window;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.recap.RecapOption;
+import mchorse.bbs_mod.BBSModClient;
+import mchorse.bbs_mod.camera.controller.CameraController;
+import mchorse.bbs_mod.client.BBSRendering;
 import mchorse.bbs_mod.recap.RecapRecord;
+import mchorse.bbs_mod.recap.RecapScene;
+import mchorse.bbs_mod.recap.RecapTrack;
 import mchorse.bbs_mod.recap.RecapStore;
 import mchorse.bbs_mod.recap.RecapTime;
 import mchorse.bbs_mod.ui.framework.UIContext;
@@ -15,6 +20,7 @@ import mchorse.bbs_mod.ui.utils.Area;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.ui.utils.keys.KeyAction;
 import mchorse.bbs_mod.utils.colors.Colors;
+import net.minecraft.client.MinecraftClient;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.List;
@@ -36,7 +42,8 @@ import java.util.Map;
  * menu goes back to any step at once.</p>
  *
  * <p>The cursor is a tick, and playing advances it a tick per game tick, so the editor is on the same
- * moment on every machine. The stage is not drawn yet: it shows the frame and the thirds guide.</p>
+ * moment on every machine. The viewport draws the world through the recap's camera at the cursor
+ * ({@link RecapScene}).</p>
  */
 public class UIRecapEditor extends UIElement
 {
@@ -64,6 +71,10 @@ public class UIRecapEditor extends UIElement
     private final UIRecapSplitter innerSplitter;
 
     private RecapRecord record;
+    private RecapTrack track;
+    private boolean sceneShown;
+    private int sceneWidth;
+    private int sceneHeight;
     private int cursor;
     private boolean playing;
 
@@ -73,6 +84,8 @@ public class UIRecapEditor extends UIElement
     private final Area body = new Area();
     private final Area side = new Area();
     private final Area main = new Area();
+    /** The column the timeline and the viewport share, which stays put while the timeline is resized. */
+    private final Area column = new Area();
 
     public UIRecapEditor(UIRecapPanel panel)
     {
@@ -145,6 +158,7 @@ public class UIRecapEditor extends UIElement
     public void open(RecapRecord record)
     {
         this.record = record;
+        this.track = RecapStore.loadTrack(record);
         this.cursor = 0;
         this.stopPlayback();
         this.info.fill(record);
@@ -181,11 +195,89 @@ public class UIRecapEditor extends UIElement
         }
 
         this.playing = true;
+        RecapScene.setPlaying(true);
     }
 
     public void stopPlayback()
     {
         this.playing = false;
+        RecapScene.setPlaying(false);
+    }
+
+    /* The scene */
+
+    public RecapTrack getTrack()
+    {
+        return this.track;
+    }
+
+    /**
+     * Shows the recap in the world: the world is drawn at the viewport's frame size into the
+     * picture the viewport shows, through the recap's camera when it has one, with its view
+     * settings laid over it. Only while the editor is on screen.
+     */
+    public void showScene()
+    {
+        if (this.record == null)
+        {
+            return;
+        }
+
+        CameraController controller = BBSModClient.getCameraController();
+
+        RecapScene.show(this.record, this.track, this::getCursor);
+        RecapScene.setPlaying(this.playing);
+
+        if (RecapScene.hasCamera())
+        {
+            if (!controller.has(RecapScene.INSTANCE))
+            {
+                controller.add(RecapScene.INSTANCE);
+            }
+        }
+        else
+        {
+            /* A recap kept before its camera was: the world from where the player is now */
+            controller.remove(RecapScene.INSTANCE);
+        }
+
+        this.sceneShown = true;
+        this.applySceneSize();
+    }
+
+    /** Gives the world back to the game: its own camera, size and look. */
+    public void hideScene()
+    {
+        if (!this.sceneShown)
+        {
+            return;
+        }
+
+        this.sceneShown = false;
+        RecapScene.hide();
+        BBSModClient.getCameraController().remove(RecapScene.INSTANCE);
+        BBSRendering.setCustomSize(false);
+    }
+
+    public boolean isSceneShown()
+    {
+        return this.sceneShown;
+    }
+
+    /** The viewport's frame in real pixels, which the world is drawn at. */
+    public void setSceneSize(int width, int height)
+    {
+        this.sceneWidth = width;
+        this.sceneHeight = height;
+        this.applySceneSize();
+    }
+
+    private void applySceneSize()
+    {
+        if (this.sceneShown && this.sceneWidth > 1 && this.sceneHeight > 1 && MinecraftClient.getInstance().world != null)
+        {
+            BBSRendering.setCustomSize(true, this.sceneWidth, this.sceneHeight);
+        }
     }
 
     public void tick()
@@ -358,11 +450,38 @@ public class UIRecapEditor extends UIElement
 
     /* Layout */
 
+    /**
+     * The panels are placed once the editor's own area is known for this pass, never from the one
+     * of the pass before: placed from a stale area, a resize or a drag lagged a frame behind and the
+     * panels slid over each other or shook.
+     */
     @Override
-    public void resize()
+    protected void afterResizeApplied()
     {
         this.applyLayout();
-        super.resize();
+    }
+
+    /** The smallest height a side panel keeps: its header and a few rows. */
+    private static final int MIN_DOCK = UIRecapDock.HEADER + 40;
+    /** What the viewport keeps beside the side column and above or below the timeline. */
+    private static final int MIN_MAIN_W = 240;
+    private static final int MIN_MAIN_H = 110;
+
+    private static int clamp(int value, int min, int max)
+    {
+        return max < min ? min : Math.max(min, Math.min(max, value));
+    }
+
+    /** The side column's width the layout asks for, held inside what the window leaves. */
+    private int sideWidth(int width)
+    {
+        return clamp(this.layout.sideWidth, RecapLayout.MIN_SIDE, Math.min(width * 3 / 5, width - GAP - MIN_MAIN_W));
+    }
+
+    /** The timeline's height in a column of {@code height}, held so the viewport keeps its share. */
+    private int timelineHeight(int height)
+    {
+        return clamp(this.layout.timelineHeight, RecapLayout.MIN_TIMELINE, Math.min(height * 7 / 10, height - GAP - MIN_MAIN_H));
     }
 
     /** Places every panel and gap after the layout. */
@@ -375,8 +494,7 @@ public class UIRecapEditor extends UIElement
         int y1 = this.area.ey() - MARGIN;
         int width = Math.max(1, x1 - x0);
         int height = Math.max(1, y1 - y0);
-        int sw = Math.max(RecapLayout.MIN_SIDE, Math.min(width / 2, l.sideWidth));
-        int th = Math.max(RecapLayout.MIN_TIMELINE, Math.min(height * 3 / 5, l.timelineHeight));
+        int sw = this.sideWidth(width);
 
         this.body.set(x0, y0, width, height);
 
@@ -385,6 +503,9 @@ public class UIRecapEditor extends UIElement
 
         if (l.timelineFull)
         {
+            int th = this.timelineHeight(height);
+
+            this.column.set(x0, y0, width, height);
             tl = l.timelineTop ? new int[] {x0, y0, x1, y0 + th} : new int[] {x0, y1 - th, x1, y1};
             by0 = l.timelineTop ? y0 + th + GAP : y0;
             by1 = l.timelineTop ? y1 : y1 - th - GAP;
@@ -395,6 +516,10 @@ public class UIRecapEditor extends UIElement
 
         if (!l.timelineFull)
         {
+            /* The timeline shares the viewport's column, which does not move while it is resized */
+            int th = this.timelineHeight(mainRect[3] - mainRect[1]);
+
+            this.column.set(mainRect[0], mainRect[1], mainRect[2] - mainRect[0], mainRect[3] - mainRect[1]);
             tl = l.timelineTop ? new int[] {mainRect[0], mainRect[1], mainRect[2], mainRect[1] + th} : new int[] {mainRect[0], mainRect[3] - th, mainRect[2], mainRect[3]};
             mainRect = l.timelineTop ? new int[] {mainRect[0], mainRect[1] + th + GAP, mainRect[2], mainRect[3]} : new int[] {mainRect[0], mainRect[1], mainRect[2], mainRect[3] - th - GAP};
         }
@@ -408,7 +533,9 @@ public class UIRecapEditor extends UIElement
         /* The side column: the record and the view settings, in their order and share */
         if (l.infoVisible)
         {
-            int share = (int) ((sideRect[3] - sideRect[1] - GAP) * l.infoRatio);
+            int room = sideRect[3] - sideRect[1] - GAP;
+            float upperRatio = l.infoFirst ? l.infoRatio : 1F - l.infoRatio;
+            int share = room < MIN_DOCK * 2 ? room / 2 : clamp(Math.round(room * upperRatio), MIN_DOCK, room - MIN_DOCK);
             int split = sideRect[1] + share;
             int[] upper = {sideRect[0], sideRect[1], sideRect[2], split};
             int[] lower = {sideRect[0], split + GAP, sideRect[2], sideRect[3]};
@@ -436,39 +563,39 @@ public class UIRecapEditor extends UIElement
         this.place(this.timelineSplitter, new int[] {tl[0], gapY, tl[2], gapY + GAP});
     }
 
+    /** Sets an element's area right away, so the children it lays out next see the new one. */
     private void place(UIElement element, int[] r)
     {
         element.relative(this).x(r[0] - this.area.x).y(r[1] - this.area.y).w(Math.max(1, r[2] - r[0])).h(Math.max(1, r[3] - r[1]));
     }
 
+    /* The drags read the pointer against areas that stay put while they resize, and hold the
+     * value to the same bounds the layout uses, so what is stored is what is shown */
+
     private void dragSide(int mouseX)
     {
         int width = this.layout.sideLeft ? mouseX - this.body.x - GAP / 2 : this.body.ex() - mouseX - GAP / 2;
 
-        this.layout.sideWidth = Math.max(RecapLayout.MIN_SIDE, Math.min(this.body.w / 2, width));
+        this.layout.sideWidth = width;
+        this.layout.sideWidth = this.sideWidth(this.body.w);
         this.resize();
     }
 
     private void dragTimeline(int mouseY)
     {
-        int top = this.layout.timelineFull ? this.body.y : this.main.y;
-        int bottom = this.layout.timelineFull ? this.body.ey() : this.main.ey();
-        int height = this.layout.timelineTop ? mouseY - top - GAP / 2 : bottom - mouseY - GAP / 2;
+        int height = this.layout.timelineTop ? mouseY - this.column.y - GAP / 2 : this.column.ey() - mouseY - GAP / 2;
 
-        this.layout.timelineHeight = Math.max(RecapLayout.MIN_TIMELINE, Math.min(this.body.h * 3 / 5, height));
+        this.layout.timelineHeight = height;
+        this.layout.timelineHeight = this.timelineHeight(this.column.h);
         this.resize();
     }
 
     private void dragInner(int mouseY)
     {
-        float ratio = (mouseY - this.side.y) / (float) Math.max(1, this.side.h);
+        float upper = (mouseY - this.side.y - GAP / 2F) / (float) Math.max(1, this.side.h - GAP);
 
-        if (!this.layout.infoFirst)
-        {
-            ratio = 1F - ratio;
-        }
-
-        this.layout.infoRatio = Math.max(0.15F, Math.min(0.85F, ratio));
+        upper = Math.max(0.1F, Math.min(0.9F, upper));
+        this.layout.infoRatio = this.layout.infoFirst ? upper : 1F - upper;
         this.resize();
     }
 
@@ -687,7 +814,8 @@ public class UIRecapEditor extends UIElement
         if (this.record != null)
         {
             FontRenderer font = context.batcher.getFont();
-            String name = font.limitToWidth(this.record.name, Math.max(30, this.area.w - 140));
+            /* Between rename on the left and undo, redo, history and layouts on the right */
+            String name = font.limitToWidth(this.record.name, Math.max(20, this.area.w - (MARGIN + 56) - (MARGIN + 112)));
 
             context.batcher.text(name, this.area.x + MARGIN + 56, this.area.y + 8, RecapStyle.text(), false);
         }

@@ -21,7 +21,7 @@ public class SimpleOptionMixin
 
         if (MinecraftClient.getInstance().options != null && option == MinecraftClient.getInstance().options.getGamma())
         {
-            if (BBSRendering.isFullbright())
+            if (BBSRendering.isFullbright() || mchorse.bbs_mod.recap.RecapScene.nightVision())
             {
                 info.setReturnValue(FULLBRIGHT_GAMMA);
 

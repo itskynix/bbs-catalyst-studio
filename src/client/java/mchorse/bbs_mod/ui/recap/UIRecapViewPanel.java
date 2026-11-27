@@ -10,6 +10,7 @@ import mchorse.bbs_mod.ui.framework.elements.buttons.UICirculate;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIToggle;
 import mchorse.bbs_mod.ui.framework.elements.input.UIColor;
 import mchorse.bbs_mod.ui.framework.elements.input.UITrackpad;
+import mchorse.bbs_mod.ui.utils.UI;
 
 import java.util.function.Consumer;
 
@@ -50,6 +51,12 @@ public class UIRecapViewPanel extends UIScrollView
 
         section.fields.column(3).stretch().vertical();
         this.add(section);
+
+        /* The viewport draws the scene; the interface pieces are kept for when a recap is exported */
+        if (group == RecapOption.Group.HUD)
+        {
+            section.fields.add(UI.label(UIRecapKeys.key("view.hud_note")).color(RecapStyle.dim()));
+        }
 
         for (RecapOption option : RecapOption.values())
         {

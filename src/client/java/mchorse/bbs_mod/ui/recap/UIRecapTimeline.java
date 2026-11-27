@@ -9,7 +9,8 @@ import mchorse.bbs_mod.utils.colors.Colors;
 
 /**
  * The recap's timeline: a ruler, the marked moments as flags and the cursor. A click or a drag
- * moves the cursor; the cursor is a tick, so what it points at never depends on the frame rate.
+ * on the ruler moves the cursor, a click on a flag jumps onto its moment, and the body under them
+ * does not scrub; the cursor is a tick, so what it points at never depends on the frame rate.
  */
 public class UIRecapTimeline extends UIElement
 {
@@ -76,10 +77,22 @@ public class UIRecapTimeline extends UIElement
             }
         }
 
+        /* Only the ruler scrubs: a click on the body under it moves nothing */
+        if (!this.isOnRuler(context))
+        {
+            return false;
+        }
+
         this.dragging = true;
         this.editor.seek(this.toTick(context.mouseX));
 
         return true;
+    }
+
+    /** The band along the top with the time marks, the one place the cursor is dragged from. */
+    private boolean isOnRuler(UIContext context)
+    {
+        return this.area.isInside(context) && context.mouseY < this.area.y + RULER;
     }
 
     @Override
@@ -96,6 +109,13 @@ public class UIRecapTimeline extends UIElement
         RecapRecord record = this.editor.getRecord();
 
         RecapStyle.well(context.batcher, this.area.x + 4, this.area.y + 2, this.area.ex() - 4, this.area.ey() - 2);
+
+        /* The ruler band, lit under the pointer or while dragged, so it reads as the scrub handle */
+        boolean ruler = this.dragging || this.isOnRuler(context);
+        int band = RecapStyle.light() ? (ruler ? 0x502b7ab8 : 0x302b7ab8) : (ruler ? 0x26ffffff : 0x12ffffff);
+
+        context.batcher.box(this.area.x + 5, this.area.y + 3, this.area.ex() - 5, this.area.y + RULER, band);
+        context.batcher.box(this.area.x + 5, this.area.y + RULER, this.area.ex() - 5, this.area.y + RULER + 1, RecapStyle.divider());
 
         if (record == null)
         {

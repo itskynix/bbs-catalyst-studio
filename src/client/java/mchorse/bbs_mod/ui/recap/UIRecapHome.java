@@ -52,6 +52,7 @@ public class UIRecapHome extends UIElement
 
     private List<RecapRecord> records = List.of();
     private RecapRecord picked;
+    private int infoLimit = Integer.MAX_VALUE;
 
     public UIRecapHome(UIRecapPanel panel)
     {
@@ -335,10 +336,17 @@ public class UIRecapHome extends UIElement
         int width = a.w - 20;
         int y = a.y + PANEL_HEAD + 8;
 
+        /* What is written stops above the buttons, so a short window never draws it under them */
+        this.infoLimit = this.open.area.y - 4;
+
         context.batcher.text(font.limitToWidth(record.name, width), x, y, RecapStyle.text(), !RecapStyle.light() && !UITheme.flat());
         y += 18;
 
-        renderStrip(context, record, x, y, width, 18);
+        if (y + 18 <= this.infoLimit)
+        {
+            renderStrip(context, record, x, y, width, 18);
+        }
+
         y += 28;
 
         y = this.renderInfo(context, font, x, y, width, "home.world", record.worldName);
@@ -350,6 +358,11 @@ public class UIRecapHome extends UIElement
 
     private int renderInfo(UIContext context, FontRenderer font, int x, int y, int width, String label, String value)
     {
+        if (y + font.getHeight() > this.infoLimit)
+        {
+            return y + 14;
+        }
+
         context.batcher.text(UIRecapKeys.text(label), x, y, RecapStyle.dim(), false);
 
         String limited = font.limitToWidth(value, Math.max(20, width - 90));

@@ -1234,7 +1234,8 @@ public class BBSRendering
     {
         Double value = getCurveValue(ShaderCurves.SUN_ROTATION, CurveClip::getValues);
 
-        return value == null ? null : (long) (value * 1000L);
+        /* Recap Studio showing a recap with its time of day overridden */
+        return value == null ? mchorse.bbs_mod.recap.RecapScene.timeOfDay() : (long) (value * 1000L);
     }
 
     /* Fullbright: a work light for the film editor's preview, never part of a recording */
@@ -1268,7 +1269,9 @@ public class BBSRendering
 
     public static Double getWeather()
     {
-        return getCurveValue(ShaderCurves.WEATHER, CurveClip::getValues);
+        Double value = getCurveValue(ShaderCurves.WEATHER, CurveClip::getValues);
+
+        return value == null ? mchorse.bbs_mod.recap.RecapScene.weather() : value;
     }
 
     public static float getSunHorizontalRotation()
@@ -1314,7 +1317,7 @@ public class BBSRendering
     /** Whether the world's terrain, block entities, clouds and weather are left out. */
     public static boolean isChromaHidingTerrain()
     {
-        return greenScreen || (BBSSettings.chromaSkyEnabled.get() && !BBSSettings.chromaSkyTerrain.get());
+        return greenScreen || (BBSSettings.chromaSkyEnabled.get() && !BBSSettings.chromaSkyTerrain.get()) || mchorse.bbs_mod.recap.RecapScene.hidesBlocks();
     }
 
     /** The chroma colour in use: pure green under the green screen, else the curve's or the setting's. */

@@ -30,6 +30,16 @@ public class BackgroundRendererMixin
             blue = mchorse.bbs_mod.forms.renderers.utils.FakeSpaceSky.blue();
         }
 
+        /* Recap Studio showing a recap with its fog colour overridden */
+        Integer recapFog = mchorse.bbs_mod.recap.RecapScene.fogColor();
+
+        if (recapFog != null)
+        {
+            red = (recapFog >> 16 & 0xff) / 255F;
+            green = (recapFog >> 8 & 0xff) / 255F;
+            blue = (recapFog & 0xff) / 255F;
+        }
+
         BBSRendering.setFogColor(red, green, blue);
         RenderSystem.clearColor(red, green, blue, 1.0F);
     }
@@ -49,6 +59,19 @@ public class BackgroundRendererMixin
         {
             RenderSystem.setShaderFogStart(1_000_000F);
             RenderSystem.setShaderFogEnd(1_001_000F);
+
+            return;
+        }
+
+        /* Recap Studio showing a recap with its fog distance overridden: thick from a quarter of it */
+        Float recapFog = mchorse.bbs_mod.recap.RecapScene.fogDistance();
+
+        if (recapFog != null)
+        {
+            float end = Math.max(1F, recapFog);
+
+            RenderSystem.setShaderFogStart(end * 0.25F);
+            RenderSystem.setShaderFogEnd(end);
         }
     }
 }

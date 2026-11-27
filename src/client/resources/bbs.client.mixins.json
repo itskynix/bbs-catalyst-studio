@@ -57,6 +57,8 @@
         "PostEffectProcessorAccessor",
         "PostEffectPassAccessor",
         "RenderPhaseMixin",
+        "RecapParticlesMixin",
+        "RecapBeaconMixin",
         "ClientWorldPropertiesMixin",
         "sodium.SodiumBufferBuilderAccessor",
         "sodium.ColorAttributeMixin",

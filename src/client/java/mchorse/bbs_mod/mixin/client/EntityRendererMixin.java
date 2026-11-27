@@ -14,7 +14,7 @@ public class EntityRendererMixin
     @Inject(method = "renderLabelIfPresent", at = @At("HEAD"), cancellable = true)
     public void onRenderLabelIfPresent(CallbackInfo info)
     {
-        if (FormUtilsClient.getCurrentForm() instanceof MobForm form && form.isPlayer())
+        if ((FormUtilsClient.getCurrentForm() instanceof MobForm form && form.isPlayer()) || mchorse.bbs_mod.recap.RecapScene.hidesLabels())
         {
             info.cancel();
         }

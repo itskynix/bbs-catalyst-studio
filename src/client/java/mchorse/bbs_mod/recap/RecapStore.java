@@ -98,7 +98,31 @@ public final class RecapStore
 
     public static boolean delete(RecapRecord record)
     {
-        return !record.id.isEmpty() && file(record.id).delete();
+        if (record.id.isEmpty())
+        {
+            return false;
+        }
+
+        trackFile(record.id).delete();
+
+        return file(record.id).delete();
+    }
+
+    /** Writes the camera of a saved recap next to its file. */
+    public static boolean saveTrack(RecapRecord record, RecapTrack track)
+    {
+        return !record.id.isEmpty() && track != null && track.write(trackFile(record.id));
+    }
+
+    /** The camera of a recap, or null when it has none: a recap made before the camera was kept. */
+    public static RecapTrack loadTrack(RecapRecord record)
+    {
+        return record == null || record.id.isEmpty() ? null : RecapTrack.read(trackFile(record.id));
+    }
+
+    private static File trackFile(String id)
+    {
+        return new File(folder(), id + ".track");
     }
 
     private static File file(String id)

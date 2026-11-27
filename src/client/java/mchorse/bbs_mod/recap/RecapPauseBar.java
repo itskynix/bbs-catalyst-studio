@@ -110,11 +110,23 @@ public class RecapPauseBar extends ClickableWidget
 
         return switch (action)
         {
-            case START -> state == RecapRecorder.State.IDLE;
+            /* Start also goes on with a stopped recording, from where it was held */
+            case START -> state != RecapRecorder.State.RECORDING;
             case STOP -> state == RecapRecorder.State.RECORDING;
             case SAVE, CANCEL -> state != RecapRecorder.State.IDLE;
-            case MARKER -> state == RecapRecorder.State.RECORDING || (state == RecapRecorder.State.IDLE && RecapRecorder.isInstantEnabled());
-            case INSTANT -> RecapRecorder.isInstantEnabled();
+            case MARKER -> state == RecapRecorder.State.RECORDING || state == RecapRecorder.State.IDLE;
+            case INSTANT -> RecapRecorder.isInstantEnabled() && RecapRecorder.getInstantTicks() > 0;
+        };
+    }
+
+    /** The button the state leads to next, drawn in the theme's primary look. */
+    private boolean primary(Action action)
+    {
+        return switch (RecapRecorder.getState())
+        {
+            case IDLE -> action == Action.START;
+            case RECORDING -> action == Action.STOP;
+            case STOPPED -> action == Action.SAVE;
         };
     }
 
@@ -151,10 +163,10 @@ public class RecapPauseBar extends ClickableWidget
         switch (action)
         {
             case START -> RecapRecorder.startWithMessage();
-            case STOP -> RecapRecorder.stop();
+            case STOP -> RecapRecorder.stopWithMessage();
             case SAVE -> RecapRecorder.saveWithMessage();
-            case CANCEL -> RecapRecorder.cancel();
-            case MARKER -> RecapRecorder.marker();
+            case CANCEL -> RecapRecorder.cancelWithMessage();
+            case MARKER -> RecapRecorder.markerWithMessage();
             case INSTANT -> RecapRecorder.saveInstantWithMessage();
         }
     }
@@ -189,7 +201,7 @@ public class RecapPauseBar extends ClickableWidget
                 batcher.box(bx - GROUP_GAP / 2 - 2, this.buttonsY + 3, bx - GROUP_GAP / 2 - 1, this.buttonsY + BUTTON_H - 3, RecapStyle.divider());
             }
 
-            boolean primary = action == Action.START && enabled;
+            boolean primary = enabled && this.primary(action);
 
             RecapStyle.button(batcher, bx, this.buttonsY, bx + BUTTON, this.buttonsY + BUTTON_H, primary, hover);
 
@@ -209,10 +221,9 @@ public class RecapPauseBar extends ClickableWidget
     private void renderTime(Batcher2D batcher, TextRenderer font, int accent, float transition)
     {
         RecapRecorder.State state = RecapRecorder.getState();
-        /* Idle with Instant Recap on, the bar shows how much play an instant save would take */
-        boolean instant = state == RecapRecorder.State.IDLE && RecapRecorder.isInstantEnabled();
-        int ticks = instant ? RecapRecorder.getInstantTicks() : (int) RecapRecorder.getTime(transition);
-        String time = RecapTime.format(ticks);
+        /* Only a running recording moves the time; held or ended, it stands still, at zero when idle.
+         * How much an instant save would take is on that button's tooltip instead. */
+        String time = RecapTime.format((int) RecapRecorder.getTime(transition));
         int color = this.compact ? (state == RecapRecorder.State.IDLE ? RecapStyle.dim() : RecapStyle.text()) : (state == RecapRecorder.State.IDLE ? 0xb0ffffff : Colors.WHITE);
         int width = font.getWidth(time);
         int centerX = this.compact ? this.getX() + PADDING + 23 : this.getX() + this.width / 2;
@@ -233,6 +244,11 @@ public class RecapPauseBar extends ClickableWidget
     {
         String text = L10n.lang("bbs.recap.bar." + action.id).get();
 
+        if (action == Action.START && RecapRecorder.getState() == RecapRecorder.State.STOPPED)
+        {
+            return L10n.lang("bbs.recap.bar.resume").get();
+        }
+
         if (action == Action.START)
         {
             return text + "  " + BBSModClient.getKeyRecapRecord().getBoundKeyLocalizedText().getString();
@@ -240,7 +256,7 @@ public class RecapPauseBar extends ClickableWidget
 
         if (action == Action.INSTANT)
         {
-            return text + "  " + BBSModClient.getKeyRecapInstant().getBoundKeyLocalizedText().getString();
+            return text + "  " + RecapTime.format(RecapRecorder.getInstantTicks()) + "  " + BBSModClient.getKeyRecapInstant().getBoundKeyLocalizedText().getString();
         }
 
         if (action == Action.MARKER)

@@ -28,7 +28,11 @@ public class UIRecapPanel extends UIDashboardPanel
         this.add(this.home, this.editor);
 
         this.onAppear(this::refresh);
-        this.onDisappear(this.editor::stopPlayback);
+        this.onDisappear(() ->
+        {
+            this.editor.stopPlayback();
+            this.editor.hideScene();
+        });
     }
 
     private void refresh()
@@ -36,6 +40,10 @@ public class UIRecapPanel extends UIDashboardPanel
         if (this.home.isVisible())
         {
             this.home.refresh();
+        }
+        else if (this.editor.isVisible())
+        {
+            this.editor.showScene();
         }
     }
 
@@ -45,11 +53,13 @@ public class UIRecapPanel extends UIDashboardPanel
         this.home.setVisible(false);
         this.editor.setVisible(true);
         this.editor.resize();
+        this.editor.showScene();
     }
 
     public void openHome()
     {
         this.editor.stopPlayback();
+        this.editor.hideScene();
         this.editor.setVisible(false);
         this.home.setVisible(true);
         this.home.refresh();
@@ -64,6 +74,16 @@ public class UIRecapPanel extends UIDashboardPanel
         {
             this.editor.tick();
         }
+    }
+
+    /**
+     * The editor keeps the world running, as the film studio does: the viewport shows it live and
+     * the recap plays on the game's ticks. The picker pauses as any menu.
+     */
+    @Override
+    public boolean canPause()
+    {
+        return !this.editor.isVisible();
     }
 
     @Override

@@ -76,6 +76,17 @@ public class WorldRendererMixin
             return;
         }
 
+        /* Recap Studio with the sky of a recap hidden: the fog colour alone behind the world */
+        if (mchorse.bbs_mod.recap.RecapScene.hidesSky())
+        {
+            GL11.glClearColor(BBSRendering.getFogRed(), BBSRendering.getFogGreen(), BBSRendering.getFogBlue(), 1F);
+            GL11.glClear(GL11.GL_COLOR_BUFFER_BIT);
+
+            info.cancel();
+
+            return;
+        }
+
         if (BBSRendering.isChromaSky())
         {
             Color color = Color.rgba(BBSRendering.getChromaArgb());
@@ -94,7 +105,7 @@ public class WorldRendererMixin
     @Inject(method = "renderClouds(Lnet/minecraft/client/util/math/MatrixStack;Lorg/joml/Matrix4f;FDDD)V", at = @At("HEAD"), cancellable = true)
     public void onRenderClouds(CallbackInfo info)
     {
-        if (BBSRendering.isGreenScreen() || mchorse.bbs_mod.forms.renderers.utils.FakeSpaceSky.isActive())
+        if (BBSRendering.isGreenScreen() || mchorse.bbs_mod.forms.renderers.utils.FakeSpaceSky.isActive() || mchorse.bbs_mod.recap.RecapScene.hidesSky())
         {
             info.cancel();
         }
@@ -161,6 +172,16 @@ public class WorldRendererMixin
         }
     }
     //?}
+
+    /** Recap Studio leaving out the entities or the players a recap hides, with their shadows and names. */
+    @Inject(method = "renderEntity", at = @At("HEAD"), cancellable = true)
+    private void bbs$recapHidesEntity(net.minecraft.entity.Entity entity, double cameraX, double cameraY, double cameraZ, float tickDelta, MatrixStack matrices, net.minecraft.client.render.VertexConsumerProvider vertexConsumers, CallbackInfo info)
+    {
+        if (mchorse.bbs_mod.recap.RecapScene.hides(entity))
+        {
+            info.cancel();
+        }
+    }
 
     @Inject(at = @At("RETURN"), method = "loadEntityOutlinePostProcessor")
     private void onLoadEntityOutlineShader(CallbackInfo info)
