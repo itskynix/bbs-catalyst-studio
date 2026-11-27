@@ -54,10 +54,11 @@ public class UIRecapClipsPanel extends UITimelinePanel implements IUIClipsDelega
         this.add(this.clips.full(this));
     }
 
+    /** The properties live in the editor's clip panel, not beside the timeline. */
     @Override
     protected UIElement getPropertiesPanel()
     {
-        return this.panel;
+        return null;
     }
 
     @Override
@@ -108,35 +109,28 @@ public class UIRecapClipsPanel extends UITimelinePanel implements IUIClipsDelega
         return clip != null ? this.clips.getClipDisplayName(clip) : "";
     }
 
+    /**
+     * Picks a clip: its properties go into the editor's own clip panel, between the record and
+     * the view settings, instead of being squeezed beside the timeline.
+     */
     @Override
     public void pickClip(Clip clip)
     {
         UIClip.saveScroll(this.panel);
 
-        if (this.panel != null)
+        if (this.panel != null && this.panel.clip == clip)
         {
-            if (this.panel.clip == clip)
-            {
-                if (!this.panel.hasParent())
-                {
-                    this.attachPropertiesPanel(this.panel, 160);
-                }
+            this.panel.fillData();
 
-                this.resize();
-                this.panel.setVisible(this.propertiesVisible);
-                this.panel.fillData();
-
-                return;
-            }
-
-            this.panel.removeFromParent();
+            return;
         }
+
+        this.panel = null;
 
         if (clip == null)
         {
-            this.panel = null;
             this.clips.clearSelection();
-            this.resize();
+            this.editor.showClipPanel(null);
 
             return;
         }
@@ -147,14 +141,33 @@ public class UIRecapClipsPanel extends UITimelinePanel implements IUIClipsDelega
         if (this.panel != null)
         {
             this.panel.setUndoId("recap_clip_panel");
-            this.attachPropertiesPanel(this.panel, 160);
-            this.resize();
+            this.editor.showClipPanel(this.panel);
             this.panel.fillData();
-            this.panel.setVisible(this.propertiesVisible);
             this.panel.restoreScroll();
         }
+        else
+        {
+            this.editor.showClipPanel(null);
+        }
+    }
 
-        this.resize();
+    @Override
+    public boolean pickActors()
+    {
+        return false;
+    }
+
+    @Override
+    public UIClips getClipsTimeline()
+    {
+        return this.clips;
+    }
+
+    /** The recap's own time code, as on the viewport: where the cursor is and the whole length. */
+    @Override
+    public String formatCursorLabel(float cursor, int duration)
+    {
+        return mchorse.bbs_mod.recap.RecapTime.formatWithTicks((int) cursor) + " / " + mchorse.bbs_mod.recap.RecapTime.formatWithTicks(this.editor.getLength());
     }
 
     @Override

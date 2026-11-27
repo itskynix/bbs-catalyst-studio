@@ -64,6 +64,9 @@ public class UIRecapEditor extends UIElement
     public final UIRecapDock timelineDock;
     public final UIRecapDock infoDock;
     public final UIRecapDock viewDock;
+    /** The picked clip's properties, a panel of its own beside the timeline's */
+    public final UIRecapDock clipDock;
+    private final UIElement clipHost = new UIElement();
 
     private final UIRecapViewport viewport;
     private final UIRecapClipsPanel timeline;
@@ -108,6 +111,11 @@ public class UIRecapEditor extends UIElement
 
         back.relative(this).x(MARGIN).y(4).w(22).h(18);
         rename.relative(this).x(MARGIN + 26).y(4).w(22).h(18);
+
+        UIRecapButton saveButton = new UIRecapButton(() -> Icons.SAVE, UIRecapKeys.key("editor.save"), this::saveWithNotice);
+
+        saveButton.relative(this).x(MARGIN + 52).y(4).w(22).h(18);
+        this.add(saveButton);
         layouts.relative(this).x(1F, -MARGIN - 22).y(4).w(22).h(18);
         history.relative(this).x(1F, -MARGIN - 52).y(4).w(22).h(18);
         redo.relative(this).x(1F, -MARGIN - 78).y(4).w(22).h(18);
@@ -125,12 +133,14 @@ public class UIRecapEditor extends UIElement
         this.keys().register(Keys.FLIGHT, this::toggleFlight).active(() -> this.record != null && this.sceneShown);
         this.infoDock = this.dock("info", Icons.FILE, this.info);
         this.viewDock = this.dock("view", Icons.VISIBLE, this.view);
+        this.clipDock = this.dock("clip", Icons.EDIT, this.clipHost);
+        this.clipDock.setVisible(false);
 
         this.sideSplitter = new UIRecapSplitter(true, this::dragSide, this::saveLayout);
         this.timelineSplitter = new UIRecapSplitter(false, this::dragTimeline, this::saveLayout);
         this.innerSplitter = new UIRecapSplitter(false, this::dragInner, this::saveLayout);
 
-        this.add(back, rename, undo, redo, history, layouts, this.viewportDock, this.timelineDock, this.infoDock, this.viewDock,
+        this.add(back, rename, undo, redo, history, layouts, this.viewportDock, this.timelineDock, this.infoDock, this.viewDock, this.clipDock,
             this.sideSplitter, this.timelineSplitter, this.innerSplitter);
     }
 
@@ -320,6 +330,43 @@ public class UIRecapEditor extends UIElement
      * recap written. Called on every release over the timeline, so it compares before it writes.
      * Tracking clips put down with no one picked are pointed at the player first.
      */
+    /**
+     * Saves on request, with a notice: everything is written as it is edited anyway, so this is
+     * the sure way to know the recap on disk is the one on screen. Also Ctrl S.
+     */
+    public void saveWithNotice()
+    {
+        if (this.record == null)
+        {
+            return;
+        }
+
+        this.commitTimeline();
+
+        if (RecapStore.save(this.record))
+        {
+            this.getContext().notifySuccess(UIRecapKeys.key("editor.saved"));
+        }
+        else
+        {
+            this.getContext().notifyError(UIRecapKeys.key("message.failed"));
+        }
+    }
+
+    /** Puts the picked clip's properties panel in the clip panel, or takes it away for none. */
+    public void showClipPanel(UIElement panel)
+    {
+        this.clipHost.removeAll();
+
+        if (panel != null)
+        {
+            panel.resetFlex().relative(this.clipHost).w(1F).h(1F);
+            this.clipHost.add(panel);
+        }
+
+        this.resize();
+    }
+
     public void commitTimeline()
     {
         if (this.record == null)
@@ -581,6 +628,8 @@ public class UIRecapEditor extends UIElement
     /** What the viewport keeps beside the side column and above or below the timeline. */
     private static final int MIN_MAIN_W = 240;
     private static final int MIN_MAIN_H = 110;
+    /** The smallest the clip panel is made: its header and a few of its fields. */
+    private static final int MIN_CLIP = UIRecapDock.HEADER + 120;
 
     private static int clamp(int value, int min, int max)
     {
@@ -639,21 +688,53 @@ public class UIRecapEditor extends UIElement
             mainRect = l.timelineTop ? new int[] {mainRect[0], mainRect[1] + th + GAP, mainRect[2], mainRect[3]} : new int[] {mainRect[0], mainRect[1], mainRect[2], mainRect[3] - th - GAP};
         }
 
+        /* The picked clip's properties: between the record and the view settings in the side
+         * column, or, when that column has no room for three panels, left of the viewport */
+        boolean clipShown = this.clipHost.getChildren().size() > 0;
+        int[] clipRect = null;
+        boolean clipInSide = false;
+        int sideH = sideRect[3] - sideRect[1];
+        int sideNeed = MIN_CLIP + GAP + (l.infoVisible ? MIN_DOCK * 2 + GAP : MIN_DOCK);
+
+        if (clipShown)
+        {
+            int mainW = mainRect[2] - mainRect[0];
+            int clipW = clamp(mainW / 3, 170, 260);
+
+            if (sideH >= sideNeed || mainW - clipW - GAP < MIN_MAIN_W / 2)
+            {
+                clipInSide = true;
+            }
+            else
+            {
+                clipRect = new int[] {mainRect[0], mainRect[1], mainRect[0] + clipW, mainRect[3]};
+                mainRect = new int[] {mainRect[0] + clipW + GAP, mainRect[1], mainRect[2], mainRect[3]};
+            }
+        }
+
         this.side.set(sideRect[0], sideRect[1], sideRect[2] - sideRect[0], sideRect[3] - sideRect[1]);
         this.main.set(mainRect[0], mainRect[1], mainRect[2] - mainRect[0], mainRect[3] - mainRect[1]);
 
         this.place(this.viewportDock, mainRect);
         this.place(this.timelineDock, tl);
 
-        /* The side column: the record and the view settings, in their order and share */
+        int clipH = clipInSide ? clamp(Math.round(sideH * 0.42F), Math.min(MIN_CLIP, sideH / 2), sideH - (l.infoVisible ? 2 : 1) * (MIN_DOCK + GAP)) : 0;
+        int band = clipInSide ? clipH + GAP : 0;
+
+        /* The side column: the record and the view settings, in their order and share, the clip between */
         if (l.infoVisible)
         {
-            int room = sideRect[3] - sideRect[1] - GAP;
+            int room = sideH - GAP - band;
             float upperRatio = l.infoFirst ? l.infoRatio : 1F - l.infoRatio;
             int share = room < MIN_DOCK * 2 ? room / 2 : clamp(Math.round(room * upperRatio), MIN_DOCK, room - MIN_DOCK);
             int split = sideRect[1] + share;
             int[] upper = {sideRect[0], sideRect[1], sideRect[2], split};
-            int[] lower = {sideRect[0], split + GAP, sideRect[2], sideRect[3]};
+            int[] lower = {sideRect[0], split + GAP + band, sideRect[2], sideRect[3]};
+
+            if (clipInSide)
+            {
+                clipRect = new int[] {sideRect[0], split + GAP, sideRect[2], split + GAP + clipH};
+            }
 
             this.place(l.infoFirst ? this.infoDock : this.viewDock, upper);
             this.place(l.infoFirst ? this.viewDock : this.infoDock, lower);
@@ -663,9 +744,21 @@ public class UIRecapEditor extends UIElement
         }
         else
         {
-            this.place(this.viewDock, sideRect);
+            if (clipInSide)
+            {
+                clipRect = new int[] {sideRect[0], sideRect[1], sideRect[2], sideRect[1] + clipH};
+            }
+
+            this.place(this.viewDock, new int[] {sideRect[0], sideRect[1] + band, sideRect[2], sideRect[3]});
             this.infoDock.setVisible(false);
             this.innerSplitter.setVisible(false);
+        }
+
+        this.clipDock.setVisible(clipRect != null);
+
+        if (clipRect != null)
+        {
+            this.place(this.clipDock, clipRect);
         }
 
         /* The gaps that resize */
@@ -900,6 +993,13 @@ public class UIRecapEditor extends UIElement
         {
             int key = context.getKeyCode();
 
+            if (key == GLFW.GLFW_KEY_S)
+            {
+                this.saveWithNotice();
+
+                return true;
+            }
+
             if (key == GLFW.GLFW_KEY_Z && !Window.isShiftPressed())
             {
                 this.undo();
@@ -925,6 +1025,16 @@ public class UIRecapEditor extends UIElement
     {
         this.updateFlight();
 
+        /* As in the film studio: the mouse is the flown camera's for as long as the flight lasts,
+         * hidden and held, and given back while an overlay needs clicking or when the flight ends.
+         * With the pointer away nothing of the interface answers to it. */
+        this.panel.dashboard.orbitUI.setFreeLook(this.isFlying() && !mchorse.bbs_mod.ui.framework.elements.overlay.UIOverlay.has(context));
+
+        if (this.panel.dashboard.orbitUI.isFreeLook())
+        {
+            context.mouseX = context.mouseY = -1;
+        }
+
         RecapStyle.backdrop(context.batcher, this.area);
         RecapStyle.surface(context.batcher, this.area.x, this.area.y, this.area.ex(), this.area.y + TOP - 4, 0, false);
 
@@ -932,9 +1042,9 @@ public class UIRecapEditor extends UIElement
         {
             FontRenderer font = context.batcher.getFont();
             /* Between rename on the left and undo, redo, history and layouts on the right */
-            String name = font.limitToWidth(this.record.name, Math.max(20, this.area.w - (MARGIN + 56) - (MARGIN + 112)));
+            String name = font.limitToWidth(this.record.name, Math.max(20, this.area.w - (MARGIN + 82) - (MARGIN + 112)));
 
-            context.batcher.text(name, this.area.x + MARGIN + 56, this.area.y + 8, RecapStyle.text(), false);
+            context.batcher.text(name, this.area.x + MARGIN + 82, this.area.y + 8, RecapStyle.text(), false);
         }
 
         super.render(context);

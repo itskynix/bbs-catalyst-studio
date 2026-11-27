@@ -94,7 +94,7 @@ public class UIEnvelope extends UIElement
         this.channel = new UIKeyframeEditor((consumer) -> new UIFilmKeyframes(this.panel.editor, consumer));
         this.channel.view.rulerRenderer((context) ->
         {
-            UIReplaysEditor.renderRuler(context, this.channel.view, (UIClipsPanel) this.panel.editor, (Clips) this.panel.clip.getParent(), this.panel.clip.tick.get());
+            UIReplaysEditor.renderRuler(context, this.channel.view, this.panel.editor, (Clips) this.panel.clip.getParent(), this.panel.clip.tick.get());
         });
         this.channel.view.single().duration(() -> this.panel.clip.duration.get());
 

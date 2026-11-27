@@ -77,7 +77,7 @@ public class UIThirdPersonClip extends UIClip<ThirdPersonClientClip>
         this.keyframes = new UIKeyframeEditor((consumer) -> new UIFilmKeyframes(this.editor, consumer));
         this.keyframes.view.rulerRenderer((context) ->
         {
-            UIReplaysEditor.renderRuler(context, this.keyframes.view, (UIClipsPanel) this.editor, (Clips) this.clip.getParent(), this.clip.tick.get());
+            UIReplaysEditor.renderRuler(context, this.keyframes.view, this.editor, (Clips) this.clip.getParent(), this.clip.tick.get());
         });
         this.keyframes.view.duration(() -> this.clip.duration.get());
         this.keyframes.setUndoId("third_person_keyframes");
@@ -96,7 +96,11 @@ public class UIThirdPersonClip extends UIClip<ThirdPersonClientClip>
     {
         super.registerPanels();
 
-        this.panels.add(this.section(UIKeys.CAMERA_PANELS_TARGET, this.selector, this.group));
+        /* Recap Studio has no actors to pick: its clip follows the recorded player by itself */
+        if (this.editor.pickActors())
+        {
+            this.panels.add(this.section(UIKeys.CAMERA_PANELS_TARGET, this.selector, this.group));
+        }
         this.panels.add(this.section(UIKeys.THIRD_PERSON_ARM, this.followTargetYaw, this.positionLag, this.rotationLag, this.collisionTest, this.fadeThinObstacles));
         this.panels.add(this.section(UIKeys.CAMERA_PANELS_KEYFRAMES, this.edit));
     }

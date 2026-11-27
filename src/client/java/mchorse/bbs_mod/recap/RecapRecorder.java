@@ -271,6 +271,7 @@ public final class RecapRecorder
         }
     }
 
+
     /** The instant key and button: saves the last stretch, and says what came of it. */
     public static RecapRecord saveInstantWithMessage()
     {
@@ -284,6 +285,11 @@ public final class RecapRecorder
         RecapRecord record = saveInstant();
 
         say(record != null ? "bbs.recap.message.instant_saved" : "bbs.recap.message.instant_empty");
+
+        if (record != null)
+        {
+            toast("bbs.recap.message.instant_saved", record);
+        }
 
         return record;
     }
@@ -313,7 +319,24 @@ public final class RecapRecorder
 
     public static void saveWithMessage()
     {
-        say(save() != null ? "bbs.recap.message.saved" : "bbs.recap.message.failed");
+        RecapRecord record = save();
+
+        say(record != null ? "bbs.recap.message.saved" : "bbs.recap.message.failed");
+
+        if (record != null)
+        {
+            toast("bbs.recap.message.saved", record);
+        }
+    }
+
+    /** A pop up in the corner when a recap was written, with its name and length, seen also over the pause menu. */
+    private static void toast(String key, RecapRecord record)
+    {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        Text title = Text.literal(L10n.lang(key).get());
+        Text description = Text.literal(record.name + "  " + RecapTime.format(record.ticks));
+
+        net.minecraft.client.toast.SystemToast.show(mc.getToastManager(), net.minecraft.client.toast.SystemToast.Type.PERIODIC_NOTIFICATION, title, description);
     }
 
     public static void cancelWithMessage()

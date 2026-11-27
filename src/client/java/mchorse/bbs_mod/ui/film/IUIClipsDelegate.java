@@ -36,6 +36,28 @@ public interface IUIClipsDelegate extends ICursor
         return false;
     }
 
+    /**
+     * Whether the clips here pick a film's actors and use its player recordings. Recap Studio has
+     * no actors: its tracking clips follow the recorded player by themselves, so the pickers and
+     * the "from a player recording" entry are left out there.
+     */
+    public default boolean pickActors()
+    {
+        return true;
+    }
+
+    /** The clip timeline this delegate shows, for the clip panels that act on it; null when none. */
+    public default UIClips getClipsTimeline()
+    {
+        return null;
+    }
+
+    /** The time under the playhead and the whole length, as the timeline writes them beside it. */
+    public default String formatCursorLabel(float cursor, int duration)
+    {
+        return mchorse.bbs_mod.camera.utils.TimeUtils.formatCursorTime(cursor) + "/" + mchorse.bbs_mod.camera.utils.TimeUtils.formatTime(duration);
+    }
+
     public void setFlight(boolean flight);
 
     public boolean isFlying();

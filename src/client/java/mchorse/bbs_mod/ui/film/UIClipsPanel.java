@@ -138,6 +138,12 @@ public class UIClipsPanel extends UITimelinePanel implements IUIClipsDelegate
     }
 
     @Override
+    public UIClips getClipsTimeline()
+    {
+        return this.clips;
+    }
+
+    @Override
     public Film getFilm()
     {
         return this.filmPanel.getData();

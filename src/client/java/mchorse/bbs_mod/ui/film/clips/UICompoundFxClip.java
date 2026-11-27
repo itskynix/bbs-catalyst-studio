@@ -200,9 +200,12 @@ public class UICompoundFxClip extends UIFxClip<CompoundFxClip>
 
     private void decompose()
     {
-        if (this.editor instanceof UIClipsPanel panel && panel.clips != null)
+        /* The film studio's camera editor and Recap Studio's timeline both hand their clip timeline over */
+        UIClips timeline = this.editor.getClipsTimeline();
+
+        if (timeline != null)
         {
-            panel.clips.decomposeCompound(this.clip);
+            timeline.decomposeCompound(this.clip);
         }
     }
 

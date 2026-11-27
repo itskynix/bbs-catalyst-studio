@@ -136,7 +136,7 @@ public class UIActorEyeClip extends UIClip<ActorEyeClientClip>
         this.keyframes = new UIKeyframeEditor((consumer) -> new UIFilmKeyframes(this.editor, consumer));
         this.keyframes.view.rulerRenderer((context) ->
         {
-            UIReplaysEditor.renderRuler(context, this.keyframes.view, (UIClipsPanel) this.editor, (Clips) this.clip.getParent(), this.clip.tick.get());
+            UIReplaysEditor.renderRuler(context, this.keyframes.view, this.editor, (Clips) this.clip.getParent(), this.clip.tick.get());
         });
         this.keyframes.view.duration(() -> this.clip.duration.get());
         this.keyframes.setUndoId("actor_eye_keyframes");
@@ -175,7 +175,11 @@ public class UIActorEyeClip extends UIClip<ActorEyeClientClip>
     {
         super.registerPanels();
 
-        this.panels.add(this.section(key("replay_source"), this.selector, this.bone));
+        /* Recap Studio has no actors to pick: its clip follows the recorded player by itself */
+        if (this.editor.pickActors())
+        {
+            this.panels.add(this.section(key("replay_source"), this.selector, this.bone));
+        }
         this.panels.add(this.section(key("output"), this.hands, this.outHud, this.outCrosshair, this.outPovActions, this.outScreenEffects, this.outCursor, this.outCameraShake));
         this.panels.add(this.section(key("camera"), this.headLook, this.hardcoreLook, this.blockOutline, this.perspective, this.fov));
         this.panels.add(this.offset);

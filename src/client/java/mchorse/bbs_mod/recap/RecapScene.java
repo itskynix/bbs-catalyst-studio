@@ -58,6 +58,7 @@ public final class RecapScene implements ICameraController
 
     private final RecapTrack.Sample sample = new RecapTrack.Sample();
     private final Position position = new Position();
+    private RecapActor actor;
     private final java.util.WeakHashMap<Entity, IEntity> wrapped = new java.util.WeakHashMap<>();
 
     private RecapScene()
@@ -385,7 +386,16 @@ public final class RecapScene implements ICameraController
             return;
         }
 
-        CONTEXT.entities.put(RecapClips.PLAYER, this.wrap(mc.player));
+        /* The recorded player, standing where the recording had it, for the clips that follow it */
+        if (this.actor == null || this.actor.getMcEntity() != mc.player)
+        {
+            this.actor = new RecapActor(mc.player);
+        }
+
+        int tick = cursor.getAsInt();
+
+        this.actor.place(track, RecapClips.sourceTime(record.clips, tick), RecapClips.sourceTime(record.clips, tick + 1));
+        CONTEXT.entities.put(RecapClips.PLAYER, this.actor.isPlaced() ? this.actor : this.wrap(mc.player));
 
         for (PlayerEntity player : mc.world.getPlayers())
         {
@@ -401,6 +411,69 @@ public final class RecapScene implements ICameraController
         return this.wrapped.computeIfAbsent(entity, MCEntity::new);
     }
 
+    /**
+     * Draws the recorded player in the world, where and as turned as the recording had it, while
+     * the camera is not its own eye: the player's own model, so it looks as they do. Its walk is
+     * not recorded, it holds its pose.
+     */
+    public static void renderActor(net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext context)
+    {
+        MinecraftClient mc = MinecraftClient.getInstance();
+
+        if (!isActive() || track == null || track.isEmpty() || mc.player == null || isFirstPerson() || !record.isOn(RecapOption.PLAYERS)
+            || context.matrixStack() == null || context.consumers() == null)
+        {
+            return;
+        }
+
+        float time = time();
+
+        if (!track.sample(RecapClips.sourceTime(record.clips, time), INSTANCE.sample))
+        {
+            return;
+        }
+
+        RecapTrack.Sample at = INSTANCE.sample;
+        net.minecraft.client.network.ClientPlayerEntity player = mc.player;
+        net.minecraft.client.render.entity.EntityRenderDispatcher dispatcher = mc.getEntityRenderDispatcher();
+        Vec3d camera = context.camera().getPos();
+        double feet = at.y - player.getStandingEyeHeight();
+
+        /* The turn is read off the entity by its renderer, so it is lent the recorded one and given back */
+        float yaw = player.getYaw(), prevYaw = player.prevYaw, pitch = player.getPitch(), prevPitch = player.prevPitch;
+        float bodyYaw = player.bodyYaw, prevBodyYaw = player.prevBodyYaw, headYaw = player.headYaw, prevHeadYaw = player.prevHeadYaw;
+        boolean shadows = mc.options.getEntityShadows().getValue();
+
+        player.setYaw(at.yaw);
+        player.prevYaw = at.yaw;
+        player.setPitch(at.pitch);
+        player.prevPitch = at.pitch;
+        player.bodyYaw = player.prevBodyYaw = at.yaw;
+        player.headYaw = player.prevHeadYaw = at.yaw;
+
+        try
+        {
+            /* Its shadow would be cast where the player really stands */
+            dispatcher.setRenderShadows(false);
+
+            int light = net.minecraft.client.render.WorldRenderer.getLightmapCoordinates(mc.world, net.minecraft.util.math.BlockPos.ofFloored(at.x, at.y, at.z));
+
+            dispatcher.render(player, at.x - camera.x, feet - camera.y, at.z - camera.z, at.yaw, context.tickDelta(), context.matrixStack(), context.consumers(), light);
+        }
+        finally
+        {
+            dispatcher.setRenderShadows(shadows);
+            player.setYaw(yaw);
+            player.prevYaw = prevYaw;
+            player.setPitch(pitch);
+            player.prevPitch = prevPitch;
+            player.bodyYaw = bodyYaw;
+            player.prevBodyYaw = prevBodyYaw;
+            player.headYaw = headYaw;
+            player.prevHeadYaw = prevHeadYaw;
+        }
+    }
+
     /** Lets the sounds of the audio clips go when the recap is no longer shown. */
     public static void stopSounds()
     {
@@ -414,5 +487,6 @@ public final class RecapScene implements ICameraController
         CONTEXT.shutdown();
         CONTEXT.clips = null;
         INSTANCE.wrapped.clear();
+        INSTANCE.actor = null;
     }
 }

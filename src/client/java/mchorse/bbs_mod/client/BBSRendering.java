@@ -997,6 +997,9 @@ public class BBSRendering
             }
 
             BBSModClient.getFilms().render(worldRenderContext);
+
+            /* Recap Studio: the recorded player, where the recording had it */
+            mchorse.bbs_mod.recap.RecapScene.renderActor(worldRenderContext);
         }
         finally
         {

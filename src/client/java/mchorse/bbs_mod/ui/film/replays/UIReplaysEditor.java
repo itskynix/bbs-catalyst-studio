@@ -228,7 +228,7 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
         return TrackCategories.categoryOf(id == null ? null : TrackId.parse(id), owned);
     }
 
-    public static void renderRuler(UIContext context, UIKeyframes keyframes, UIClipsPanel clipsPanel, Clips camera, int clipOffset)
+    public static void renderRuler(UIContext context, UIKeyframes keyframes, mchorse.bbs_mod.ui.film.IUIClipsDelegate clipsPanel, Clips camera, int clipOffset)
     {
         Area area = keyframes.graphArea;
 
@@ -300,7 +300,7 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
         return renderedOnce;
     }
 
-    private static void renderRulerClipGradient(UIContext context, UIKeyframes keyframes, UIClipsPanel clipsPanel, int clipOffset, Area area, int rulerBottom)
+    private static void renderRulerClipGradient(UIContext context, UIKeyframes keyframes, mchorse.bbs_mod.ui.film.IUIClipsDelegate clipsPanel, int clipOffset, Area area, int rulerBottom)
     {
         Clip clip = clipsPanel.getClip();
 
@@ -318,7 +318,8 @@ public class UIReplaysEditor extends UIElement implements IBoneSelectionHost
             return;
         }
 
-        int color = clipsPanel.clips.getFactory().getData(clip).color;
+        /* Any clip timeline: the film studio's camera editor or Recap Studio's; the colour is the clip's own factory's */
+        int color = clip.getParent() instanceof Clips owner ? owner.getFactory().getData(clip).color : 0x888888;
         int left = Math.max(area.x, x1);
         int right = Math.min(area.ex(), x2);
         int top = area.y + 1;

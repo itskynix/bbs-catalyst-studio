@@ -70,7 +70,11 @@ public class UITrackerClip extends UIClip<TrackerClientClip>
     {
         super.registerPanels();
 
-        this.panels.add(this.section(UIKeys.CAMERA_PANELS_TARGET, this.selector, this.group));
+        /* Recap Studio has no actors to pick: its clip follows the recorded player by itself */
+        if (this.editor.pickActors())
+        {
+            this.panels.add(this.section(UIKeys.CAMERA_PANELS_TARGET, this.selector, this.group));
+        }
 
         this.panels.add(this.point);
         this.panels.add(this.angle);

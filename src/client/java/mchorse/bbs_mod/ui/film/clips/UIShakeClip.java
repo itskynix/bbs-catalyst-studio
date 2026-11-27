@@ -117,7 +117,7 @@ public class UIShakeClip extends UIClip<ShakeClip>
         this.keyframes = new UIKeyframeEditor((consumer) -> new UIFilmKeyframes(this.editor, consumer));
         this.keyframes.view.rulerRenderer((context) ->
         {
-            UIReplaysEditor.renderRuler(context, this.keyframes.view, (UIClipsPanel) this.editor, (Clips) this.clip.getParent(), this.clip.tick.get());
+            UIReplaysEditor.renderRuler(context, this.keyframes.view, this.editor, (Clips) this.clip.getParent(), this.clip.tick.get());
         });
         this.keyframes.view.duration(() -> this.clip.duration.get());
         this.keyframes.setUndoId("shake_keyframes");

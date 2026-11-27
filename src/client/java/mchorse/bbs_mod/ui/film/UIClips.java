@@ -318,7 +318,7 @@ public class UIClips extends UITimelineCanvas
                 add.action(Icons.UPLOAD, UIKeys.CAMERA_TIMELINE_CONTEXT_ADD_ON_TOP, this::showAddsOnTop);
             }
 
-            if (this.factory.getKeys().contains(Link.bbs("keyframe")))
+            if (this.factory.getKeys().contains(Link.bbs("keyframe")) && this.delegate.pickActors())
             {
                 add.action(Icons.EDITOR, UIKeys.CAMERA_TIMELINE_CONTEXT_FROM_PLAYER_RECORDING, () -> this.fromReplay(mouseX, mouseY));
             }
@@ -2749,7 +2749,7 @@ public class UIClips extends UITimelineCanvas
         this.markers.render(context, this.area, this.xAxis, 0);
 
         float cursor = this.delegate.getTimelineCursor(context.getTransition()) - this.nestOffset;
-        String label = TimeUtils.formatCursorTime(cursor) + "/" + TimeUtils.formatTime(this.clips.calculateDuration());
+        String label = this.delegate.formatCursorLabel(cursor, this.clips.calculateDuration());
 
         renderCursor(context, label, area, this.toGraphX(cursor));
         this.renderSelection(context);
