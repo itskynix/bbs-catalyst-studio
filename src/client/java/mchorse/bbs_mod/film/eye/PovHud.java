@@ -11,6 +11,7 @@ import mchorse.bbs_mod.forms.entities.IEntity;
 import mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D;
 import mchorse.bbs_mod.utils.Ids;
 import mchorse.bbs_mod.utils.clips.ClipContext;
+import mchorse.bbs_mod.utils.keyframes.Keyframe;
 import mchorse.bbs_mod.utils.keyframes.KeyframeChannel;
 import mchorse.bbs_mod.utils.keyframes.KeyframeSegment;
 import net.minecraft.client.MinecraftClient;
@@ -42,6 +43,8 @@ public final class PovHud
     private static final int HOTBAR_WIDTH = 182;
     private static final int XP_COLOR = 0x80FF20;
     private static final float MAX_AIR = 300F;
+    /** How long a slot springs after something comes into it, in ticks, as the game has it */
+    private static final float POP_TICKS = 5F;
 
     private PovHud()
     {}
@@ -185,7 +188,7 @@ public final class PovHud
         if (offHand != null && !offHand.isEmpty())
         {
             batcher.drawGuiTexture(sprite("hotbar_offhand_left"), left - 29, h - 23, 29, 24);
-            drawItem(context, mc, offHand, left - 26, h - 19);
+            drawItem(context, mc, offHand, left - 26, h - 19, pop(keyframes.offHand, tick));
         }
 
         for (int i = 0; i < ReplayKeyframes.HOTBAR_SIZE && i < keyframes.hotbar.size(); i++)
@@ -195,15 +198,79 @@ public final class PovHud
 
             if (stack != null && !stack.isEmpty())
             {
-                drawItem(context, mc, stack, left + 3 + i * 20, h - 19);
+                drawItem(context, mc, stack, left + 3 + i * 20, h - 19, pop(slot, tick));
             }
         }
     }
 
-    private static void drawItem(DrawContext context, MinecraftClient mc, ItemStack stack, int x, int y)
+    /**
+     * A hotbar item; one that just came in is squeezed narrow and tall and springs back, the way the
+     * game shows a pick up, its count standing still over it.
+     *
+     * @param pop how much of the spring is left, in ticks; nought for an item at rest
+     */
+    private static void drawItem(DrawContext context, MinecraftClient mc, ItemStack stack, int x, int y, float pop)
     {
-        context.drawItem(stack, x, y);
+        if (pop > 0F)
+        {
+            float squeeze = 1F + pop / POP_TICKS;
+            MatrixStack matrices = context.getMatrices();
+
+            matrices.push();
+            matrices.translate(x + 8, y + 12, 0F);
+            matrices.scale(1F / squeeze, (squeeze + 1F) / 2F, 1F);
+            matrices.translate(-(x + 8), -(y + 12), 0F);
+            context.drawItem(stack, x, y);
+            matrices.pop();
+        }
+        else
+        {
+            context.drawItem(stack, x, y);
+        }
+
         context.drawItemInSlot(mc.textRenderer, stack, x, y);
+    }
+
+    /**
+     * What is left of a slot's spring at {@code tick}, read off its channel alone, so a scrub and an
+     * export show the same: something came in when a key puts an item where there was none, or raises
+     * the count. Nothing else, such as a count going down or a tool wearing, moves the slot.
+     */
+    private static float pop(KeyframeChannel<ItemStack> channel, float tick)
+    {
+        List<Keyframe<ItemStack>> keys = channel.getKeyframes();
+        int low = 0;
+        int high = keys.size() - 1;
+        int last = -1;
+
+        while (low <= high)
+        {
+            int middle = (low + high) >>> 1;
+
+            if (keys.get(middle).getTick() <= tick)
+            {
+                last = middle;
+                low = middle + 1;
+            }
+            else
+            {
+                high = middle - 1;
+            }
+        }
+
+        /* The first key is where the take starts: what is held then did not just come in */
+        for (int i = last; i > 0 && tick - keys.get(i).getTick() < POP_TICKS; i--)
+        {
+            ItemStack now = keys.get(i).getValue();
+            ItemStack before = keys.get(i - 1).getValue();
+
+            if (now != null && !now.isEmpty() && (before == null || before.isEmpty() || before.getCount() < now.getCount()))
+            {
+                return POP_TICKS - (tick - keys.get(i).getTick());
+            }
+        }
+
+        return 0F;
     }
 
     private static void renderStatus(DrawContext context, Batcher2D batcher, MinecraftClient mc, ReplayPov pov, float tick, int w, int h)
