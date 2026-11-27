@@ -27,6 +27,8 @@ public class RecapRecord
     public boolean instant;
     public final List<Integer> markers = new ArrayList<>();
     private MapType view = new MapType();
+    /** The timeline tracks: camera, orbit, speed, time of day and the rest; empty ones change nothing. */
+    public final RecapTracks tracks = new RecapTracks();
 
     public boolean isOn(RecapOption option)
     {
@@ -69,12 +71,13 @@ public class RecapRecord
         this.markers.clear();
         this.markers.addAll(other.markers);
         this.view = (MapType) other.view.copy();
+        this.tracks.fromData(other.tracks.toData());
     }
 
     /** Whether the editable side matches another copy. */
     public boolean sameEditable(RecapRecord other)
     {
-        return this.name.equals(other.name) && this.markers.equals(other.markers) && this.view.equals(other.view);
+        return this.name.equals(other.name) && this.markers.equals(other.markers) && this.view.equals(other.view) && this.tracks.toData().equals(other.tracks.toData());
     }
 
     public MapType toData()
@@ -97,6 +100,7 @@ public class RecapRecord
         data.putBool("instant", this.instant);
         data.put("markers", markers);
         data.put("view", this.view.copy());
+        data.put("tracks", this.tracks.toData());
 
         return data;
     }
@@ -126,6 +130,7 @@ public class RecapRecord
         MapType view = data.getMap("view");
 
         record.view = view == null ? new MapType() : (MapType) view.copy();
+        record.tracks.fromData(data.getMap("tracks"));
 
         return record;
     }

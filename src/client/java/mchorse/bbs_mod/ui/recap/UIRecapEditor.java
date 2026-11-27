@@ -9,6 +9,12 @@ import mchorse.bbs_mod.client.BBSRendering;
 import mchorse.bbs_mod.recap.RecapRecord;
 import mchorse.bbs_mod.recap.RecapScene;
 import mchorse.bbs_mod.recap.RecapTrack;
+import mchorse.bbs_mod.recap.RecapTrackKind;
+import mchorse.bbs_mod.utils.keyframes.Keyframe;
+import mchorse.bbs_mod.utils.keyframes.KeyframeChannel;
+import net.minecraft.client.sound.PositionedSoundInstance;
+import net.minecraft.sound.SoundEvent;
+import net.minecraft.util.Identifier;
 import mchorse.bbs_mod.recap.RecapStore;
 import mchorse.bbs_mod.recap.RecapTime;
 import mchorse.bbs_mod.ui.framework.UIContext;
@@ -62,7 +68,7 @@ public class UIRecapEditor extends UIElement
     public final UIRecapDock viewDock;
 
     private final UIRecapViewport viewport;
-    private final UIRecapTimeline timeline;
+    private final UIRecapTracksPanel tracks;
     private final UIRecapInfoPanel info;
     private final UIRecapViewPanel view;
 
@@ -73,6 +79,7 @@ public class UIRecapEditor extends UIElement
     private RecapRecord record;
     private RecapTrack track;
     private boolean sceneShown;
+    private int commitClock;
     private int sceneWidth;
     private int sceneHeight;
     private int cursor;
@@ -106,12 +113,12 @@ public class UIRecapEditor extends UIElement
         undo.relative(this).x(1F, -MARGIN - 104).y(4).w(22).h(18);
 
         this.viewport = new UIRecapViewport(this);
-        this.timeline = new UIRecapTimeline(this);
+        this.tracks = new UIRecapTracksPanel(this);
         this.info = new UIRecapInfoPanel(this);
         this.view = new UIRecapViewPanel(this::viewChanged);
 
         this.viewportDock = this.dock("viewport", Icons.VIDEO_CAMERA, this.viewport);
-        this.timelineDock = this.dock("timeline", Icons.TIME, this.timeline);
+        this.timelineDock = this.dock("timeline", Icons.TIME, this.tracks);
         this.infoDock = this.dock("info", Icons.FILE, this.info);
         this.viewDock = this.dock("view", Icons.VISIBLE, this.view);
 
@@ -167,6 +174,12 @@ public class UIRecapEditor extends UIElement
         if (record != null)
         {
             this.history.reset(UIRecapKeys.text("history.opened"), record, this.layout);
+        }
+
+        this.tracks.rebuild();
+
+        if (record != null)
+        {
         }
     }
 
@@ -228,17 +241,11 @@ public class UIRecapEditor extends UIElement
         RecapScene.show(this.record, this.track, this::getCursor);
         RecapScene.setPlaying(this.playing);
 
-        if (RecapScene.hasCamera())
+        /* Always the recap's camera: the recorded eye, or for a recap kept before the camera was
+         * the player's own, and the camera tracks over either */
+        if (!controller.has(RecapScene.INSTANCE))
         {
-            if (!controller.has(RecapScene.INSTANCE))
-            {
-                controller.add(RecapScene.INSTANCE);
-            }
-        }
-        else
-        {
-            /* A recap kept before its camera was: the world from where the player is now */
-            controller.remove(RecapScene.INSTANCE);
+            controller.add(RecapScene.INSTANCE);
         }
 
         this.sceneShown = true;
@@ -282,17 +289,73 @@ public class UIRecapEditor extends UIElement
 
     public void tick()
     {
+        /* Values typed into the timeline's properties panel reach the history here, twice a second,
+         * between presses so a drag in progress is one step when it is let go */
+        if (++this.commitClock % 10 == 0 && GLFW.glfwGetMouseButton(MinecraftClient.getInstance().getWindow().getHandle(), GLFW.GLFW_MOUSE_BUTTON_LEFT) != GLFW.GLFW_PRESS)
+        {
+            this.commitTracks();
+        }
+
         if (!this.playing)
         {
             return;
         }
 
+        int from = this.cursor;
+
         this.cursor += 1;
+        this.playAudio(from, this.cursor);
 
         if (this.cursor >= this.getLength())
         {
             this.cursor = this.getLength();
             this.stopPlayback();
+        }
+    }
+
+    /**
+     * The audio track while playing: each keyframe the cursor passed this tick, from {@code from}
+     * up to but not including {@code to}, plays its sound once. Scrubbing plays nothing.
+     */
+    private void playAudio(int from, int to)
+    {
+        if (this.record == null || this.record.tracks.isEmpty(RecapTrackKind.AUDIO))
+        {
+            return;
+        }
+
+        KeyframeChannel<String> audio = this.record.tracks.get(RecapTrackKind.AUDIO);
+
+        for (Keyframe<String> keyframe : audio.getKeyframes())
+        {
+            float tick = keyframe.getTick();
+
+            if (tick >= from && tick < to && keyframe.getValue() != null)
+            {
+                Identifier id = Identifier.tryParse(keyframe.getValue().trim());
+
+                if (id != null)
+                {
+                    MinecraftClient.getInstance().getSoundManager().play(PositionedSoundInstance.master(SoundEvent.of(id), 1F));
+                }
+            }
+        }
+    }
+
+    public UIRecapTracksPanel getTracksPanel()
+    {
+        return this.tracks;
+    }
+
+    /**
+     * After an edit on the timeline: a step of the history when the tracks really changed, and the
+     * recap written. Called on every release over the timeline, so it compares before it writes.
+     */
+    public void commitTracks()
+    {
+        if (this.record != null && this.history.push(UIRecapKeys.text("history.tracks"), null, this.record, this.layout))
+        {
+            this.save();
         }
     }
 
@@ -398,6 +461,7 @@ public class UIRecapEditor extends UIElement
         this.layouts.save();
         this.info.fill(this.record);
         this.view.fill(this.record);
+        this.tracks.rebuild();
         this.resize();
     }
 

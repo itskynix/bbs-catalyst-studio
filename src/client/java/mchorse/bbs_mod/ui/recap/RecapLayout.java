@@ -21,12 +21,12 @@ import java.util.Map;
 public class RecapLayout
 {
     public static final int MIN_SIDE = 150;
-    public static final int MIN_TIMELINE = 64;
+    public static final int MIN_TIMELINE = 90;
 
     public boolean sideLeft;
     public int sideWidth = 210;
     public boolean timelineTop;
-    public int timelineHeight = 96;
+    public int timelineHeight = 180;
     public boolean timelineFull;
     public boolean infoVisible = true;
     public boolean infoFirst = true;
@@ -43,14 +43,14 @@ public class RecapLayout
         RecapLayout stage = new RecapLayout();
 
         stage.sideWidth = 160;
-        stage.timelineHeight = 68;
+        stage.timelineHeight = 120;
         stage.infoVisible = false;
 
         RecapLayout cutting = new RecapLayout();
 
         cutting.sideLeft = true;
         cutting.sideWidth = 240;
-        cutting.timelineHeight = 150;
+        cutting.timelineHeight = 240;
         cutting.timelineFull = true;
         cutting.infoRatio = 0.45F;
 
@@ -58,7 +58,7 @@ public class RecapLayout
 
         review.sideWidth = 230;
         review.timelineTop = true;
-        review.timelineHeight = 84;
+        review.timelineHeight = 140;
         review.infoFirst = false;
         review.infoRatio = 0.5F;
 

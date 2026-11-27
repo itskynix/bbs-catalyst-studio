@@ -179,13 +179,15 @@ public class UIRecapViewport extends UIElement
         {
             this.renderMessage(context, font, UIRecapKeys.text("editor.no_world"), x, y, w, h);
         }
-        else if (this.editor.getTrack() == null || this.editor.getTrack().isEmpty())
-        {
-            this.renderChip(context, font, UIRecapKeys.text("editor.no_camera"), x, y, w);
-        }
         else
         {
-            this.renderChip(context, font, UIRecapKeys.text("editor.live_world"), x, y, w);
+            /* The game's interface over the picture while it looks out of the eye, after the view settings */
+            RecapHud.render(context, x, y, w, h);
+
+            String note = !mchorse.bbs_mod.recap.RecapScene.isFirstPerson() ? "editor.track_camera"
+                : (this.editor.getTrack() == null || this.editor.getTrack().isEmpty() ? "editor.no_camera" : "editor.live_world");
+
+            this.renderChip(context, font, UIRecapKeys.text(note), x, y, w);
         }
 
         if (record.isOn(RecapOption.THIRDS_GUIDE))

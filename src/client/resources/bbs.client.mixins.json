@@ -59,6 +59,7 @@
         "RenderPhaseMixin",
         "RecapParticlesMixin",
         "RecapBeaconMixin",
+        "RecapInGameHudAccessor",
         "ClientWorldPropertiesMixin",
         "sodium.SodiumBufferBuilderAccessor",
         "sodium.ColorAttributeMixin",
