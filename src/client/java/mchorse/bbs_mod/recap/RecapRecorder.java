@@ -61,7 +61,14 @@ public final class RecapRecorder
     private static final RecapEvents events = new RecapEvents();
     private static final RecapDimensions dimensions = new RecapDimensions();
     private static final RecapEnvironment environment = new RecapEnvironment();
+    private static final RecapGear gear = new RecapGear();
+    private static final RecapEntities entities = new RecapEntities();
+    private static final RecapSounds sounds = new RecapSounds();
+    private static final RecapParticles particles = new RecapParticles();
     private static RecapWorlds.Info world;
+
+    /** Set while the world gives off its own ambient particles and sounds, which are not kept. */
+    public static boolean ambient;
 
     private static int playedTicks;
     private static final List<Integer> playedMarkers = new ArrayList<>();
@@ -70,6 +77,10 @@ public final class RecapRecorder
     private static final RecapEvents playedEvents = new RecapEvents();
     private static final RecapDimensions playedDimensions = new RecapDimensions();
     private static final RecapEnvironment playedEnvironment = new RecapEnvironment();
+    private static final RecapGear playedGear = new RecapGear();
+    private static final RecapEntities playedEntities = new RecapEntities();
+    private static final RecapSounds playedSounds = new RecapSounds();
+    private static final RecapParticles playedParticles = new RecapParticles();
 
     private RecapRecorder()
     {}
@@ -126,6 +137,8 @@ public final class RecapRecorder
             sample(mc, track);
             sampleMotion(mc, motion);
             sampleEnvironment(mc, environment);
+            sampleGear(mc, gear);
+            entities.record(mc.world.getEntities(), mc.player, mc.player, ticks - 1, RecapWorldOverlay.dimensionOf(mc.world));
             dimensions.mark(ticks - 1, RecapWorldOverlay.dimensionOf(mc.world));
         }
 
@@ -141,6 +154,12 @@ public final class RecapRecorder
         playedMotion.trim(BUFFER_LIMIT);
         sampleEnvironment(mc, playedEnvironment);
         playedEnvironment.trim(BUFFER_LIMIT);
+        sampleGear(mc, playedGear);
+        playedGear.trim(BUFFER_LIMIT);
+        playedEntities.record(mc.world.getEntities(), mc.player, mc.player, playedTicks - 1, RecapWorldOverlay.dimensionOf(mc.world));
+        playedEntities.dropBefore(playedTicks - BUFFER_LIMIT);
+        playedSounds.dropBefore(playedTicks - BUFFER_LIMIT);
+        playedParticles.dropBefore(playedTicks - BUFFER_LIMIT);
         playedEvents.dropBefore(playedTicks - BUFFER_LIMIT);
         playedDimensions.mark(playedTicks - 1, RecapWorldOverlay.dimensionOf(mc.world));
         playedDimensions.dropBefore(playedTicks - BUFFER_LIMIT);
@@ -164,6 +183,112 @@ public final class RecapRecorder
 
             into.sample(into.size() - 1, frame);
             into.add(frame.x, frame.y, frame.z, frame.bodyYaw, frame.headYaw, frame.pitch, frame.limbPos, frame.limbSpeed, frame.swing, frame.lean, frame.pose.ordinal(), frame.flags);
+        }
+    }
+
+    /** What the player has on it and its interface's numbers this tick, a frame for every tick as the camera. */
+    private static void sampleGear(MinecraftClient mc, RecapGear into)
+    {
+        if (mc.player != null)
+        {
+            net.minecraft.world.GameMode mode = mc.interactionManager == null ? null : mc.interactionManager.getCurrentGameMode();
+
+            into.add(mc.player, mode == null ? -1 : mode.getId());
+        }
+        else
+        {
+            into.repeat();
+        }
+    }
+
+    /* The world's sounds and particles, as they come */
+
+    private static boolean keepsEffects()
+    {
+        return !ambient && (state == State.RECORDING || !RecapScene.isActive());
+    }
+
+    /** A sound the game plays, with its loudness and pitch as asked. */
+    public static void onSound(net.minecraft.client.sound.SoundInstance sound, float volume, float pitch)
+    {
+        if (!keepsEffects() || !RecapSounds.isKept(sound))
+        {
+            return;
+        }
+
+        String dimension = RecapWorldOverlay.dimensionOf(MinecraftClient.getInstance().world);
+
+        if (state == State.RECORDING)
+        {
+            sounds.add(ticks, sound, volume, pitch, dimension);
+        }
+
+        if (!RecapScene.isActive() && MinecraftClient.getInstance().world != null)
+        {
+            playedSounds.add(playedTicks, sound, volume, pitch, dimension);
+        }
+    }
+
+    /** A particle the game sends off. */
+    public static void onParticle(net.minecraft.particle.ParticleEffect effect, double x, double y, double z, double vx, double vy, double vz)
+    {
+        if (RecapParticles.replaying || !keepsEffects())
+        {
+            return;
+        }
+
+        String dimension = RecapWorldOverlay.dimensionOf(MinecraftClient.getInstance().world);
+
+        if (state == State.RECORDING)
+        {
+            particles.addEffect(ticks, effect, x, y, z, vx, vy, vz, dimension);
+        }
+
+        if (!RecapScene.isActive() && MinecraftClient.getInstance().world != null)
+        {
+            playedParticles.addEffect(playedTicks, effect, x, y, z, vx, vy, vz, dimension);
+        }
+    }
+
+    /** The dust of a block broken. */
+    public static void onBlockBreakParticles(net.minecraft.util.math.BlockPos pos, net.minecraft.block.BlockState state)
+    {
+        if (RecapParticles.replaying || !keepsEffects())
+        {
+            return;
+        }
+
+        String dimension = RecapWorldOverlay.dimensionOf(MinecraftClient.getInstance().world);
+
+        if (RecapRecorder.state == State.RECORDING)
+        {
+            particles.addBlockBreak(ticks, pos, state, dimension);
+        }
+
+        if (!RecapScene.isActive() && MinecraftClient.getInstance().world != null)
+        {
+            playedParticles.addBlockBreak(playedTicks, pos, state, dimension);
+        }
+    }
+
+    /** The dust of a block hit. */
+    public static void onBlockHitParticles(net.minecraft.util.math.BlockPos pos, net.minecraft.util.math.Direction side)
+    {
+        if (RecapParticles.replaying || !keepsEffects())
+        {
+            return;
+        }
+
+        String dimension = RecapWorldOverlay.dimensionOf(MinecraftClient.getInstance().world);
+
+        if (state == State.RECORDING)
+        {
+            particles.addBlockHit(ticks, pos, side, dimension);
+        }
+
+        if (!RecapScene.isActive() && MinecraftClient.getInstance().world != null)
+        {
+            playedParticles.addBlockHit(playedTicks, pos, side, dimension);
         }
     }
 
@@ -260,6 +385,10 @@ public final class RecapRecorder
         motion.clear();
         events.clear();
         environment.clear();
+        gear.clear();
+        entities.clear();
+        sounds.clear();
+        particles.clear();
         eventsNear = eventsFull = false;
         dimensions.clear();
         state = State.RECORDING;
@@ -290,7 +419,7 @@ public final class RecapRecorder
         /* The session ends here whatever comes of the writing: no clock runs behind it */
         state = State.STOPPED;
 
-        RecapRecord record = create(world, ticks, markers, track, motion, events, dimensions, environment, false);
+        RecapRecord record = create(world, ticks, markers, data(track, motion, events, environment, gear, entities, sounds, particles), dimensions, false);
 
         if (record != null)
         {
@@ -366,7 +495,10 @@ public final class RecapRecorder
             }
         }
 
-        return create(info, length, inside, RecapTrack.tail(playedTrack, length), RecapMotion.tail(playedMotion, length), RecapEvents.tail(playedEvents, from), RecapDimensions.tail(playedDimensions, from), RecapEnvironment.tail(playedEnvironment, length), true);
+        RecapData data = data(RecapTrack.tail(playedTrack, length), RecapMotion.tail(playedMotion, length), RecapEvents.tail(playedEvents, from), RecapEnvironment.tail(playedEnvironment, length),
+            RecapGear.tail(playedGear, length), RecapEntities.tail(playedEntities, from), RecapSounds.tail(playedSounds, from), RecapParticles.tail(playedParticles, from));
+
+        return create(info, length, inside, data, RecapDimensions.tail(playedDimensions, from), true);
     }
 
     /** The record key: starts a recording, and saves the one running or stopped. */
@@ -482,6 +614,10 @@ public final class RecapRecorder
         playedMotion.clear();
         playedEvents.clear();
         playedEnvironment.clear();
+        playedGear.clear();
+        playedEntities.clear();
+        playedSounds.clear();
+        playedParticles.clear();
         playedDimensions.clear();
     }
 
@@ -505,12 +641,32 @@ public final class RecapRecorder
         motion.clear();
         events.clear();
         environment.clear();
+        gear.clear();
+        entities.clear();
+        sounds.clear();
+        particles.clear();
         eventsNear = eventsFull = false;
         dimensions.clear();
         world = null;
     }
 
-    private static RecapRecord create(RecapWorlds.Info info, int length, List<Integer> marked, RecapTrack camera, RecapMotion moves, RecapEvents changes, RecapDimensions places, RecapEnvironment around, boolean instant)
+    private static RecapData data(RecapTrack track, RecapMotion motion, RecapEvents events, RecapEnvironment environment, RecapGear gear, RecapEntities entities, RecapSounds sounds, RecapParticles particles)
+    {
+        RecapData data = new RecapData();
+
+        data.track = track;
+        data.motion = motion;
+        data.events = events;
+        data.environment = environment;
+        data.gear = gear;
+        data.entities = entities;
+        data.sounds = sounds;
+        data.particles = particles;
+
+        return data;
+    }
+
+    private static RecapRecord create(RecapWorlds.Info info, int length, List<Integer> marked, RecapData data, RecapDimensions places, boolean instant)
     {
         RecapRecord record = new RecapRecord();
         LocalDateTime now = LocalDateTime.now();
@@ -535,10 +691,14 @@ public final class RecapRecorder
             return null;
         }
 
-        RecapStore.saveTrack(record, camera);
-        RecapStore.saveMotion(record, moves);
-        RecapStore.saveEvents(record, changes);
-        RecapStore.saveEnvironment(record, around);
+        RecapStore.saveTrack(record, data.track);
+        RecapStore.saveMotion(record, data.motion);
+        RecapStore.saveEvents(record, data.events);
+        RecapStore.saveEnvironment(record, data.environment);
+        RecapStore.saveGear(record, data.gear);
+        RecapStore.saveEntities(record, data.entities);
+        RecapStore.saveSounds(record, data.sounds);
+        RecapStore.saveParticles(record, data.particles);
 
         return record;
     }

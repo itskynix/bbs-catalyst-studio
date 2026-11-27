@@ -61,6 +61,10 @@ public final class RecapScene implements ICameraController
     private static RecapMotion motion;
     private static RecapEnvironment environment;
     private static final RecapEnvironment.Sample AROUND = new RecapEnvironment.Sample();
+    /** Everything else recorded: what the player had on it, the other entities, the sounds, the particles. */
+    private static RecapData data = new RecapData();
+    private static final RecapGear.Frame GEAR = new RecapGear.Frame();
+    private static final RecapGhosts GHOSTS = new RecapGhosts();
 
     /** The free camera: where the viewport looks from while no camera clip is under the cursor. */
     private static final Position FREE = new Position();
@@ -76,18 +80,22 @@ public final class RecapScene implements ICameraController
     private RecapScene()
     {}
 
-    public static void show(RecapRecord shown, RecapTrack camera, RecapMotion moves, RecapEvents changes, RecapEnvironment around, IntSupplier at)
+    public static void show(RecapRecord shown, RecapData recorded, IntSupplier at)
     {
-        /* The blocks of another recap shown before go back to the world's own first */
-        RecapWorldOverlay.attach(changes);
+        RecapData all = recorded == null ? new RecapData() : recorded;
 
-        if (record != shown)
+        /* The blocks of another recap shown before go back to the world's own first */
+        RecapWorldOverlay.attach(all.events);
+
+        if (record != shown || data != all)
         {
-            freeSet = false;
+            freeSet = record != shown ? false : freeSet;
+            GHOSTS.clear();
         }
 
-        motion = moves;
-        environment = around;
+        data = all;
+        motion = all.motion;
+        environment = all.environment;
 
         MinecraftClient mc = MinecraftClient.getInstance();
 
@@ -97,8 +105,14 @@ public final class RecapScene implements ICameraController
 
         active = shown != null;
         record = shown;
-        track = camera;
+        track = all.track;
         cursor = at;
+    }
+
+    /** Everything the shown recap recorded; never null, its parts are when not recorded. */
+    public static RecapData getData()
+    {
+        return data;
     }
 
     public static void hide()
@@ -117,6 +131,9 @@ public final class RecapScene implements ICameraController
         track = null;
         motion = null;
         environment = null;
+        data = new RecapData();
+        GHOSTS.clear();
+        traveling = false;
         freeSet = false;
         playing = false;
     }
@@ -143,6 +160,19 @@ public final class RecapScene implements ICameraController
     public static void setPlaying(boolean isPlaying)
     {
         playing = isPlaying;
+    }
+
+    /* On the way to another dimension: a video takes none of the frames drawn meanwhile */
+    private static boolean traveling;
+
+    public static void setTraveling(boolean isTraveling)
+    {
+        traveling = isTraveling;
+    }
+
+    public static boolean isTraveling()
+    {
+        return traveling && active;
     }
 
     public static boolean isActive()
@@ -225,7 +255,106 @@ public final class RecapScene implements ICameraController
             return false;
         }
 
+        /* A recap that kept the entities around shows those, never the live ones over them */
+        if (data.hasEntities())
+        {
+            return true;
+        }
+
         return entity instanceof PlayerEntity ? !record.isOn(RecapOption.PLAYERS) : !record.isOn(RecapOption.ENTITIES);
+    }
+
+    /**
+     * Whether a live sound of the world is held back: while a recap with its own sounds is shown,
+     * the live world's blocks, mobs and players are not heard over the recording's.
+     */
+    public static boolean mutesLiveSound(net.minecraft.client.sound.SoundInstance sound)
+    {
+        if (RecapSounds.replaying || !isActive() || !data.hasSounds() || sound == null)
+        {
+            return false;
+        }
+
+        net.minecraft.sound.SoundCategory category = sound.getCategory();
+
+        return category == net.minecraft.sound.SoundCategory.BLOCKS || category == net.minecraft.sound.SoundCategory.HOSTILE
+            || category == net.minecraft.sound.SoundCategory.NEUTRAL || category == net.minecraft.sound.SoundCategory.PLAYERS
+            || category == net.minecraft.sound.SoundCategory.RECORDS || category == net.minecraft.sound.SoundCategory.VOICE;
+    }
+
+    /**
+     * Whether a live particle is held back: while a recap with its own particles is shown, apart
+     * from those blocks and the weather give off by themselves, which the recording left to the
+     * live world.
+     */
+    public static boolean mutesLiveParticles()
+    {
+        return !RecapParticles.replaying && !RecapRecorder.ambient && isActive() && data.hasParticles();
+    }
+
+    /**
+     * Plays the recorded sounds and sends off the recorded particles of the moments the timeline
+     * went through from {@code from} to {@code to} as it played forward, of the client's dimension.
+     */
+    public static void playEffects(int from, int to)
+    {
+        if (!isActive() || to <= from)
+        {
+            return;
+        }
+
+        int sourceFrom = (int) Math.floor(RecapClips.sourceTime(record.clips, from));
+        int sourceTo = (int) Math.floor(RecapClips.sourceTime(record.clips, to));
+
+        if (sourceTo <= sourceFrom)
+        {
+            return;
+        }
+
+        String here = RecapWorldOverlay.dimensionOf(MinecraftClient.getInstance().world);
+
+        if (data.sounds != null)
+        {
+            data.sounds.play(sourceFrom, sourceTo, here);
+        }
+
+        if (data.particles != null && record.isOn(RecapOption.PARTICLES))
+        {
+            data.particles.play(sourceFrom, sourceTo, here);
+        }
+    }
+
+    /** The point of view clip under the cursor, or null. */
+    public static mchorse.bbs_mod.camera.clips.modifiers.ActorEyeClip povClip()
+    {
+        if (!isActive())
+        {
+            return null;
+        }
+
+        int tick = cursor.getAsInt();
+        mchorse.bbs_mod.camera.clips.modifiers.ActorEyeClip found = null;
+
+        for (Clip clip : record.clips.get())
+        {
+            if (on(clip, tick) && clip instanceof mchorse.bbs_mod.camera.clips.modifiers.ActorEyeClip eye && (found == null || eye.layer.get() >= found.layer.get()))
+            {
+                found = eye;
+            }
+        }
+
+        return found;
+    }
+
+    /** What the recorded player had on it at the moment drawn, or null when the recap did not keep it. */
+    public static RecapGear.Frame gearNow()
+    {
+        if (!isActive() || data.gear == null || !data.gear.sample(RecapClips.sourceTime(record.clips, time()), GEAR))
+        {
+            return null;
+        }
+
+        return GEAR;
     }
 
     /* Interface */
@@ -708,6 +837,9 @@ public final class RecapScene implements ICameraController
         net.minecraft.entity.EntityPose pose = player.getPose();
         boolean sneaking = player.isSneaking(), sprinting = player.isSprinting(), swimming = player.isSwimming();
         boolean gliding = flags.bbs$getFlag(RecapMotion.GLIDE_FLAG);
+        /* What it had in its hands and on it, as the recording had it */
+        RecapGear.Frame gear = gearNow();
+        RecapLend lent = gear == null ? null : RecapLend.lend(player, gear, false);
         boolean shadows = mc.options.getEntityShadows().getValue();
 
         try
@@ -761,7 +893,147 @@ public final class RecapScene implements ICameraController
             player.setSprinting(sprinting);
             player.setSwimming(swimming);
             flags.bbs$setFlag(RecapMotion.GLIDE_FLAG, gliding);
+
+            if (lent != null)
+            {
+                lent.giveBack(player);
+            }
         }
+    }
+
+    /**
+     * Draws the other entities the recap kept, where and as they were at the moment drawn, of the
+     * client's dimension, as the view settings let players and other entities through.
+     */
+    public static void renderEntities(net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext context)
+    {
+        if (!isActive() || !data.hasEntities() || context.matrixStack() == null || context.consumers() == null)
+        {
+            return;
+        }
+
+        float source = RecapClips.sourceTime(record.clips, time());
+
+        GHOSTS.render(data.entities, source, record.isOn(RecapOption.PLAYERS), record.isOn(RecapOption.ENTITIES), context.camera().getPos(),
+            context.matrixStack(), context.consumers());
+    }
+
+    /**
+     * The game's first person hand pass while a recap is shown: true when Recap took it. Looking out
+     * of the recorded player's eyes, its hands are drawn with what it held then, raised, swinging and
+     * turned as recorded, through the hand lens and the point of view clip's arm offset; with any
+     * other camera of a recap no hands at all.
+     */
+    public static boolean renderPovHands(net.minecraft.client.render.Camera camera, float tickDelta)
+    {
+        if (!isActive())
+        {
+            return false;
+        }
+
+        mchorse.bbs_mod.camera.clips.modifiers.ActorEyeClip clip = isFirstPerson() ? povClip() : null;
+        MinecraftClient mc = MinecraftClient.getInstance();
+
+        if (clip == null || !clip.hands.get() || mc.player == null || mc.world == null)
+        {
+            return true;
+        }
+
+        RecapGear.Frame gear = gearNow();
+
+        if (gear != null && gear.mode == 3)
+        {
+            /* A spectator has no hands */
+            return true;
+        }
+
+        net.minecraft.client.network.ClientPlayerEntity player = mc.player;
+        RecapMotion.Frame at = INSTANCE.frame;
+
+        if (!frameAt(track, motion, RecapClips.sourceTime(record.clips, time()), at, player.getStandingEyeHeight()))
+        {
+            return true;
+        }
+
+        mchorse.bbs_mod.mixin.client.RecapHeldItemAccessor held = (mchorse.bbs_mod.mixin.client.RecapHeldItemAccessor) mc.gameRenderer.firstPersonRenderer;
+        org.joml.Matrix4f projection = new org.joml.Matrix4f(com.mojang.blaze3d.systems.RenderSystem.getProjectionMatrix());
+        com.mojang.blaze3d.systems.VertexSorter sorting = com.mojang.blaze3d.systems.RenderSystem.getVertexSorting();
+
+        /* Kept to be given back */
+        net.minecraft.item.ItemStack mainHand = held.bbs$getMainHand(), offHand = held.bbs$getOffHand();
+        float equipMain = held.bbs$getEquipMain(), prevEquipMain = held.bbs$getPrevEquipMain();
+        float equipOff = held.bbs$getEquipOff(), prevEquipOff = held.bbs$getPrevEquipOff();
+        float pitch = player.getPitch(), prevPitch = player.prevPitch, yaw = player.getYaw(), prevYaw = player.prevYaw;
+        float renderPitch = player.renderPitch, lastRenderPitch = player.lastRenderPitch, renderYaw = player.renderYaw, lastRenderYaw = player.lastRenderYaw;
+        float swing = player.handSwingProgress, lastSwing = player.lastHandSwingProgress;
+        RecapLend lent = gear == null ? null : RecapLend.lend(player, gear, false);
+
+        try
+        {
+            net.minecraft.item.ItemStack main = gear == null ? player.getMainHandStack() : gear.mainHand();
+            net.minecraft.item.ItemStack off = gear == null ? player.getOffHandStack() : gear.item(RecapGear.OFF_HAND);
+
+            held.bbs$setMainHand(main);
+            held.bbs$setOffHand(off);
+            held.bbs$setEquipMain(1F);
+            held.bbs$setPrevEquipMain(1F);
+            held.bbs$setEquipOff(1F);
+            held.bbs$setPrevEquipOff(1F);
+            player.setPitch(at.pitch);
+            player.prevPitch = at.pitch;
+            player.setYaw(at.headYaw);
+            player.prevYaw = at.headYaw;
+            player.renderPitch = player.lastRenderPitch = at.pitch;
+            player.renderYaw = player.lastRenderYaw = at.headYaw;
+            player.handSwingProgress = player.lastHandSwingProgress = at.swing;
+
+            /* The hand's own lens, as the game draws hands: a fixed field of view, apart from the scene's */
+            com.mojang.blaze3d.systems.RenderSystem.setProjectionMatrix(mc.gameRenderer.getBasicProjectionMatrix(70D), com.mojang.blaze3d.systems.VertexSorter.BY_DISTANCE);
+
+            net.minecraft.client.util.math.MatrixStack matrices = new net.minecraft.client.util.math.MatrixStack();
+            mchorse.bbs_mod.camera.data.Point offset = clip.handOffset.get();
+
+            matrices.translate(offset.x, offset.y, offset.z);
+            matrices.multiply(net.minecraft.util.math.RotationAxis.POSITIVE_X.rotationDegrees(clip.handPitch.get()));
+            matrices.multiply(net.minecraft.util.math.RotationAxis.POSITIVE_Y.rotationDegrees(clip.handYaw.get()));
+
+            int light = net.minecraft.client.render.WorldRenderer.getLightmapCoordinates(mc.world, net.minecraft.util.math.BlockPos.ofFloored(at.x, at.y + player.getStandingEyeHeight(), at.z));
+
+            mc.gameRenderer.getLightmapTextureManager().enable();
+            mc.gameRenderer.firstPersonRenderer.renderItem(1F, matrices, mc.getBufferBuilders().getEntityVertexConsumers(), player, light);
+            mc.gameRenderer.getLightmapTextureManager().disable();
+        }
+        catch (RuntimeException e)
+        {
+            /* Hands that cannot be drawn are left out of this frame, nothing else */
+        }
+        finally
+        {
+            com.mojang.blaze3d.systems.RenderSystem.setProjectionMatrix(projection, sorting);
+            held.bbs$setMainHand(mainHand);
+            held.bbs$setOffHand(offHand);
+            held.bbs$setEquipMain(equipMain);
+            held.bbs$setPrevEquipMain(prevEquipMain);
+            held.bbs$setEquipOff(equipOff);
+            held.bbs$setPrevEquipOff(prevEquipOff);
+            player.setPitch(pitch);
+            player.prevPitch = prevPitch;
+            player.setYaw(yaw);
+            player.prevYaw = prevYaw;
+            player.renderPitch = renderPitch;
+            player.lastRenderPitch = lastRenderPitch;
+            player.renderYaw = renderYaw;
+            player.lastRenderYaw = lastRenderYaw;
+            player.handSwingProgress = swing;
+            player.lastHandSwingProgress = lastSwing;
+
+            if (lent != null)
+            {
+                lent.giveBack(player);
+            }
+        }
+
+        return true;
     }
 
     /** Lets the sounds of the audio clips go when the recap is no longer shown. */

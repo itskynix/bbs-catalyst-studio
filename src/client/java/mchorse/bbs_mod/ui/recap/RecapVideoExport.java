@@ -43,12 +43,19 @@ public class RecapVideoExport extends VideoExportSession
         this.editor = editor;
     }
 
-    /** Starts the export at the video settings' size; false when it could not be started. */
-    public boolean start()
-    {
-        int width = Math.max(2, BBSSettings.videoWidth.get());
-        int height = Math.max(2, BBSSettings.videoHeight.get());
+    private String movieName;
 
+    /**
+     * Starts the export as the delivery panel set it up: its profile (format, codec, frame rate,
+     * range), the file's name and the size; false when it could not be started.
+     */
+    public boolean start(mchorse.bbs_mod.camera.export.VideoExportProfile profile, String name, int width, int height)
+    {
+        this.profile = profile;
+        this.movieName = name;
+
+        width = Math.max(2, width);
+        height = Math.max(2, height);
         width += width % 2;
         height += height % 2;
 
@@ -68,8 +75,18 @@ public class RecapVideoExport extends VideoExportSession
             return false;
         }
 
+        int length = Math.max(1, this.editor.getLength());
+
         this.startTick = 0;
-        this.endTick = Math.max(1, this.editor.getLength());
+        this.endTick = length;
+
+        /* The delivery panel's own range, kept inside the timeline */
+        if (this.profile != null && this.profile.getRangeType() == mchorse.bbs_mod.camera.export.VideoExportProfile.RangeType.CUSTOM)
+        {
+            this.startTick = Math.max(0, Math.min(length - 1, this.profile.getCustomStartTick()));
+            this.endTick = this.profile.getCustomEndTick() > 0 ? Math.min(length, this.profile.getCustomEndTick()) : length;
+            this.endTick = Math.max(this.startTick + 1, this.endTick);
+        }
 
         if (BBSSettings.videoExportAudio.get())
         {
@@ -81,7 +98,7 @@ public class RecapVideoExport extends VideoExportSession
 
                 try
                 {
-                    if (AudioRenderer.renderAudio(file, audio, this.endTick, 48000, TimeUtils.toSeconds(this.startTick), TimeUtils.toSeconds(this.endTick)))
+                    if (AudioRenderer.renderAudio(file, audio, length, 48000, TimeUtils.toSeconds(this.startTick), TimeUtils.toSeconds(this.endTick)))
                     {
                         this.audioFile = file;
                     }
@@ -95,7 +112,7 @@ public class RecapVideoExport extends VideoExportSession
 
         this.editor.stopPlayback();
         this.editor.setFlight(false);
-        this.editor.seek(this.startTick);
+        this.editor.seekForExport(this.startTick);
         this.readyAt = 0L;
         this.warmupFrom = 0L;
 
@@ -105,10 +122,52 @@ public class RecapVideoExport extends VideoExportSession
     @Override
     protected String getMovieName()
     {
+        if (this.movieName != null && !this.movieName.trim().isEmpty())
+        {
+            return uniqueName(BBSRendering.getVideoFolder(), this.movieName.trim());
+        }
+
         RecapRecord record = this.editor.getRecord();
         String name = record == null ? "recap" : record.name.replaceAll("[\\\\/:*?\"<>|]", "_").trim();
 
         return (name.isEmpty() ? "recap" : name) + " " + StringUtils.createTimestampFilename();
+    }
+
+    /** A name no earlier video of the folder has, so the encoder never stops to ask about one. */
+    private static String uniqueName(File folder, String base)
+    {
+        String candidate = base;
+
+        for (int i = 1; taken(folder, candidate); i++)
+        {
+            candidate = base + " " + i;
+        }
+
+        return candidate;
+    }
+
+    private static boolean taken(File folder, String base)
+    {
+        File[] files = folder.listFiles();
+
+        if (files == null)
+        {
+            return false;
+        }
+
+        String prefix = (base + ".").toLowerCase();
+
+        for (File file : files)
+        {
+            String name = file.getName().toLowerCase();
+
+            if (name.startsWith(prefix) && !isExportArtifact(name.substring(prefix.length())))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     @Override

@@ -134,7 +134,8 @@ public final class RecapStore
             return false;
         }
 
-        File[] files = {trackFile(record.id), side(record.id, ".motion"), side(record.id, ".world"), side(record.id, ".env"), file(record.id)};
+        File[] files = {trackFile(record.id), side(record.id, ".motion"), side(record.id, ".world"), side(record.id, ".env"), side(record.id, ".gear"),
+            side(record.id, ".mobs"), side(record.id, ".sounds"), side(record.id, ".particles"), file(record.id)};
 
         /* A write still on its way would bring a deleted file back */
         for (File file : files)
@@ -229,6 +230,86 @@ public final class RecapStore
     public static RecapEnvironment loadEnvironment(RecapRecord record)
     {
         return record == null || record.id.isEmpty() ? null : RecapEnvironment.read(waited(side(record.id, ".env")));
+    }
+
+    /** What the player had on it and its interface's numbers, from a copy taken now. */
+    public static boolean saveGear(RecapRecord record, RecapGear gear)
+    {
+        if (record.id.isEmpty() || gear == null)
+        {
+            return false;
+        }
+
+        RecapGear copy = RecapGear.tail(gear, gear.size());
+
+        RecapWriter.write(side(record.id, ".gear"), copy::write, null);
+
+        return true;
+    }
+
+    public static RecapGear loadGear(RecapRecord record)
+    {
+        return record == null || record.id.isEmpty() ? null : RecapGear.read(waited(side(record.id, ".gear")));
+    }
+
+    /** The other entities around, from a copy taken now. */
+    public static boolean saveEntities(RecapRecord record, RecapEntities entities)
+    {
+        if (record.id.isEmpty() || entities == null)
+        {
+            return false;
+        }
+
+        RecapEntities copy = RecapEntities.tail(entities, 0);
+
+        RecapWriter.write(side(record.id, ".mobs"), copy::write, null);
+
+        return true;
+    }
+
+    public static RecapEntities loadEntities(RecapRecord record)
+    {
+        return record == null || record.id.isEmpty() ? null : RecapEntities.read(waited(side(record.id, ".mobs")));
+    }
+
+    /** The world's sounds, from a copy taken now. */
+    public static boolean saveSounds(RecapRecord record, RecapSounds sounds)
+    {
+        if (record.id.isEmpty() || sounds == null)
+        {
+            return false;
+        }
+
+        RecapSounds copy = RecapSounds.tail(sounds, 0);
+
+        RecapWriter.write(side(record.id, ".sounds"), copy::write, null);
+
+        return true;
+    }
+
+    public static RecapSounds loadSounds(RecapRecord record)
+    {
+        return record == null || record.id.isEmpty() ? null : RecapSounds.read(waited(side(record.id, ".sounds")));
+    }
+
+    /** The world's particles, from a copy taken now. */
+    public static boolean saveParticles(RecapRecord record, RecapParticles particles)
+    {
+        if (record.id.isEmpty() || particles == null)
+        {
+            return false;
+        }
+
+        RecapParticles copy = RecapParticles.tail(particles, 0);
+
+        RecapWriter.write(side(record.id, ".particles"), copy::write, null);
+
+        return true;
+    }
+
+    public static RecapParticles loadParticles(RecapRecord record)
+    {
+        return record == null || record.id.isEmpty() ? null : RecapParticles.read(waited(side(record.id, ".particles")));
     }
 
     private static File waited(File file)

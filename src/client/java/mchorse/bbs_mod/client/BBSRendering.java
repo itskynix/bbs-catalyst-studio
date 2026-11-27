@@ -767,7 +767,13 @@ public class BBSRendering
 
         if (recording && canRender && mchorse.bbs_mod.recap.RecapScene.isActive())
         {
-            if (mchorse.bbs_mod.recap.RecapWorldOverlay.isSettled())
+            /* On the way to another dimension the recap's clock waits and the game ticks on to get
+             * there: those frames are not taken, and not held either */
+            if (mchorse.bbs_mod.recap.RecapScene.isTraveling())
+            {
+                recording = false;
+            }
+            else if (mchorse.bbs_mod.recap.RecapWorldOverlay.isSettled())
             {
                 mchorse.bbs_mod.recap.RecapWorldOverlay.frameTaken();
             }
@@ -1014,8 +1020,9 @@ public class BBSRendering
 
             BBSModClient.getFilms().render(worldRenderContext);
 
-            /* Recap Studio: the recorded player, where the recording had it */
+            /* Recap Studio: the recorded player, where the recording had it, and the entities around it */
             mchorse.bbs_mod.recap.RecapScene.renderActor(worldRenderContext);
+            mchorse.bbs_mod.recap.RecapScene.renderEntities(worldRenderContext);
         }
         finally
         {

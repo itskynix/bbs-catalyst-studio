@@ -92,6 +92,14 @@ public abstract class GameRendererMixin
     public void onRenderHand(MatrixStack matrices, net.minecraft.client.render.Camera camera, float tickDelta, CallbackInfo info)
     //?}
     {
+        /* Recap Studio's hand pass first: the recorded player's hands while looking out of its eyes */
+        if (mchorse.bbs_mod.recap.RecapScene.renderPovHands(camera, tickDelta))
+        {
+            info.cancel();
+
+            return;
+        }
+
         if (mchorse.bbs_mod.film.eye.ActorEyeHands.render(camera, tickDelta))
         {
             info.cancel();

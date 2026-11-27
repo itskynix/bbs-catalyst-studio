@@ -80,8 +80,6 @@ public class UIRecapEditor extends UIElement
     private RecapRecord record;
     private RecapTrack track;
     private mchorse.bbs_mod.recap.RecapMotion motion;
-    private mchorse.bbs_mod.recap.RecapEvents events;
-    private mchorse.bbs_mod.recap.RecapEnvironment environment;
     private boolean sceneShown;
     private Position flight;
     private final Position lastFlown = new Position();
@@ -95,6 +93,15 @@ public class UIRecapEditor extends UIElement
     /** The video export, and the button that takes the player to the dimension of the cursor's moment. */
     private final RecapVideoExport export = new RecapVideoExport(this);
     private UIRecapButton travelButton;
+
+    /** Everything the recap recorded besides its own file. */
+    private mchorse.bbs_mod.recap.RecapData data = new mchorse.bbs_mod.recap.RecapData();
+
+    /* The way to another dimension: where to, for how long, and how long the cursor rested elsewhere */
+    private String travelTarget;
+    private String failedTarget;
+    private int travelTicks;
+    private int elsewhereTicks;
 
     private UIRecapDock dragged;
 
@@ -204,12 +211,23 @@ public class UIRecapEditor extends UIElement
     public void open(RecapRecord record)
     {
         this.record = record;
-        this.track = RecapStore.loadTrack(record);
-        this.motion = RecapStore.loadMotion(record);
-        this.events = RecapStore.loadEvents(record);
-        this.environment = RecapStore.loadEnvironment(record);
+        this.data = record == null ? new mchorse.bbs_mod.recap.RecapData() : mchorse.bbs_mod.recap.RecapData.load(record);
+        this.track = this.data.track;
+        this.motion = this.data.motion;
         this.cursor = 0;
+        this.travelTarget = null;
+        this.elsewhereTicks = 0;
         this.stopPlayback();
+
+        /* The lone default camera of a recap that went through dimensions, made before it was made
+         * a stretch at a time, would stand in another dimension's blocks: made again per stretch */
+        mchorse.bbs_mod.utils.clips.Clip lone = record != null && record.dimensions.isMixed() ? this.findDefaultCamera(record) : null;
+
+        if (lone != null)
+        {
+            record.clips.remove(lone);
+            this.addDefaultCamera(record);
+        }
 
         /* A recap with no clips starts on an idle camera outside, behind the player, the whole length */
         if (record != null && record.clips.get().isEmpty())
@@ -311,15 +329,60 @@ public class UIRecapEditor extends UIElement
             return;
         }
 
-        if (this.export.start())
-        {
-            this.getContext().notifyInfo(UIRecapKeys.key("editor.export_started"));
-        }
-        else
-        {
-            this.getContext().notifyError(UIRecapKeys.key("editor.export_failed"));
-        }
+        /* The film studio's delivery panel: format, codec, size, frame rate, range, file, queue */
+        mchorse.bbs_mod.ui.film.export.UIDeliverOverlayPanel deliver = new mchorse.bbs_mod.ui.film.export.UIDeliverOverlayPanel(this.deliverTarget);
+
+        mchorse.bbs_mod.ui.framework.elements.overlay.UIOverlay.addOverlay(this.getContext(), deliver, 720, 480);
     }
+
+    /** What the delivery panel renders: this recap's timeline, through its own export. */
+    private final mchorse.bbs_mod.ui.film.export.IDeliverTarget deliverTarget = new mchorse.bbs_mod.ui.film.export.IDeliverTarget()
+    {
+        @Override
+        public String getDeliverName()
+        {
+            return UIRecapEditor.this.record == null ? "recap" : UIRecapEditor.this.record.name;
+        }
+
+        @Override
+        public int getDeliverDuration()
+        {
+            return Math.max(1, UIRecapEditor.this.getLength());
+        }
+
+        @Override
+        public boolean startDeliver(mchorse.bbs_mod.camera.export.VideoExportProfile profile, String filename, int width, int height,
+            mchorse.bbs_mod.camera.export.RenderJob job, mchorse.bbs_mod.film.VideoExportSession.FinishedListener finished)
+        {
+            UIRecapEditor editor = UIRecapEditor.this;
+
+            if (editor.record == null || !editor.sceneShown || editor.export.isExporting())
+            {
+                return false;
+            }
+
+            editor.export.setFinishedListener(finished);
+
+            if (job != null)
+            {
+                editor.export.setJob(job);
+            }
+
+            boolean started = editor.export.start(profile, filename, width, height);
+
+            if (started)
+            {
+                editor.getContext().notifyInfo(UIRecapKeys.key("editor.export_started"));
+            }
+            else
+            {
+                editor.export.setFinishedListener(null);
+                editor.getContext().notifyError(UIRecapKeys.key("editor.export_failed"));
+            }
+
+            return started;
+        }
+    };
 
     /** The File menu's recap entries. */
     public void fillFileMenu(mchorse.bbs_mod.ui.utils.context.ContextMenuManager menu)
@@ -374,10 +437,24 @@ public class UIRecapEditor extends UIElement
      */
     public void travelToDimension()
     {
+        this.travel(true);
+    }
+
+    /**
+     * Whether the player is on its way to another dimension: the recap's clock waits meanwhile, and
+     * a video takes none of the frames drawn on the way.
+     */
+    public boolean isTraveling()
+    {
+        return this.travelTarget != null;
+    }
+
+    private void travel(boolean asked)
+    {
         String id = RecapScene.recordedDimension();
         MinecraftClient mc = MinecraftClient.getInstance();
 
-        if (id == null || !RecapScene.isElsewhere() || mc.player == null)
+        if (id == null || !RecapScene.isElsewhere() || mc.player == null || this.travelTarget != null)
         {
             return;
         }
@@ -386,7 +463,10 @@ public class UIRecapEditor extends UIElement
 
         if (server == null)
         {
-            this.getContext().notifyInfo(UIRecapKeys.key("editor.travel_multiplayer"));
+            if (asked)
+            {
+                this.getContext().notifyInfo(UIRecapKeys.key("editor.travel_multiplayer"));
+            }
 
             return;
         }
@@ -400,6 +480,11 @@ public class UIRecapEditor extends UIElement
 
             return;
         }
+
+        this.travelTarget = id;
+        this.travelTicks = 0;
+        RecapScene.setTraveling(true);
+        RecapScene.setPlaying(false);
 
         java.util.UUID uuid = mc.player.getUuid();
         mchorse.bbs_mod.ui.framework.UIContext context = this.getContext();
@@ -462,14 +547,76 @@ public class UIRecapEditor extends UIElement
             {
                 if (result)
                 {
-                    context.notifySuccess(UIRecapKeys.key("editor.travel_done"));
+                    if (asked)
+                    {
+                        context.notifySuccess(UIRecapKeys.key("editor.travel_done"));
+                    }
                 }
                 else
                 {
+                    this.endTravel();
+                    /* Not tried again by itself until the cursor has left that dimension's stretch */
+                    this.failedTarget = id;
                     context.notifyError(UIRecapKeys.key("editor.travel_failed"));
                 }
             });
         });
+    }
+
+    private void endTravel()
+    {
+        this.travelTarget = null;
+        this.travelTicks = 0;
+        this.elsewhereTicks = 0;
+        RecapScene.setTraveling(false);
+        RecapScene.setPlaying(this.playing);
+    }
+
+    /**
+     * Once a tick: the way to another dimension followed, and taken by itself in single player when
+     * the recap's moment is in one the client is not in, at once while playing or making a video,
+     * after a short rest of the cursor while scrubbing, so a drag across the line does not travel
+     * back and forth.
+     */
+    private void updateTravel()
+    {
+        MinecraftClient mc = MinecraftClient.getInstance();
+
+        if (this.travelTarget != null)
+        {
+            this.travelTicks += 1;
+
+            boolean there = mc.world != null && mc.player != null && this.travelTarget.equals(mchorse.bbs_mod.recap.RecapWorldOverlay.dimensionOf(mc.world))
+                && mc.world.getChunkManager().isChunkLoaded(mc.player.getBlockX() >> 4, mc.player.getBlockZ() >> 4);
+
+            /* Arrived and settled a moment, or given up on after twenty seconds */
+            if ((there && this.travelTicks >= 10) || this.travelTicks > 400)
+            {
+                this.endTravel();
+            }
+
+            return;
+        }
+
+        if (!this.sceneShown || this.isFlying() || mc.getServer() == null || !RecapScene.isElsewhere())
+        {
+            this.elsewhereTicks = 0;
+            this.failedTarget = null;
+
+            return;
+        }
+
+        if (this.failedTarget != null && this.failedTarget.equals(RecapScene.recordedDimension()))
+        {
+            return;
+        }
+
+        this.elsewhereTicks += 1;
+
+        if (this.playing || this.export.isExporting() || this.elsewhereTicks >= 4)
+        {
+            this.travel(false);
+        }
     }
 
     /* The scene */
@@ -493,8 +640,8 @@ public class UIRecapEditor extends UIElement
 
         CameraController controller = BBSModClient.getCameraController();
 
-        RecapScene.show(this.record, this.track, this.motion, this.events, this.environment, this::getCursor);
-        RecapScene.setPlaying(this.playing);
+        RecapScene.show(this.record, this.data, this::getCursor);
+        RecapScene.setPlaying(this.playing && this.travelTarget == null);
 
         /* Always the recap's camera: the recorded eye, or for a recap kept before the camera was
          * the player's own, and the timeline's clips over either */
@@ -523,6 +670,7 @@ public class UIRecapEditor extends UIElement
 
         this.setFlight(false);
         this.sceneShown = false;
+        this.endTravel();
         RecapScene.hide();
         BBSModClient.getCameraController().remove(RecapScene.INSTANCE);
         BBSRendering.setCustomSize(false);
@@ -554,10 +702,12 @@ public class UIRecapEditor extends UIElement
     {
         /* The video's warm up and its end, on the game's ticks as the recap plays */
         this.export.update();
+        this.updateTravel();
 
+        /* In single player the dimension is changed by itself; the button is for a server, to say why it is not */
         if (this.travelButton != null)
         {
-            this.travelButton.setVisible(this.sceneShown && !this.export.isExporting() && RecapScene.isElsewhere());
+            this.travelButton.setVisible(this.sceneShown && !this.export.isExporting() && MinecraftClient.getInstance().getServer() == null && RecapScene.isElsewhere());
         }
 
         /* Values typed into the timeline's properties panel reach the history here, twice a second,
@@ -567,12 +717,18 @@ public class UIRecapEditor extends UIElement
             this.commitTimeline();
         }
 
-        if (!this.playing)
+        /* On the way to another dimension the recap's clock waits */
+        if (!this.playing || this.travelTarget != null)
         {
             return;
         }
 
+        int before = this.cursor;
+
         this.cursor += 1;
+
+        /* The recorded sounds and particles of the moments played through */
+        RecapScene.playEffects(before, this.cursor);
 
         if (this.cursor >= this.getLength())
         {
@@ -630,42 +786,77 @@ public class UIRecapEditor extends UIElement
     }
 
     /**
-     * The idle camera a new recap starts with: outside, behind and above the player, over its
-     * whole length; behind it where it first is in the client's dimension, and none while the
-     * recording was never in it, as its coordinates would be of another world.
+     * The idle cameras a new recap starts with: outside, behind and above the player, one for each
+     * stretch of it spent in one dimension, each placed where the player was as the stretch began,
+     * so none of them ever stands in the blocks of another dimension.
      */
     private void addDefaultCamera(RecapRecord record)
     {
-        int first = 0;
+        mchorse.bbs_mod.recap.RecapDimensions dimensions = record.dimensions;
+        int length = Math.max(1, record.ticks);
+        int stretches = Math.max(1, dimensions.size());
+        boolean added = false;
 
-        if (!record.dimensions.isEmpty())
+        for (int i = 0; i < stretches; i++)
         {
-            first = record.dimensions.firstTickIn(mchorse.bbs_mod.recap.RecapWorldOverlay.dimensionOf(net.minecraft.client.MinecraftClient.getInstance().world));
+            int start = i == 0 || dimensions.isEmpty() ? 0 : Math.min(length - 1, dimensions.getStart(i));
+            int end = i + 1 < dimensions.size() ? Math.min(length, dimensions.getStart(i + 1)) : length;
 
-            if (first < 0)
+            if (end <= start)
             {
-                return;
+                continue;
+            }
+
+            /* A moment into the stretch: the player is through the portal and standing */
+            Position outside = RecapScene.outsideView(record, this.track, this.motion, Math.min(end - 1, start + (i == 0 ? 0 : 20)));
+
+            if (outside == null)
+            {
+                continue;
+            }
+
+            mchorse.bbs_mod.utils.clips.Clip clip = RecapClips.factory().create(mchorse.bbs_mod.resources.Link.bbs("idle"));
+
+            if (clip instanceof mchorse.bbs_mod.camera.clips.overwrite.IdleClip idle)
+            {
+                idle.tick.set(start);
+                idle.duration.set(end - start);
+                idle.layer.set(0);
+                idle.position.get().set(outside);
+                record.clips.addClip(idle);
+                added = true;
             }
         }
 
-        Position outside = RecapScene.outsideView(record, this.track, this.motion, first);
-
-        if (outside == null)
+        if (added)
         {
-            return;
-        }
-
-        mchorse.bbs_mod.utils.clips.Clip clip = RecapClips.factory().create(mchorse.bbs_mod.resources.Link.bbs("idle"));
-
-        if (clip instanceof mchorse.bbs_mod.camera.clips.overwrite.IdleClip idle)
-        {
-            idle.tick.set(0);
-            idle.duration.set(Math.max(1, record.ticks));
-            idle.layer.set(0);
-            idle.position.get().set(outside);
-            record.clips.addClip(idle);
             RecapStore.save(record);
         }
+    }
+
+    /**
+     * The one idle camera over the whole length that new recaps were given, as it was given and
+     * left untouched; null when there is none or more than one such.
+     */
+    private mchorse.bbs_mod.utils.clips.Clip findDefaultCamera(RecapRecord record)
+    {
+        mchorse.bbs_mod.utils.clips.Clip found = null;
+
+        for (mchorse.bbs_mod.utils.clips.Clip clip : record.clips.get())
+        {
+            if (clip instanceof mchorse.bbs_mod.camera.clips.overwrite.IdleClip idle && idle.tick.get() == 0
+                && idle.duration.get() == Math.max(1, record.ticks) && idle.layer.get() == 0)
+            {
+                if (found != null)
+                {
+                    return null;
+                }
+
+                found = clip;
+            }
+        }
+
+        return found;
     }
 
     /** What the viewport shows, said beside its title. */
@@ -1478,10 +1669,11 @@ public class UIRecapEditor extends UIElement
         if (this.record != null)
         {
             FontRenderer font = context.batcher.getFont();
-            /* Between rename on the left and undo, redo, history and layouts on the right */
-            String name = font.limitToWidth(this.record.name, Math.max(20, this.area.w - (MARGIN + 82) - (MARGIN + 82)));
+            /* After back, rename, save, video and, when shown, the dimension button; before undo, redo and history */
+            int left = MARGIN + (this.travelButton != null && this.travelButton.isVisible() ? 132 : 106);
+            String name = font.limitToWidth(this.record.name, Math.max(20, this.area.w - left - (MARGIN + 82)));
 
-            context.batcher.text(name, this.area.x + MARGIN + 82, this.area.y + 8, RecapStyle.text(), false);
+            context.batcher.text(name, this.area.x + left, this.area.y + 8, RecapStyle.text(), false);
         }
 
         super.render(context);

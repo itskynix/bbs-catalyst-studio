@@ -41,6 +41,8 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
 {
     private final UIFilmPanel filmPanel;
     private final UICatalystPanel catalystPanel;
+    /** Neither a film nor a composition: something rendering itself, such as a recap. */
+    private final IDeliverTarget target;
     private VideoExportProfile currentProfile;
 
     /* Top Presets bar */
@@ -124,13 +126,31 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
         this(null, catalystPanel);
     }
 
+    /** For anything else that renders itself, such as a recap: see {@link IDeliverTarget}. */
+    public UIDeliverOverlayPanel(IDeliverTarget target)
+    {
+        this(null, null, target);
+    }
+
     public UIDeliverOverlayPanel(UIFilmPanel filmPanel, UICatalystPanel catalystPanel)
+    {
+        this(filmPanel, catalystPanel, null);
+    }
+
+    private UIDeliverOverlayPanel(UIFilmPanel filmPanel, UICatalystPanel catalystPanel, IDeliverTarget target)
     {
         super(key("title"));
 
         this.filmPanel = filmPanel;
         this.catalystPanel = catalystPanel;
+        this.target = target;
         this.currentProfile = ExportProfiles.getSelectedProfile().copy();
+
+        /* A target has no in and out points of a film's timeline */
+        if (this.target != null && this.currentProfile.getRangeType() == VideoExportProfile.RangeType.IN_OUT)
+        {
+            this.currentProfile.setRangeType(VideoExportProfile.RangeType.ENTIRE);
+        }
 
         if (this.catalystPanel != null)
         {
@@ -553,6 +573,10 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
         {
             defaultName = this.catalystPanel.getActiveComposition().name.replaceAll("[^a-zA-Z0-9._-]", "_");
         }
+        else if (this.target != null)
+        {
+            defaultName = safeName(this.target.getDeliverName());
+        }
         else
         {
             defaultName = StringUtils.createTimestampFilename();
@@ -856,6 +880,10 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
             {
                 defaultDuration = this.catalystPanel.getActiveComposition().duration;
             }
+            else if (this.target != null)
+            {
+                defaultDuration = this.target.getDeliverDuration();
+            }
 
             int start = this.currentProfile.getCustomStartTick();
             int end = this.currentProfile.getCustomEndTick() > 0 ? this.currentProfile.getCustomEndTick() : defaultDuration;
@@ -911,11 +939,23 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
                 duration = Math.max(1, end - start);
             }
         }
+        else if (this.target != null)
+        {
+            filmId = "target:" + safeName(this.target.getDeliverName());
+            duration = Math.max(1, this.target.getDeliverDuration());
+
+            if (this.currentProfile.getRangeType() == VideoExportProfile.RangeType.CUSTOM)
+            {
+                int start = this.currentProfile.getCustomStartTick();
+                int end = this.currentProfile.getCustomEndTick() > 0 ? this.currentProfile.getCustomEndTick() : duration;
+                duration = Math.max(1, end - start);
+            }
+        }
 
         String filename = this.filenameTextbox.getText();
         if (filename.isEmpty())
         {
-            String base = filmId.startsWith("catalyst:") ? filmId.substring(9) : filmId;
+            String base = filmId.startsWith("catalyst:") ? filmId.substring(9) : (filmId.startsWith("target:") ? filmId.substring(7) : filmId);
             filename = base.replaceAll("[^a-zA-Z0-9._-]", "_") + "_" + StringUtils.createTimestampFilename();
         }
 
@@ -986,6 +1026,27 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
                     this.processNextQueueJob();
                 }
             });
+            return;
+        }
+
+        if (this.filmPanel == null && this.target != null)
+        {
+            RenderQueue.setActiveJob(job);
+            job.setStatus(RenderJob.Status.RENDERING);
+
+            if (this.jobList != null)
+            {
+                this.jobList.updateList();
+            }
+
+            this.deliverToTarget(job.getProfile(), job.getFilename(), job, (cancelled) ->
+            {
+                if (RenderQueue.isProcessingQueue() && !cancelled)
+                {
+                    this.processNextQueueJob();
+                }
+            });
+
             return;
         }
 
@@ -1072,6 +1133,81 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
         });
     }
 
+    private static String safeName(String name)
+    {
+        String safe = name == null ? "" : name.replaceAll("[^a-zA-Z0-9._-]", "_");
+
+        return safe.isEmpty() ? "export" : safe;
+    }
+
+    /**
+     * Hands a render to the panel's own target, at the profile's size, the queue told how it went
+     * as the film path tells it.
+     */
+    private void deliverToTarget(VideoExportProfile profile, String filename, RenderJob job, mchorse.bbs_mod.film.VideoExportSession.FinishedListener after)
+    {
+        int width = profile.getWidth() > 0 ? profile.getWidth() : BBSRendering.getVideoWidth();
+        int height = profile.getHeight() > 0 ? profile.getHeight() : BBSRendering.getVideoHeight();
+
+        if (width % 2 != 0) width++;
+        if (height % 2 != 0) height++;
+
+        boolean started;
+
+        try
+        {
+            started = this.target.startDeliver(profile, filename, width, height, job, (cancelled) ->
+            {
+                RenderJob finished = job != null ? job : RenderQueue.getActiveJob();
+
+                if (finished != null)
+                {
+                    finished.setStatus(cancelled ? RenderJob.Status.CANCELLED : RenderJob.Status.COMPLETED);
+                }
+
+                if (RenderQueue.getActiveJob() == finished)
+                {
+                    RenderQueue.setActiveJob(null);
+                }
+
+                if (this.jobList != null)
+                {
+                    this.jobList.updateList();
+                }
+
+                if (after != null)
+                {
+                    after.onFinished(cancelled);
+                }
+            });
+        }
+        catch (Throwable t)
+        {
+            t.printStackTrace();
+            started = false;
+        }
+
+        if (!started)
+        {
+            mchorse.bbs_mod.utils.VideoRecorder.sendChatMessage("§c[BBS] Render başlatılamadı!");
+
+            if (job != null)
+            {
+                job.setStatus(RenderJob.Status.CANCELLED);
+
+                if (RenderQueue.getActiveJob() == job)
+                {
+                    RenderQueue.setActiveJob(null);
+                }
+            }
+
+            if (RenderQueue.isProcessingQueue() && after != null)
+            {
+                after.onFinished(false);
+            }
+        }
+    }
+
     /**
      * Immediately renders the current film/composition with currently selected profile.
      */
@@ -1131,6 +1267,16 @@ public class UIDeliverOverlayPanel extends UIOverlayPanel
             }
 
             this.catalystPanel.startExportFromProfile(this.currentProfile, targetOut, duration, matchingJob, null);
+            return;
+        }
+
+        if (this.filmPanel == null && this.target != null)
+        {
+            String rawFilename = this.filenameTextbox.getText().trim();
+            String filename = rawFilename.isEmpty() ? safeName(this.target.getDeliverName()) + "_" + StringUtils.createTimestampFilename() : rawFilename;
+
+            this.deliverToTarget(this.currentProfile, filename, null, null);
+
             return;
         }
 

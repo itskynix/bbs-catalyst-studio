@@ -186,13 +186,8 @@ public class UIRecapViewport extends UIElement
         {
             this.renderMessage(context, font, UIRecapKeys.text("editor.no_world"), x, y, w, h);
         }
-        else
-        {
-            /* The game's interface over the picture while it looks out of the eye, after the view settings */
-            RecapHud.render(context, x, y, w, h);
-
-            /* What the picture is made of is said beside the panel's title, not over the picture */
-        }
+        /* The game's interface, while it looks out of the eye, is drawn into the frame itself
+         * (RecapHud), so it is in the picture here and in a video alike */
 
         if (record.isOn(RecapOption.THIRDS_GUIDE))
         {

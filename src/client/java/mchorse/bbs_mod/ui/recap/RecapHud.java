@@ -1,13 +1,24 @@
 package mchorse.bbs_mod.ui.recap;
 
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.systems.VertexSorter;
+import mchorse.bbs_mod.camera.clips.modifiers.ActorEyeClip;
+import mchorse.bbs_mod.mixin.client.RecapHudInvoker;
 import mchorse.bbs_mod.mixin.client.RecapInGameHudAccessor;
+import mchorse.bbs_mod.recap.RecapGear;
+import mchorse.bbs_mod.recap.RecapLend;
 import mchorse.bbs_mod.recap.RecapOption;
 import mchorse.bbs_mod.recap.RecapScene;
-import mchorse.bbs_mod.ui.framework.UIContext;
+import mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D;
+import mchorse.bbs_mod.utils.clips.ClipContext;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
+import net.minecraft.client.gl.Framebuffer;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.hud.InGameHud;
+import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.client.option.Perspective;
+import net.minecraft.client.render.DiffuseLighting;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.scoreboard.Scoreboard;
 import net.minecraft.scoreboard.ScoreboardDisplaySlot;
@@ -15,14 +26,18 @@ import net.minecraft.scoreboard.ScoreboardObjective;
 import net.minecraft.scoreboard.Team;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.MathHelper;
+import org.joml.Matrix4f;
+import org.lwjgl.opengl.GL11;
 
 /**
- * The game's interface over the recap viewport, while it looks out of the eye: chat, boss bars,
- * the title, the scoreboard and the action bar, each only while the view settings panel has it on.
+ * The game's interface over a recap's frame while it looks out of the recorded player's eyes,
+ * drawn into the frame itself, so the viewport and a video show it alike.
  *
- * <p>It is the game's own interface, live, laid out for the whole window and scaled down into the
- * frame, so it sits where the player would see it. The pieces are drawn by the game's own code;
- * the title and the action bar, which the game draws inline, follow its fades.</p>
+ * <p>Laid out the game's way on the frame's own size, at the interface scale the game would pick
+ * for a window that size. The point of view clip lets through the hotbar with the hearts, food, air
+ * and experience (its interface switch) and the crosshair (its crosshair switch), with what the
+ * recorded player had and how it was doing lent for the draw; the view settings let through the
+ * chat, the boss bars, the title, the scoreboard and the action bar.</p>
  */
 public final class RecapHud
 {
@@ -31,83 +46,147 @@ public final class RecapHud
     private RecapHud()
     {}
 
-    public static void render(UIContext context, int x, int y, int w, int h)
+    /** A frame overlay: only while a recap is shown through a point of view clip. */
+    public static void render(MatrixStack stack, Batcher2D unused, ClipContext context)
     {
         MinecraftClient mc = MinecraftClient.getInstance();
 
-        if (mc.world == null || mc.player == null || w <= 0 || h <= 0 || !RecapScene.isFirstPerson())
+        if (mc.world == null || mc.player == null || !RecapScene.isFirstPerson())
         {
             return;
         }
 
-        boolean any = false;
+        ActorEyeClip clip = RecapScene.povClip();
+        RecapGear.Frame gear = RecapScene.gearNow();
+        int mode = gear == null ? -1 : gear.mode;
+        boolean spectator = mode == 3;
+        boolean hud = clip != null && clip.outHud.get() && !spectator;
+        boolean crosshair = clip != null && clip.outCrosshair.get() && !spectator;
+        boolean pieces = false;
 
         for (RecapOption piece : PIECES)
         {
-            any |= RecapScene.showsHud(piece);
+            pieces |= RecapScene.showsHud(piece);
         }
 
-        if (!any)
+        if (!hud && !crosshair && !pieces)
         {
             return;
         }
 
-        int sw = Math.max(1, mc.getWindow().getScaledWidth());
-        int sh = Math.max(1, mc.getWindow().getScaledHeight());
-        float tickDelta = context.getTransition();
-        InGameHud hud = mc.inGameHud;
-        RecapInGameHudAccessor access = (RecapInGameHudAccessor) hud;
-        TextRenderer font = mc.textRenderer;
+        Framebuffer fb = mc.getFramebuffer();
+        int scale = scaleFor(mc, fb.textureWidth, fb.textureHeight);
+        int w = (int) Math.ceil(fb.textureWidth / (double) scale);
+        int h = (int) Math.ceil(fb.textureHeight / (double) scale);
+        Matrix4f projection = new Matrix4f(RenderSystem.getProjectionMatrix());
+        VertexSorter sorting = RenderSystem.getVertexSorting();
+        DrawContext draw = new DrawContext(mc, mc.getBufferBuilders().getEntityVertexConsumers());
+        InGameHud game = mc.inGameHud;
+        RecapInGameHudAccessor access = (RecapInGameHudAccessor) game;
+        RecapHudInvoker invoke = (RecapHudInvoker) game;
+        ClientPlayerEntity player = mc.player;
+        Perspective perspective = mc.options.getPerspective();
+        RecapLend lent = gear == null ? null : RecapLend.lend(player, gear, true);
+        float tickDelta = mc.getTickDelta();
 
-        context.batcher.flush();
-        context.batcher.clip(x, y, w, h, context);
-
-        DrawContext draw = context.batcher.getContext();
-        MatrixStack matrices = draw.getMatrices();
-
-        matrices.push();
-        matrices.translate(x, y, 0F);
-        matrices.scale(w / (float) sw, h / (float) sh, 1F);
+        /* The interface's own space over the frame; the world's depth is done with */
+        RenderSystem.clear(GL11.GL_DEPTH_BUFFER_BIT, MinecraftClient.IS_SYSTEM_MAC);
+        RenderSystem.setProjectionMatrix(new Matrix4f().ortho(0, w, h, 0, -10000F, 10000F), VertexSorter.BY_Z);
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        DiffuseLighting.enableGuiDepthLighting();
 
         try
         {
-            access.bbs$setScaledWidth(sw);
-            access.bbs$setScaledHeight(sh);
+            access.bbs$setScaledWidth(w);
+            access.bbs$setScaledHeight(h);
+            mc.options.setPerspective(Perspective.FIRST_PERSON);
 
-            if (RecapScene.showsHud(RecapOption.BOSS_BAR))
+            if (hud)
             {
-                hud.getBossBarHud().render(draw);
+                invoke.bbs$renderHotbar(tickDelta, draw);
+
+                /* No bars in creative, as the game draws none */
+                if (mode != 1)
+                {
+                    invoke.bbs$renderStatusBars(draw);
+                    game.renderExperienceBar(draw, w / 2 - 91);
+                }
             }
 
-            if (RecapScene.showsHud(RecapOption.SCOREBOARD))
+            if (crosshair)
             {
-                renderScoreboard(mc, draw, access);
+                invoke.bbs$renderCrosshair(draw);
             }
 
-            if (RecapScene.showsHud(RecapOption.TITLE))
-            {
-                renderTitle(draw, font, access, sw, sh, tickDelta);
-            }
-
-            if (RecapScene.showsHud(RecapOption.ACTION_BAR))
-            {
-                renderActionBar(draw, font, access, sw, sh, tickDelta);
-            }
-
-            if (RecapScene.showsHud(RecapOption.CHAT))
-            {
-                matrices.push();
-                matrices.translate(0F, sh - 48, 0F);
-                hud.getChatHud().render(draw, hud.getTicks(), -1, -1);
-                matrices.pop();
-            }
-
+            renderPieces(mc, draw, access, w, h, tickDelta);
             draw.draw();
+        }
+        catch (RuntimeException e)
+        {
+            /* An interface that cannot be drawn is left out of this frame, nothing else */
         }
         finally
         {
+            mc.options.setPerspective(perspective);
+
+            if (lent != null)
+            {
+                lent.giveBack(player);
+            }
+
+            RenderSystem.setProjectionMatrix(projection, sorting);
+            RenderSystem.defaultBlendFunc();
+        }
+    }
+
+    /** The interface scale the game would pick for a window of the frame's size. */
+    private static int scaleFor(MinecraftClient mc, int width, int height)
+    {
+        int chosen = mc.options.getGuiScale().getValue();
+        int scale = 1;
+
+        while ((chosen == 0 || scale < chosen) && width / (scale + 1) >= 320 && height / (scale + 1) >= 240)
+        {
+            scale += 1;
+        }
+
+        return scale;
+    }
+
+    /** The chat, the boss bars, the title, the scoreboard and the action bar, each as the view settings let it. */
+    private static void renderPieces(MinecraftClient mc, DrawContext draw, RecapInGameHudAccessor access, int sw, int sh, float tickDelta)
+    {
+        InGameHud hud = mc.inGameHud;
+        TextRenderer font = mc.textRenderer;
+        MatrixStack matrices = draw.getMatrices();
+
+        if (RecapScene.showsHud(RecapOption.BOSS_BAR))
+        {
+            hud.getBossBarHud().render(draw);
+        }
+
+        if (RecapScene.showsHud(RecapOption.SCOREBOARD))
+        {
+            renderScoreboard(mc, draw, access);
+        }
+
+        if (RecapScene.showsHud(RecapOption.TITLE))
+        {
+            renderTitle(draw, font, access, sw, sh, tickDelta);
+        }
+
+        if (RecapScene.showsHud(RecapOption.ACTION_BAR))
+        {
+            renderActionBar(draw, font, access, sw, sh, tickDelta);
+        }
+
+        if (RecapScene.showsHud(RecapOption.CHAT))
+        {
+            matrices.push();
+            matrices.translate(0F, sh - 48, 0F);
+            hud.getChatHud().render(draw, hud.getTicks(), -1, -1);
             matrices.pop();
-            context.batcher.unclip(context);
         }
     }
 
