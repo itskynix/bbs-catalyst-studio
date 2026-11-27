@@ -686,6 +686,12 @@ public class BBSRendering
             wanted = PostFxRenderer.wantsDepth(panel.getRunner().getContext());
         }
 
+        /* Recap Studio showing a recap with a depth effect clip under its cursor */
+        if (!wanted && customSize && mchorse.bbs_mod.recap.RecapScene.isActive() && mchorse.bbs_mod.recap.RecapScene.getContext().clips != null)
+        {
+            wanted = PostFxRenderer.wantsDepth(mchorse.bbs_mod.recap.RecapScene.getContext());
+        }
+
         /* A post-process volume the camera is in with a depth effect in its stack */
         if (!wanted)
         {
@@ -732,6 +738,11 @@ public class BBSRendering
                 if (dashboard.getPanels().panel instanceof UIFilmPanel panel)
                 {
                     FrameOverlays.render(currentMenu.context.batcher.getContext().getMatrices(), currentMenu.context.batcher, panel.getRunner().getContext());
+                }
+                else if (mchorse.bbs_mod.recap.RecapScene.isActive() && mchorse.bbs_mod.recap.RecapScene.getContext().clips != null)
+                {
+                    /* Recap Studio: the effect clips under its cursor, over the world drawn for its viewport */
+                    FrameOverlays.render(currentMenu.context.batcher.getContext().getMatrices(), currentMenu.context.batcher, mchorse.bbs_mod.recap.RecapScene.getContext());
                 }
             }
         }

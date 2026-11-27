@@ -6,6 +6,7 @@ import mchorse.bbs_mod.recap.RecapTime;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.utils.FontRenderer;
+import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 
 import mchorse.bbs_mod.client.BBSRendering;
@@ -18,7 +19,8 @@ import java.util.List;
 /**
  * The viewport panel's content: the stage, a sixteen by nine frame as large as fits, and right under
  * it the transport, as wide as the frame: the cursor's time on its left, previous marker, play and
- * next marker in the middle, adding and removing a marker after them, the length on its right.
+ * next marker in the middle, adding and removing a marker after them, flight last, the length on
+ * its right.
  *
  * <p>The stage is the world itself, drawn at the frame's size through the recap's camera at the
  * cursor with the recap's view settings over it ({@link mchorse.bbs_mod.recap.RecapScene}); the
@@ -36,6 +38,7 @@ public class UIRecapViewport extends UIElement
     private final UIRecapButton next;
     private final UIRecapButton add;
     private final UIRecapButton remove;
+    private final UIRecapButton flight;
 
     /* Where the frame was put, for the row under it */
     private int frameX;
@@ -53,7 +56,10 @@ public class UIRecapViewport extends UIElement
         this.add = new UIRecapButton(() -> Icons.BOOKMARK, UIRecapKeys.key("editor.add_marker"), editor::addMarker);
         this.remove = new UIRecapButton(() -> Icons.TRASH, UIRecapKeys.key("editor.remove_marker"), editor::removeMarker);
 
-        this.add(this.previous, this.play, this.next, this.add, this.remove);
+        /* The film studio's flight, F: the camera flown by hand and keyed into the picked clip */
+        this.flight = new UIRecapButton(() -> Icons.PLANE, UIKeys.CAMERA_EDITOR_KEYS_MODES_FLIGHT, editor::toggleFlight).primary(editor::isFlying);
+
+        this.add(this.previous, this.play, this.next, this.add, this.remove, this.flight);
     }
 
     /** Placed from this pass's own area, before the buttons lay themselves out from it. */
@@ -70,14 +76,15 @@ public class UIRecapViewport extends UIElement
 
         /* The buttons in the middle of the frame's width, on the row right under it */
         int row = this.frameY + this.frameH + (ROW - BUTTON + 4) / 2;
-        int group = BUTTON * 5 + GAP * 4 + 8;
+        int group = BUTTON * 6 + GAP * 5 + 16;
         int x = this.frameX + (this.frameW - group) / 2;
 
         this.place(this.previous, x, row);
         this.place(this.play, x += BUTTON + GAP, row);
         this.place(this.next, x += BUTTON + GAP, row);
         this.place(this.add, x += BUTTON + GAP + 8, row);
-        this.place(this.remove, x + BUTTON + GAP, row);
+        this.place(this.remove, x += BUTTON + GAP, row);
+        this.place(this.flight, x + BUTTON + GAP + 8, row);
 
         /* The world is drawn at the frame's size in real pixels, so the picture is sharp and not stretched */
         double scale = MinecraftClient.getInstance().getWindow().getScaleFactor();
@@ -184,7 +191,7 @@ public class UIRecapViewport extends UIElement
             /* The game's interface over the picture while it looks out of the eye, after the view settings */
             RecapHud.render(context, x, y, w, h);
 
-            String note = !mchorse.bbs_mod.recap.RecapScene.isFirstPerson() ? "editor.track_camera"
+            String note = !mchorse.bbs_mod.recap.RecapScene.isFirstPerson() ? "editor.clip_camera"
                 : (this.editor.getTrack() == null || this.editor.getTrack().isEmpty() ? "editor.no_camera" : "editor.live_world");
 
             this.renderChip(context, font, UIRecapKeys.text(note), x, y, w);

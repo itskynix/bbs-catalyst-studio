@@ -64,6 +64,15 @@ public class UIClipTypeMenu extends UIContextMenu
 
     private static final Icon[] POV_TAB_ICONS = {Icons.FULLSCREEN, Icons.CAMERA, Icons.SUN, Icons.MORE};
 
+    /* Recap Studio's timeline: its cameras, its effects and its general tools, nothing else */
+    private static final String[][] RECAP_CATEGORIES = {
+        mchorse.bbs_mod.recap.RecapClips.CAMERAS,
+        mchorse.bbs_mod.recap.RecapClips.EFFECTS,
+        mchorse.bbs_mod.recap.RecapClips.TOOLS
+    };
+
+    private static final Icon[] RECAP_TAB_ICONS = {Icons.CAMERA, Icons.SPARKLES, Icons.PROPERTIES};
+
     private final String[][] categories;
     private final Icon[] tabIcons;
     private final String tabKey;
@@ -117,12 +126,16 @@ public class UIClipTypeMenu extends UIContextMenu
     public UIClipTypeMenu(IFactory<Clip, ClipFactoryData> factory, Consumer<Link> pick)
     {
         boolean pov = isPov(factory);
+        boolean recap = mchorse.bbs_mod.recap.RecapClips.isRecap(factory);
 
         this.factory = factory;
         this.pick = pick;
-        this.categories = pov ? POV_CATEGORIES : CATEGORIES;
-        this.tabIcons = pov ? POV_TAB_ICONS : TAB_ICONS;
-        this.tabKey = pov ? "bbs.ui.film.pov_clips.tab." : "bbs.ui.camera.fx.tab.";
+        this.categories = recap ? RECAP_CATEGORIES : (pov ? POV_CATEGORIES : CATEGORIES);
+        this.tabIcons = recap ? RECAP_TAB_ICONS : (pov ? POV_TAB_ICONS : TAB_ICONS);
+        this.tabKey = recap ? "bbs.recap.clips.tab." : (pov ? "bbs.ui.film.pov_clips.tab." : "bbs.ui.camera.fx.tab.");
+
+        /* The film's menus end in a tab for whatever no tab names; the recap's lists only what it names */
+        int named = recap ? this.categories.length : this.categories.length - 1;
 
         for (int i = 0; i < this.categories.length; i++)
         {
@@ -142,7 +155,7 @@ public class UIClipTypeMenu extends UIContextMenu
 
         List<Link> sorted = new ArrayList<>();
 
-        for (int i = 0; i < this.categories.length - 1; i++)
+        for (int i = 0; i < named; i++)
         {
             for (String id : this.categories[i])
             {
@@ -159,7 +172,7 @@ public class UIClipTypeMenu extends UIContextMenu
 
         for (Link type : unsorted)
         {
-            if (!sorted.contains(type))
+            if (!recap && !sorted.contains(type))
             {
                 this.tabs.get(this.categories.length - 1).add(type);
             }
@@ -194,6 +207,23 @@ public class UIClipTypeMenu extends UIContextMenu
         this.xy(context.mouseX(), context.mouseY()).bounds(context.menu.overlay, 5);
     }
 
+    /** A type's name in the list: Recap Studio may call a clip its own way, else the clip's own name. */
+    private String nameOf(Link type)
+    {
+        if (this.tabKey.startsWith("bbs.recap."))
+        {
+            String key = "bbs.recap.clips.name." + type.path;
+            String name = L10n.lang(key).get();
+
+            if (!name.equals(key))
+            {
+                return name;
+            }
+        }
+
+        return UIKeys.C_CLIP.get(type).get();
+    }
+
     private String query()
     {
         return this.search.textbox.getText().trim().toLowerCase();
@@ -215,7 +245,7 @@ public class UIClipTypeMenu extends UIContextMenu
         {
             for (Link type : list)
             {
-                if (UIKeys.C_CLIP.get(type).get().toLowerCase().contains(query))
+                if (this.nameOf(type).toLowerCase().contains(query))
                 {
                     found.add(type);
                 }
@@ -388,7 +418,7 @@ public class UIClipTypeMenu extends UIContextMenu
             /* The colour the clip has on the timeline */
             context.batcher.box(this.area.x + PAD, y + 1, this.area.x + PAD + 3, y + ROW_H - 1, Colors.A100 | data.color);
             context.batcher.icon(data.icon, Colors.WHITE, this.area.x + PAD + 8, y + 2);
-            context.batcher.text(UIKeys.C_CLIP.get(type).get(), this.area.x + PAD + 30, y + (ROW_H - font.getHeight()) / 2 + 1, Colors.WHITE);
+            context.batcher.text(this.nameOf(type), this.area.x + PAD + 30, y + (ROW_H - font.getHeight()) / 2 + 1, Colors.WHITE);
         }
 
         if (types.isEmpty())

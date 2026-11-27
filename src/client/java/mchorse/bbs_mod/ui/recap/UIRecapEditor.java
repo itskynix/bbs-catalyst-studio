@@ -9,12 +9,10 @@ import mchorse.bbs_mod.client.BBSRendering;
 import mchorse.bbs_mod.recap.RecapRecord;
 import mchorse.bbs_mod.recap.RecapScene;
 import mchorse.bbs_mod.recap.RecapTrack;
-import mchorse.bbs_mod.recap.RecapTrackKind;
-import mchorse.bbs_mod.utils.keyframes.Keyframe;
-import mchorse.bbs_mod.utils.keyframes.KeyframeChannel;
-import net.minecraft.client.sound.PositionedSoundInstance;
-import net.minecraft.sound.SoundEvent;
-import net.minecraft.util.Identifier;
+import mchorse.bbs_mod.camera.data.Position;
+import mchorse.bbs_mod.recap.RecapClips;
+import mchorse.bbs_mod.ui.Keys;
+import mchorse.bbs_mod.ui.dashboard.UIDashboard;
 import mchorse.bbs_mod.recap.RecapStore;
 import mchorse.bbs_mod.recap.RecapTime;
 import mchorse.bbs_mod.ui.framework.UIContext;
@@ -68,7 +66,7 @@ public class UIRecapEditor extends UIElement
     public final UIRecapDock viewDock;
 
     private final UIRecapViewport viewport;
-    private final UIRecapTracksPanel tracks;
+    private final UIRecapClipsPanel timeline;
     private final UIRecapInfoPanel info;
     private final UIRecapViewPanel view;
 
@@ -79,6 +77,9 @@ public class UIRecapEditor extends UIElement
     private RecapRecord record;
     private RecapTrack track;
     private boolean sceneShown;
+    private Position flight;
+    private final Position lastFlown = new Position();
+    private long lastFlightEdit;
     private int commitClock;
     private int sceneWidth;
     private int sceneHeight;
@@ -113,12 +114,15 @@ public class UIRecapEditor extends UIElement
         undo.relative(this).x(1F, -MARGIN - 104).y(4).w(22).h(18);
 
         this.viewport = new UIRecapViewport(this);
-        this.tracks = new UIRecapTracksPanel(this);
+        this.timeline = new UIRecapClipsPanel(this);
         this.info = new UIRecapInfoPanel(this);
         this.view = new UIRecapViewPanel(this::viewChanged);
 
         this.viewportDock = this.dock("viewport", Icons.VIDEO_CAMERA, this.viewport);
-        this.timelineDock = this.dock("timeline", Icons.TIME, this.tracks);
+        this.timelineDock = this.dock("timeline", Icons.TIME, this.timeline);
+
+        /* F flies the camera, as in the film studio */
+        this.keys().register(Keys.FLIGHT, this::toggleFlight).active(() -> this.record != null && this.sceneShown);
         this.infoDock = this.dock("info", Icons.FILE, this.info);
         this.viewDock = this.dock("view", Icons.VISIBLE, this.view);
 
@@ -176,7 +180,7 @@ public class UIRecapEditor extends UIElement
             this.history.reset(UIRecapKeys.text("history.opened"), record, this.layout);
         }
 
-        this.tracks.rebuild();
+        this.timeline.setRecord(record);
 
         if (record != null)
         {
@@ -242,7 +246,7 @@ public class UIRecapEditor extends UIElement
         RecapScene.setPlaying(this.playing);
 
         /* Always the recap's camera: the recorded eye, or for a recap kept before the camera was
-         * the player's own, and the camera tracks over either */
+         * the player's own, and the timeline's clips over either */
         if (!controller.has(RecapScene.INSTANCE))
         {
             controller.add(RecapScene.INSTANCE);
@@ -260,6 +264,7 @@ public class UIRecapEditor extends UIElement
             return;
         }
 
+        this.setFlight(false);
         this.sceneShown = false;
         RecapScene.hide();
         BBSModClient.getCameraController().remove(RecapScene.INSTANCE);
@@ -293,7 +298,7 @@ public class UIRecapEditor extends UIElement
          * between presses so a drag in progress is one step when it is let go */
         if (++this.commitClock % 10 == 0 && GLFW.glfwGetMouseButton(MinecraftClient.getInstance().getWindow().getHandle(), GLFW.GLFW_MOUSE_BUTTON_LEFT) != GLFW.GLFW_PRESS)
         {
-            this.commitTracks();
+            this.commitTimeline();
         }
 
         if (!this.playing)
@@ -301,10 +306,7 @@ public class UIRecapEditor extends UIElement
             return;
         }
 
-        int from = this.cursor;
-
         this.cursor += 1;
-        this.playAudio(from, this.cursor);
 
         if (this.cursor >= this.getLength())
         {
@@ -314,48 +316,97 @@ public class UIRecapEditor extends UIElement
     }
 
     /**
-     * The audio track while playing: each keyframe the cursor passed this tick, from {@code from}
-     * up to but not including {@code to}, plays its sound once. Scrubbing plays nothing.
+     * After an edit on the timeline: a step of the history when the clips really changed, and the
+     * recap written. Called on every release over the timeline, so it compares before it writes.
+     * Tracking clips put down with no one picked are pointed at the player first.
      */
-    private void playAudio(int from, int to)
+    public void commitTimeline()
     {
-        if (this.record == null || this.record.tracks.isEmpty(RecapTrackKind.AUDIO))
+        if (this.record == null)
         {
             return;
         }
 
-        KeyframeChannel<String> audio = this.record.tracks.get(RecapTrackKind.AUDIO);
-
-        for (Keyframe<String> keyframe : audio.getKeyframes())
+        if (RecapClips.aimAtPlayer(this.record.clips))
         {
-            float tick = keyframe.getTick();
+            this.timeline.fillData();
+        }
 
-            if (tick >= from && tick < to && keyframe.getValue() != null)
-            {
-                Identifier id = Identifier.tryParse(keyframe.getValue().trim());
-
-                if (id != null)
-                {
-                    MinecraftClient.getInstance().getSoundManager().play(PositionedSoundInstance.master(SoundEvent.of(id), 1F));
-                }
-            }
+        if (this.history.push(UIRecapKeys.text("history.timeline"), null, this.record, this.layout))
+        {
+            this.save();
         }
     }
 
-    public UIRecapTracksPanel getTracksPanel()
+    /* Flight */
+
+    public boolean isFlying()
     {
-        return this.tracks;
+        return this.flight != null;
+    }
+
+    public void toggleFlight()
+    {
+        this.setFlight(!this.isFlying());
     }
 
     /**
-     * After an edit on the timeline: a step of the history when the tracks really changed, and the
-     * recap written. Called on every release over the timeline, so it compares before it writes.
+     * Flying: the camera is flown by hand from where it was, with the keys and the mouse as in the
+     * film studio, and while a clip is picked and the recap holds still, where it is flown to is
+     * put into that clip at the cursor. Landing gives the camera back to the clips.
      */
-    public void commitTracks()
+    public void setFlight(boolean flight)
     {
-        if (this.record != null && this.history.push(UIRecapKeys.text("history.tracks"), null, this.record, this.layout))
+        UIDashboard dashboard = this.panel.dashboard;
+
+        if (flight == this.isFlying() || (flight && !this.sceneShown))
         {
-            this.save();
+            return;
+        }
+
+        if (flight)
+        {
+            this.flight = new Position();
+            this.flight.set(RecapScene.getLast());
+            this.lastFlown.set(this.flight);
+            dashboard.orbit.setup(BBSModClient.getCameraController().camera);
+            RecapScene.setManual(this.flight);
+        }
+        else
+        {
+            this.flight = null;
+            RecapScene.setManual(null);
+            this.commitTimeline();
+        }
+
+        dashboard.orbitUI.setControl(flight);
+    }
+
+    /** Each frame: the flown camera follows the keys, and keys its pose into the picked clip now and then. */
+    private void updateFlight()
+    {
+        UIDashboard dashboard = this.panel.dashboard;
+
+        if (this.flight == null)
+        {
+            /* Kept on the camera shown, so a flight starts where the picture is */
+            if (BBSModClient.getCameraController().camera != null)
+            {
+                dashboard.orbit.setup(BBSModClient.getCameraController().camera);
+            }
+
+            return;
+        }
+
+        dashboard.orbit.apply(this.flight);
+
+        long now = System.currentTimeMillis();
+
+        if (!this.playing && this.timeline.getClip() != null && !this.lastFlown.equals(this.flight) && now - this.lastFlightEdit > 100L)
+        {
+            this.lastFlightEdit = now;
+            this.lastFlown.set(this.flight);
+            this.timeline.editClip(new Position(this.flight.point, this.flight.angle));
         }
     }
 
@@ -461,7 +512,7 @@ public class UIRecapEditor extends UIElement
         this.layouts.save();
         this.info.fill(this.record);
         this.view.fill(this.record);
-        this.tracks.rebuild();
+        this.timeline.setRecord(this.record);
         this.resize();
     }
 
@@ -872,6 +923,8 @@ public class UIRecapEditor extends UIElement
     @Override
     public void render(UIContext context)
     {
+        this.updateFlight();
+
         RecapStyle.backdrop(context.batcher, this.area);
         RecapStyle.surface(context.batcher, this.area.x, this.area.y, this.area.ex(), this.area.y + TOP - 4, 0, false);
 
