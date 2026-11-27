@@ -63,6 +63,8 @@
         "RecapLimbAccessor",
         "RecapLivingAccessor",
         "RecapEntityFlagInvoker",
+        "RecapWorldWeatherAccessor",
+        "RecapClientTimeAccessor",
         "ClientWorldPropertiesMixin",
         "sodium.SodiumBufferBuilderAccessor",
         "sodium.ColorAttributeMixin",

@@ -56,8 +56,11 @@ public final class RecapScene implements ICameraController
     private static final Position LAST = new Position();
     private static Position manual;
 
-    /* How the recorded player moved, when the recap has it; its blocks are the world overlay's */
+    /* How the recorded player moved and the world around it, when the recap has them; its blocks
+     * are the world overlay's */
     private static RecapMotion motion;
+    private static RecapEnvironment environment;
+    private static final RecapEnvironment.Sample AROUND = new RecapEnvironment.Sample();
 
     /** The free camera: where the viewport looks from while no camera clip is under the cursor. */
     private static final Position FREE = new Position();
@@ -73,7 +76,7 @@ public final class RecapScene implements ICameraController
     private RecapScene()
     {}
 
-    public static void show(RecapRecord shown, RecapTrack camera, RecapMotion moves, RecapEvents changes, IntSupplier at)
+    public static void show(RecapRecord shown, RecapTrack camera, RecapMotion moves, RecapEvents changes, RecapEnvironment around, IntSupplier at)
     {
         /* The blocks of another recap shown before go back to the world's own first */
         RecapWorldOverlay.attach(changes);
@@ -84,6 +87,7 @@ public final class RecapScene implements ICameraController
         }
 
         motion = moves;
+        environment = around;
 
         MinecraftClient mc = MinecraftClient.getInstance();
 
@@ -112,6 +116,7 @@ public final class RecapScene implements ICameraController
         record = null;
         track = null;
         motion = null;
+        environment = null;
         freeSet = false;
         playing = false;
     }
@@ -307,6 +312,20 @@ public final class RecapScene implements ICameraController
 
     /* Overrides */
 
+    /**
+     * The world around as the recording had it at the moment drawn, after the speed and freeze
+     * clips; false for a recap kept before it was.
+     */
+    private static boolean around()
+    {
+        return isActive() && environment != null && environment.sample(RecapClips.sourceTime(record.clips, time()), AROUND);
+    }
+
+    /**
+     * The time of day the sky is drawn with. What decides it, first to last: the day time and
+     * timelapse clips, the view settings' time, the time recorded, the world's own. Only drawn:
+     * the world is never told another time.
+     */
     public static Long timeOfDay()
     {
         if (!isActive())
@@ -314,19 +333,39 @@ public final class RecapScene implements ICameraController
             return null;
         }
 
-        Long clipped = RecapClips.dayTime(record.clips, time(), on(RecapOption.TIME_OF_DAY) ? record.getValue(RecapOption.TIME_OF_DAY) : baseDayTime);
+        boolean set = on(RecapOption.TIME_OF_DAY);
+        Long recorded = !set && around() ? AROUND.time : null;
+        long base = set ? record.getValue(RecapOption.TIME_OF_DAY) : (recorded != null ? recorded : baseDayTime);
+        Long clipped = RecapClips.dayTime(record.clips, time(), base);
 
         if (clipped != null)
         {
             return clipped;
         }
 
-        return on(RecapOption.TIME_OF_DAY) ? (long) record.getValue(RecapOption.TIME_OF_DAY) : null;
+        return set ? (long) record.getValue(RecapOption.TIME_OF_DAY) : recorded;
     }
 
+    /** The rain drawn: the view settings' weather, else the rain recorded, else the world's own. */
     public static Double weather()
     {
-        return on(RecapOption.WEATHER) ? (record.getValue(RecapOption.WEATHER) > 0 ? 1D : 0D) : null;
+        if (on(RecapOption.WEATHER))
+        {
+            return record.getValue(RecapOption.WEATHER) > 0 ? 1D : 0D;
+        }
+
+        return around() ? (double) AROUND.rain : null;
+    }
+
+    /** The thunder drawn: storm in the view settings' weather, else the thunder recorded, else the world's own. */
+    public static Double thunder()
+    {
+        if (on(RecapOption.WEATHER))
+        {
+            return record.getValue(RecapOption.WEATHER) > 1 ? 1D : 0D;
+        }
+
+        return around() ? (double) AROUND.thunder : null;
     }
 
     public static Integer fogColor()

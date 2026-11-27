@@ -43,6 +43,16 @@ public final class RecapRecorder
     /** The longest instant recap the setting allows, in ticks: what the play buffer keeps. */
     private static final int BUFFER_LIMIT = 600 * 20;
 
+    /**
+     * The most block changes a recording keeps, about forty four megabytes of them: past it the
+     * camera, the movement and the sky go on and the blocks stop, with a word when it is near and
+     * when it is reached. The play buffer keeps half as many, its oldest going first.
+     */
+    public static final int EVENT_LIMIT = 2_000_000;
+    private static final int PLAYED_EVENT_LIMIT = EVENT_LIMIT / 2;
+    private static boolean eventsNear;
+    private static boolean eventsFull;
+
     private static State state = State.IDLE;
     private static int ticks;
     private static final List<Integer> markers = new ArrayList<>();
@@ -50,6 +60,7 @@ public final class RecapRecorder
     private static final RecapMotion motion = new RecapMotion();
     private static final RecapEvents events = new RecapEvents();
     private static final RecapDimensions dimensions = new RecapDimensions();
+    private static final RecapEnvironment environment = new RecapEnvironment();
     private static RecapWorlds.Info world;
 
     private static int playedTicks;
@@ -58,6 +69,7 @@ public final class RecapRecorder
     private static final RecapMotion playedMotion = new RecapMotion();
     private static final RecapEvents playedEvents = new RecapEvents();
     private static final RecapDimensions playedDimensions = new RecapDimensions();
+    private static final RecapEnvironment playedEnvironment = new RecapEnvironment();
 
     private RecapRecorder()
     {}
@@ -113,6 +125,7 @@ public final class RecapRecorder
             ticks += 1;
             sample(mc, track);
             sampleMotion(mc, motion);
+            sampleEnvironment(mc, environment);
             dimensions.mark(ticks - 1, RecapWorldOverlay.dimensionOf(mc.world));
         }
 
@@ -126,6 +139,8 @@ public final class RecapRecorder
         playedTrack.trim(BUFFER_LIMIT);
         sampleMotion(mc, playedMotion);
         playedMotion.trim(BUFFER_LIMIT);
+        sampleEnvironment(mc, playedEnvironment);
+        playedEnvironment.trim(BUFFER_LIMIT);
         playedEvents.dropBefore(playedTicks - BUFFER_LIMIT);
         playedDimensions.mark(playedTicks - 1, RecapWorldOverlay.dimensionOf(mc.world));
         playedDimensions.dropBefore(playedTicks - BUFFER_LIMIT);
@@ -153,6 +168,19 @@ public final class RecapRecorder
     }
 
     /**
+     * The world around this tick, read from the world's own values: never the time or weather a
+     * shown recap or a film draws over them.
+     */
+    private static void sampleEnvironment(MinecraftClient mc, RecapEnvironment into)
+    {
+        net.minecraft.client.world.ClientWorld world = mc.world;
+        long time = ((mchorse.bbs_mod.mixin.client.RecapClientTimeAccessor) world.getLevelProperties()).bbs$getTimeOfDay();
+        mchorse.bbs_mod.mixin.client.RecapWorldWeatherAccessor weather = (mchorse.bbs_mod.mixin.client.RecapWorldWeatherAccessor) world;
+
+        into.add(time, weather.bbs$getRainGradient(), weather.bbs$getThunderGradient());
+    }
+
+    /**
      * A block of a client world changed: broken, placed or used. It goes into the running recording
      * at its tick, and into the instant stretch while play is going on, each with the dimension it
      * changed in; the recap's own blocks put in by Recap Studio are not play and are left out. A
@@ -171,12 +199,32 @@ public final class RecapRecorder
 
         if (state == State.RECORDING)
         {
-            events.add(ticks, pos, from, to, dimension);
+            if (events.size() < EVENT_LIMIT)
+            {
+                events.add(ticks, pos, from, to, dimension);
+
+                if (!eventsNear && events.size() >= EVENT_LIMIT / 4 * 3)
+                {
+                    eventsNear = true;
+                    say("bbs.recap.message.events_near");
+                }
+            }
+            else if (!eventsFull)
+            {
+                eventsFull = true;
+                say("bbs.recap.message.events_full");
+            }
         }
 
         if (in != null && !RecapScene.isActive())
         {
             playedEvents.add(playedTicks, pos, from, to, dimension);
+
+            if (playedEvents.size() > PLAYED_EVENT_LIMIT)
+            {
+                /* In a chunk, so the front is moved on now and then rather than every change */
+                playedEvents.dropFirst(playedEvents.size() - PLAYED_EVENT_LIMIT + PLAYED_EVENT_LIMIT / 16);
+            }
         }
     }
 
@@ -211,6 +259,8 @@ public final class RecapRecorder
         track.clear();
         motion.clear();
         events.clear();
+        environment.clear();
+        eventsNear = eventsFull = false;
         dimensions.clear();
         state = State.RECORDING;
 
@@ -240,7 +290,7 @@ public final class RecapRecorder
         /* The session ends here whatever comes of the writing: no clock runs behind it */
         state = State.STOPPED;
 
-        RecapRecord record = create(world, ticks, markers, track, motion, events, dimensions, false);
+        RecapRecord record = create(world, ticks, markers, track, motion, events, dimensions, environment, false);
 
         if (record != null)
         {
@@ -316,7 +366,7 @@ public final class RecapRecorder
             }
         }
 
-        return create(info, length, inside, RecapTrack.tail(playedTrack, length), RecapMotion.tail(playedMotion, length), RecapEvents.tail(playedEvents, from), RecapDimensions.tail(playedDimensions, from), true);
+        return create(info, length, inside, RecapTrack.tail(playedTrack, length), RecapMotion.tail(playedMotion, length), RecapEvents.tail(playedEvents, from), RecapDimensions.tail(playedDimensions, from), RecapEnvironment.tail(playedEnvironment, length), true);
     }
 
     /** The record key: starts a recording, and saves the one running or stopped. */
@@ -431,6 +481,7 @@ public final class RecapRecorder
         playedTrack.clear();
         playedMotion.clear();
         playedEvents.clear();
+        playedEnvironment.clear();
         playedDimensions.clear();
     }
 
@@ -453,11 +504,13 @@ public final class RecapRecorder
         track.clear();
         motion.clear();
         events.clear();
+        environment.clear();
+        eventsNear = eventsFull = false;
         dimensions.clear();
         world = null;
     }
 
-    private static RecapRecord create(RecapWorlds.Info info, int length, List<Integer> marked, RecapTrack camera, RecapMotion moves, RecapEvents changes, RecapDimensions places, boolean instant)
+    private static RecapRecord create(RecapWorlds.Info info, int length, List<Integer> marked, RecapTrack camera, RecapMotion moves, RecapEvents changes, RecapDimensions places, RecapEnvironment around, boolean instant)
     {
         RecapRecord record = new RecapRecord();
         LocalDateTime now = LocalDateTime.now();
@@ -485,6 +538,7 @@ public final class RecapRecorder
         RecapStore.saveTrack(record, camera);
         RecapStore.saveMotion(record, moves);
         RecapStore.saveEvents(record, changes);
+        RecapStore.saveEnvironment(record, around);
 
         return record;
     }

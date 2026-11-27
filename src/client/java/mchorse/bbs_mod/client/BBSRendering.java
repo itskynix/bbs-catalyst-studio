@@ -761,14 +761,17 @@ public class BBSRendering
 
         frameCapturedThisRender = true;
 
-        boolean needsExportFrame = pendingExportResolutionAction != null || BBSModClient.getVideoRecorder().isRecording();
+        /* A video frame of a shown recap is only taken once all its blocks and their light are in */
+        boolean recording = BBSModClient.getVideoRecorder().isRecording()
+            && !(mchorse.bbs_mod.recap.RecapScene.isActive() && !mchorse.bbs_mod.recap.RecapWorldOverlay.isSettled());
+        boolean needsExportFrame = pendingExportResolutionAction != null || recording;
 
         if (needsExportFrame && canRender)
         {
             captureExportFrame();
         }
 
-        if (BBSModClient.getVideoRecorder().isRecording() && canRender)
+        if (recording && canRender)
         {
             BBSModClient.getMinecraftSoundCapture().captureFrame();
             BBSModClient.getVideoRecorder().recordFrame();
@@ -1290,9 +1293,23 @@ public class BBSRendering
 
     public static Double getWeather()
     {
+        return getWeather(true);
+    }
+
+    /**
+     * The rain drawn: a film's weather curve as before, for any world; else a shown recap's
+     * weather, for the client world only, so the single player server never takes it for real.
+     */
+    public static Double getWeather(boolean clientWorld)
+    {
         Double value = getCurveValue(ShaderCurves.WEATHER, CurveClip::getValues);
 
-        return value != null ? value : mchorse.bbs_mod.recap.RecapScene.weather();
+        if (value != null || !clientWorld)
+        {
+            return value;
+        }
+
+        return mchorse.bbs_mod.recap.RecapScene.weather();
     }
 
     public static float getSunHorizontalRotation()

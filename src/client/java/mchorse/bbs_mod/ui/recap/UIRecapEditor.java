@@ -81,6 +81,7 @@ public class UIRecapEditor extends UIElement
     private RecapTrack track;
     private mchorse.bbs_mod.recap.RecapMotion motion;
     private mchorse.bbs_mod.recap.RecapEvents events;
+    private mchorse.bbs_mod.recap.RecapEnvironment environment;
     private boolean sceneShown;
     private Position flight;
     private final Position lastFlown = new Position();
@@ -192,6 +193,7 @@ public class UIRecapEditor extends UIElement
         this.track = RecapStore.loadTrack(record);
         this.motion = RecapStore.loadMotion(record);
         this.events = RecapStore.loadEvents(record);
+        this.environment = RecapStore.loadEnvironment(record);
         this.cursor = 0;
         this.stopPlayback();
 
@@ -270,7 +272,7 @@ public class UIRecapEditor extends UIElement
 
         CameraController controller = BBSModClient.getCameraController();
 
-        RecapScene.show(this.record, this.track, this.motion, this.events, this::getCursor);
+        RecapScene.show(this.record, this.track, this.motion, this.events, this.environment, this::getCursor);
         RecapScene.setPlaying(this.playing);
 
         /* Always the recap's camera: the recorded eye, or for a recap kept before the camera was

@@ -106,6 +106,7 @@ public final class RecapStore
         trackFile(record.id).delete();
         new File(folder(), record.id + ".motion").delete();
         new File(folder(), record.id + ".world").delete();
+        new File(folder(), record.id + ".env").delete();
 
         return file(record.id).delete();
     }
@@ -142,6 +143,17 @@ public final class RecapStore
     public static RecapEvents loadEvents(RecapRecord record)
     {
         return record == null || record.id.isEmpty() ? null : RecapEvents.read(new File(folder(), record.id + ".world"));
+    }
+
+    /** Writes the time of day and the weather of every tick, next to the recap. */
+    public static boolean saveEnvironment(RecapRecord record, RecapEnvironment environment)
+    {
+        return !record.id.isEmpty() && environment != null && environment.write(new File(folder(), record.id + ".env"));
+    }
+
+    public static RecapEnvironment loadEnvironment(RecapRecord record)
+    {
+        return record == null || record.id.isEmpty() ? null : RecapEnvironment.read(new File(folder(), record.id + ".env"));
     }
 
     private static File trackFile(String id)

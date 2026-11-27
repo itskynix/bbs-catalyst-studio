@@ -3100,6 +3100,8 @@
     "bbs.recap.view.hud_note": "Dışa aktarma için saklanır, görüntü alanı sahneyi gösterir",
     "bbs.recap.message.instant_saved": "Anında kayıt kaydedildi",
     "bbs.recap.message.instant_empty": "Kaydedilecek oynanış henüz yok",
+    "bbs.recap.message.events_near": "Kayıt blok değişikliği sınırına yaklaştı",
+    "bbs.recap.message.events_full": "Blok değişikliği sınırına ulaşıldı: kamera, hareket ve gökyüzü sürüyor, bloklar artık kaydedilmiyor",
     "bbs.recap.message.instant_off": "Anında Kayıt kapalı, Recap ayarlarından aç",
     "bbs.recap.history.undo": "Geri al, Ctrl Z",
     "bbs.recap.history.redo": "Yinele, Ctrl Y",

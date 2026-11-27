@@ -1,6 +1,7 @@
 package mchorse.bbs_mod.recap;
 
 import it.unimi.dsi.fastutil.ints.IntArrayList;
+import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongArrayList;
@@ -13,9 +14,9 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
+import net.minecraft.util.math.ChunkSectionPos;
 import net.minecraft.world.chunk.WorldChunk;
-
-import java.util.List;
+import net.minecraft.world.chunk.light.LightingProvider;
 
 /**
  * The one owner of the blocks Recap Studio puts on the world: while a recap is shown, every block
@@ -31,17 +32,28 @@ import java.util.List;
  * the overlay sets it, and kept up to date after: a change the server sends for one of them while
  * the recap is shown (another player, a piston, an explosion) becomes its real state, and the
  * recap's block goes back over it; a chunk let go of forgets its real blocks, a chunk sent again
- * brings them back. Putting them back ({@link #detach}) therefore gives the world as it is.</p>
+ * brings them back. Putting them back ({@link #detach}) therefore gives the world as it is, all at
+ * once.</p>
  *
  * <p><b>Dimensions.</b> Only the changes of the dimension the client is in are put on the world;
  * a change made in another dimension is never put at the same coordinates here.</p>
  *
- * <p><b>Cost.</b> The first moment shown sets every block the recap touched; after that, moving
- * the cursor from one tick to another only sets the blocks changed between the two, so scrubbing
- * a long recap with thousands of changes costs what changes between the two moments.</p>
+ * <p><b>Cost.</b> Moving the cursor from one tick to another only touches the blocks changed
+ * between the two, in either direction. Those blocks wait in a queue, by chunk section, and a
+ * frame sets no more than {@link #BUDGET} of them, whole sections at a time so each section is
+ * rebuilt once: a tick that blew up fifty thousand blocks comes in over a few frames instead of
+ * stopping one. What a queued block is set to is read when it is set, from the latest cursor, so
+ * the queue is never behind the picture by more than its length.</p>
+ *
+ * <p><b>Video.</b> While a video is being recorded every frame is whole: the queue is emptied with
+ * no budget, sections are rebuilt on the spot and the light is brought up to date before the
+ * frame is drawn, and a frame is not taken until all of it is done ({@link #isSettled}).</p>
  */
 public final class RecapWorldOverlay
 {
+    /** How many blocks a frame sets while playing or scrubbing. */
+    public static final int BUDGET = 2000;
+
     private static RecapEvents source;
     private static int sourceRevision;
 
@@ -52,8 +64,9 @@ public final class RecapWorldOverlay
 
     /** The real state of every block set, by position. */
     private static final Long2ObjectOpenHashMap<BlockState> live = new Long2ObjectOpenHashMap<>();
-    /** Blocks the recap's state must be put on again at the same tick: a real change came over them. */
-    private static final LongOpenHashSet dirty = new LongOpenHashSet();
+    /** The blocks waiting to be set to the cursor's state, by chunk section, oldest section first. */
+    private static final Long2ObjectLinkedOpenHashMap<LongOpenHashSet> queue = new Long2ObjectLinkedOpenHashMap<>();
+    private static int queued;
     private static final LongOpenHashSet changed = new LongOpenHashSet();
     private static int appliedTick = Integer.MIN_VALUE;
 
@@ -80,6 +93,26 @@ public final class RecapWorldOverlay
         return world;
     }
 
+    /** How many blocks still wait to be set. */
+    public static int getQueued()
+    {
+        return queued;
+    }
+
+    /**
+     * Whether the world shows the cursor's blocks fully: none waiting, and the client's light done
+     * with them. A video frame is only taken then.
+     */
+    public static boolean isSettled()
+    {
+        if (source == null || world == null)
+        {
+            return true;
+        }
+
+        return queued == 0 && !world.getLightingProvider().hasUpdates();
+    }
+
     /** Shows these changes; the ones shown before are taken off first, unless they are these. */
     public static void attach(RecapEvents events)
     {
@@ -95,8 +128,8 @@ public final class RecapWorldOverlay
     }
 
     /**
-     * Takes everything off: the blocks go back to what the world really has, when the world they
-     * were put on is still the one the client is in; else they are simply let go of.
+     * Takes everything off: the blocks go back to what the world really has, all at once, when the
+     * world they were put on is still the one the client is in; else they are simply let go of.
      */
     public static void detach()
     {
@@ -124,7 +157,8 @@ public final class RecapWorldOverlay
         dimension = null;
         index = null;
         live.clear();
-        dirty.clear();
+        queue.clear();
+        queued = 0;
         changed.clear();
         appliedTick = Integer.MIN_VALUE;
     }
@@ -143,7 +177,15 @@ public final class RecapWorldOverlay
         return world == null ? null : world.getRegistryKey().getValue().toString();
     }
 
-    /** Puts the recap's blocks of {@code tick} on {@code into}, the client's world. */
+    private static boolean isExporting()
+    {
+        return mchorse.bbs_mod.BBSModClient.getVideoRecorder().isRecording();
+    }
+
+    /**
+     * Once a frame: puts the recap's blocks of {@code tick} on {@code into}, the client's world, as
+     * many as the frame's budget allows, all of them while a video is being recorded.
+     */
     public static void update(ClientWorld into, int tick)
     {
         if (source == null || into == null)
@@ -161,8 +203,8 @@ public final class RecapWorldOverlay
 
         if (index == null || sourceRevision != source.getRevision())
         {
+            index = new Index(source, dimension);
             sourceRevision = source.getRevision();
-            index = new Index(source.getEvents(), dimension);
             appliedTick = Integer.MIN_VALUE;
         }
 
@@ -171,32 +213,77 @@ public final class RecapWorldOverlay
             return;
         }
 
+        if (appliedTick == Integer.MIN_VALUE)
+        {
+            /* The first moment: every block of this dimension the recap touched, chunk by chunk */
+            for (Long2ObjectMap.Entry<long[]> entry : index.byChunk.long2ObjectEntrySet())
+            {
+                if (isLoaded(entry.getLongKey()))
+                {
+                    for (long pos : entry.getValue())
+                    {
+                        enqueue(pos);
+                    }
+                }
+            }
+        }
+        else if (tick != appliedTick)
+        {
+            /* Only the blocks changed between the last moment and this one */
+            index.changedBetween(appliedTick, tick, changed);
+
+            LongIterator it = changed.iterator();
+
+            while (it.hasNext())
+            {
+                enqueue(it.nextLong());
+            }
+
+            changed.clear();
+        }
+
+        appliedTick = tick;
+
+        boolean exporting = isExporting();
+
+        drain(exporting ? Integer.MAX_VALUE : BUDGET, exporting);
+
+        if (exporting)
+        {
+            settleLight();
+        }
+    }
+
+    private static void enqueue(long pos)
+    {
+        if (queue.computeIfAbsent(ChunkSectionPos.fromBlockPos(pos), (key) -> new LongOpenHashSet()).add(pos))
+        {
+            queued += 1;
+        }
+    }
+
+    /** Sets queued blocks, whole sections at a time, until {@code budget} blocks were looked at. */
+    private static void drain(int budget, boolean onTheSpot)
+    {
+        if (queue.isEmpty())
+        {
+            return;
+        }
+
+        int flags = Block.NOTIFY_LISTENERS | Block.FORCE_STATE | (onTheSpot ? Block.REDRAW_ON_MAIN_THREAD : 0);
+        int done = 0;
+
         applying = true;
 
         try
         {
-            if (appliedTick == Integer.MIN_VALUE)
+            while (!queue.isEmpty() && done < budget)
             {
-                /* The first moment: every block of this dimension the recap touched */
-                for (Long2ObjectMap.Entry<long[]> entry : index.byChunk.long2ObjectEntrySet())
-                {
-                    if (isLoaded(entry.getLongKey()))
-                    {
-                        for (long pos : entry.getValue())
-                        {
-                            put(pos, tick);
-                        }
-                    }
-                }
+                LongOpenHashSet section = queue.removeFirst();
 
-                dirty.clear();
-            }
-            else if (tick != appliedTick)
-            {
-                /* Only the blocks changed between the last moment and this one */
-                index.changedBetween(appliedTick, tick, changed);
+                queued -= section.size();
 
-                LongIterator it = changed.iterator();
+                LongIterator it = section.iterator();
 
                 while (it.hasNext())
                 {
@@ -204,31 +291,12 @@ public final class RecapWorldOverlay
 
                     if (isLoaded(chunkOf(pos)))
                     {
-                        put(pos, tick);
+                        put(pos, appliedTick, flags);
                     }
+
+                    done += 1;
                 }
-
-                changed.clear();
             }
-
-            if (!dirty.isEmpty())
-            {
-                LongIterator it = dirty.iterator();
-
-                while (it.hasNext())
-                {
-                    long pos = it.nextLong();
-
-                    if (isLoaded(chunkOf(pos)))
-                    {
-                        put(pos, tick);
-                    }
-                }
-
-                dirty.clear();
-            }
-
-            appliedTick = tick;
         }
         finally
         {
@@ -236,8 +304,19 @@ public final class RecapWorldOverlay
         }
     }
 
+    /** Brings the client's light up to date with the blocks set, before the frame is drawn. */
+    private static void settleLight()
+    {
+        LightingProvider light = world.getLightingProvider();
+
+        for (int i = 0; i < 64 && light.hasUpdates(); i++)
+        {
+            light.doLightUpdates();
+        }
+    }
+
     /** Sets one block to the recap's state at {@code tick}, its real state kept first. */
-    private static void put(long packed, int tick)
+    private static void put(long packed, int tick, int flags)
     {
         BlockState wanted = index.stateAt(packed, tick);
 
@@ -253,15 +332,15 @@ public final class RecapWorldOverlay
 
         if (wanted != current)
         {
-            set(pos, wanted);
+            set(pos, wanted, flags);
         }
     }
 
-    private static void set(BlockPos pos, BlockState state)
+    private static void set(BlockPos pos, BlockState state, int flags)
     {
         try
         {
-            world.setBlockState(pos, state, Block.NOTIFY_LISTENERS | Block.FORCE_STATE);
+            world.setBlockState(pos, state, flags);
         }
         catch (RuntimeException e)
         {
@@ -274,6 +353,7 @@ public final class RecapWorldOverlay
         }
     }
 
+    /** Every block set goes back to its real state, all at once, with no budget. */
     private static void writeBack()
     {
         if (live.isEmpty())
@@ -298,7 +378,7 @@ public final class RecapWorldOverlay
 
                 if (world.getBlockState(pos) != entry.getValue())
                 {
-                    set(pos, entry.getValue());
+                    set(pos, entry.getValue(), Block.NOTIFY_LISTENERS | Block.FORCE_STATE);
                 }
             }
         }
@@ -326,7 +406,7 @@ public final class RecapWorldOverlay
         if (index.touches(packed))
         {
             live.put(packed, to);
-            dirty.add(packed);
+            enqueue(packed);
         }
     }
 
@@ -350,7 +430,7 @@ public final class RecapWorldOverlay
         for (long packed : positions)
         {
             live.put(packed, chunk.getBlockState(pos.set(packed)));
-            dirty.add(packed);
+            enqueue(packed);
         }
     }
 
@@ -372,11 +452,23 @@ public final class RecapWorldOverlay
         for (long packed : positions)
         {
             live.remove(packed);
-            dirty.remove(packed);
+
+            long key = ChunkSectionPos.fromBlockPos(packed);
+            LongOpenHashSet section = queue.get(key);
+
+            if (section != null && section.remove(packed))
+            {
+                queued -= 1;
+
+                if (section.isEmpty())
+                {
+                    queue.remove(key);
+                }
+            }
         }
     }
 
-    private static long chunkOf(long packed)
+    static long chunkOf(long packed)
     {
         return ChunkPos.toLong(BlockPos.unpackLongX(packed) >> 4, BlockPos.unpackLongZ(packed) >> 4);
     }
@@ -387,46 +479,35 @@ public final class RecapWorldOverlay
     }
 
     /**
-     * The changes of one dimension, laid out for quick lookups: each block's changes in the order
-     * of their ticks, the blocks of each chunk, and all the changes by tick.
+     * The changes of one dimension, laid out for quick lookups: all of them by tick, each block's
+     * changes in the order of their ticks, and the blocks of each chunk.
      */
     static final class Index
     {
-        private final List<RecapEvents.Event> events;
-        /** Indices of the dimension's changes, in the order of their ticks. */
+        private final RecapEvents events;
+        /** The dimension's changes, as places in the (sorted) events. */
         private final int[] order;
         private final int[] orderTicks;
         private final Long2ObjectOpenHashMap<int[]> byPos = new Long2ObjectOpenHashMap<>();
         final Long2ObjectOpenHashMap<long[]> byChunk = new Long2ObjectOpenHashMap<>();
 
-        Index(List<RecapEvents.Event> events, String dimension)
+        Index(RecapEvents events, String dimension)
         {
+            events.sort();
+
             this.events = events;
 
             IntArrayList kept = new IntArrayList();
-            boolean sorted = true;
-            int last = Integer.MIN_VALUE;
 
             for (int i = 0; i < events.size(); i++)
             {
-                RecapEvents.Event event = events.get(i);
-
-                if (event.isIn(dimension))
+                if (events.isIn(i, dimension))
                 {
                     kept.add(i);
-                    sorted &= event.tick() >= last;
-                    last = Math.max(last, event.tick());
                 }
             }
 
             this.order = kept.toIntArray();
-
-            if (!sorted)
-            {
-                /* Stable by tick, so changes of one tick keep the order they happened in */
-                it.unimi.dsi.fastutil.ints.IntArrays.mergeSort(this.order, (a, b) -> Integer.compare(events.get(a).tick(), events.get(b).tick()));
-            }
-
             this.orderTicks = new int[this.order.length];
 
             Long2ObjectOpenHashMap<IntArrayList> positions = new Long2ObjectOpenHashMap<>();
@@ -434,19 +515,20 @@ public final class RecapWorldOverlay
 
             for (int i = 0; i < this.order.length; i++)
             {
-                RecapEvents.Event event = events.get(this.order[i]);
-                IntArrayList list = positions.get(event.pos());
+                int at = this.order[i];
+                long pos = events.pos(at);
+                IntArrayList list = positions.get(pos);
 
-                this.orderTicks[i] = event.tick();
+                this.orderTicks[i] = events.tick(at);
 
                 if (list == null)
                 {
                     list = new IntArrayList(2);
-                    positions.put(event.pos(), list);
-                    chunks.computeIfAbsent(chunkOf(event.pos()), (key) -> new LongArrayList()).add(event.pos());
+                    positions.put(pos, list);
+                    chunks.computeIfAbsent(chunkOf(pos), (key) -> new LongArrayList()).add(pos);
                 }
 
-                list.add(this.order[i]);
+                list.add(at);
             }
 
             for (Long2ObjectMap.Entry<IntArrayList> entry : positions.long2ObjectEntrySet())
@@ -488,7 +570,7 @@ public final class RecapWorldOverlay
             {
                 int middle = (low + high) >>> 1;
 
-                if (this.events.get(list[middle]).tick() <= tick)
+                if (this.events.tick(list[middle]) <= tick)
                 {
                     found = middle;
                     low = middle + 1;
@@ -499,10 +581,10 @@ public final class RecapWorldOverlay
                 }
             }
 
-            return found < 0 ? this.events.get(list[0]).from() : this.events.get(list[found]).to();
+            return found < 0 ? this.events.from(list[0]) : this.events.to(list[found]);
         }
 
-        /** The blocks with a change after the earlier of two ticks and up to the later one. */
+        /** The blocks with a change after the earlier of two ticks and up to the later one: what differs between the two. */
         void changedBetween(int a, int b, LongOpenHashSet out)
         {
             int from = Math.min(a, b);
@@ -510,7 +592,7 @@ public final class RecapWorldOverlay
 
             for (int i = firstAfter(from); i < this.order.length && this.orderTicks[i] <= to; i++)
             {
-                out.add(this.events.get(this.order[i]).pos());
+                out.add(this.events.pos(this.order[i]));
             }
         }
 
