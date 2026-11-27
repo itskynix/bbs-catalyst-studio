@@ -1,6 +1,5 @@
 package mchorse.bbs_mod.ui.recap;
 
-import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.recap.RecapRecord;
 import mchorse.bbs_mod.recap.RecapStore;
 import mchorse.bbs_mod.recap.RecapTime;
@@ -16,6 +15,7 @@ import mchorse.bbs_mod.ui.framework.elements.overlay.UIConfirmOverlayPanel;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UIOverlay;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UIPromptOverlayPanel;
 import mchorse.bbs_mod.ui.framework.elements.utils.FontRenderer;
+import mchorse.bbs_mod.ui.framework.elements.windows.UITheme;
 import mchorse.bbs_mod.ui.utils.Area;
 import mchorse.bbs_mod.ui.utils.UIUtils;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
@@ -38,6 +38,7 @@ public class UIRecapHome extends UIElement
     private static final int HEADER = 58;
     private static final int MARGIN = 16;
     private static final int ROW_H = 46;
+    private static final int PANEL_HEAD = 18;
 
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd  HH:mm").withZone(ZoneId.systemDefault());
 
@@ -65,7 +66,7 @@ public class UIRecapHome extends UIElement
         reload.relative(this).x(1F, -MARGIN - 38).y(20).wh(18, 18);
 
         this.list = new UIScrollView();
-        this.list.relative(this).x(MARGIN).y(HEADER).w(0.6F, -MARGIN).h(1F, -HEADER - MARGIN);
+        this.list.relative(this).x(MARGIN + 1).y(HEADER + PANEL_HEAD + 1).w(0.6F, -MARGIN - 2).h(1F, -HEADER - MARGIN - PANEL_HEAD - 2);
         this.list.column(4).vertical().stretch().scroll().padding(4);
 
         this.details = new UIElement()
@@ -228,7 +229,15 @@ public class UIRecapHome extends UIElement
     @Override
     public void render(UIContext context)
     {
-        this.backdrop.render(context, this.area);
+        /* The glass themes keep the moving backdrop of the landing; the others their own plain ground */
+        if (UITheme.glass())
+        {
+            this.backdrop.render(context, this.area);
+        }
+        else
+        {
+            RecapStyle.backdrop(context.batcher, this.area);
+        }
 
         FontRenderer font = context.batcher.getFont();
         MatrixStack stack = context.batcher.getContext().getMatrices();
@@ -236,10 +245,10 @@ public class UIRecapHome extends UIElement
         stack.push();
         stack.translate(this.area.x + MARGIN, this.area.y + 14, 0F);
         stack.scale(1.6F, 1.6F, 1F);
-        context.batcher.text("Recap Studio", 0, 0, Colors.WHITE, true);
+        context.batcher.text("Recap Studio", 0, 0, RecapStyle.text(), !RecapStyle.light() && !UITheme.flat());
         stack.pop();
 
-        context.batcher.text(UIRecapKeys.text("home.subtitle"), this.area.x + MARGIN, this.area.y + 34, Colors.setA(Colors.WHITE, 0.55F), false);
+        context.batcher.text(UIRecapKeys.text("home.subtitle"), this.area.x + MARGIN, this.area.y + 34, RecapStyle.dim(), false);
 
         int total = 0;
         int marks = 0;
@@ -256,7 +265,7 @@ public class UIRecapHome extends UIElement
         right = this.renderChip(context, font, right, UIRecapKeys.text("home.total_time"), RecapTime.format(total));
         this.renderChip(context, font, right, UIRecapKeys.text("home.count"), String.valueOf(this.records.size()));
 
-        this.renderBox(context, this.list.area);
+        this.renderPanel(context, this.list.area.x - 1, this.list.area.y - PANEL_HEAD - 1, this.list.area.ex() + 1, this.list.area.ey() + 1, Icons.FILM, UIRecapKeys.text("home.list"));
         super.render(context);
 
         if (this.records.isEmpty())
@@ -277,18 +286,22 @@ public class UIRecapHome extends UIElement
             return x;
         }
 
-        context.batcher.box(x, y, x + width, y + 28, 0xb010141e);
-        context.batcher.box(x, y, x + 2, y + 28, Colors.A100 | BBSSettings.primaryColor.get());
-        context.batcher.text(label, x + 8, y + 4, Colors.setA(Colors.WHITE, 0.5F), false);
-        context.batcher.text(value, x + 8, y + 16, Colors.WHITE, false);
+        RecapStyle.surface(context.batcher, x, y, x + width, y + 28, 0, false);
+        context.batcher.box(x + 1, y + 4, x + 3, y + 24, RecapStyle.accent());
+        context.batcher.text(label, x + 8, y + 4, RecapStyle.dim(), false);
+        context.batcher.text(value, x + 8, y + 16, RecapStyle.text(), false);
 
         return x - 6;
     }
 
-    private void renderBox(UIContext context, Area a)
+    /** A panel of the picker, in the theme's material, with its title on its header. */
+    private void renderPanel(UIContext context, int x1, int y1, int x2, int y2, mchorse.bbs_mod.ui.utils.icons.Icon icon, String title)
     {
-        context.batcher.box(a.x, a.y, a.ex(), a.ey(), 0xc00c1017);
-        context.batcher.outline(a.x, a.y, a.ex(), a.ey(), BBSSettings.dividerColor());
+        int color = RecapStyle.header();
+
+        RecapStyle.surface(context.batcher, x1, y1, x2, y2, PANEL_HEAD, false);
+        context.batcher.icon(icon, color, x1 + 5, y1 + PANEL_HEAD / 2F, 0F, 0.5F);
+        context.batcher.text(context.batcher.getFont().limitToWidth(title, x2 - x1 - 30), x1 + 23, y1 + (PANEL_HEAD - 8) / 2F, color, RecapStyle.headerShadow());
     }
 
     private void renderEmpty(UIContext context, Area a)
@@ -298,18 +311,18 @@ public class UIRecapHome extends UIElement
         List<String> lines = font.wrap(UIRecapKeys.text("home.empty"), width);
         int y = a.my() - lines.size() * (font.getHeight() + 3) / 2;
 
-        context.batcher.icon(Icons.FILM, Colors.setA(Colors.WHITE, 0.35F), a.mx(), y - 20, 0.5F, 0.5F);
+        context.batcher.icon(Icons.FILM, RecapStyle.faint(), a.mx(), y - 20, 0.5F, 0.5F);
 
         for (String line : lines)
         {
-            context.batcher.text(line, a.mx() - font.getWidth(line) / 2, y, Colors.setA(Colors.WHITE, 0.5F), false);
+            context.batcher.text(line, a.mx() - font.getWidth(line) / 2, y, RecapStyle.dim(), false);
             y += font.getHeight() + 3;
         }
     }
 
     private void renderDetails(UIContext context, Area a)
     {
-        this.renderBox(context, a);
+        this.renderPanel(context, a.x, a.y, a.ex(), a.ey(), Icons.FILE, UIRecapKeys.text("home.picked"));
 
         if (this.picked == null)
         {
@@ -320,9 +333,9 @@ public class UIRecapHome extends UIElement
         FontRenderer font = context.batcher.getFont();
         int x = a.x + 10;
         int width = a.w - 20;
-        int y = a.y + 10;
+        int y = a.y + PANEL_HEAD + 8;
 
-        context.batcher.text(font.limitToWidth(record.name, width), x, y, Colors.WHITE, true);
+        context.batcher.text(font.limitToWidth(record.name, width), x, y, RecapStyle.text(), !RecapStyle.light() && !UITheme.flat());
         y += 18;
 
         renderStrip(context, record, x, y, width, 18);
@@ -337,11 +350,11 @@ public class UIRecapHome extends UIElement
 
     private int renderInfo(UIContext context, FontRenderer font, int x, int y, int width, String label, String value)
     {
-        context.batcher.text(UIRecapKeys.text(label), x, y, Colors.setA(Colors.WHITE, 0.5F), false);
+        context.batcher.text(UIRecapKeys.text(label), x, y, RecapStyle.dim(), false);
 
         String limited = font.limitToWidth(value, Math.max(20, width - 90));
 
-        context.batcher.text(limited, x + width - font.getWidth(limited), y, Colors.WHITE, false);
+        context.batcher.text(limited, x + width - font.getWidth(limited), y, RecapStyle.text(), false);
 
         return y + 14;
     }
@@ -349,16 +362,16 @@ public class UIRecapHome extends UIElement
     /** A recap's length as a bar, with a line where each moment was marked. */
     static void renderStrip(UIContext context, RecapRecord record, int x, int y, int width, int height)
     {
-        int accent = Colors.A100 | BBSSettings.primaryColor.get();
+        int accent = RecapStyle.accent();
 
-        context.batcher.box(x, y, x + width, y + height, 0xff1b212e);
+        context.batcher.box(x, y, x + width, y + height, RecapStyle.light() ? 0x402b7ab8 : 0xff1b212e);
         context.batcher.box(x, y + height - 2, x + width, y + height, Colors.setA(accent, 0.7F));
 
         for (int marker : record.markers)
         {
             int mx = x + (record.ticks <= 0 ? 0 : (int) ((long) marker * (width - 1) / record.ticks));
 
-            context.batcher.box(mx, y, mx + 1, y + height, 0xffffc857);
+            context.batcher.box(mx, y, mx + 1, y + height, RecapStyle.marker());
         }
     }
 
@@ -401,30 +414,29 @@ public class UIRecapHome extends UIElement
             Area a = this.area;
             FontRenderer font = context.batcher.getFont();
             boolean selected = UIRecapHome.this.picked == this.record;
-            int accent = Colors.A100 | BBSSettings.primaryColor.get();
+            boolean light = RecapStyle.light();
 
-            context.batcher.box(a.x, a.y, a.ex(), a.ey(), selected ? 0xf01a2232 : this.hover ? 0xd0151b28 : 0xc010141d);
-            context.batcher.outline(a.x, a.y, a.ex(), a.ey(), selected ? accent : 0x2affffff);
+            RecapStyle.row(context.batcher, a.x, a.y, a.ex(), a.ey(), selected, this.hover);
 
             /* The perforations of a film strip down the left edge */
-            context.batcher.box(a.x + 1, a.y + 1, a.x + 9, a.ey() - 1, 0xff0a0d13);
+            context.batcher.box(a.x + 1, a.y + 2, a.x + 9, a.ey() - 2, light ? 0x502b7ab8 : 0xff0a0d13);
 
             for (int hole = a.y + 5; hole < a.ey() - 5; hole += 9)
             {
-                context.batcher.box(a.x + 3, hole, a.x + 7, hole + 4, 0xff2a3140);
+                context.batcher.box(a.x + 3, hole, a.x + 7, hole + 4, light ? 0xd0ffffff : 0xff2a3140);
             }
 
             int x = a.x + 16;
             int infoWidth = Math.max(40, a.w - 26);
             String time = RecapTime.format(this.record.ticks);
 
-            context.batcher.text(font.limitToWidth(this.record.name, infoWidth - font.getWidth(time) - 8), x, a.y + 6, Colors.WHITE, false);
-            context.batcher.text(time, a.ex() - 8 - font.getWidth(time), a.y + 6, Colors.WHITE, false);
+            context.batcher.text(font.limitToWidth(this.record.name, infoWidth - font.getWidth(time) - 8), x, a.y + 6, RecapStyle.text(), false);
+            context.batcher.text(time, a.ex() - 8 - font.getWidth(time), a.y + 6, RecapStyle.text(), false);
 
             String meta = this.record.worldName + "  ·  " + (this.record.created <= 0 ? "-" : DATE.format(Instant.ofEpochMilli(this.record.created)))
                 + "  ·  " + this.record.markers.size() + " " + UIRecapKeys.text("home.markers");
 
-            context.batcher.text(font.limitToWidth(meta, infoWidth), x, a.y + 18, Colors.setA(Colors.WHITE, 0.5F), false);
+            context.batcher.text(font.limitToWidth(meta, infoWidth), x, a.y + 18, RecapStyle.dim(), false);
             renderStrip(context, this.record, x, a.y + 31, infoWidth - 6, 9);
         }
     }

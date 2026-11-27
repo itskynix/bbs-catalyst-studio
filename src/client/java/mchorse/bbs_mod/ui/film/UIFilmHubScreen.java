@@ -123,7 +123,7 @@ public class UIFilmHubScreen extends UILandingScreen
 
         this.searchContainer.add(this.searchBox);
 
-        /* 3. Subtitle / Badge: Film Editör */
+        /* 3. Subtitle / Badge: Film Studio */
         UILabel badge = UI.label(UIKeys.FILM_HUB_EDITOR_BADGE).color(Colors.setA(Colors.WHITE, 0.45F));
         badge.labelAnchor(0.5F, 0.5F);
         badge.relative(this.card).x(0.5F).y(108).w(1F).h(12).anchor(0.5F, 0F);

@@ -5,16 +5,15 @@ import mchorse.bbs_mod.recap.RecapOption;
 import mchorse.bbs_mod.recap.RecapRecord;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.UIScrollView;
+import mchorse.bbs_mod.ui.framework.elements.UISection;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UICirculate;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIToggle;
 import mchorse.bbs_mod.ui.framework.elements.input.UIColor;
 import mchorse.bbs_mod.ui.framework.elements.input.UITrackpad;
-import mchorse.bbs_mod.ui.utils.UI;
-import mchorse.bbs_mod.utils.colors.Colors;
 
 /**
- * The editor's right panel: what of the interface and the scene is shown, and what is overridden.
- * Every change is written into the recap.
+ * The view settings panel: what of the interface and the scene is shown, and what is overridden,
+ * each in its own group that folds. Every change is written into the recap.
  */
 public class UIRecapViewPanel extends UIScrollView
 {
@@ -25,7 +24,7 @@ public class UIRecapViewPanel extends UIScrollView
         super();
 
         this.onChange = onChange;
-        this.column(4).vertical().stretch().scroll().padding(8);
+        this.column(4).vertical().stretch().scroll().padding(6);
     }
 
     public void fill(RecapRecord record)
@@ -40,11 +39,15 @@ public class UIRecapViewPanel extends UIScrollView
         this.section(record, "view.hud", RecapOption.Group.HUD);
         this.section(record, "view.scene", RecapOption.Group.SCENE);
         this.section(record, "view.override", RecapOption.Group.OVERRIDE);
+        this.resize();
     }
 
     private void section(RecapRecord record, String title, RecapOption.Group group)
     {
-        this.add(UI.label(UIRecapKeys.key(title)).color(Colors.setA(Colors.WHITE, 0.55F)));
+        UISection section = UIRecapInfoPanel.section(title, "recap." + title);
+
+        section.fields.column(3).stretch().vertical();
+        this.add(section);
 
         for (RecapOption option : RecapOption.values())
         {
@@ -68,13 +71,13 @@ public class UIRecapViewPanel extends UIScrollView
             });
 
             toggle.h(14);
-            this.add(toggle);
+            section.fields.add(toggle);
 
             if (value != null)
             {
                 value.setEnabled(record.isOn(option));
                 value.h(16);
-                this.add(value);
+                section.fields.add(value);
             }
         }
     }

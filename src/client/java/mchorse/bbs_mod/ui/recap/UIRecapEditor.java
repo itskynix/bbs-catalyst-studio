@@ -1,86 +1,111 @@
 package mchorse.bbs_mod.ui.recap;
 
-import mchorse.bbs_mod.BBSSettings;
-import mchorse.bbs_mod.recap.RecapOption;
 import mchorse.bbs_mod.recap.RecapRecord;
 import mchorse.bbs_mod.recap.RecapStore;
-import mchorse.bbs_mod.recap.RecapTime;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
-import mchorse.bbs_mod.ui.framework.elements.buttons.UIIcon;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UIOverlay;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UIPromptOverlayPanel;
 import mchorse.bbs_mod.ui.framework.elements.utils.FontRenderer;
 import mchorse.bbs_mod.ui.utils.Area;
-import mchorse.bbs_mod.ui.utils.icons.Icon;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.ui.utils.keys.KeyAction;
 import mchorse.bbs_mod.utils.colors.Colors;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.List;
+import java.util.Map;
 
 /**
- * The recap editor: a bar of controls on top, the stage in the middle, the timeline with its marked
- * moments below, and what is shown and overridden on the right.
+ * The recap editor, laid out like a studio: a slim bar on top, and four panels under it — the
+ * viewport with its transport right below the frame, the timeline, the record and the view
+ * settings — each with its title on a header.
  *
- * <p>The cursor is a tick and playing it advances one tick per game tick, so the editor is on the
- * same moment on every machine. The stage itself is not drawn yet: it shows the cursor and the
- * rule of thirds guide.</p>
+ * <p><b>Panels move and resize.</b> The gaps between them are handles that resize them; a panel's
+ * header is a handle that moves it: the side column to the left or the right, the timeline above or
+ * below, the record above or below the view settings. Ready made layouts and the author's own saved
+ * ones are a click away in the layout menu, and the layout in use is kept across sessions
+ * ({@link RecapLayout}).</p>
+ *
+ * <p>The cursor is a tick, and playing advances it a tick per game tick, so the editor is on the same
+ * moment on every machine. The stage is not drawn yet: it shows the frame and the thirds guide.</p>
  */
 public class UIRecapEditor extends UIElement
 {
-    private static final int TOP = 24;
-    private static final int SIDE = 176;
-    private static final int TIMELINE = 78;
+    private static final int TOP = 26;
+    private static final int MARGIN = 6;
+    private static final int GAP = 6;
 
     private final UIRecapPanel panel;
+    private final RecapLayout.Store layouts = RecapLayout.Store.load();
+    private final RecapLayout layout = this.layouts.current;
+
+    public final UIRecapDock viewportDock;
+    public final UIRecapDock timelineDock;
+    public final UIRecapDock infoDock;
+    public final UIRecapDock viewDock;
+
+    private final UIRecapViewport viewport;
     private final UIRecapTimeline timeline;
+    private final UIRecapInfoPanel info;
     private final UIRecapViewPanel view;
-    private final UIIcon play;
+
+    private final UIRecapSplitter sideSplitter;
+    private final UIRecapSplitter timelineSplitter;
+    private final UIRecapSplitter innerSplitter;
 
     private RecapRecord record;
     private int cursor;
     private boolean playing;
 
+    private UIRecapDock dragged;
+
+    /* The areas computed by the last layout, for the splitters and the drop targets */
+    private final Area body = new Area();
+    private final Area side = new Area();
+    private final Area main = new Area();
+
     public UIRecapEditor(UIRecapPanel panel)
     {
         this.panel = panel;
 
-        UIIcon back = this.button(Icons.ARROW_LEFT, "editor.back", 4, () -> this.panel.openHome());
-        UIIcon rename = this.button(Icons.EDIT, "editor.rename", 26, this::rename);
-        UIIcon previous = this.button(Icons.FRAME_PREV, "editor.previous_marker", -66, () -> this.jump(false));
-        UIIcon next = this.button(Icons.FRAME_NEXT, "editor.next_marker", -22, () -> this.jump(true));
-        UIIcon addMarker = this.button(Icons.BOOKMARK, "editor.add_marker", 4, this::addMarker);
-        UIIcon removeMarker = this.button(Icons.TRASH, "editor.remove_marker", 26, this::removeMarker);
+        UIRecapButton back = new UIRecapButton(() -> Icons.ARROW_LEFT, UIRecapKeys.key("editor.back"), () -> this.panel.openHome());
+        UIRecapButton rename = new UIRecapButton(() -> Icons.EDIT, UIRecapKeys.key("editor.rename"), this::rename);
+        UIRecapButton layouts = new UIRecapButton(() -> Icons.LAYOUT, UIRecapKeys.key("layout.menu"), this::openLayoutMenu);
 
-        this.play = this.button(Icons.PLAY, "editor.play", -44, this::togglePlayback);
+        back.relative(this).x(MARGIN).y(4).w(22).h(18);
+        rename.relative(this).x(MARGIN + 26).y(4).w(22).h(18);
+        layouts.relative(this).x(1F, -MARGIN - 22).y(4).w(22).h(18);
 
-        /* Transport in the middle of the bar, markers on its right */
-        previous.relative(this).x(0.5F, -33).y(3).wh(18, 18);
-        this.play.relative(this).x(0.5F, -9).y(3).wh(18, 18);
-        next.relative(this).x(0.5F, 15).y(3).wh(18, 18);
-        addMarker.relative(this).x(1F, -SIDE - 48).y(3).wh(18, 18);
-        removeMarker.relative(this).x(1F, -SIDE - 26).y(3).wh(18, 18);
-
-        this.view = new UIRecapViewPanel(this::save);
-        this.view.relative(this).x(1F, -SIDE).y(TOP).w(SIDE).h(1F, -TOP);
-
+        this.viewport = new UIRecapViewport(this);
         this.timeline = new UIRecapTimeline(this);
-        this.timeline.relative(this).x(0).y(1F, -TIMELINE).w(1F, -SIDE).h(TIMELINE);
+        this.info = new UIRecapInfoPanel(this);
+        this.view = new UIRecapViewPanel(this::save);
 
-        this.add(back, rename, previous, this.play, next, addMarker, removeMarker, this.timeline, this.view);
+        this.viewportDock = this.dock("viewport", Icons.VIDEO_CAMERA, this.viewport);
+        this.timelineDock = this.dock("timeline", Icons.TIME, this.timeline);
+        this.infoDock = this.dock("info", Icons.FILE, this.info);
+        this.viewDock = this.dock("view", Icons.VISIBLE, this.view);
+
+        this.sideSplitter = new UIRecapSplitter(true, this::dragSide, this::saveLayout);
+        this.timelineSplitter = new UIRecapSplitter(false, this::dragTimeline, this::saveLayout);
+        this.innerSplitter = new UIRecapSplitter(false, this::dragInner, this::saveLayout);
+
+        this.add(back, rename, layouts, this.viewportDock, this.timelineDock, this.infoDock, this.viewDock,
+            this.sideSplitter, this.timelineSplitter, this.innerSplitter);
     }
 
-    private UIIcon button(Icon icon, String tooltip, int x, Runnable action)
+    private UIRecapDock dock(String id, mchorse.bbs_mod.ui.utils.icons.Icon icon, UIElement content)
     {
-        UIIcon button = new UIIcon(icon, (b) -> action.run());
+        UIRecapDock dock = new UIRecapDock(this, id, UIRecapKeys.key("panel." + id), icon);
 
-        button.tooltip(UIRecapKeys.key(tooltip));
-        button.relative(this).x(x).y(3).wh(18, 18);
+        content.relative(dock.content).w(1F).h(1F);
+        dock.content.add(content);
 
-        return button;
+        return dock;
     }
+
+    /* State */
 
     public RecapRecord getRecord()
     {
@@ -97,13 +122,18 @@ public class UIRecapEditor extends UIElement
         return this.record == null ? 0 : this.record.ticks;
     }
 
+    public boolean isPlaying()
+    {
+        return this.playing;
+    }
+
     public void open(RecapRecord record)
     {
         this.record = record;
         this.cursor = 0;
         this.stopPlayback();
+        this.info.fill(record);
         this.view.fill(record);
-        this.view.scroll.setScroll(0);
     }
 
     public void seek(int tick)
@@ -111,7 +141,7 @@ public class UIRecapEditor extends UIElement
         this.cursor = Math.max(0, Math.min(this.getLength(), tick));
     }
 
-    private void togglePlayback()
+    public void togglePlayback()
     {
         if (this.record == null)
         {
@@ -131,17 +161,11 @@ public class UIRecapEditor extends UIElement
         }
 
         this.playing = true;
-        this.play.both(Icons.PAUSE);
     }
 
     public void stopPlayback()
     {
         this.playing = false;
-
-        if (this.play != null)
-        {
-            this.play.both(Icons.PLAY);
-        }
     }
 
     public void tick()
@@ -160,7 +184,7 @@ public class UIRecapEditor extends UIElement
         }
     }
 
-    private void jump(boolean forward)
+    public void jump(boolean forward)
     {
         if (this.record == null)
         {
@@ -199,20 +223,22 @@ public class UIRecapEditor extends UIElement
         this.seek(0);
     }
 
-    private void addMarker()
+    public void addMarker()
     {
         if (this.record != null)
         {
             this.record.addMarker(this.cursor);
             this.save();
+            this.info.fill(this.record);
         }
     }
 
-    private void removeMarker()
+    public void removeMarker()
     {
         if (this.record != null && this.record.markers.remove(Integer.valueOf(this.cursor)))
         {
             this.save();
+            this.info.fill(this.record);
         }
     }
 
@@ -244,6 +270,292 @@ public class UIRecapEditor extends UIElement
         }
     }
 
+    /* Layout */
+
+    @Override
+    public void resize()
+    {
+        this.applyLayout();
+        super.resize();
+    }
+
+    /** Places every panel and gap after the layout. */
+    private void applyLayout()
+    {
+        RecapLayout l = this.layout;
+        int x0 = this.area.x + MARGIN;
+        int y0 = this.area.y + TOP;
+        int x1 = this.area.ex() - MARGIN;
+        int y1 = this.area.ey() - MARGIN;
+        int width = Math.max(1, x1 - x0);
+        int height = Math.max(1, y1 - y0);
+        int sw = Math.max(RecapLayout.MIN_SIDE, Math.min(width / 2, l.sideWidth));
+        int th = Math.max(RecapLayout.MIN_TIMELINE, Math.min(height * 3 / 5, l.timelineHeight));
+
+        this.body.set(x0, y0, width, height);
+
+        int bx0 = x0, by0 = y0, bx1 = x1, by1 = y1;
+        int[] tl = null;
+
+        if (l.timelineFull)
+        {
+            tl = l.timelineTop ? new int[] {x0, y0, x1, y0 + th} : new int[] {x0, y1 - th, x1, y1};
+            by0 = l.timelineTop ? y0 + th + GAP : y0;
+            by1 = l.timelineTop ? y1 : y1 - th - GAP;
+        }
+
+        int[] sideRect = l.sideLeft ? new int[] {bx0, by0, bx0 + sw, by1} : new int[] {bx1 - sw, by0, bx1, by1};
+        int[] mainRect = l.sideLeft ? new int[] {bx0 + sw + GAP, by0, bx1, by1} : new int[] {bx0, by0, bx1 - sw - GAP, by1};
+
+        if (!l.timelineFull)
+        {
+            tl = l.timelineTop ? new int[] {mainRect[0], mainRect[1], mainRect[2], mainRect[1] + th} : new int[] {mainRect[0], mainRect[3] - th, mainRect[2], mainRect[3]};
+            mainRect = l.timelineTop ? new int[] {mainRect[0], mainRect[1] + th + GAP, mainRect[2], mainRect[3]} : new int[] {mainRect[0], mainRect[1], mainRect[2], mainRect[3] - th - GAP};
+        }
+
+        this.side.set(sideRect[0], sideRect[1], sideRect[2] - sideRect[0], sideRect[3] - sideRect[1]);
+        this.main.set(mainRect[0], mainRect[1], mainRect[2] - mainRect[0], mainRect[3] - mainRect[1]);
+
+        this.place(this.viewportDock, mainRect);
+        this.place(this.timelineDock, tl);
+
+        /* The side column: the record and the view settings, in their order and share */
+        if (l.infoVisible)
+        {
+            int share = (int) ((sideRect[3] - sideRect[1] - GAP) * l.infoRatio);
+            int split = sideRect[1] + share;
+            int[] upper = {sideRect[0], sideRect[1], sideRect[2], split};
+            int[] lower = {sideRect[0], split + GAP, sideRect[2], sideRect[3]};
+
+            this.place(l.infoFirst ? this.infoDock : this.viewDock, upper);
+            this.place(l.infoFirst ? this.viewDock : this.infoDock, lower);
+            this.infoDock.setVisible(true);
+            this.innerSplitter.setVisible(true);
+            this.place(this.innerSplitter, new int[] {sideRect[0], split, sideRect[2], split + GAP});
+        }
+        else
+        {
+            this.place(this.viewDock, sideRect);
+            this.infoDock.setVisible(false);
+            this.innerSplitter.setVisible(false);
+        }
+
+        /* The gaps that resize */
+        int gapX = l.sideLeft ? sideRect[2] : sideRect[0] - GAP;
+
+        this.place(this.sideSplitter, new int[] {gapX, sideRect[1], gapX + GAP, sideRect[3]});
+
+        int gapY = l.timelineTop ? tl[3] : tl[1] - GAP;
+
+        this.place(this.timelineSplitter, new int[] {tl[0], gapY, tl[2], gapY + GAP});
+    }
+
+    private void place(UIElement element, int[] r)
+    {
+        element.relative(this).x(r[0] - this.area.x).y(r[1] - this.area.y).w(Math.max(1, r[2] - r[0])).h(Math.max(1, r[3] - r[1]));
+    }
+
+    private void dragSide(int mouseX)
+    {
+        int width = this.layout.sideLeft ? mouseX - this.body.x - GAP / 2 : this.body.ex() - mouseX - GAP / 2;
+
+        this.layout.sideWidth = Math.max(RecapLayout.MIN_SIDE, Math.min(this.body.w / 2, width));
+        this.resize();
+    }
+
+    private void dragTimeline(int mouseY)
+    {
+        int top = this.layout.timelineFull ? this.body.y : this.main.y;
+        int bottom = this.layout.timelineFull ? this.body.ey() : this.main.ey();
+        int height = this.layout.timelineTop ? mouseY - top - GAP / 2 : bottom - mouseY - GAP / 2;
+
+        this.layout.timelineHeight = Math.max(RecapLayout.MIN_TIMELINE, Math.min(this.body.h * 3 / 5, height));
+        this.resize();
+    }
+
+    private void dragInner(int mouseY)
+    {
+        float ratio = (mouseY - this.side.y) / (float) Math.max(1, this.side.h);
+
+        if (!this.layout.infoFirst)
+        {
+            ratio = 1F - ratio;
+        }
+
+        this.layout.infoRatio = Math.max(0.15F, Math.min(0.85F, ratio));
+        this.resize();
+    }
+
+    private void saveLayout()
+    {
+        this.layouts.save();
+    }
+
+    /* Moving panels */
+
+    public UIRecapDock getDragged()
+    {
+        return this.dragged;
+    }
+
+    public void startDrag(UIRecapDock dock)
+    {
+        this.dragged = dock;
+    }
+
+    /** A panel let go: where it lands decides the layout. */
+    public void dropDock(UIRecapDock dock, int mouseX, int mouseY)
+    {
+        this.dragged = null;
+
+        if (!this.area.isInside(mouseX, mouseY))
+        {
+            return;
+        }
+
+        RecapLayout l = this.layout;
+        boolean left = mouseX < this.body.mx();
+
+        if (dock == this.timelineDock)
+        {
+            l.timelineTop = mouseY < this.body.my();
+        }
+        else if (dock == this.viewportDock)
+        {
+            /* The viewport goes where it was dropped, so the side column goes to the other side */
+            l.sideLeft = !left;
+        }
+        else
+        {
+            UIRecapDock other = dock == this.infoDock ? this.viewDock : this.infoDock;
+
+            if (l.infoVisible && other.isVisible() && other.area.isInside(mouseX, mouseY))
+            {
+                l.infoFirst = !l.infoFirst;
+            }
+            else
+            {
+                l.sideLeft = left;
+            }
+        }
+
+        this.resize();
+        this.saveLayout();
+    }
+
+    /** Where a dragged panel would land under the pointer, to draw it before it is let go. */
+    private Area dropTarget(int mouseX, int mouseY)
+    {
+        Area target = new Area();
+        boolean left = mouseX < this.body.mx();
+
+        if (this.dragged == this.timelineDock)
+        {
+            boolean top = mouseY < this.body.my();
+
+            target.set(this.body.x, top ? this.body.y : this.body.ey() - this.timelineDock.area.h, this.body.w, this.timelineDock.area.h);
+        }
+        else if (this.dragged == this.viewportDock)
+        {
+            int w = this.main.w;
+
+            target.set(left ? this.body.x : this.body.ex() - w, this.main.y, w, this.main.h);
+        }
+        else
+        {
+            UIRecapDock other = this.dragged == this.infoDock ? this.viewDock : this.infoDock;
+
+            if (this.layout.infoVisible && other.isVisible() && other.area.isInside(mouseX, mouseY))
+            {
+                target.copy(other.area);
+            }
+            else
+            {
+                target.set(left ? this.body.x : this.body.ex() - this.side.w, this.side.y, this.side.w, this.side.h);
+            }
+        }
+
+        return target;
+    }
+
+    /* Layout templates */
+
+    private void openLayoutMenu()
+    {
+        UIContext context = this.getContext();
+
+        context.replaceContextMenu((menu) ->
+        {
+            for (RecapLayout.Preset preset : RecapLayout.presets())
+            {
+                menu.action(this.layout.same(preset.layout()) ? Icons.CHECKMARK : Icons.LAYOUT, UIRecapKeys.key("layout.preset." + preset.key()), () -> this.useLayout(preset.layout()));
+            }
+
+            for (Map.Entry<String, RecapLayout> entry : this.layouts.templates.entrySet())
+            {
+                menu.action(this.layout.same(entry.getValue()) ? Icons.CHECKMARK : Icons.FAVORITE, mchorse.bbs_mod.l10n.keys.IKey.constant(entry.getKey()), () -> this.useLayout(entry.getValue()));
+            }
+
+            menu.action(Icons.SAVE, UIRecapKeys.key("layout.save"), this::saveTemplate);
+
+            if (!this.layouts.templates.isEmpty())
+            {
+                menu.action(Icons.REMOVE, UIRecapKeys.key("layout.delete"), this::openDeleteMenu);
+            }
+
+            menu.action(this.layout.sideLeft ? Icons.ARROW_RIGHT : Icons.ARROW_LEFT, UIRecapKeys.key(this.layout.sideLeft ? "layout.side_right" : "layout.side_left"), () -> this.change(() -> this.layout.sideLeft = !this.layout.sideLeft));
+            menu.action(this.layout.timelineTop ? Icons.ARROW_DOWN : Icons.ARROW_UP, UIRecapKeys.key(this.layout.timelineTop ? "layout.timeline_bottom" : "layout.timeline_top"), () -> this.change(() -> this.layout.timelineTop = !this.layout.timelineTop));
+            menu.action(this.layout.timelineFull ? Icons.CHECKMARK : Icons.HORIZONTAL, UIRecapKeys.key("layout.timeline_full"), () -> this.change(() -> this.layout.timelineFull = !this.layout.timelineFull));
+            menu.action(this.layout.infoVisible ? Icons.CHECKMARK : Icons.FILE, UIRecapKeys.key("layout.info_visible"), () -> this.change(() -> this.layout.infoVisible = !this.layout.infoVisible));
+        });
+    }
+
+    private void openDeleteMenu()
+    {
+        this.getContext().replaceContextMenu((menu) ->
+        {
+            for (String name : this.layouts.templates.keySet())
+            {
+                menu.action(Icons.REMOVE, mchorse.bbs_mod.l10n.keys.IKey.constant(name), () ->
+                {
+                    this.layouts.templates.remove(name);
+                    this.saveLayout();
+                });
+            }
+        });
+    }
+
+    private void change(Runnable change)
+    {
+        change.run();
+        this.resize();
+        this.saveLayout();
+    }
+
+    private void useLayout(RecapLayout layout)
+    {
+        this.change(() -> this.layout.set(layout));
+    }
+
+    private void saveTemplate()
+    {
+        UIPromptOverlayPanel prompt = new UIPromptOverlayPanel(UIRecapKeys.key("layout.save"), UIRecapKeys.key("layout.save_message"), (name) ->
+        {
+            String trimmed = name.trim();
+
+            if (!trimmed.isEmpty())
+            {
+                this.layouts.templates.put(trimmed, this.layout.copy());
+                this.saveLayout();
+                this.getContext().notifySuccess(UIRecapKeys.key("layout.saved"));
+            }
+        });
+
+        UIOverlay.addOverlay(this.getContext(), prompt);
+    }
+
+    /* Input */
+
     @Override
     protected boolean subKeyPressed(UIContext context)
     {
@@ -262,69 +574,26 @@ public class UIRecapEditor extends UIElement
     @Override
     public void render(UIContext context)
     {
-        context.batcher.box(this.area.x, this.area.y, this.area.ex(), this.area.ey(), 0xff0d1016);
-        context.batcher.box(this.area.x, this.area.y, this.area.ex(), this.area.y + TOP, BBSSettings.deepSurface());
-        context.batcher.box(this.area.x, this.area.y + TOP - 1, this.area.ex(), this.area.y + TOP, BBSSettings.dividerColor());
-        context.batcher.box(this.view.area.x, this.view.area.y, this.view.area.ex(), this.view.area.ey(), BBSSettings.deepSurface());
-        context.batcher.box(this.view.area.x, this.view.area.y, this.view.area.x + 1, this.view.area.ey(), BBSSettings.dividerColor());
+        RecapStyle.backdrop(context.batcher, this.area);
+        RecapStyle.surface(context.batcher, this.area.x, this.area.y, this.area.ex(), this.area.y + TOP - 4, 0, false);
 
         if (this.record != null)
         {
             FontRenderer font = context.batcher.getFont();
-            int x = this.area.x + 52;
-            int width = Math.max(30, this.area.w / 2 - 100);
+            String name = font.limitToWidth(this.record.name, Math.max(30, this.area.w - 140));
 
-            context.batcher.text(font.limitToWidth(this.record.name, width), x, this.area.y + 8, Colors.WHITE, false);
-            this.renderStage(context, font);
+            context.batcher.text(name, this.area.x + MARGIN + 56, this.area.y + 8, RecapStyle.text(), false);
         }
 
         super.render(context);
-    }
 
-    private void renderStage(UIContext context, FontRenderer font)
-    {
-        Area a = this.area;
-        int left = a.x + 12;
-        int top = a.y + TOP + 12;
-        int right = a.ex() - SIDE - 12;
-        int bottom = a.ey() - TIMELINE - 20;
-        int width = right - left;
-        int height = bottom - top;
-
-        if (width < 40 || height < 30)
+        if (this.dragged != null)
         {
-            return;
+            Area target = this.dropTarget(context.mouseX, context.mouseY);
+            int accent = RecapStyle.accent();
+
+            context.batcher.box(target.x, target.y, target.ex(), target.ey(), Colors.setA(accent, 0.18F));
+            context.batcher.outline(target.x, target.y, target.ex(), target.ey(), accent, 2);
         }
-
-        /* A sixteen by nine frame inside the space there is */
-        int w = Math.min(width, height * 16 / 9);
-        int h = w * 9 / 16;
-        int x = left + (width - w) / 2;
-        int y = top + (height - h) / 2;
-
-        context.batcher.box(x, y, x + w, y + h, 0xff000000);
-        context.batcher.outline(x, y, x + w, y + h, 0x40ffffff);
-
-        List<String> lines = font.wrap(UIRecapKeys.text("editor.stage"), Math.max(40, w - 30));
-        int ty = y + h / 2 - lines.size() * (font.getHeight() + 3) / 2;
-
-        for (String line : lines)
-        {
-            context.batcher.text(line, x + (w - font.getWidth(line)) / 2, ty, Colors.setA(Colors.WHITE, 0.45F), false);
-            ty += font.getHeight() + 3;
-        }
-
-        if (this.record.isOn(RecapOption.THIRDS_GUIDE))
-        {
-            for (int i = 1; i <= 2; i++)
-            {
-                context.batcher.box(x + w * i / 3, y, x + w * i / 3 + 1, y + h, 0x60ffffff);
-                context.batcher.box(x, y + h * i / 3, x + w, y + h * i / 3 + 1, 0x60ffffff);
-            }
-        }
-
-        String time = RecapTime.formatWithTicks(this.cursor) + "  /  " + RecapTime.formatWithTicks(this.getLength());
-
-        context.batcher.text(time, x + (w - font.getWidth(time)) / 2, y + h + 5, Colors.WHITE, false);
     }
 }

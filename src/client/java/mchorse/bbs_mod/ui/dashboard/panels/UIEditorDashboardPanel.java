@@ -226,7 +226,7 @@ public abstract class UIEditorDashboardPanel extends UIDashboardPanel implements
         return IKey.raw(this.getHubName());
     }
 
-    /** What a tab with this editor's landing screen is called, e.g. "Film Editor Hub". */
+    /** What a tab with this editor's landing screen is called, e.g. "Film Studio Hub". */
     public String getHubName()
     {
         return this.getTitle().get() + " Hub";

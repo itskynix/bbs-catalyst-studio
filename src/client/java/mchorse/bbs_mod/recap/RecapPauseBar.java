@@ -4,6 +4,7 @@ import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.l10n.L10n;
 import mchorse.bbs_mod.ui.framework.elements.utils.Batcher2D;
+import mchorse.bbs_mod.ui.recap.RecapStyle;
 import mchorse.bbs_mod.ui.utils.icons.Icon;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.utils.colors.Colors;
@@ -169,9 +170,8 @@ public class RecapPauseBar extends ClickableWidget
         int ey = y + this.height;
         int accent = Colors.A100 | BBSSettings.primaryColor.get();
 
-        batcher.box(x, y, ex, ey, BBSSettings.deepSurface());
-        batcher.outline(x, y, ex, ey, BBSSettings.dividerColor());
-        batcher.box(x, y, ex, y + 1, accent);
+        /* The theme's own material: glass, gel, matte plate or square panel */
+        RecapStyle.surface(batcher, x, y, ex, ey, this.compact ? 0 : PADDING + TIME_H - 1, false);
 
         this.renderTime(batcher, font, accent);
 
@@ -186,17 +186,14 @@ public class RecapPauseBar extends ClickableWidget
 
             if (i == 4)
             {
-                batcher.box(bx - GROUP_GAP / 2 - 2, this.buttonsY + 3, bx - GROUP_GAP / 2 - 1, this.buttonsY + BUTTON_H - 3, BBSSettings.dividerColor());
+                batcher.box(bx - GROUP_GAP / 2 - 2, this.buttonsY + 3, bx - GROUP_GAP / 2 - 1, this.buttonsY + BUTTON_H - 3, RecapStyle.divider());
             }
 
-            batcher.box(bx, this.buttonsY, bx + BUTTON, this.buttonsY + BUTTON_H, hover ? BBSSettings.accentOverlay(Colors.A50) : BBSSettings.raisedSurface());
+            boolean primary = action == Action.START && enabled;
 
-            if (hover)
-            {
-                batcher.box(bx, this.buttonsY + BUTTON_H - 1, bx + BUTTON, this.buttonsY + BUTTON_H, accent);
-            }
+            RecapStyle.button(batcher, bx, this.buttonsY, bx + BUTTON, this.buttonsY + BUTTON_H, primary, hover);
 
-            int color = !enabled ? 0x50ffffff : action == Action.CANCEL ? 0xffe57373 : Colors.WHITE;
+            int color = action == Action.CANCEL && enabled ? RecapStyle.red() : RecapStyle.buttonIcon(primary, enabled);
 
             batcher.icon(action.icon, color, bx + BUTTON / 2F, this.buttonsY + BUTTON_H / 2F, 0.5F, 0.5F);
         }
@@ -213,16 +210,16 @@ public class RecapPauseBar extends ClickableWidget
     {
         RecapRecorder.State state = RecapRecorder.getState();
         String time = RecapTime.format(RecapRecorder.getTicks());
-        int color = state == RecapRecorder.State.IDLE ? 0x90ffffff : Colors.WHITE;
+        int color = this.compact ? (state == RecapRecorder.State.IDLE ? RecapStyle.dim() : RecapStyle.text()) : (state == RecapRecorder.State.IDLE ? 0xb0ffffff : Colors.WHITE);
         int width = font.getWidth(time);
         int centerX = this.compact ? this.getX() + PADDING + 23 : this.getX() + this.width / 2;
         int textY = this.compact ? this.buttonsY + (BUTTON_H - font.fontHeight) / 2 : this.getY() + PADDING;
 
-        batcher.text(time, centerX - width / 2F, textY, color, false);
+        batcher.text(time, centerX - width / 2F, textY, color, !this.compact && RecapStyle.headerShadow());
 
         if (state != RecapRecorder.State.IDLE)
         {
-            int dot = state == RecapRecorder.State.RECORDING ? 0xffe53935 : accent;
+            int dot = state == RecapRecorder.State.RECORDING ? RecapStyle.red() : accent;
             int dx = centerX - width / 2 - 8;
 
             batcher.box(dx, textY + 2, dx + 4, textY + 6, dot);

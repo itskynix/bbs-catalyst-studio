@@ -557,7 +557,8 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
     @Override
     public String getHubName()
     {
-        return "Film Editor Hub";
+        /* The card's own name with the hub suffix, so the tab follows the language and the rename to Film Studio */
+        return UIKeys.CENTRAL_HUB_TAB_SUFFIX.get().replace("%s", UIKeys.CENTRAL_HUB_CARD_FILMS_TITLE.get());
     }
 
     @Override

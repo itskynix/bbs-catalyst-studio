@@ -1,6 +1,5 @@
 package mchorse.bbs_mod.ui.recap;
 
-import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.recap.RecapRecord;
 import mchorse.bbs_mod.recap.RecapTime;
 import mchorse.bbs_mod.ui.framework.UIContext;
@@ -96,8 +95,7 @@ public class UIRecapTimeline extends UIElement
     {
         RecapRecord record = this.editor.getRecord();
 
-        context.batcher.box(this.area.x, this.area.y, this.area.ex(), this.area.ey(), BBSSettings.deepSurface());
-        context.batcher.box(this.area.x, this.area.y, this.area.ex(), this.area.y + 1, BBSSettings.dividerColor());
+        RecapStyle.well(context.batcher, this.area.x + 4, this.area.y + 2, this.area.ex() - 4, this.area.ey() - 2);
 
         if (record == null)
         {
@@ -112,7 +110,8 @@ public class UIRecapTimeline extends UIElement
         }
 
         FontRenderer font = context.batcher.getFont();
-        int accent = Colors.A100 | BBSSettings.primaryColor.get();
+        int accent = RecapStyle.accent();
+        boolean light = RecapStyle.light();
         int length = this.editor.getLength();
         int top = this.area.y + RULER;
         int bottom = this.area.ey() - 6;
@@ -120,13 +119,13 @@ public class UIRecapTimeline extends UIElement
         this.renderRuler(context, font, length, top, bottom);
 
         /* The recorded span */
-        context.batcher.box(this.left(), top + 22, this.left() + this.width(), bottom, 0xff1b212e);
+        context.batcher.box(this.left(), top + 22, this.left() + this.width(), bottom, light ? 0x302b7ab8 : 0xff1b212e);
         context.batcher.box(this.left(), top + 22, this.left() + this.width(), top + 24, Colors.setA(accent, 0.7F));
 
         for (int marker : record.markers)
         {
             int x = this.toX(marker);
-            int color = marker == this.editor.getCursor() ? Colors.WHITE : 0xffffc857;
+            int color = marker == this.editor.getCursor() ? (light ? RecapStyle.text() : Colors.WHITE) : RecapStyle.marker();
 
             context.batcher.box(x, top + 4, x + 1, bottom, Colors.setA(color, 0.6F));
             context.batcher.box(x + 1, top + 4, x + FLAG_W, top + 11, color);
@@ -134,8 +133,10 @@ public class UIRecapTimeline extends UIElement
 
         int cursor = this.toX(this.editor.getCursor());
 
-        context.batcher.box(cursor, this.area.y + 2, cursor + 1, bottom, 0xffff5252);
-        context.batcher.box(cursor - 3, this.area.y + 2, cursor + 4, this.area.y + 6, 0xffff5252);
+        int red = RecapStyle.red();
+
+        context.batcher.box(cursor, this.area.y + 2, cursor + 1, bottom, red);
+        context.batcher.box(cursor - 3, this.area.y + 2, cursor + 4, this.area.y + 6, red);
 
         super.render(context);
     }
@@ -166,11 +167,11 @@ public class UIRecapTimeline extends UIElement
             int x = this.toX(tick);
             String label = RecapTime.format(tick);
 
-            context.batcher.box(x, top - 4, x + 1, bottom, 0x18ffffff);
+            context.batcher.box(x, top - 4, x + 1, bottom, RecapStyle.light() ? 0x200f2742 : 0x18ffffff);
 
             if (x + font.getWidth(label) < this.area.ex())
             {
-                context.batcher.text(label, x + 2, this.area.y + 4, Colors.setA(Colors.WHITE, 0.5F), false);
+                context.batcher.text(label, x + 2, this.area.y + 4, RecapStyle.dim(), false);
             }
         }
     }
