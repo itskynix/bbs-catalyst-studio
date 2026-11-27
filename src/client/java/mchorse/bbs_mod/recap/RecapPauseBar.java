@@ -150,12 +150,12 @@ public class RecapPauseBar extends ClickableWidget
 
         switch (action)
         {
-            case START -> RecapRecorder.start();
+            case START -> RecapRecorder.startWithMessage();
             case STOP -> RecapRecorder.stop();
-            case SAVE -> RecapRecorder.save();
+            case SAVE -> RecapRecorder.saveWithMessage();
             case CANCEL -> RecapRecorder.cancel();
             case MARKER -> RecapRecorder.marker();
-            case INSTANT -> RecapRecorder.saveInstant();
+            case INSTANT -> RecapRecorder.saveInstantWithMessage();
         }
     }
 
@@ -173,7 +173,7 @@ public class RecapPauseBar extends ClickableWidget
         /* The theme's own material: glass, gel, matte plate or square panel */
         RecapStyle.surface(batcher, x, y, ex, ey, this.compact ? 0 : PADDING + TIME_H - 1, false);
 
-        this.renderTime(batcher, font, accent);
+        this.renderTime(batcher, font, accent, delta);
 
         Action hovered = this.actionAt(mouseX, mouseY);
 
@@ -206,10 +206,13 @@ public class RecapPauseBar extends ClickableWidget
         }
     }
 
-    private void renderTime(Batcher2D batcher, TextRenderer font, int accent)
+    private void renderTime(Batcher2D batcher, TextRenderer font, int accent, float transition)
     {
         RecapRecorder.State state = RecapRecorder.getState();
-        String time = RecapTime.format(RecapRecorder.getTicks());
+        /* Idle with Instant Recap on, the bar shows how much play an instant save would take */
+        boolean instant = state == RecapRecorder.State.IDLE && RecapRecorder.isInstantEnabled();
+        int ticks = instant ? RecapRecorder.getInstantTicks() : (int) RecapRecorder.getTime(transition);
+        String time = RecapTime.format(ticks);
         int color = this.compact ? (state == RecapRecorder.State.IDLE ? RecapStyle.dim() : RecapStyle.text()) : (state == RecapRecorder.State.IDLE ? 0xb0ffffff : Colors.WHITE);
         int width = font.getWidth(time);
         int centerX = this.compact ? this.getX() + PADDING + 23 : this.getX() + this.width / 2;
@@ -233,6 +236,11 @@ public class RecapPauseBar extends ClickableWidget
         if (action == Action.START)
         {
             return text + "  " + BBSModClient.getKeyRecapRecord().getBoundKeyLocalizedText().getString();
+        }
+
+        if (action == Action.INSTANT)
+        {
+            return text + "  " + BBSModClient.getKeyRecapInstant().getBoundKeyLocalizedText().getString();
         }
 
         if (action == Action.MARKER)

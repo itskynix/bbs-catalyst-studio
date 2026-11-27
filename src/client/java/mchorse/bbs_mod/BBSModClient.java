@@ -182,6 +182,7 @@ public class BBSModClient implements ClientModInitializer
     private static KeyBinding keyRecordReplay;
     private static KeyBinding keyRecapRecord;
     private static KeyBinding keyRecapMarker;
+    private static KeyBinding keyRecapInstant;
     private static KeyBinding keyReplayNextTrack;
     private static KeyBinding keyReplayPrevTrack;
     private static KeyBinding keyReplayRadial;
@@ -331,6 +332,11 @@ public class BBSModClient implements ClientModInitializer
     public static KeyBinding getKeyRecapMarker()
     {
         return keyRecapMarker;
+    }
+
+    public static KeyBinding getKeyRecapInstant()
+    {
+        return keyRecapInstant;
     }
 
     /** Returns the dashboard without creating it. Used to avoid creating UI when handling keys before the user has opened BBS. */
@@ -734,6 +740,7 @@ public class BBSModClient implements ClientModInitializer
         keyOpenReplays = this.createKey("open_replays", GLFW.GLFW_KEY_RIGHT_SHIFT);
         keyRecapRecord = this.createKey("recap_record", GLFW.GLFW_KEY_F6);
         keyRecapMarker = this.createKey("recap_marker", GLFW.GLFW_KEY_F8);
+        keyRecapInstant = this.createKey("recap_instant", GLFW.GLFW_KEY_F10);
         keyOpenMorphing = this.createKey("open_morphing", GLFW.GLFW_KEY_B);
         keyNavPreview = this.createKey("navmesh_preview", GLFW.GLFW_KEY_P);
         keyDemorph = this.createKey("demorph", GLFW.GLFW_KEY_PERIOD);
@@ -986,6 +993,7 @@ public class BBSModClient implements ClientModInitializer
             while (keyOpenReplays.wasPressed()) this.keyOpenReplays();
             while (keyRecapRecord.wasPressed()) mchorse.bbs_mod.recap.RecapRecorder.toggleWithMessage();
             while (keyRecapMarker.wasPressed()) mchorse.bbs_mod.recap.RecapRecorder.markerWithMessage();
+            while (keyRecapInstant.wasPressed()) mchorse.bbs_mod.recap.RecapRecorder.saveInstantWithMessage();
 
             /* The recap clock runs on game ticks, and a recap asked for opens once its world is in */
             mchorse.bbs_mod.recap.RecapRecorder.tick(mc);

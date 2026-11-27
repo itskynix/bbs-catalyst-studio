@@ -14,11 +14,16 @@ import java.util.List;
  * The recording side of a recap: its state, its clock and its markers, driven by the transport bar
  * of the pause menu and by the key bindings.
  *
- * <p>The clock counts game ticks only: a paused game does not advance it.</p>
+ * <p><b>The clock.</b> A running recording counts client ticks, twenty a second, also while the
+ * pause menu is open, so the time on the transport bar goes on from the moment Start is pressed
+ * there. What is drawn between two ticks is {@code ticks + transition}, the transition being the
+ * frame's share of the next tick; nothing reads the wall clock.</p>
  *
- * <p><b>Instant recap.</b> While the setting is on, the last stretch of play can be saved after
- * the fact: ticks since the world was joined and the markers pressed in them are kept in memory,
- * and saving takes the last so many seconds of them.</p>
+ * <p><b>Instant recap.</b> The last stretch of play can be saved after the fact: the ticks played
+ * since the world was joined and the markers pressed in them are counted all the time, so switching
+ * the setting on mid session already has the stretch behind it; a paused game is not play and does
+ * not add to it. Saving takes the last so many seconds, the setting's length, or all that was
+ * played when that is shorter.</p>
  */
 public final class RecapRecorder
 {
@@ -63,20 +68,38 @@ public final class RecapRecorder
         return BBSSettings.recapInstantSeconds == null ? 0 : BBSSettings.recapInstantSeconds.get() * 20;
     }
 
+    /** The recording's time between two ticks, for drawing: the ticks plus the frame's transition. */
+    public static float getTime(float transition)
+    {
+        return state == State.RECORDING ? ticks + Math.max(0F, Math.min(1F, transition)) : ticks;
+    }
+
+    /** How much play an instant recap would take right now. */
+    public static int getInstantTicks()
+    {
+        return Math.min(playedTicks, instantWindow());
+    }
+
     /** Once a client tick. */
     public static void tick(MinecraftClient mc)
     {
-        if (mc.world == null || mc.isPaused())
+        if (mc.world == null)
+        {
+            return;
+        }
+
+        /* The recording counts on with the pause menu open; only play feeds the instant stretch */
+        if (state == State.RECORDING)
+        {
+            ticks += 1;
+        }
+
+        if (mc.isPaused())
         {
             return;
         }
 
         playedTicks += 1;
-
-        if (state == State.RECORDING)
-        {
-            ticks += 1;
-        }
 
         int oldest = playedTicks - instantWindow();
 
@@ -155,7 +178,7 @@ public final class RecapRecorder
             return true;
         }
 
-        if (state == State.IDLE && isInstantEnabled() && MinecraftClient.getInstance().world != null)
+        if (state == State.IDLE && MinecraftClient.getInstance().world != null)
         {
             if (!playedMarkers.contains(playedTicks))
             {
@@ -178,7 +201,7 @@ public final class RecapRecorder
             return null;
         }
 
-        int length = Math.min(playedTicks, instantWindow());
+        int length = getInstantTicks();
 
         if (length <= 0)
         {
@@ -204,12 +227,40 @@ public final class RecapRecorder
     {
         if (state == State.IDLE)
         {
-            say(start() ? "bbs.recap.message.started" : "bbs.recap.message.unavailable");
+            startWithMessage();
         }
         else
         {
-            say(save() != null ? "bbs.recap.message.saved" : "bbs.recap.message.failed");
+            saveWithMessage();
         }
+    }
+
+    /** The instant key and button: saves the last stretch, and says what came of it. */
+    public static RecapRecord saveInstantWithMessage()
+    {
+        if (!isInstantEnabled())
+        {
+            say("bbs.recap.message.instant_off");
+
+            return null;
+        }
+
+        RecapRecord record = saveInstant();
+
+        say(record != null ? "bbs.recap.message.instant_saved" : "bbs.recap.message.instant_empty");
+
+        return record;
+    }
+
+    /** The start and stop of the transport bar, with what came of them said. */
+    public static void startWithMessage()
+    {
+        say(start() ? "bbs.recap.message.started" : "bbs.recap.message.unavailable");
+    }
+
+    public static void saveWithMessage()
+    {
+        say(save() != null ? "bbs.recap.message.saved" : "bbs.recap.message.failed");
     }
 
     public static void markerWithMessage()

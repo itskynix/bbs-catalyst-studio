@@ -11,15 +11,17 @@ import mchorse.bbs_mod.ui.framework.elements.buttons.UIToggle;
 import mchorse.bbs_mod.ui.framework.elements.input.UIColor;
 import mchorse.bbs_mod.ui.framework.elements.input.UITrackpad;
 
+import java.util.function.Consumer;
+
 /**
  * The view settings panel: what of the interface and the scene is shown, and what is overridden,
  * each in its own group that folds. Every change is written into the recap.
  */
 public class UIRecapViewPanel extends UIScrollView
 {
-    private final Runnable onChange;
+    private final Consumer<RecapOption> onChange;
 
-    public UIRecapViewPanel(Runnable onChange)
+    public UIRecapViewPanel(Consumer<RecapOption> onChange)
     {
         super();
 
@@ -67,7 +69,7 @@ public class UIRecapViewPanel extends UIScrollView
                     value.setEnabled(t.getValue());
                 }
 
-                this.onChange.run();
+                this.onChange.accept(option);
             });
 
             toggle.h(14);
@@ -89,7 +91,7 @@ public class UIRecapViewPanel extends UIScrollView
             UIColor color = new UIColor((c) ->
             {
                 record.setValue(option, c & 0xffffff);
-                this.onChange.run();
+                this.onChange.accept(option);
             });
 
             color.setColor(record.getValue(option));
@@ -102,7 +104,7 @@ public class UIRecapViewPanel extends UIScrollView
             UICirculate weather = new UICirculate((b) ->
             {
                 record.setValue(option, b.getValue());
-                this.onChange.run();
+                this.onChange.accept(option);
             });
 
             weather.addLabel(UIRecapKeys.key("view.weather_clear"));
@@ -116,7 +118,7 @@ public class UIRecapViewPanel extends UIScrollView
         UITrackpad trackpad = new UITrackpad((v) ->
         {
             record.setValue(option, v.intValue());
-            this.onChange.run();
+            this.onChange.accept(option);
         });
 
         trackpad.limit(option.min, option.max, true);

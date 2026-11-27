@@ -1,7 +1,11 @@
 package mchorse.bbs_mod.ui.recap;
 
+import mchorse.bbs_mod.graphics.window.Window;
+import mchorse.bbs_mod.l10n.keys.IKey;
+import mchorse.bbs_mod.recap.RecapOption;
 import mchorse.bbs_mod.recap.RecapRecord;
 import mchorse.bbs_mod.recap.RecapStore;
+import mchorse.bbs_mod.recap.RecapTime;
 import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UIOverlay;
@@ -27,6 +31,10 @@ import java.util.Map;
  * ones are a click away in the layout menu, and the layout in use is kept across sessions
  * ({@link RecapLayout}).</p>
  *
+ * <p><b>History.</b> Every edit, to a view setting, a marker, the name or the layout, is a step
+ * of {@link RecapHistory}: undo and redo on the top bar and with Ctrl Z and Ctrl Y, and the history
+ * menu goes back to any step at once.</p>
+ *
  * <p>The cursor is a tick, and playing advances it a tick per game tick, so the editor is on the same
  * moment on every machine. The stage is not drawn yet: it shows the frame and the thirds guide.</p>
  */
@@ -39,6 +47,7 @@ public class UIRecapEditor extends UIElement
     private final UIRecapPanel panel;
     private final RecapLayout.Store layouts = RecapLayout.Store.load();
     private final RecapLayout layout = this.layouts.current;
+    private final RecapHistory history = new RecapHistory();
 
     public final UIRecapDock viewportDock;
     public final UIRecapDock timelineDock;
@@ -72,15 +81,21 @@ public class UIRecapEditor extends UIElement
         UIRecapButton back = new UIRecapButton(() -> Icons.ARROW_LEFT, UIRecapKeys.key("editor.back"), () -> this.panel.openHome());
         UIRecapButton rename = new UIRecapButton(() -> Icons.EDIT, UIRecapKeys.key("editor.rename"), this::rename);
         UIRecapButton layouts = new UIRecapButton(() -> Icons.LAYOUT, UIRecapKeys.key("layout.menu"), this::openLayoutMenu);
+        UIRecapButton undo = new UIRecapButton(() -> Icons.UNDO, UIRecapKeys.key("history.undo"), this::undo).active(this.history::canUndo);
+        UIRecapButton redo = new UIRecapButton(() -> Icons.REDO, UIRecapKeys.key("history.redo"), this::redo).active(this.history::canRedo);
+        UIRecapButton history = new UIRecapButton(() -> Icons.LIST, UIRecapKeys.key("history.title"), this::openHistoryMenu);
 
         back.relative(this).x(MARGIN).y(4).w(22).h(18);
         rename.relative(this).x(MARGIN + 26).y(4).w(22).h(18);
         layouts.relative(this).x(1F, -MARGIN - 22).y(4).w(22).h(18);
+        history.relative(this).x(1F, -MARGIN - 52).y(4).w(22).h(18);
+        redo.relative(this).x(1F, -MARGIN - 78).y(4).w(22).h(18);
+        undo.relative(this).x(1F, -MARGIN - 104).y(4).w(22).h(18);
 
         this.viewport = new UIRecapViewport(this);
         this.timeline = new UIRecapTimeline(this);
         this.info = new UIRecapInfoPanel(this);
-        this.view = new UIRecapViewPanel(this::save);
+        this.view = new UIRecapViewPanel(this::viewChanged);
 
         this.viewportDock = this.dock("viewport", Icons.VIDEO_CAMERA, this.viewport);
         this.timelineDock = this.dock("timeline", Icons.TIME, this.timeline);
@@ -91,7 +106,7 @@ public class UIRecapEditor extends UIElement
         this.timelineSplitter = new UIRecapSplitter(false, this::dragTimeline, this::saveLayout);
         this.innerSplitter = new UIRecapSplitter(false, this::dragInner, this::saveLayout);
 
-        this.add(back, rename, layouts, this.viewportDock, this.timelineDock, this.infoDock, this.viewDock,
+        this.add(back, rename, undo, redo, history, layouts, this.viewportDock, this.timelineDock, this.infoDock, this.viewDock,
             this.sideSplitter, this.timelineSplitter, this.innerSplitter);
     }
 
@@ -134,6 +149,11 @@ public class UIRecapEditor extends UIElement
         this.stopPlayback();
         this.info.fill(record);
         this.view.fill(record);
+
+        if (record != null)
+        {
+            this.history.reset(UIRecapKeys.text("history.opened"), record, this.layout);
+        }
     }
 
     public void seek(int tick)
@@ -230,6 +250,7 @@ public class UIRecapEditor extends UIElement
             this.record.addMarker(this.cursor);
             this.save();
             this.info.fill(this.record);
+            this.remember(UIRecapKeys.text("history.marker_add") + " " + RecapTime.format(this.cursor), null);
         }
     }
 
@@ -239,7 +260,71 @@ public class UIRecapEditor extends UIElement
         {
             this.save();
             this.info.fill(this.record);
+            this.remember(UIRecapKeys.text("history.marker_remove") + " " + RecapTime.format(this.cursor), null);
         }
+    }
+
+    /** A view setting changed: written into the recap, and one step per setting in a row. */
+    private void viewChanged(RecapOption option)
+    {
+        this.save();
+        this.remember(UIRecapKeys.text("history.view") + ": " + UIRecapKeys.text("view." + option.id), "view." + option.id);
+    }
+
+    /* History */
+
+    /** Adds what is on screen now to the history, after an edit. */
+    private void remember(String label, String merge)
+    {
+        if (this.record != null)
+        {
+            this.history.push(label, merge, this.record, this.layout);
+        }
+    }
+
+    public void undo()
+    {
+        this.apply(this.history.undo());
+    }
+
+    public void redo()
+    {
+        this.apply(this.history.redo());
+    }
+
+    /** Puts a state of the history back on screen: the recap's editable side and the layout. */
+    private void apply(RecapHistory.State state)
+    {
+        if (state == null || this.record == null)
+        {
+            return;
+        }
+
+        this.record.setEditable(state.record());
+        this.layout.set(state.layout());
+        this.save();
+        this.layouts.save();
+        this.info.fill(this.record);
+        this.view.fill(this.record);
+        this.resize();
+    }
+
+    /** Every step since the recap was opened, newest on top; the one on screen is ticked. */
+    private void openHistoryMenu()
+    {
+        List<RecapHistory.State> states = this.history.getStates();
+        int current = this.history.getIndex();
+
+        this.getContext().replaceContextMenu((menu) ->
+        {
+            for (int i = states.size() - 1; i >= 0; i--)
+            {
+                int index = i;
+                String label = (i + 1) + ". " + states.get(i).label();
+
+                menu.action(i == current ? Icons.CHECKMARK : (i > current ? Icons.REDO : Icons.TIME), IKey.constant(label), () -> this.apply(this.history.jump(index)));
+            }
+        });
     }
 
     private void rename()
@@ -255,6 +340,7 @@ public class UIRecapEditor extends UIElement
             {
                 this.record.name = name.trim();
                 this.save();
+                this.remember(UIRecapKeys.text("history.rename"), null);
             }
         });
 
@@ -389,6 +475,7 @@ public class UIRecapEditor extends UIElement
     private void saveLayout()
     {
         this.layouts.save();
+        this.remember(UIRecapKeys.text("history.layout"), null);
     }
 
     /* Moving panels */
@@ -493,7 +580,7 @@ public class UIRecapEditor extends UIElement
 
             for (Map.Entry<String, RecapLayout> entry : this.layouts.templates.entrySet())
             {
-                menu.action(this.layout.same(entry.getValue()) ? Icons.CHECKMARK : Icons.FAVORITE, mchorse.bbs_mod.l10n.keys.IKey.constant(entry.getKey()), () -> this.useLayout(entry.getValue()));
+                menu.action(this.layout.same(entry.getValue()) ? Icons.CHECKMARK : Icons.FAVORITE, IKey.constant(entry.getKey()), () -> this.useLayout(entry.getValue()));
             }
 
             menu.action(Icons.SAVE, UIRecapKeys.key("layout.save"), this::saveTemplate);
@@ -516,7 +603,7 @@ public class UIRecapEditor extends UIElement
         {
             for (String name : this.layouts.templates.keySet())
             {
-                menu.action(Icons.REMOVE, mchorse.bbs_mod.l10n.keys.IKey.constant(name), () ->
+                menu.action(Icons.REMOVE, IKey.constant(name), () ->
                 {
                     this.layouts.templates.remove(name);
                     this.saveLayout();
@@ -564,6 +651,26 @@ public class UIRecapEditor extends UIElement
             this.togglePlayback();
 
             return true;
+        }
+
+        /* Ctrl Z steps back, Ctrl Y or Ctrl Shift Z forward; a focused text field keeps its own */
+        if (context.getKeyAction() != KeyAction.RELEASED && !context.isFocused() && Window.isCtrlPressed())
+        {
+            int key = context.getKeyCode();
+
+            if (key == GLFW.GLFW_KEY_Z && !Window.isShiftPressed())
+            {
+                this.undo();
+
+                return true;
+            }
+
+            if (key == GLFW.GLFW_KEY_Y || (key == GLFW.GLFW_KEY_Z && Window.isShiftPressed()))
+            {
+                this.redo();
+
+                return true;
+            }
         }
 
         return super.subKeyPressed(context);

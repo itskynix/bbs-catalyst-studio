@@ -35,6 +35,7 @@
     "key.bbs.record_replay": "Record Current Replay",
     "key.bbs.recap_record": "Recap: Record and Save",
     "key.bbs.recap_marker": "Recap: Mark Moment",
+    "key.bbs.recap_instant": "Recap: Save Instant Recap",
     "key.bbs.replay_radial": "Replay Picker (hold)",
     "key.bbs.replay_next_track": "Next Actor / Take",
     "key.bbs.replay_prev_track": "Previous Actor / Take",

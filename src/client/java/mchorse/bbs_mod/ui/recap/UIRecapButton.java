@@ -13,6 +13,7 @@ public class UIRecapButton extends UIClickable<UIRecapButton>
 {
     private final Supplier<Icon> icon;
     private BooleanSupplier primary = () -> false;
+    private BooleanSupplier active;
 
     public UIRecapButton(Supplier<Icon> icon, IKey tooltip, Runnable action)
     {
@@ -29,6 +30,14 @@ public class UIRecapButton extends UIClickable<UIRecapButton>
         return this;
     }
 
+    /** Whether it can be pressed, asked again every frame: undo with nothing to undo is dimmed. */
+    public UIRecapButton active(BooleanSupplier active)
+    {
+        this.active = active;
+
+        return this;
+    }
+
     @Override
     protected UIRecapButton get()
     {
@@ -38,6 +47,11 @@ public class UIRecapButton extends UIClickable<UIRecapButton>
     @Override
     protected void renderSkin(UIContext context)
     {
+        if (this.active != null)
+        {
+            this.setEnabled(this.active.getAsBoolean());
+        }
+
         boolean enabled = this.isEnabled();
         boolean primary = enabled && this.primary.getAsBoolean();
 

@@ -62,6 +62,21 @@ public class RecapRecord
         }
     }
 
+    /** Takes the editable side of another copy: its name, markers and view settings. */
+    public void setEditable(RecapRecord other)
+    {
+        this.name = other.name;
+        this.markers.clear();
+        this.markers.addAll(other.markers);
+        this.view = (MapType) other.view.copy();
+    }
+
+    /** Whether the editable side matches another copy. */
+    public boolean sameEditable(RecapRecord other)
+    {
+        return this.name.equals(other.name) && this.markers.equals(other.markers) && this.view.equals(other.view);
+    }
+
     public MapType toData()
     {
         MapType data = new MapType();
