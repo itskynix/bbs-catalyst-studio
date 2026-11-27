@@ -1234,8 +1234,15 @@ public class BBSRendering
     {
         Double value = getCurveValue(ShaderCurves.SUN_ROTATION, CurveClip::getValues);
 
-        /* Recap Studio showing a recap with its time of day overridden */
-        return value == null ? mchorse.bbs_mod.recap.RecapScene.timeOfDay() : (long) (value * 1000L);
+        if (value != null)
+        {
+            return (long) (value * 1000L);
+        }
+
+        /* Recap Studio showing a recap with its time of day overridden. Kept out of a ?: on purpose:
+         * a Long and a long there make the whole expression a long, and a null unboxed in it threw
+         * inside the ClientWorld constructor, so a world never finished joining. */
+        return mchorse.bbs_mod.recap.RecapScene.timeOfDay();
     }
 
     /* Fullbright: a work light for the film editor's preview, never part of a recording */
@@ -1271,7 +1278,7 @@ public class BBSRendering
     {
         Double value = getCurveValue(ShaderCurves.WEATHER, CurveClip::getValues);
 
-        return value == null ? mchorse.bbs_mod.recap.RecapScene.weather() : value;
+        return value != null ? value : mchorse.bbs_mod.recap.RecapScene.weather();
     }
 
     public static float getSunHorizontalRotation()

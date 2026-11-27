@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(ParticleManager.class)
 public class RecapParticlesMixin
 {
-    @Inject(method = "renderParticles", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "renderParticles", at = @At("HEAD"), cancellable = true, require = 0)
     private void bbs$recapHidesParticles(CallbackInfo info)
     {
         if (mchorse.bbs_mod.recap.RecapScene.hidesParticles())

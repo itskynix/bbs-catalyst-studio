@@ -50,6 +50,23 @@ public final class RecapScene implements ICameraController
         playing = false;
     }
 
+    /**
+     * Lets go of everything at a world change: the shown recap, its camera on the controller and,
+     * when a recap was being shown, the frame size it asked the world to be drawn at.
+     */
+    public static void reset()
+    {
+        boolean wasShown = active;
+
+        hide();
+        mchorse.bbs_mod.BBSModClient.getCameraController().remove(INSTANCE);
+
+        if (wasShown)
+        {
+            mchorse.bbs_mod.client.BBSRendering.setCustomSize(false);
+        }
+    }
+
     public static void setPlaying(boolean isPlaying)
     {
         playing = isPlaying;

@@ -174,7 +174,7 @@ public class WorldRendererMixin
     //?}
 
     /** Recap Studio leaving out the entities or the players a recap hides, with their shadows and names. */
-    @Inject(method = "renderEntity", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "renderEntity", at = @At("HEAD"), cancellable = true, require = 0)
     private void bbs$recapHidesEntity(net.minecraft.entity.Entity entity, double cameraX, double cameraY, double cameraZ, float tickDelta, MatrixStack matrices, net.minecraft.client.render.VertexConsumerProvider vertexConsumers, CallbackInfo info)
     {
         if (mchorse.bbs_mod.recap.RecapScene.hides(entity))

@@ -29,6 +29,10 @@ public final class RecapWorlds
 
     private static String pending;
     private static int pendingTicks;
+    private static int readyTicks;
+
+    /** How long the joined world is given to settle before a requested recap opens in it. */
+    private static final int READY_TICKS = 10;
 
     private RecapWorlds()
     {}
@@ -87,12 +91,17 @@ public final class RecapWorlds
 
         pending = record.id;
         pendingTicks = 0;
+        readyTicks = 0;
 
-        /* Next tick: the click that asked for this comes from the very screen that goes away */
+        /* In steps, each on its own game thread task: the click that asked for this comes from the
+         * very screen that goes away, and the next world is only started once the last one is fully
+         * let go (the leave cleanup the disconnect queues runs before the start queued after it) */
         mc.send(() ->
         {
             try
             {
+                RecapScene.reset();
+
                 if (mc.world != null)
                 {
                     boolean local = mc.isInSingleplayer();
@@ -108,29 +117,54 @@ public final class RecapWorlds
                         mc.disconnect();
                     }
                 }
-
-                if (record.singleplayer)
-                {
-                    mc.createIntegratedServerLoader().start(record.worldTarget, () ->
-                    {
-                        pending = null;
-                        mc.setScreen(new TitleScreen());
-                    });
-                }
-                else
-                {
-                    ServerInfo info = new ServerInfo(record.worldName, record.worldTarget, ServerInfo.ServerType.OTHER);
-
-                    ConnectScreen.connect(new TitleScreen(), mc, ServerAddress.parse(record.worldTarget), info, false);
-                }
             }
             catch (Throwable e)
             {
                 pending = null;
-                BBSMod.LOGGER.error("Could not enter the world of a recap", e);
+                BBSMod.LOGGER.error("Could not leave the world for a recap", e);
                 mc.setScreen(new TitleScreen());
+
+                return;
             }
+
+            mc.send(() -> start(mc, record));
         });
+    }
+
+    /** The second step: loads the recap's world, with nothing of the last one left. */
+    private static void start(MinecraftClient mc, RecapRecord record)
+    {
+        try
+        {
+            if (mc.world != null)
+            {
+                /* Still in a world: something else took over in between, so nothing is started */
+                pending = null;
+
+                return;
+            }
+
+            if (record.singleplayer)
+            {
+                mc.createIntegratedServerLoader().start(record.worldTarget, () ->
+                {
+                    pending = null;
+                    mc.setScreen(new TitleScreen());
+                });
+            }
+            else
+            {
+                ServerInfo info = new ServerInfo(record.worldName, record.worldTarget, ServerInfo.ServerType.OTHER);
+
+                ConnectScreen.connect(new TitleScreen(), mc, ServerAddress.parse(record.worldTarget), info, false);
+            }
+        }
+        catch (Throwable e)
+        {
+            pending = null;
+            BBSMod.LOGGER.error("Could not enter the world of a recap", e);
+            mc.setScreen(new TitleScreen());
+        }
     }
 
     /** Once a client tick: opens a recap waiting for its world, once the player is in it. */
@@ -148,7 +182,16 @@ public final class RecapWorlds
             return;
         }
 
-        if (mc.world == null || mc.player == null || mc.currentScreen != null)
+        /* Only once the world has joined for real and settled a moment: the handler has its world,
+         * the player is in it and no loading screen is up */
+        if (mc.world == null || mc.player == null || mc.getNetworkHandler() == null || mc.getNetworkHandler().getWorld() == null || mc.currentScreen != null)
+        {
+            readyTicks = 0;
+
+            return;
+        }
+
+        if (++readyTicks < READY_TICKS)
         {
             return;
         }

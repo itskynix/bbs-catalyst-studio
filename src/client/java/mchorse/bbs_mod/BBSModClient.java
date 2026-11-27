@@ -867,11 +867,22 @@ public class BBSModClient implements ClientModInitializer
             }
         });
 
-        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> mchorse.bbs_mod.recap.RecapRecorder.onJoin());
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) ->
+        {
+            /* A new world starts with nothing of the last one: no recording, no recap shown */
+            mchorse.bbs_mod.recap.RecapScene.reset();
+            mchorse.bbs_mod.recap.RecapRecorder.onJoin();
+        });
 
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) ->
         {
-            mchorse.bbs_mod.recap.RecapRecorder.onLeave();
+            /* This can come on the network thread: the recorder and the recap scene are let go on the
+             * game thread, in order before anything of the next world, which also queues there */
+            client.execute(() ->
+            {
+                mchorse.bbs_mod.recap.RecapScene.reset();
+                mchorse.bbs_mod.recap.RecapRecorder.onLeave();
+            });
             dashboard = null;
             DashboardWarmup.reset();
             client.execute(() -> videos.delete());
