@@ -867,6 +867,10 @@ public class BBSModClient implements ClientModInitializer
             }
         });
 
+        /* A shown recap's blocks: a chunk sent brings the world's real ones, a chunk let go of takes them along */
+        net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents.CHUNK_LOAD.register(mchorse.bbs_mod.recap.RecapWorldOverlay::onChunkLoad);
+        net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents.CHUNK_UNLOAD.register(mchorse.bbs_mod.recap.RecapWorldOverlay::onChunkUnload);
+
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) ->
         {
             /* A new world starts with nothing of the last one: no recording, no recap shown */
@@ -1006,7 +1010,9 @@ public class BBSModClient implements ClientModInitializer
             while (keyRecapMarker.wasPressed()) mchorse.bbs_mod.recap.RecapRecorder.markerWithMessage();
             while (keyRecapInstant.wasPressed()) mchorse.bbs_mod.recap.RecapRecorder.saveInstantWithMessage();
 
-            /* The recap clock runs on game ticks, and a recap asked for opens once its world is in */
+            /* The recap clock runs on game ticks, and a recap asked for opens once its world is in;
+             * a shown recap's blocks go with the client world they were put on */
+            mchorse.bbs_mod.recap.RecapWorldOverlay.tick(mc);
             mchorse.bbs_mod.recap.RecapRecorder.tick(mc);
             mchorse.bbs_mod.recap.RecapWorlds.tick(mc);
             while (keyOpenMorphing.wasPressed())

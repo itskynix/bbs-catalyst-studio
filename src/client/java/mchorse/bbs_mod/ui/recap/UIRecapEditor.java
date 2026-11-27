@@ -385,10 +385,26 @@ public class UIRecapEditor extends UIElement
         this.resize();
     }
 
-    /** The idle camera a new recap starts with: outside, behind and above the player, over its whole length. */
+    /**
+     * The idle camera a new recap starts with: outside, behind and above the player, over its
+     * whole length; behind it where it first is in the client's dimension, and none while the
+     * recording was never in it, as its coordinates would be of another world.
+     */
     private void addDefaultCamera(RecapRecord record)
     {
-        Position outside = RecapScene.outsideView(record, this.track, this.motion, 0F);
+        int first = 0;
+
+        if (!record.dimensions.isEmpty())
+        {
+            first = record.dimensions.firstTickIn(mchorse.bbs_mod.recap.RecapWorldOverlay.dimensionOf(net.minecraft.client.MinecraftClient.getInstance().world));
+
+            if (first < 0)
+            {
+                return;
+            }
+        }
+
+        Position outside = RecapScene.outsideView(record, this.track, this.motion, first);
 
         if (outside == null)
         {
@@ -419,6 +435,11 @@ public class UIRecapEditor extends UIElement
         if (this.isFlying())
         {
             return UIRecapKeys.text("editor.flying_note");
+        }
+
+        if (RecapScene.isElsewhere())
+        {
+            return UIRecapKeys.key("editor.other_dimension").format(UIRecapKeys.dimensionName(RecapScene.recordedDimension())).get();
         }
 
         if (RecapScene.isFirstPerson())

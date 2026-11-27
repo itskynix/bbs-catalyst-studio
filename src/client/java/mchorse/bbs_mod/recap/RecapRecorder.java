@@ -49,6 +49,7 @@ public final class RecapRecorder
     private static final RecapTrack track = new RecapTrack();
     private static final RecapMotion motion = new RecapMotion();
     private static final RecapEvents events = new RecapEvents();
+    private static final RecapDimensions dimensions = new RecapDimensions();
     private static RecapWorlds.Info world;
 
     private static int playedTicks;
@@ -56,6 +57,7 @@ public final class RecapRecorder
     private static final RecapTrack playedTrack = new RecapTrack();
     private static final RecapMotion playedMotion = new RecapMotion();
     private static final RecapEvents playedEvents = new RecapEvents();
+    private static final RecapDimensions playedDimensions = new RecapDimensions();
 
     private RecapRecorder()
     {}
@@ -111,6 +113,7 @@ public final class RecapRecorder
             ticks += 1;
             sample(mc, track);
             sampleMotion(mc, motion);
+            dimensions.mark(ticks - 1, RecapWorldOverlay.dimensionOf(mc.world));
         }
 
         if (mc.isPaused() || RecapScene.isActive())
@@ -124,6 +127,8 @@ public final class RecapRecorder
         sampleMotion(mc, playedMotion);
         playedMotion.trim(BUFFER_LIMIT);
         playedEvents.dropBefore(playedTicks - BUFFER_LIMIT);
+        playedDimensions.mark(playedTicks - 1, RecapWorldOverlay.dimensionOf(mc.world));
+        playedDimensions.dropBefore(playedTicks - BUFFER_LIMIT);
 
         int oldest = playedTicks - BUFFER_LIMIT;
 
@@ -148,27 +153,30 @@ public final class RecapRecorder
     }
 
     /**
-     * A block of the world changed: broken, placed or used. It goes into the running recording at
-     * its tick, and into the instant stretch while play is going on; the recap's own blocks put
-     * in by Recap Studio are not play and are left out.
+     * A block of a client world changed: broken, placed or used. It goes into the running recording
+     * at its tick, and into the instant stretch while play is going on, each with the dimension it
+     * changed in; the recap's own blocks put in by Recap Studio are not play and are left out. A
+     * change from outside over a block the shown recap set is what that block really is now.
      */
-    public static void onBlockChanged(net.minecraft.util.math.BlockPos pos, net.minecraft.block.BlockState from, net.minecraft.block.BlockState to)
+    public static void onBlockChanged(net.minecraft.client.world.ClientWorld in, net.minecraft.util.math.BlockPos pos, net.minecraft.block.BlockState from, net.minecraft.block.BlockState to)
     {
-        if (RecapEvents.applying || from == to)
+        if (RecapWorldOverlay.isApplying() || from == to)
         {
             return;
         }
 
+        RecapWorldOverlay.onBlockChanged(in, pos, to);
+
+        String dimension = RecapWorldOverlay.dimensionOf(in);
+
         if (state == State.RECORDING)
         {
-            events.add(ticks, pos, from, to);
+            events.add(ticks, pos, from, to, dimension);
         }
 
-        MinecraftClient mc = MinecraftClient.getInstance();
-
-        if (mc.world != null && !RecapScene.isActive())
+        if (in != null && !RecapScene.isActive())
         {
-            playedEvents.add(playedTicks, pos, from, to);
+            playedEvents.add(playedTicks, pos, from, to, dimension);
         }
     }
 
@@ -203,6 +211,7 @@ public final class RecapRecorder
         track.clear();
         motion.clear();
         events.clear();
+        dimensions.clear();
         state = State.RECORDING;
 
         return true;
@@ -231,7 +240,7 @@ public final class RecapRecorder
         /* The session ends here whatever comes of the writing: no clock runs behind it */
         state = State.STOPPED;
 
-        RecapRecord record = create(world, ticks, markers, track, motion, events, false);
+        RecapRecord record = create(world, ticks, markers, track, motion, events, dimensions, false);
 
         if (record != null)
         {
@@ -307,7 +316,7 @@ public final class RecapRecorder
             }
         }
 
-        return create(info, length, inside, RecapTrack.tail(playedTrack, length), RecapMotion.tail(playedMotion, length), RecapEvents.tail(playedEvents, from), true);
+        return create(info, length, inside, RecapTrack.tail(playedTrack, length), RecapMotion.tail(playedMotion, length), RecapEvents.tail(playedEvents, from), RecapDimensions.tail(playedDimensions, from), true);
     }
 
     /** The record key: starts a recording, and saves the one running or stopped. */
@@ -422,6 +431,7 @@ public final class RecapRecorder
         playedTrack.clear();
         playedMotion.clear();
         playedEvents.clear();
+        playedDimensions.clear();
     }
 
     /** Leaving the world keeps what was being recorded rather than losing it. */
@@ -443,10 +453,11 @@ public final class RecapRecorder
         track.clear();
         motion.clear();
         events.clear();
+        dimensions.clear();
         world = null;
     }
 
-    private static RecapRecord create(RecapWorlds.Info info, int length, List<Integer> marked, RecapTrack camera, RecapMotion moves, RecapEvents changes, boolean instant)
+    private static RecapRecord create(RecapWorlds.Info info, int length, List<Integer> marked, RecapTrack camera, RecapMotion moves, RecapEvents changes, RecapDimensions places, boolean instant)
     {
         RecapRecord record = new RecapRecord();
         LocalDateTime now = LocalDateTime.now();
@@ -459,6 +470,7 @@ public final class RecapRecorder
         record.ticks = length;
         record.created = System.currentTimeMillis();
         record.instant = instant;
+        record.dimensions.copy(places);
 
         for (int marker : marked)
         {

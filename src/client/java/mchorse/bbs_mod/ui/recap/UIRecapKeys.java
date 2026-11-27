@@ -18,4 +18,21 @@ public final class UIRecapKeys
     {
         return key(id).get();
     }
+
+    /** A dimension's name: the three of the game by their own strings, any other by its id. */
+    public static String dimensionName(String id)
+    {
+        if (id == null || id.isEmpty())
+        {
+            return "?";
+        }
+
+        switch (id)
+        {
+            case "minecraft:overworld": return text("dimension.overworld");
+            case "minecraft:the_nether": return text("dimension.the_nether");
+            case "minecraft:the_end": return text("dimension.the_end");
+            default: return id;
+        }
+    }
 }

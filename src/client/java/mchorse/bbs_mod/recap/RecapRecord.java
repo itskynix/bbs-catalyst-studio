@@ -25,6 +25,8 @@ public class RecapRecord
     public int ticks;
     public long created;
     public boolean instant;
+    /** Which dimension the recording was in, tick by tick; empty for a recap kept before they were. */
+    public final RecapDimensions dimensions = new RecapDimensions();
     public final List<Integer> markers = new ArrayList<>();
     private MapType view = new MapType();
     /** The timeline: the film studio's own clips, cameras, effects and tools, over the recording. */
@@ -98,6 +100,12 @@ public class RecapRecord
         data.putInt("ticks", this.ticks);
         data.putLong("created", this.created);
         data.putBool("instant", this.instant);
+
+        if (!this.dimensions.isEmpty())
+        {
+            data.put("dimensions", this.dimensions.toData());
+        }
+
         data.put("markers", markers);
         data.put("view", this.view.copy());
         data.put("clips", this.clips.toData());
@@ -118,6 +126,7 @@ public class RecapRecord
         record.ticks = Math.max(0, data.getInt("ticks", 0));
         record.created = data.getLong("created", 0L);
         record.instant = data.getBool("instant", false);
+        record.dimensions.copy(RecapDimensions.fromData(data.getMap("dimensions")));
 
         for (BaseType marker : data.getList("markers"))
         {

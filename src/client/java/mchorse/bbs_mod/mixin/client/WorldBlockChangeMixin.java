@@ -26,8 +26,9 @@ public class WorldBlockChangeMixin
         }
         BlockShadowCache.invalidateChange((ClientWorld) (Object) this, pos, oldState, newState);
 
-        /* Recap: a block broken, placed or used goes into the recording at its tick */
-        mchorse.bbs_mod.recap.RecapRecorder.onBlockChanged(pos, oldState, newState);
+        /* Recap: a block broken, placed or used goes into the recording at its tick, with its
+         * dimension; over a block a shown recap set, it is what the world really has there now */
+        mchorse.bbs_mod.recap.RecapRecorder.onBlockChanged((ClientWorld) (Object) this, pos, oldState, newState);
 
         /* A decay volume over this block rebuilds its surfaces in the very next frame */
         mchorse.bbs_mod.forms.renderers.DecayFormRenderer.onBlockChanged(pos);

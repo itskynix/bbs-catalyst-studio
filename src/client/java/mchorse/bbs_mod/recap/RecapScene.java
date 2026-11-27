@@ -56,9 +56,8 @@ public final class RecapScene implements ICameraController
     private static final Position LAST = new Position();
     private static Position manual;
 
-    /* How the recorded player moved and what happened to the blocks, when the recap has them */
+    /* How the recorded player moved, when the recap has it; its blocks are the world overlay's */
     private static RecapMotion motion;
-    private static RecapEvents events;
 
     /** The free camera: where the viewport looks from while no camera clip is under the cursor. */
     private static final Position FREE = new Position();
@@ -76,10 +75,8 @@ public final class RecapScene implements ICameraController
 
     public static void show(RecapRecord shown, RecapTrack camera, RecapMotion moves, RecapEvents changes, IntSupplier at)
     {
-        if (events != null && events != changes)
-        {
-            events.restore();
-        }
+        /* The blocks of another recap shown before go back to the world's own first */
+        RecapWorldOverlay.attach(changes);
 
         if (record != shown)
         {
@@ -87,7 +84,6 @@ public final class RecapScene implements ICameraController
         }
 
         motion = moves;
-        events = changes;
 
         MinecraftClient mc = MinecraftClient.getInstance();
 
@@ -108,18 +104,14 @@ public final class RecapScene implements ICameraController
             stopSounds();
         }
 
-        /* The blocks the recap set go back to what they really are */
-        if (events != null)
-        {
-            events.restore();
-        }
+        /* The blocks the recap set go back to what the world really has now */
+        RecapWorldOverlay.detach();
 
         manual = null;
         active = false;
         record = null;
         track = null;
         motion = null;
-        events = null;
         freeSet = false;
         playing = false;
     }
@@ -132,6 +124,8 @@ public final class RecapScene implements ICameraController
     {
         boolean wasShown = active;
 
+        /* The world is going: its blocks are let go of with it, none set back */
+        RecapWorldOverlay.drop();
         hide();
         mchorse.bbs_mod.BBSModClient.getCameraController().remove(INSTANCE);
 
@@ -149,6 +143,30 @@ public final class RecapScene implements ICameraController
     public static boolean isActive()
     {
         return active && record != null && MinecraftClient.getInstance().world != null;
+    }
+
+    /* Dimensions */
+
+    /** The dimension the recording was in at the moment drawn, after the speed and freeze clips; null when it kept none. */
+    public static String recordedDimension()
+    {
+        if (!isActive() || record.dimensions.isEmpty())
+        {
+            return null;
+        }
+
+        return record.dimensions.at((int) Math.floor(RecapClips.sourceTime(record.clips, time())));
+    }
+
+    /**
+     * Whether the recording is in another dimension than the client at the moment drawn: then its
+     * camera and its player are somewhere this world does not have, and neither is shown.
+     */
+    public static boolean isElsewhere()
+    {
+        String at = recordedDimension();
+
+        return at != null && !at.equals(RecapWorldOverlay.dimensionOf(MinecraftClient.getInstance().world));
     }
 
     /** Whether the recap has a recorded camera to look through. */
@@ -247,7 +265,7 @@ public final class RecapScene implements ICameraController
      */
     public static boolean isFirstPerson()
     {
-        if (!isActive() || manual != null)
+        if (!isActive() || manual != null || isElsewhere())
         {
             return false;
         }
@@ -265,10 +283,13 @@ public final class RecapScene implements ICameraController
         return false;
     }
 
-    /** Whether the viewport shows the free camera: no flight and no camera clip under the cursor. */
+    /**
+     * Whether the viewport starts from the free camera: no flight, and no camera clip under the
+     * cursor or the recording in another dimension, whose eye is nowhere in this world.
+     */
     public static boolean isFreeCamera()
     {
-        return isActive() && manual == null && !hasCameraClip();
+        return isActive() && manual == null && (!hasCameraClip() || isElsewhere());
     }
 
     /** Puts the free camera somewhere, as a flight leaves it. */
@@ -393,6 +414,16 @@ public final class RecapScene implements ICameraController
     {
         transition = Math.max(0F, Math.min(1F, frameTransition));
 
+        float time = time();
+        int now = cursor.getAsInt();
+
+        /* The world's blocks as the recording had them at this moment, of this dimension only;
+         * also while flying, so the cursor moved under a flight shows its blocks */
+        if (isActive())
+        {
+            RecapWorldOverlay.update(MinecraftClient.getInstance().world, (int) Math.floor(RecapClips.sourceTime(record.clips, now)));
+        }
+
         if (manual != null)
         {
             manual.apply(camera);
@@ -401,26 +432,19 @@ public final class RecapScene implements ICameraController
             return;
         }
 
-        float time = time();
-        int now = cursor.getAsInt();
-
-        /* The world's blocks as the recording had them at this moment */
-        if (events != null)
-        {
-            events.apply(MinecraftClient.getInstance().world, (int) Math.floor(RecapClips.sourceTime(record.clips, now)));
-        }
-
         if (!this.base(time, this.sample))
         {
             return;
         }
 
-        boolean free = !hasCameraClip();
+        boolean elsewhere = isElsewhere();
+        boolean free = !hasCameraClip() || elsewhere;
 
-        /* No camera clip: the free camera, outside, where it was left; first seen behind the player */
+        /* The free camera, outside, where it was left; first seen behind the player, or where the
+         * client is when the recording is in another dimension */
         if (free && !freeSet)
         {
-            Position outside = outsideView(record, track, motion, time);
+            Position outside = elsewhere ? liveView() : outsideView(record, track, motion, time);
 
             if (outside != null)
             {
@@ -498,8 +522,12 @@ public final class RecapScene implements ICameraController
 
         int tick = cursor.getAsInt();
 
-        this.actor.place(track, motion, RecapClips.sourceTime(record.clips, tick), RecapClips.sourceTime(record.clips, tick + 1));
-        CONTEXT.entities.put(RecapClips.PLAYER, this.actor.isPlaced() ? this.actor : this.wrap(mc.player));
+        /* Not while the recording is in another dimension: the clips that follow it hold still */
+        if (!isElsewhere())
+        {
+            this.actor.place(track, motion, RecapClips.sourceTime(record.clips, tick), RecapClips.sourceTime(record.clips, tick + 1));
+            CONTEXT.entities.put(RecapClips.PLAYER, this.actor.isPlaced() ? this.actor : this.wrap(mc.player));
+        }
 
         for (PlayerEntity player : mc.world.getPlayers())
         {
@@ -574,6 +602,25 @@ public final class RecapScene implements ICameraController
         return position;
     }
 
+    /** Where the client's own camera is: the free camera's start while the recording is elsewhere. */
+    private static Position liveView()
+    {
+        MinecraftClient mc = MinecraftClient.getInstance();
+
+        if (mc.player == null)
+        {
+            return null;
+        }
+
+        Vec3d eye = mc.player.getCameraPosVec(1F);
+        Position position = new Position();
+
+        position.point.set(eye.x, eye.y, eye.z);
+        position.angle.set(mc.player.getYaw() + 180F, mc.player.getPitch(), 0F, 70F);
+
+        return position;
+    }
+
     private IEntity wrap(Entity entity)
     {
         return this.wrapped.computeIfAbsent(entity, MCEntity::new);
@@ -588,7 +635,7 @@ public final class RecapScene implements ICameraController
     {
         MinecraftClient mc = MinecraftClient.getInstance();
 
-        if (!isActive() || mc.player == null || isFirstPerson() || !record.isOn(RecapOption.PLAYERS)
+        if (!isActive() || mc.player == null || isFirstPerson() || isElsewhere() || !record.isOn(RecapOption.PLAYERS)
             || context.matrixStack() == null || context.consumers() == null)
         {
             return;
