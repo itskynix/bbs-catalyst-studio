@@ -103,6 +103,28 @@ public final class RecapStyle
         return light() ? 0xffe08a00 : 0xffffc857;
     }
 
+    /** A dimension's colour on the timeline: green, red and pale violet for the game's three, a steady one of its own for any other. */
+    public static int dimension(String id)
+    {
+        if (id == null)
+        {
+            return faint();
+        }
+
+        switch (id)
+        {
+            case "minecraft:overworld": return light() ? 0xff3a9a48 : 0xff5cc46a;
+            case "minecraft:the_nether": return light() ? 0xffc0392b : 0xffff6b5b;
+            case "minecraft:the_end": return light() ? 0xff8e6cc8 : 0xffc9a8ff;
+            default:
+            {
+                float hue = (id.hashCode() & 0xffff) / 65535F;
+
+                return 0xff000000 | (java.awt.Color.HSBtoRGB(hue, 0.55F, light() ? 0.7F : 0.95F) & 0xffffff);
+            }
+        }
+    }
+
     /* Backgrounds */
 
     /** Everything behind the editor's panels. */

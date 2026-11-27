@@ -113,6 +113,53 @@ public final class RecapWorldOverlay
         return queued == 0 && !world.getLightingProvider().hasUpdates();
     }
 
+    /* Holding a video frame: a frame drawn before the cursor's blocks and light were all in is not
+     * taken, and the next frame draws the same moment again, the clock held, until they are */
+    private static boolean hold;
+    private static int holds;
+
+    /**
+     * A video frame of a shown recap was not settled: true when it is held, not taken, the next
+     * frame repeating its moment; false once it has waited long enough and is to be taken anyway.
+     */
+    public static boolean holdFrame()
+    {
+        if (holds < 200)
+        {
+            holds += 1;
+            hold = true;
+
+            return true;
+        }
+
+        /* Light that never ends (something outside keeps changing it) must not stop a video */
+        BBSMod.LOGGER.warn("A recap video frame waited too long for the world to settle; it is taken as it is");
+        holds = 0;
+        hold = false;
+
+        return false;
+    }
+
+    /** A settled video frame was taken: the next one may move on. */
+    public static void frameTaken()
+    {
+        holds = 0;
+        hold = false;
+    }
+
+    /** Asked as a video frame begins: true once when the frame must repeat the last moment instead of moving on. */
+    public static boolean takeHold()
+    {
+        if (!hold)
+        {
+            return false;
+        }
+
+        hold = false;
+
+        return true;
+    }
+
     /** Shows these changes; the ones shown before are taken off first, unless they are these. */
     public static void attach(RecapEvents events)
     {

@@ -761,9 +761,22 @@ public class BBSRendering
 
         frameCapturedThisRender = true;
 
-        /* A video frame of a shown recap is only taken once all its blocks and their light are in */
-        boolean recording = BBSModClient.getVideoRecorder().isRecording()
-            && !(mchorse.bbs_mod.recap.RecapScene.isActive() && !mchorse.bbs_mod.recap.RecapWorldOverlay.isSettled());
+        /* A video frame of a shown recap is only taken once all its blocks and their light are in;
+         * one that is not is held, the next frame drawing the same moment, nothing skipped */
+        boolean recording = BBSModClient.getVideoRecorder().isRecording();
+
+        if (recording && canRender && mchorse.bbs_mod.recap.RecapScene.isActive())
+        {
+            if (mchorse.bbs_mod.recap.RecapWorldOverlay.isSettled())
+            {
+                mchorse.bbs_mod.recap.RecapWorldOverlay.frameTaken();
+            }
+            else if (mchorse.bbs_mod.recap.RecapWorldOverlay.holdFrame())
+            {
+                recording = false;
+            }
+        }
+
         boolean needsExportFrame = pendingExportResolutionAction != null || recording;
 
         if (needsExportFrame && canRender)

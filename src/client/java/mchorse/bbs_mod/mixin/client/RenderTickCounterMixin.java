@@ -35,6 +35,15 @@ public class RenderTickCounterMixin
 
         if (videoRecorder.isRecording())
         {
+            /^ A shown recap's last frame was not settled: the same moment again, the clock held ^/
+            if (mchorse.bbs_mod.recap.RecapWorldOverlay.takeHold())
+            {
+                BBSRendering.canRender = true;
+                info.setReturnValue(0);
+
+                return;
+            }
+
             if (videoRecorder.getCounter() == 0)
             {
                 this.tickDelta = 0;
@@ -120,6 +129,15 @@ public class RenderTickCounterMixin
 
         if (videoRecorder.isRecording())
         {
+            /* A shown recap's last frame was not settled: the same moment again, the clock held */
+            if (mchorse.bbs_mod.recap.RecapWorldOverlay.takeHold())
+            {
+                BBSRendering.canRender = true;
+                info.setReturnValue(0);
+
+                return;
+            }
+
             if (videoRecorder.getCounter() == 0)
             {
                 this.tickDelta = 0;

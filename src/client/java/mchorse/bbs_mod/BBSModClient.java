@@ -1069,6 +1069,22 @@ public class BBSModClient implements ClientModInitializer
         });
 
         ClientLifecycleEvents.CLIENT_STOPPING.register((e) -> BBSResources.stopWatchdog());
+
+        /* Closing the game: a recording still running is kept, and every recap file still on its
+         * way to the disk is written before the game is gone */
+        ClientLifecycleEvents.CLIENT_STOPPING.register((e) ->
+        {
+            try
+            {
+                mchorse.bbs_mod.recap.RecapRecorder.onLeave();
+            }
+            catch (Throwable error)
+            {
+                BBSMod.LOGGER.error("The running recap could not be kept on closing", error);
+            }
+
+            mchorse.bbs_mod.recap.RecapWriter.shutdown();
+        });
         ClientLifecycleEvents.CLIENT_STARTED.register((e) ->
         {
             BBSRendering.setupFramebuffer();

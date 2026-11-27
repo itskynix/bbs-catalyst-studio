@@ -92,6 +92,10 @@ public class UIRecapEditor extends UIElement
     private int cursor;
     private boolean playing;
 
+    /** The video export, and the button that takes the player to the dimension of the cursor's moment. */
+    private final RecapVideoExport export = new RecapVideoExport(this);
+    private UIRecapButton travelButton;
+
     private UIRecapDock dragged;
 
     /* The areas computed by the last layout, for the splitters and the drop targets */
@@ -118,6 +122,16 @@ public class UIRecapEditor extends UIElement
 
         saveButton.relative(this).x(MARGIN + 52).y(4).w(22).h(18);
         this.add(saveButton);
+
+        /* The video of the recap, and the way to the dimension the cursor's moment was in */
+        UIRecapButton exportButton = new UIRecapButton(() -> this.export.isExporting() ? Icons.STOP : Icons.FILM, UIRecapKeys.key("editor.export"), this::toggleExport)
+            .primary(this.export::isExporting).active(() -> this.record != null && this.sceneShown);
+
+        exportButton.relative(this).x(MARGIN + 78).y(4).w(22).h(18);
+        this.travelButton = new UIRecapButton(() -> Icons.GLOBE, UIRecapKeys.key("editor.travel"), this::travelToDimension).primary(() -> true);
+        this.travelButton.relative(this).x(MARGIN + 104).y(4).w(22).h(18);
+        this.travelButton.setVisible(false);
+        this.add(exportButton, this.travelButton);
         history.relative(this).x(1F, -MARGIN - 22).y(4).w(22).h(18);
         redo.relative(this).x(1F, -MARGIN - 48).y(4).w(22).h(18);
         undo.relative(this).x(1F, -MARGIN - 74).y(4).w(22).h(18);
@@ -132,7 +146,7 @@ public class UIRecapEditor extends UIElement
         this.viewportDock.note(this::viewportNote);
 
         /* F flies the camera, as in the film studio */
-        this.keys().register(Keys.FLIGHT, this::toggleFlight).active(() -> this.record != null && this.sceneShown);
+        this.keys().register(Keys.FLIGHT, this::toggleFlight).active(() -> this.record != null && this.sceneShown && !this.export.isExporting());
         this.infoDock = this.dock("info", Icons.FILE, this.info);
         this.viewDock = this.dock("view", Icons.VISIBLE, this.view);
         this.clipDock = this.dock("clip", Icons.EDIT, this.clipHost);
@@ -217,14 +231,26 @@ public class UIRecapEditor extends UIElement
         }
     }
 
+    /** Moves the cursor; not by hand while a video is made, which moves it alone. */
     public void seek(int tick)
+    {
+        if (this.export.isExporting())
+        {
+            return;
+        }
+
+        this.seekForExport(tick);
+    }
+
+    void seekForExport(int tick)
     {
         this.cursor = Math.max(0, Math.min(this.getLength(), tick));
     }
 
     public void togglePlayback()
     {
-        if (this.record == null)
+        /* A video plays the recap through by itself; a key press must not stop it half way */
+        if (this.record == null || this.export.isExporting())
         {
             return;
         }
@@ -249,6 +275,201 @@ public class UIRecapEditor extends UIElement
     {
         this.playing = false;
         RecapScene.setPlaying(false);
+    }
+
+    /** Plays on from the cursor as it is, as the video export starts. */
+    public void startPlayback()
+    {
+        if (this.record == null)
+        {
+            return;
+        }
+
+        this.playing = true;
+        RecapScene.setPlaying(true);
+    }
+
+    /* Video */
+
+    public boolean isExporting()
+    {
+        return this.export.isExporting();
+    }
+
+    /** Starts the video of the recap, or stops the one being made. */
+    public void toggleExport()
+    {
+        if (this.export.isExporting())
+        {
+            this.export.cancel();
+
+            return;
+        }
+
+        if (this.record == null || !this.sceneShown)
+        {
+            return;
+        }
+
+        if (this.export.start())
+        {
+            this.getContext().notifyInfo(UIRecapKeys.key("editor.export_started"));
+        }
+        else
+        {
+            this.getContext().notifyError(UIRecapKeys.key("editor.export_failed"));
+        }
+    }
+
+    /** The File menu's recap entries. */
+    public void fillFileMenu(mchorse.bbs_mod.ui.utils.context.ContextMenuManager menu)
+    {
+        menu.action(Icons.SAVE, UIRecapKeys.key("editor.save"), this::saveWithNotice);
+
+        if (this.export.isExporting())
+        {
+            menu.action(Icons.STOP, UIRecapKeys.key("editor.export_stop"), this::toggleExport);
+        }
+        else if (this.sceneShown)
+        {
+            menu.action(Icons.FILM, UIRecapKeys.key("editor.export"), this::toggleExport);
+        }
+
+        if (this.sceneShown && RecapScene.isElsewhere())
+        {
+            menu.action(Icons.GLOBE, UIRecapKeys.key("editor.travel"), this::travelToDimension);
+        }
+    }
+
+    /** The world drawn at the viewport's size again, after a video. */
+    public void restoreSceneSize()
+    {
+        if (this.sceneShown)
+        {
+            this.applySceneSize();
+        }
+    }
+
+    public void onExportFinished(boolean cancelled)
+    {
+        if (this.getContext() != null)
+        {
+            if (cancelled)
+            {
+                this.getContext().notifyInfo(UIRecapKeys.key("editor.export_cancelled"));
+            }
+            else
+            {
+                this.getContext().notifySuccess(UIRecapKeys.key("editor.export_done"));
+            }
+        }
+    }
+
+    /* Dimensions */
+
+    /**
+     * Takes the player to the dimension the recording was in at the cursor, where the recorded
+     * player stood: in single player through the game's own server, on a free spot at or above
+     * that place, never inside blocks; on a server the client cannot do it and says so.
+     */
+    public void travelToDimension()
+    {
+        String id = RecapScene.recordedDimension();
+        MinecraftClient mc = MinecraftClient.getInstance();
+
+        if (id == null || !RecapScene.isElsewhere() || mc.player == null)
+        {
+            return;
+        }
+
+        net.minecraft.server.integrated.IntegratedServer server = mc.getServer();
+
+        if (server == null)
+        {
+            this.getContext().notifyInfo(UIRecapKeys.key("editor.travel_multiplayer"));
+
+            return;
+        }
+
+        mchorse.bbs_mod.recap.RecapMotion.Frame at = new mchorse.bbs_mod.recap.RecapMotion.Frame();
+        float source = RecapClips.sourceTime(this.record.clips, this.cursor);
+
+        if (!RecapScene.frameAt(this.track, this.motion, source, at, mc.player.getStandingEyeHeight()))
+        {
+            this.getContext().notifyError(UIRecapKeys.key("editor.travel_failed"));
+
+            return;
+        }
+
+        java.util.UUID uuid = mc.player.getUuid();
+        mchorse.bbs_mod.ui.framework.UIContext context = this.getContext();
+        net.minecraft.util.Identifier identifier = net.minecraft.util.Identifier.tryParse(id);
+
+        if (identifier == null)
+        {
+            context.notifyError(UIRecapKeys.key("editor.travel_failed"));
+
+            return;
+        }
+
+        net.minecraft.registry.RegistryKey<net.minecraft.world.World> key = net.minecraft.registry.RegistryKey.of(net.minecraft.registry.RegistryKeys.WORLD, identifier);
+        double x = at.x, y = at.y, z = at.z;
+        float yaw = at.headYaw, pitch = at.pitch;
+
+        this.setFlight(false);
+
+        /* On the server's own thread: the world and the player there are its alone */
+        server.execute(() ->
+        {
+            boolean done = false;
+
+            try
+            {
+                net.minecraft.server.world.ServerWorld target = server.getWorld(key);
+                net.minecraft.server.network.ServerPlayerEntity player = server.getPlayerManager().getPlayer(uuid);
+
+                if (target != null && player != null)
+                {
+                    /* The place loaded first, then the first spot at or above it the player fits in */
+                    target.getChunk(net.minecraft.util.math.MathHelper.floor(x) >> 4, net.minecraft.util.math.MathHelper.floor(z) >> 4);
+
+                    double safeY = y;
+                    net.minecraft.entity.EntityDimensions size = player.getDimensions(player.getPose());
+
+                    for (int up = 0; up < 64; up++)
+                    {
+                        if (target.isSpaceEmpty(player, size.getBoxAt(x, y + up, z)))
+                        {
+                            safeY = y + up;
+
+                            break;
+                        }
+                    }
+
+                    player.fallDistance = 0F;
+                    player.teleport(target, x, safeY, z, yaw, pitch);
+                    done = true;
+                }
+            }
+            catch (Throwable e)
+            {
+                mchorse.bbs_mod.BBSMod.LOGGER.error("Recap could not take the player to " + id, e);
+            }
+
+            boolean result = done;
+
+            mc.execute(() ->
+            {
+                if (result)
+                {
+                    context.notifySuccess(UIRecapKeys.key("editor.travel_done"));
+                }
+                else
+                {
+                    context.notifyError(UIRecapKeys.key("editor.travel_failed"));
+                }
+            });
+        });
     }
 
     /* The scene */
@@ -294,6 +515,12 @@ public class UIRecapEditor extends UIElement
             return;
         }
 
+        /* A video in the making stops with the picture it is made of */
+        if (this.export.isExporting())
+        {
+            this.export.cancel();
+        }
+
         this.setFlight(false);
         this.sceneShown = false;
         RecapScene.hide();
@@ -316,7 +543,8 @@ public class UIRecapEditor extends UIElement
 
     private void applySceneSize()
     {
-        if (this.sceneShown && this.sceneWidth > 1 && this.sceneHeight > 1 && MinecraftClient.getInstance().world != null)
+        /* Not while a video is made: the world is drawn at the video's size then */
+        if (this.sceneShown && !this.export.isExporting() && this.sceneWidth > 1 && this.sceneHeight > 1 && MinecraftClient.getInstance().world != null)
         {
             BBSRendering.setCustomSize(true, this.sceneWidth, this.sceneHeight);
         }
@@ -324,6 +552,14 @@ public class UIRecapEditor extends UIElement
 
     public void tick()
     {
+        /* The video's warm up and its end, on the game's ticks as the recap plays */
+        this.export.update();
+
+        if (this.travelButton != null)
+        {
+            this.travelButton.setVisible(this.sceneShown && !this.export.isExporting() && RecapScene.isElsewhere());
+        }
+
         /* Values typed into the timeline's properties panel reach the history here, twice a second,
          * between presses so a drag in progress is one step when it is let go */
         if (++this.commitClock % 10 == 0 && GLFW.glfwGetMouseButton(MinecraftClient.getInstance().getWindow().getHandle(), GLFW.GLFW_MOUSE_BUTTON_LEFT) != GLFW.GLFW_PRESS)
@@ -363,14 +599,20 @@ public class UIRecapEditor extends UIElement
 
         this.commitTimeline();
 
-        if (RecapStore.save(this.record))
+        /* Written in the background; the notice says what came of it once it is on disk */
+        mchorse.bbs_mod.ui.framework.UIContext context = this.getContext();
+
+        RecapStore.save(this.record, (written) ->
         {
-            this.getContext().notifySuccess(UIRecapKeys.key("editor.saved"));
-        }
-        else
-        {
-            this.getContext().notifyError(UIRecapKeys.key("message.failed"));
-        }
+            if (written)
+            {
+                context.notifySuccess(UIRecapKeys.key("editor.saved"));
+            }
+            else
+            {
+                context.notifyError(UIRecapKeys.key("message.failed"));
+            }
+        });
     }
 
     /** Puts the picked clip's properties panel in the clip panel, or takes it away for none. */
@@ -434,6 +676,12 @@ public class UIRecapEditor extends UIElement
             return null;
         }
 
+        if (this.export.isExporting())
+        {
+            return this.export.isWarmingUp() ? UIRecapKeys.text("editor.export_warmup")
+                : UIRecapKeys.key("editor.exporting").format(RecapTime.format(this.cursor), RecapTime.format(this.getLength())).get();
+        }
+
         if (this.isFlying())
         {
             return UIRecapKeys.text("editor.flying_note");
@@ -479,6 +727,12 @@ public class UIRecapEditor extends UIElement
 
     public void toggleFlight()
     {
+        /* No flight into a video being made: it is the clips' camera */
+        if (this.export.isExporting() && !this.isFlying())
+        {
+            return;
+        }
+
         this.setFlight(!this.isFlying());
     }
 

@@ -344,7 +344,113 @@ public class UIRecapClipsPanel extends UITimelinePanel implements IUIClipsDelega
                 context.batcher.box(x + 1, this.area.y, x + 6, this.area.y + 5, color);
             }
 
+            this.renderDimensions(context, record, clips, bottom);
+
             context.batcher.unclip(context);
+        }
+
+        /**
+         * The dimensions the recording went through, as a coloured band under the ruler: what the
+         * timeline shows at each moment, after the speed and freeze clips, with each stretch's name
+         * where it fits and under the pointer. Only for a recap that went through more than one, or
+         * that is in another one than the client.
+         */
+        private void renderDimensions(UIContext context, RecapRecord record, Clips clips, int bottom)
+        {
+            mchorse.bbs_mod.recap.RecapDimensions dimensions = record.dimensions;
+
+            if (dimensions.isEmpty())
+            {
+                return;
+            }
+
+            String here = mchorse.bbs_mod.recap.RecapWorldOverlay.dimensionOf(net.minecraft.client.MinecraftClient.getInstance().world);
+
+            if (!dimensions.isMixed() && dimensions.getId(0).equals(here))
+            {
+                return;
+            }
+
+            int length = UIRecapClipsPanel.this.editor.getLength();
+            int y = bottom;
+            int h = 4;
+            int startX = Math.max(this.area.x, this.toGraphX(0));
+            int endX = Math.min(this.area.ex(), this.toGraphX(length));
+            String hovered = null;
+            String run = null;
+            int runX = startX;
+
+            for (int x = startX; x <= endX; x += 2)
+            {
+                String id = x >= endX ? null : this.dimensionAt(dimensions, clips, x);
+
+                if (id != null && id.equals(run))
+                {
+                    continue;
+                }
+
+                if (run != null)
+                {
+                    this.renderStretch(context, run, runX, Math.min(x, endX), y, h);
+                }
+
+                run = id;
+                runX = x;
+            }
+
+            int mouseX = context.mouseX;
+            int mouseY = context.mouseY;
+
+            if (mouseX >= startX && mouseX < endX && mouseY >= y - 2 && mouseY < y + h + 2)
+            {
+                hovered = this.dimensionAt(dimensions, clips, mouseX);
+            }
+
+            if (hovered != null)
+            {
+                String label = UIRecapKeys.dimensionName(hovered);
+                int w = context.batcher.getFont().getWidth(label) + 6;
+                int lx = Math.min(mouseX + 6, this.area.ex() - w);
+
+                context.batcher.box(lx, y + h + 2, lx + w, y + h + 14, 0xee000000);
+                context.batcher.text(label, lx + 3, y + h + 4, RecapStyle.dimension(hovered), false);
+            }
+        }
+
+        private String dimensionAt(mchorse.bbs_mod.recap.RecapDimensions dimensions, Clips clips, int x)
+        {
+            double tick = this.fromGraphX(x);
+
+            if (tick < 0)
+            {
+                return null;
+            }
+
+            float source = RecapClips.sourceTime(clips, (float) tick);
+
+            return dimensions.at((int) Math.floor(source));
+        }
+
+        private void renderStretch(UIContext context, String id, int x1, int x2, int y, int h)
+        {
+            if (x2 <= x1)
+            {
+                return;
+            }
+
+            int color = RecapStyle.dimension(id);
+
+            context.batcher.box(x1, y, x2, y + h, color);
+            /* The start of a stretch, a dimension change, as a tick of its own */
+            context.batcher.box(x1, y - 3, x1 + 1, y + h, color);
+
+            String label = UIRecapKeys.dimensionName(id);
+            int width = context.batcher.getFont().getWidth(label);
+
+            if (x2 - x1 > width + 8)
+            {
+                context.batcher.text(label, x1 + 3, y + h + 1, mchorse.bbs_mod.utils.colors.Colors.setA(color, 0.85F), true);
+            }
         }
     }
 }

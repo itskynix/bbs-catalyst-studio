@@ -311,6 +311,32 @@ public class RecapEvents
         return events;
     }
 
+    /** All the changes as they are, in a copy of their own: what a save in the background writes from. */
+    public static RecapEvents copy(RecapEvents source)
+    {
+        source.sort();
+
+        RecapEvents events = new RecapEvents();
+
+        events.palette.addAll(source.palette);
+        events.paletteIndex.putAll(source.paletteIndex);
+        events.dimensions.addAll(source.dimensions);
+
+        /* Whole arrays at a time: a copy of millions of changes is a few memory copies */
+        int from = source.head;
+        int to = source.head + Math.max(source.size, 1);
+
+        events.ticks = Arrays.copyOfRange(source.ticks, from, to);
+        events.positions = Arrays.copyOfRange(source.positions, from, to);
+        events.froms = Arrays.copyOfRange(source.froms, from, to);
+        events.tos = Arrays.copyOfRange(source.tos, from, to);
+        events.dims = Arrays.copyOfRange(source.dims, from, to);
+        events.size = source.size;
+        events.revision += 1;
+
+        return events;
+    }
+
     /** Forgets the changes before {@code oldest}; the front is only moved on, not copied. */
     public void dropBefore(int oldest)
     {

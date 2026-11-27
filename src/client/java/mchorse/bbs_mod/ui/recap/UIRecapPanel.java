@@ -93,6 +93,16 @@ public class UIRecapPanel extends UIDashboardPanel implements mchorse.bbs_mod.ui
         this.editor.fillWindowMenu(menu);
     }
 
+    /** The File menu: save, the video, and the way to the dimension of the cursor's moment, while a recap is open. */
+    @Override
+    public void fillFileMenu(mchorse.bbs_mod.ui.utils.context.ContextMenuManager menu)
+    {
+        if (this.editor.isVisible() && this.editor.getRecord() != null)
+        {
+            this.editor.fillFileMenu(menu);
+        }
+    }
+
     /** Escape lands a flight first, pointer given back, rather than closing the studio from under it. */
     @Override
     public boolean handleKeyPressed(UIContext context)
