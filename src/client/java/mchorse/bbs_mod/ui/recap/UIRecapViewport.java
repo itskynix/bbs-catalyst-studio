@@ -191,10 +191,7 @@ public class UIRecapViewport extends UIElement
             /* The game's interface over the picture while it looks out of the eye, after the view settings */
             RecapHud.render(context, x, y, w, h);
 
-            String note = !mchorse.bbs_mod.recap.RecapScene.isFirstPerson() ? "editor.clip_camera"
-                : (this.editor.getTrack() == null || this.editor.getTrack().isEmpty() ? "editor.no_camera" : "editor.live_world");
-
-            this.renderChip(context, font, UIRecapKeys.text(note), x, y, w);
+            /* What the picture is made of is said beside the panel's title, not over the picture */
         }
 
         if (record.isOn(RecapOption.THIRDS_GUIDE))

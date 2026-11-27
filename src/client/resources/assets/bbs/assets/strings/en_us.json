@@ -4363,6 +4363,8 @@
 	"bbs.recap.view.weather_rain": "Rain",
 	"bbs.recap.view.weather_thunder": "Thunder",
 	"bbs.recap.view.thirds_guide": "Rule of thirds guide",
+	"bbs.recap.editor.free_camera": "Free camera outside, F to fly it",
+	"bbs.recap.editor.flying_note": "Flying, Escape lands",
 	"bbs.recap.panel.clip": "Clip",
 	"bbs.recap.editor.save": "Save the recap, Ctrl S",
 	"bbs.recap.editor.saved": "The recap was saved",

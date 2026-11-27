@@ -3065,6 +3065,8 @@
     "bbs.recap.view.weather_rain": "Yağmurlu",
     "bbs.recap.view.weather_thunder": "Fırtınalı",
     "bbs.recap.view.thirds_guide": "Üçte bir kılavuzu",
+    "bbs.recap.editor.free_camera": "Serbest dış kamera, uçmak için F",
+    "bbs.recap.editor.flying_note": "Uçuşta, inmek için Escape",
     "bbs.recap.panel.clip": "Klip",
     "bbs.recap.editor.save": "Kaydı kaydet, Ctrl S",
     "bbs.recap.editor.saved": "Kayıt kaydedildi",

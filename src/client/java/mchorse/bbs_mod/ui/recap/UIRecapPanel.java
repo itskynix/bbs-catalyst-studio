@@ -9,7 +9,7 @@ import mchorse.bbs_mod.ui.framework.UIContext;
  * Recap Studio: the picker of saved recaps, and the editor of the one that was picked. It needs no
  * world to list, rename or delete recaps.
  */
-public class UIRecapPanel extends UIDashboardPanel implements mchorse.bbs_mod.ui.dashboard.utils.IUIOrbitKeysHandler
+public class UIRecapPanel extends UIDashboardPanel implements mchorse.bbs_mod.ui.dashboard.utils.IUIOrbitKeysHandler, mchorse.bbs_mod.ui.dashboard.menu.IGlobalMenuProvider
 {
     public final UIRecapHome home;
     public final UIRecapEditor editor;
@@ -80,6 +80,19 @@ public class UIRecapPanel extends UIDashboardPanel implements mchorse.bbs_mod.ui
      * The editor keeps the world running, as the film studio does: the viewport shows it live and
      * the recap plays on the game's ticks. The picker pauses as any menu.
      */
+    /** The window and layout menu of the bar on top: the editor's panels and layouts, as the film studio's. */
+    @Override
+    public boolean hasWindowMenu()
+    {
+        return true;
+    }
+
+    @Override
+    public void fillWindowMenu(mchorse.bbs_mod.ui.utils.context.ContextMenuManager menu)
+    {
+        this.editor.fillWindowMenu(menu);
+    }
+
     /** Escape lands a flight first, pointer given back, rather than closing the studio from under it. */
     @Override
     public boolean handleKeyPressed(UIContext context)

@@ -56,6 +56,16 @@ public final class RecapScene implements ICameraController
     private static final Position LAST = new Position();
     private static Position manual;
 
+    /* How the recorded player moved and what happened to the blocks, when the recap has them */
+    private static RecapMotion motion;
+    private static RecapEvents events;
+
+    /** The free camera: where the viewport looks from while no camera clip is under the cursor. */
+    private static final Position FREE = new Position();
+    private static boolean freeSet;
+
+    private final RecapMotion.Frame frame = new RecapMotion.Frame();
+
     private final RecapTrack.Sample sample = new RecapTrack.Sample();
     private final Position position = new Position();
     private RecapActor actor;
@@ -64,8 +74,21 @@ public final class RecapScene implements ICameraController
     private RecapScene()
     {}
 
-    public static void show(RecapRecord shown, RecapTrack camera, IntSupplier at)
+    public static void show(RecapRecord shown, RecapTrack camera, RecapMotion moves, RecapEvents changes, IntSupplier at)
     {
+        if (events != null && events != changes)
+        {
+            events.restore();
+        }
+
+        if (record != shown)
+        {
+            freeSet = false;
+        }
+
+        motion = moves;
+        events = changes;
+
         MinecraftClient mc = MinecraftClient.getInstance();
 
         /* The world's own day time, read before anything here can override it, for the timelapse */
@@ -85,10 +108,19 @@ public final class RecapScene implements ICameraController
             stopSounds();
         }
 
+        /* The blocks the recap set go back to what they really are */
+        if (events != null)
+        {
+            events.restore();
+        }
+
         manual = null;
         active = false;
         record = null;
         track = null;
+        motion = null;
+        events = null;
+        freeSet = false;
         playing = false;
     }
 
@@ -175,10 +207,43 @@ public final class RecapScene implements ICameraController
 
     /* Interface */
 
+    /** Whether a clip puts the camera somewhere: everything but the effects, tools, sound, sway and lens kicks. */
+    public static boolean placesCamera(Clip clip)
+    {
+        return !(clip instanceof FxClip || clip instanceof RecapClips.ToolClip || clip instanceof AudioClip
+            || clip instanceof ShakeClip || clip instanceof FovPunchClip);
+    }
+
+    private static boolean on(Clip clip, int tick)
+    {
+        return clip.enabled.get() && tick >= clip.tick.get() && tick < clip.tick.get() + clip.duration.get();
+    }
+
+    /** Whether a camera clip is under the cursor; without one the free camera is shown. */
+    public static boolean hasCameraClip()
+    {
+        if (!isActive())
+        {
+            return false;
+        }
+
+        int tick = cursor.getAsInt();
+
+        for (Clip clip : record.clips.get())
+        {
+            if (on(clip, tick) && placesCamera(clip))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
-     * Whether the viewport looks out of the eye, as the player saw it: not flying, and no clip under
-     * the cursor that places the camera. Only then is the game's interface drawn over the picture;
-     * the effects, the time tools, the sound and the lens and sway clips leave the eye where it is.
+     * Whether the viewport looks out of the recorded player's eyes: a point of view clip under the
+     * cursor, and no flight. Then the player's own body is not drawn, and the game's interface is,
+     * after the view settings.
      */
     public static boolean isFirstPerson()
     {
@@ -191,16 +256,26 @@ public final class RecapScene implements ICameraController
 
         for (Clip clip : record.clips.get())
         {
-            boolean on = clip.enabled.get() && tick >= clip.tick.get() && tick < clip.tick.get() + clip.duration.get();
-
-            if (on && !(clip instanceof FxClip || clip instanceof RecapClips.ToolClip || clip instanceof AudioClip
-                || clip instanceof ShakeClip || clip instanceof FovPunchClip))
+            if (on(clip, tick) && clip instanceof mchorse.bbs_mod.camera.clips.modifiers.ActorEyeClip)
             {
-                return false;
+                return true;
             }
         }
 
-        return true;
+        return false;
+    }
+
+    /** Whether the viewport shows the free camera: no flight and no camera clip under the cursor. */
+    public static boolean isFreeCamera()
+    {
+        return isActive() && manual == null && !hasCameraClip();
+    }
+
+    /** Puts the free camera somewhere, as a flight leaves it. */
+    public static void setFree(Position position)
+    {
+        FREE.set(position);
+        freeSet = true;
     }
 
     /** Whether a piece of the interface is drawn in the viewport: first person, and switched on. */
@@ -327,10 +402,30 @@ public final class RecapScene implements ICameraController
         }
 
         float time = time();
+        int now = cursor.getAsInt();
+
+        /* The world's blocks as the recording had them at this moment */
+        if (events != null)
+        {
+            events.apply(MinecraftClient.getInstance().world, (int) Math.floor(RecapClips.sourceTime(record.clips, now)));
+        }
 
         if (!this.base(time, this.sample))
         {
             return;
+        }
+
+        boolean free = !hasCameraClip();
+
+        /* No camera clip: the free camera, outside, where it was left; first seen behind the player */
+        if (free && !freeSet)
+        {
+            Position outside = outsideView(record, track, motion, time);
+
+            if (outside != null)
+            {
+                setFree(outside);
+            }
         }
 
         /* The eye as recorded, with the view settings' lens, roll and sway; a position's yaw
@@ -348,8 +443,17 @@ public final class RecapScene implements ICameraController
             pitch += amount * (float) (Math.sin(time * 0.29F + 2.1F) + 0.5F * Math.sin(time * 1.13F));
         }
 
-        this.position.point.set(this.sample.x, this.sample.y, this.sample.z);
-        this.position.angle.set(yaw + 180F, pitch, roll, fov);
+        if (free && freeSet)
+        {
+            this.position.set(FREE);
+            this.position.angle.roll += roll;
+            this.position.angle.fov = on(RecapOption.FOV) ? record.getValue(RecapOption.FOV) : this.position.angle.fov;
+        }
+        else
+        {
+            this.position.point.set(this.sample.x, this.sample.y, this.sample.z);
+            this.position.angle.set(yaw + 180F, pitch, roll, fov);
+        }
 
         /* Then the clips under the cursor, in their layers, as the film studio applies them */
         int tick = cursor.getAsInt();
@@ -394,7 +498,7 @@ public final class RecapScene implements ICameraController
 
         int tick = cursor.getAsInt();
 
-        this.actor.place(track, RecapClips.sourceTime(record.clips, tick), RecapClips.sourceTime(record.clips, tick + 1));
+        this.actor.place(track, motion, RecapClips.sourceTime(record.clips, tick), RecapClips.sourceTime(record.clips, tick + 1));
         CONTEXT.entities.put(RecapClips.PLAYER, this.actor.isPlaced() ? this.actor : this.wrap(mc.player));
 
         for (PlayerEntity player : mc.world.getPlayers())
@@ -406,59 +510,147 @@ public final class RecapScene implements ICameraController
         }
     }
 
+    /**
+     * The recorded player at a moment of the recording: its own frame when its movement was kept,
+     * else made from the camera, feet an eye height under it. False when there is neither.
+     */
+    public static boolean frameAt(RecapTrack camera, RecapMotion moves, float source, RecapMotion.Frame out, double eyeHeight)
+    {
+        if (moves != null && moves.sample(source, out))
+        {
+            return true;
+        }
+
+        RecapTrack.Sample sample = new RecapTrack.Sample();
+
+        if (camera == null || !camera.sample(source, sample))
+        {
+            return false;
+        }
+
+        out.x = sample.x;
+        out.y = sample.y - eyeHeight;
+        out.z = sample.z;
+        out.bodyYaw = out.headYaw = sample.yaw;
+        out.pitch = sample.pitch;
+        out.limbPos = out.limbSpeed = out.swing = out.lean = 0F;
+        out.pose = net.minecraft.entity.EntityPose.STANDING;
+        out.flags = RecapMotion.ON_GROUND;
+
+        return true;
+    }
+
+    /**
+     * A camera outside, behind and above the recorded player at {@code time}, looking at its head:
+     * where the free camera starts and what the first camera clip of a new recap holds.
+     */
+    public static Position outsideView(RecapRecord shown, RecapTrack camera, RecapMotion moves, float time)
+    {
+        RecapMotion.Frame at = new RecapMotion.Frame();
+        float source = shown == null ? time : RecapClips.sourceTime(shown.clips, time);
+
+        if (!frameAt(camera, moves, source, at, 1.62D))
+        {
+            return null;
+        }
+
+        double headY = at.y + 1.62D;
+        double yawRad = Math.toRadians(at.headYaw);
+        double fx = -Math.sin(yawRad);
+        double fz = Math.cos(yawRad);
+        double cx = at.x - fx * 4.5D;
+        double cy = headY + 1.2D;
+        double cz = at.z - fz * 4.5D;
+        double dx = at.x - cx;
+        double dy = headY - cy;
+        double dz = at.z - cz;
+        float yaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        float pitch = (float) -Math.toDegrees(Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)));
+        Position position = new Position();
+
+        position.point.set(cx, cy, cz);
+        position.angle.set(yaw + 180F, pitch, 0F, 70F);
+
+        return position;
+    }
+
     private IEntity wrap(Entity entity)
     {
         return this.wrapped.computeIfAbsent(entity, MCEntity::new);
     }
 
     /**
-     * Draws the recorded player in the world, where and as turned as the recording had it, while
-     * the camera is not its own eye: the player's own model, so it looks as they do. Its walk is
-     * not recorded, it holds its pose.
+     * Draws the recorded player in the world, where, as turned and as moving as the recording had
+     * it: the player's own model, with the recorded stride, arm swing, crouch, swim and glide lent
+     * to it for the draw and given back after. Not while the viewport looks out of its eyes.
      */
     public static void renderActor(net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext context)
     {
         MinecraftClient mc = MinecraftClient.getInstance();
 
-        if (!isActive() || track == null || track.isEmpty() || mc.player == null || isFirstPerson() || !record.isOn(RecapOption.PLAYERS)
+        if (!isActive() || mc.player == null || isFirstPerson() || !record.isOn(RecapOption.PLAYERS)
             || context.matrixStack() == null || context.consumers() == null)
         {
             return;
         }
 
-        float time = time();
-
-        if (!track.sample(RecapClips.sourceTime(record.clips, time), INSTANCE.sample))
+        if ((track == null || track.isEmpty()) && (motion == null || motion.isEmpty()))
         {
             return;
         }
 
-        RecapTrack.Sample at = INSTANCE.sample;
         net.minecraft.client.network.ClientPlayerEntity player = mc.player;
+        RecapMotion.Frame at = INSTANCE.frame;
+
+        if (!frameAt(track, motion, RecapClips.sourceTime(record.clips, time()), at, player.getStandingEyeHeight()))
+        {
+            return;
+        }
+
         net.minecraft.client.render.entity.EntityRenderDispatcher dispatcher = mc.getEntityRenderDispatcher();
         Vec3d camera = context.camera().getPos();
-        double feet = at.y - player.getStandingEyeHeight();
+        mchorse.bbs_mod.mixin.client.RecapLimbAccessor limbs = (mchorse.bbs_mod.mixin.client.RecapLimbAccessor) player.limbAnimator;
+        mchorse.bbs_mod.mixin.client.RecapLivingAccessor living = (mchorse.bbs_mod.mixin.client.RecapLivingAccessor) player;
+        mchorse.bbs_mod.mixin.client.RecapEntityFlagInvoker flags = (mchorse.bbs_mod.mixin.client.RecapEntityFlagInvoker) player;
 
-        /* The turn is read off the entity by its renderer, so it is lent the recorded one and given back */
+        /* Everything the renderer reads off the entity, kept to be given back */
         float yaw = player.getYaw(), prevYaw = player.prevYaw, pitch = player.getPitch(), prevPitch = player.prevPitch;
         float bodyYaw = player.bodyYaw, prevBodyYaw = player.prevBodyYaw, headYaw = player.headYaw, prevHeadYaw = player.prevHeadYaw;
+        float limbPos = player.limbAnimator.getPos(), limbSpeed = player.limbAnimator.getSpeed(), limbPrev = limbs.bbs$getPrevSpeed();
+        float swing = player.handSwingProgress, lastSwing = player.lastHandSwingProgress;
+        float lean = living.bbs$getLeaningPitch(), lastLean = living.bbs$getLastLeaningPitch();
+        net.minecraft.entity.EntityPose pose = player.getPose();
+        boolean sneaking = player.isSneaking(), sprinting = player.isSprinting(), swimming = player.isSwimming();
+        boolean gliding = flags.bbs$getFlag(RecapMotion.GLIDE_FLAG);
         boolean shadows = mc.options.getEntityShadows().getValue();
-
-        player.setYaw(at.yaw);
-        player.prevYaw = at.yaw;
-        player.setPitch(at.pitch);
-        player.prevPitch = at.pitch;
-        player.bodyYaw = player.prevBodyYaw = at.yaw;
-        player.headYaw = player.prevHeadYaw = at.yaw;
 
         try
         {
+            player.setYaw(at.headYaw);
+            player.prevYaw = at.headYaw;
+            player.setPitch(at.pitch);
+            player.prevPitch = at.pitch;
+            player.bodyYaw = player.prevBodyYaw = at.bodyYaw;
+            player.headYaw = player.prevHeadYaw = at.headYaw;
+            limbs.bbs$setPos(at.limbPos);
+            limbs.bbs$setSpeed(at.limbSpeed);
+            limbs.bbs$setPrevSpeed(at.limbSpeed);
+            player.handSwingProgress = player.lastHandSwingProgress = at.swing;
+            living.bbs$setLeaningPitch(at.lean);
+            living.bbs$setLastLeaningPitch(at.lean);
+            player.setPose(at.pose);
+            player.setSneaking(at.is(RecapMotion.SNEAKING));
+            player.setSprinting(at.is(RecapMotion.SPRINTING));
+            player.setSwimming(at.is(RecapMotion.SWIMMING));
+            flags.bbs$setFlag(RecapMotion.GLIDE_FLAG, at.is(RecapMotion.GLIDING));
+
             /* Its shadow would be cast where the player really stands */
             dispatcher.setRenderShadows(false);
 
-            int light = net.minecraft.client.render.WorldRenderer.getLightmapCoordinates(mc.world, net.minecraft.util.math.BlockPos.ofFloored(at.x, at.y, at.z));
+            int light = net.minecraft.client.render.WorldRenderer.getLightmapCoordinates(mc.world, net.minecraft.util.math.BlockPos.ofFloored(at.x, at.y + 1D, at.z));
 
-            dispatcher.render(player, at.x - camera.x, feet - camera.y, at.z - camera.z, at.yaw, context.tickDelta(), context.matrixStack(), context.consumers(), light);
+            /* The animation is already at its moment: drawn with no further transition */
+            dispatcher.render(player, at.x - camera.x, at.y - camera.y, at.z - camera.z, at.headYaw, 1F, context.matrixStack(), context.consumers(), light);
         }
         finally
         {
@@ -471,6 +663,18 @@ public final class RecapScene implements ICameraController
             player.prevBodyYaw = prevBodyYaw;
             player.headYaw = headYaw;
             player.prevHeadYaw = prevHeadYaw;
+            limbs.bbs$setPos(limbPos);
+            limbs.bbs$setSpeed(limbSpeed);
+            limbs.bbs$setPrevSpeed(limbPrev);
+            player.handSwingProgress = swing;
+            player.lastHandSwingProgress = lastSwing;
+            living.bbs$setLeaningPitch(lean);
+            living.bbs$setLastLeaningPitch(lastLean);
+            player.setPose(pose);
+            player.setSneaking(sneaking);
+            player.setSprinting(sprinting);
+            player.setSwimming(swimming);
+            flags.bbs$setFlag(RecapMotion.GLIDE_FLAG, gliding);
         }
     }
 

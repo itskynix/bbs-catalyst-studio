@@ -52,6 +52,16 @@ public interface IUIClipsDelegate extends ICursor
         return null;
     }
 
+    /**
+     * How long the timeline is: where its end is drawn, how far its ruler runs and what the view
+     * fits to. The film studio's camera work ends with its last clip; Recap Studio's with the
+     * recording when it has no clips.
+     */
+    public default int getTimelineDuration(mchorse.bbs_mod.utils.clips.Clips clips)
+    {
+        return clips == null ? 0 : clips.calculateDuration();
+    }
+
     /** The time under the playhead and the whole length, as the timeline writes them beside it. */
     public default String formatCursorLabel(float cursor, int duration)
     {

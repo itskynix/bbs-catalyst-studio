@@ -47,11 +47,15 @@ public final class RecapRecorder
     private static int ticks;
     private static final List<Integer> markers = new ArrayList<>();
     private static final RecapTrack track = new RecapTrack();
+    private static final RecapMotion motion = new RecapMotion();
+    private static final RecapEvents events = new RecapEvents();
     private static RecapWorlds.Info world;
 
     private static int playedTicks;
     private static final List<Integer> playedMarkers = new ArrayList<>();
     private static final RecapTrack playedTrack = new RecapTrack();
+    private static final RecapMotion playedMotion = new RecapMotion();
+    private static final RecapEvents playedEvents = new RecapEvents();
 
     private RecapRecorder()
     {}
@@ -106,6 +110,7 @@ public final class RecapRecorder
         {
             ticks += 1;
             sample(mc, track);
+            sampleMotion(mc, motion);
         }
 
         if (mc.isPaused() || RecapScene.isActive())
@@ -116,10 +121,55 @@ public final class RecapRecorder
         playedTicks += 1;
         sample(mc, playedTrack);
         playedTrack.trim(BUFFER_LIMIT);
+        sampleMotion(mc, playedMotion);
+        playedMotion.trim(BUFFER_LIMIT);
+        playedEvents.dropBefore(playedTicks - BUFFER_LIMIT);
 
         int oldest = playedTicks - BUFFER_LIMIT;
 
         playedMarkers.removeIf((marker) -> marker < oldest);
+    }
+
+    /** How the player moves this tick: a frame for every tick the camera is kept on, so both line up. */
+    private static void sampleMotion(MinecraftClient mc, RecapMotion into)
+    {
+        if (mc.player != null)
+        {
+            into.add(mc.player);
+        }
+        else if (!into.isEmpty())
+        {
+            /* No player for a moment: the last frame again, so the frames keep step with the ticks */
+            RecapMotion.Frame frame = new RecapMotion.Frame();
+
+            into.sample(into.size() - 1, frame);
+            into.add(frame.x, frame.y, frame.z, frame.bodyYaw, frame.headYaw, frame.pitch, frame.limbPos, frame.limbSpeed, frame.swing, frame.lean, frame.pose.ordinal(), frame.flags);
+        }
+    }
+
+    /**
+     * A block of the world changed: broken, placed or used. It goes into the running recording at
+     * its tick, and into the instant stretch while play is going on; the recap's own blocks put
+     * in by Recap Studio are not play and are left out.
+     */
+    public static void onBlockChanged(net.minecraft.util.math.BlockPos pos, net.minecraft.block.BlockState from, net.minecraft.block.BlockState to)
+    {
+        if (RecapEvents.applying || from == to)
+        {
+            return;
+        }
+
+        if (state == State.RECORDING)
+        {
+            events.add(ticks, pos, from, to);
+        }
+
+        MinecraftClient mc = MinecraftClient.getInstance();
+
+        if (mc.world != null && !RecapScene.isActive())
+        {
+            playedEvents.add(playedTicks, pos, from, to);
+        }
     }
 
     private static void sample(MinecraftClient mc, RecapTrack into)
@@ -151,6 +201,8 @@ public final class RecapRecorder
         ticks = 0;
         markers.clear();
         track.clear();
+        motion.clear();
+        events.clear();
         state = State.RECORDING;
 
         return true;
@@ -179,7 +231,7 @@ public final class RecapRecorder
         /* The session ends here whatever comes of the writing: no clock runs behind it */
         state = State.STOPPED;
 
-        RecapRecord record = create(world, ticks, markers, track, false);
+        RecapRecord record = create(world, ticks, markers, track, motion, events, false);
 
         if (record != null)
         {
@@ -255,7 +307,7 @@ public final class RecapRecorder
             }
         }
 
-        return create(info, length, inside, RecapTrack.tail(playedTrack, length), true);
+        return create(info, length, inside, RecapTrack.tail(playedTrack, length), RecapMotion.tail(playedMotion, length), RecapEvents.tail(playedEvents, from), true);
     }
 
     /** The record key: starts a recording, and saves the one running or stopped. */
@@ -368,6 +420,8 @@ public final class RecapRecorder
         playedTicks = 0;
         playedMarkers.clear();
         playedTrack.clear();
+        playedMotion.clear();
+        playedEvents.clear();
     }
 
     /** Leaving the world keeps what was being recorded rather than losing it. */
@@ -387,10 +441,12 @@ public final class RecapRecorder
         ticks = 0;
         markers.clear();
         track.clear();
+        motion.clear();
+        events.clear();
         world = null;
     }
 
-    private static RecapRecord create(RecapWorlds.Info info, int length, List<Integer> marked, RecapTrack camera, boolean instant)
+    private static RecapRecord create(RecapWorlds.Info info, int length, List<Integer> marked, RecapTrack camera, RecapMotion moves, RecapEvents changes, boolean instant)
     {
         RecapRecord record = new RecapRecord();
         LocalDateTime now = LocalDateTime.now();
@@ -415,6 +471,8 @@ public final class RecapRecorder
         }
 
         RecapStore.saveTrack(record, camera);
+        RecapStore.saveMotion(record, moves);
+        RecapStore.saveEvents(record, changes);
 
         return record;
     }

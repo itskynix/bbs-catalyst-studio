@@ -1463,7 +1463,7 @@ public class UIClips extends UITimelineCanvas
 
         if (clips != null)
         {
-            int duration = clips.calculateDuration();
+            int duration = this.delegate.getTimelineDuration(clips);
 
             if (duration > 0)
             {
@@ -2689,7 +2689,7 @@ public class UIClips extends UITimelineCanvas
                 area,
                 rulerBottom,
                 (int) this.xAxis.getMinValue(),
-                this.clips.calculateDuration(),
+                this.delegate.getTimelineDuration(this.clips),
                 this::toGraphX,
                 TimeUtils::formatTime
             );
@@ -2749,7 +2749,7 @@ public class UIClips extends UITimelineCanvas
         this.markers.render(context, this.area, this.xAxis, 0);
 
         float cursor = this.delegate.getTimelineCursor(context.getTransition()) - this.nestOffset;
-        String label = this.delegate.formatCursorLabel(cursor, this.clips.calculateDuration());
+        String label = this.delegate.formatCursorLabel(cursor, this.delegate.getTimelineDuration(this.clips));
 
         renderCursor(context, label, area, this.toGraphX(cursor));
         this.renderSelection(context);
@@ -2837,7 +2837,7 @@ public class UIClips extends UITimelineCanvas
             batcher.box(this.area.x, this.area.y, Math.min(leftEdge, this.area.ex()), this.area.ey(), color);
         }
 
-        int duration = this.clips.calculateDuration();
+        int duration = this.delegate.getTimelineDuration(this.clips);
 
         if (duration <= 0)
         {
@@ -2858,7 +2858,7 @@ public class UIClips extends UITimelineCanvas
     private void renderTickMarkers(UIContext context, int y, int h)
     {
         int start = (int) this.xAxis.getMinValue();
-        int duration = this.clips.calculateDuration();
+        int duration = this.delegate.getTimelineDuration(this.clips);
 
         TimelineRulerRenderer.render(
             context,

@@ -104,6 +104,8 @@ public final class RecapStore
         }
 
         trackFile(record.id).delete();
+        new File(folder(), record.id + ".motion").delete();
+        new File(folder(), record.id + ".world").delete();
 
         return file(record.id).delete();
     }
@@ -118,6 +120,28 @@ public final class RecapStore
     public static RecapTrack loadTrack(RecapRecord record)
     {
         return record == null || record.id.isEmpty() ? null : RecapTrack.read(trackFile(record.id));
+    }
+
+    /** Writes how the recorded player moved, next to the recap. */
+    public static boolean saveMotion(RecapRecord record, RecapMotion motion)
+    {
+        return !record.id.isEmpty() && motion != null && motion.write(new File(folder(), record.id + ".motion"));
+    }
+
+    public static RecapMotion loadMotion(RecapRecord record)
+    {
+        return record == null || record.id.isEmpty() ? null : RecapMotion.read(new File(folder(), record.id + ".motion"));
+    }
+
+    /** Writes what happened to the world's blocks during the recap, next to it. */
+    public static boolean saveEvents(RecapRecord record, RecapEvents events)
+    {
+        return !record.id.isEmpty() && events != null && events.write(new File(folder(), record.id + ".world"));
+    }
+
+    public static RecapEvents loadEvents(RecapRecord record)
+    {
+        return record == null || record.id.isEmpty() ? null : RecapEvents.read(new File(folder(), record.id + ".world"));
     }
 
     private static File trackFile(String id)

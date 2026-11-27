@@ -151,6 +151,13 @@ public class UIRecapClipsPanel extends UITimelinePanel implements IUIClipsDelega
         }
     }
 
+    /** The recording's length while there are no clips, else as far as the last clip reaches. */
+    @Override
+    public int getTimelineDuration(Clips clips)
+    {
+        return this.editor.getLength();
+    }
+
     @Override
     public boolean pickActors()
     {

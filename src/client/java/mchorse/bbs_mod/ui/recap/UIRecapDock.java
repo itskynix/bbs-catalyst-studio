@@ -21,6 +21,7 @@ public class UIRecapDock extends UIElement
     private final UIRecapEditor editor;
     public final UIElement content = new UIElement();
 
+    private java.util.function.Supplier<String> note;
     private boolean pressed;
     private int pressX;
     private int pressY;
@@ -34,6 +35,14 @@ public class UIRecapDock extends UIElement
 
         this.content.relative(this).x(1).y(HEADER + 1).w(1F, -2).h(1F, -HEADER - 2);
         this.add(this.content);
+    }
+
+    /** A short note beside the title, asked again every frame. */
+    public UIRecapDock note(java.util.function.Supplier<String> note)
+    {
+        this.note = note;
+
+        return this;
     }
 
     public boolean isHeader(UIContext context)
@@ -91,7 +100,22 @@ public class UIRecapDock extends UIElement
         boolean shadow = RecapStyle.headerShadow();
 
         context.batcher.icon(this.icon, color, this.area.x + 5, this.area.y + HEADER / 2F, 0F, 0.5F);
-        context.batcher.text(context.batcher.getFont().limitToWidth(this.title.get(), this.area.w - 44), this.area.x + 23, this.area.y + (HEADER - 8) / 2F, color, shadow);
+        String title = context.batcher.getFont().limitToWidth(this.title.get(), this.area.w - 44);
+
+        context.batcher.text(title, this.area.x + 23, this.area.y + (HEADER - 8) / 2F, color, shadow);
+
+        String note = this.note == null ? null : this.note.get();
+
+        if (note != null && !note.isEmpty())
+        {
+            int x = this.area.x + 23 + context.batcher.getFont().getWidth(title) + 10;
+            int room = this.area.ex() - 22 - x;
+
+            if (room > 30)
+            {
+                context.batcher.text(context.batcher.getFont().limitToWidth(note, room), x, this.area.y + (HEADER - 8) / 2F, mchorse.bbs_mod.utils.colors.Colors.setA(color, 0.6F), false);
+            }
+        }
 
         if (this.isHeader(context))
         {

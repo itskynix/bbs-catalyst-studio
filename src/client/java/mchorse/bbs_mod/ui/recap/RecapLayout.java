@@ -31,6 +31,10 @@ public class RecapLayout
     public boolean infoVisible = true;
     public boolean infoFirst = true;
     public float infoRatio = 0.38F;
+    /** Whether the view settings panel is shown. */
+    public boolean viewVisible = true;
+    /** Whether the picked clip's panel is shown. */
+    public boolean clipVisible = true;
 
     /** A ready made layout: its key (for its name) and how it is arranged. */
     public record Preset(String key, RecapLayout layout)
@@ -84,6 +88,8 @@ public class RecapLayout
         this.infoVisible = other.infoVisible;
         this.infoFirst = other.infoFirst;
         this.infoRatio = other.infoRatio;
+        this.viewVisible = other.viewVisible;
+        this.clipVisible = other.clipVisible;
     }
 
     public boolean same(RecapLayout other)
@@ -103,6 +109,8 @@ public class RecapLayout
         data.putBool("info_visible", this.infoVisible);
         data.putBool("info_first", this.infoFirst);
         data.putFloat("info_ratio", this.infoRatio);
+        data.putBool("view_visible", this.viewVisible);
+        data.putBool("clip_visible", this.clipVisible);
 
         return data;
     }
@@ -124,6 +132,8 @@ public class RecapLayout
         layout.infoVisible = data.getBool("info_visible", layout.infoVisible);
         layout.infoFirst = data.getBool("info_first", layout.infoFirst);
         layout.infoRatio = Math.max(0.15F, Math.min(0.85F, data.getFloat("info_ratio", layout.infoRatio)));
+        layout.viewVisible = data.getBool("view_visible", layout.viewVisible);
+        layout.clipVisible = data.getBool("clip_visible", layout.clipVisible);
 
         return layout;
     }
@@ -134,6 +144,8 @@ public class RecapLayout
     {
         public final RecapLayout current;
         public final Map<String, RecapLayout> templates = new LinkedHashMap<>();
+        /** Whether the panels are held where they are: no moving, no resizing. */
+        public boolean locked;
 
         private Store(RecapLayout current)
         {
@@ -160,6 +172,8 @@ public class RecapLayout
                 {
                     MapType map = data.asMap();
                     Store store = new Store(fromData(map.getMap("current")));
+
+                    store.locked = map.getBool("locked", false);
                     MapType templates = map.getMap("templates");
 
                     if (templates != null)
@@ -193,6 +207,7 @@ public class RecapLayout
 
             data.put("current", this.current.toData());
             data.put("templates", templates);
+            data.putBool("locked", this.locked);
             DataToString.writeSilently(file(), data, true);
         }
     }
